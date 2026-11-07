@@ -12,7 +12,7 @@
 
 @media (min-width: 1180px) {
   :root .watchface-shell.watchface-shell--studio .watchface-editor-grid.has-add-rail {
-    grid-template-columns: 68px minmax(224px, 248px) minmax(360px, 1fr) minmax(292px, 326px);
+    grid-template-columns: 68px var(--wf-layers-width, minmax(224px, 248px)) minmax(360px, 1fr) minmax(292px, 326px);
   }
 
   :root .watchface-shell.watchface-shell--studio .wf-add-rail {
@@ -2389,4 +2389,140 @@ body .wf-font-picker-panel .wf-png-set .wf-png-font-rules {
 :root .watchface-shell.watchface-shell--studio .wf-delete-notice.wf-page-jump-notice {
   top: 68px;
   bottom: auto;
+}
+
+/* --- Layers tray: drag its right edge to resize ------------------------- */
+
+.watchface-shell .wf-layers-resize {
+  display: none;
+}
+
+@media (min-width: 1180px) {
+  :root .watchface-shell.watchface-shell--studio .watchface-editor-grid {
+    grid-template-columns: var(--wf-layers-width, minmax(224px, 248px)) minmax(360px, 1fr) minmax(292px, 326px);
+  }
+
+  :root .watchface-shell.watchface-shell--studio .watchface-editor-grid.has-add-rail {
+    grid-template-columns: 68px var(--wf-layers-width, minmax(224px, 248px)) minmax(360px, 1fr) minmax(292px, 326px);
+  }
+
+  :root .watchface-shell.watchface-shell--studio .wf-layers-pane {
+    position: relative;
+  }
+
+  :root .watchface-shell.watchface-shell--studio .wf-layers-resize {
+    position: absolute;
+    z-index: 5;
+    top: 0;
+    right: -7px;
+    bottom: 0;
+    display: block;
+    width: 12px;
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  :root .watchface-shell.watchface-shell--studio .wf-layers-resize::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 3px;
+    height: 36px;
+    border-radius: 2px;
+    background: var(--atl-line-strong);
+    opacity: 0;
+    transform: translate(-50%, -50%);
+    transition: opacity 120ms ease;
+  }
+
+  :root .watchface-shell.watchface-shell--studio .wf-layers-resize:hover::after,
+  body.wf-is-resizing-layers .watchface-shell.watchface-shell--studio .wf-layers-resize::after {
+    background: var(--atl-lume);
+    opacity: 1;
+  }
+}
+
+body.wf-is-resizing-layers {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* Three row actions (delete, lock, eye) need room past the row's end too. */
+:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-layer-item:is(
+  :hover,
+  :focus-within,
+  :has(.is-selected)
+):has(.wf-layer-row-actions > :nth-child(3)) > .watchface-layer-row {
+  padding-right: 90px;
+}
+
+/* --- Chart page tiles: a bubble that says what each page is ------------- */
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile-wrap {
+  position: relative;
+  display: flex;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tip {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 10px);
+  left: 50%;
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  max-width: 240px;
+  border: 1px solid var(--atl-line-strong);
+  border-radius: 10px;
+  background: var(--atl-tray-raised);
+  box-shadow: var(--atl-float-shadow);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  visibility: hidden;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tip::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid var(--atl-line-strong);
+  border-left: 1px solid var(--atl-line-strong);
+  background: var(--atl-tray-raised);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile-wrap:is(:hover, :focus-within) > .wf-page-tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 250ms;
+  visibility: visible;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tip strong {
+  font-weight: 650;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tip-kind {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--atl-lume);
+  font-weight: 600;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tip small {
+  color: var(--text-secondary);
+  font-size: 11.5px;
 }

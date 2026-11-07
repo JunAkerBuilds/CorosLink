@@ -928,6 +928,10 @@ function AlphaColorField({ label, value, onValueChange }: {
   );
 }
 
+const LAYERS_WIDTH_KEY = "coroslink.studio.layersWidth";
+const LAYERS_WIDTH_MIN = 224;
+const LAYERS_WIDTH_MAX = 520;
+
 function browserPlacementStorage(): Storage | undefined {
   if (typeof window === "undefined") return undefined;
   try {
@@ -1172,6 +1176,48 @@ export function WatchfaceEditor({
   // The Export panel's language choice, remembered across projects.
   const watchLanguagesPreferenceRef = useRef<WatchfaceWatchLanguages>(loadWatchLanguagesPreference());
   const [layersOpen, setLayersOpen] = useState(false);
+  // The Layers tray's width on wide screens: drag its right edge, double-click to reset.
+  const [layersWidth, setLayersWidth] = useState<number | null>(() => {
+    try {
+      const saved = Number(browserPlacementStorage()?.getItem(LAYERS_WIDTH_KEY));
+      return Number.isFinite(saved) && saved >= LAYERS_WIDTH_MIN ? Math.min(saved, LAYERS_WIDTH_MAX) : null;
+    } catch {
+      return null;
+    }
+  });
+  function saveLayersWidth(width: number | null) {
+    setLayersWidth(width);
+    try {
+      if (width === null) browserPlacementStorage()?.removeItem(LAYERS_WIDTH_KEY);
+      else browserPlacementStorage()?.setItem(LAYERS_WIDTH_KEY, String(Math.round(width)));
+    } catch { /* storage off: the width lasts this session */ }
+  }
+  function startLayersResize(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const pane = event.currentTarget.parentElement;
+    if (!pane) return;
+    const startX = event.clientX;
+    const startWidth = pane.getBoundingClientRect().width;
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    document.body.classList.add("wf-is-resizing-layers");
+    let latest = startWidth;
+    const move = (moveEvent: PointerEvent) => {
+      latest = Math.min(LAYERS_WIDTH_MAX, Math.max(LAYERS_WIDTH_MIN, startWidth + moveEvent.clientX - startX));
+      setLayersWidth(latest);
+    };
+    const end = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+      document.body.classList.remove("wf-is-resizing-layers");
+      saveLayersWidth(latest);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+  }
   const [layerQuery, setLayerQuery] = useState("");
   const [collapsedLayerSections, setCollapsedLayerSections] = useState(
     createCollapsedWatchfaceLayerSections
@@ -6768,6 +6814,17 @@ export function WatchfaceEditor({
     const onFace = facePageList.filter(rule);
     return { rule, label, onFace, none: onFace.length === 0 };
   }
+  /** Hover text for a layer's page-scope badge ("Not on Sun, Moon"…). */
+  function layerScopeExplanation(layer: EditorLayer): string {
+    const scope = layerPageScope(layer);
+    if (!scope) return "";
+    const offPage = Boolean(shownChartPage && !scope.rule(shownChartPage));
+    return [
+      scope.none ? t("None of this face's chart pages draw this field.")
+        : t("Chart pages: {{rule}}. The watch hides this field on the other pages.", { rule: scope.label }),
+      offPage ? t("The page on screen hides it.") : "",
+    ].filter(Boolean).join(" ");
+  }
   /** The weather icon as the page on screen draws it (no temperature on Sun or Moon). */
   function weatherForShownPage(indicator: CorosWatchfaceDesignState["weatherIndicator"]) {
     if (!indicator || !shownChartPage || (shownChartPage !== "sun" && shownChartPage !== "moon")) return indicator;
@@ -10334,7 +10391,8 @@ export function WatchfaceEditor({
         </div>
       </header>
 
-      <div className={`watchface-editor-grid wf-studio-grid${canEditActiveMode ? " has-add-rail" : ""}`}>
+      <div className={`watchface-editor-grid wf-studio-grid${canEditActiveMode ? " has-add-rail" : ""}`}
+        style={layersWidth ? { "--wf-layers-width": `${Math.round(layersWidth)}px` } as React.CSSProperties : undefined}>
         {canEditActiveMode ? <WatchfaceAddMenu
           key={`rail:${sessionId}:${previewMode}`}
           variant="rail"
@@ -10348,6 +10406,9 @@ export function WatchfaceEditor({
           chartPagesOnFace={design.nativeData?.chart?.enabled ? stripChartPages.map(page => page.page) : []}
         /> : null}
         <aside className={`watchface-editor-layers wf-pane wf-layers-pane${layersOpen ? " is-open" : ""}`} aria-label={t("Layers")}>
+          <div className="wf-layers-resize" role="separator" aria-orientation="vertical" aria-label={t("Resize Layers")}
+            title={t("Drag to resize. Double-click to reset.")}
+            onPointerDown={startLayersResize} onDoubleClick={() => saveLayersWidth(null)} />
           <div className="watchface-editor-pane-heading wf-pane-heading">
             <div className="wf-pane-heading-main">
               <span className="wf-pane-heading-icon" aria-hidden="true">
@@ -10639,12 +10700,13 @@ export function WatchfaceEditor({
                           ) : null}
                           {layerIcon(layer)}
                         </span>
-                        <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`} title={t(layer.label)}>{t(layer.label)}</span>
+                        <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`}
+                          title={layer.visible && previewMode === "current" && layerPageScope(layer) ? `${t(layer.label)}\n${layerScopeExplanation(layer)}` : t(layer.label)}>{t(layer.label)}</span>
                         {layer.visible && previewMode === "current" && layerPageScope(layer) ? (() => {
                           const scope = layerPageScope(layer)!;
                           const offPage = Boolean(shownChartPage && !scope.rule(shownChartPage));
                           return <span className={`wf-layer-value wf-layer-scope${offPage ? " is-off-page" : ""}${scope.none ? " is-warning" : ""}`}
-                            title={offPage ? t("Not on the page on screen") : undefined}>{scope.none ? t("Not shown") : scope.label}</span>;
+                            title={layerScopeExplanation(layer)}>{scope.none ? t("Not shown") : scope.label}</span>;
                         })() : layer.visible ? (() => {
                           const value = watchfaceLayerSampleValue(layer, simulationScenario ?? { dateTime: simulation.dateTime, values: simulation.values }, new Date());
                           return value ? <span className="wf-layer-value" aria-label={t("Shows {{value1}}", { value1: value })}>{value}</span> : null;
@@ -11244,17 +11306,36 @@ export function WatchfaceEditor({
                   const title = page.fromTemplate ? t("{{number}} · {{page}} · kept by the template, so the watch still stops here. The preview can't show it; remove it under Chart pages.", { number: index + 1, page: label })
                     : !page.target ? t("{{number}} · {{page}} · graph only: bars with no number", { number: index + 1, page: label })
                     : `${index + 1} · ${label} · ${graph}${bars ? ` · ${t("needs phone data")}` : ""}${empty ? ` · ${t("nothing visible, but Back still stops here")}` : ""}`;
+                  // The bubble: what the glyph means, then anything to know about the page.
+                  const kind = bars ? t("Bar chart") : page.page === "sun" || page.page === "moon" ? t("Line chart") : t("Numbers");
+                  const notes = page.fromTemplate ? [t("Kept by the template, so the watch still stops here. The preview can't show it; remove it under Chart pages.")]
+                    : [
+                      !page.target ? t("Graph only: bars with no number") : graph,
+                      ...(bars ? [t("Needs phone data")] : []),
+                      ...(empty ? [t("Nothing visible, but Back still stops here")] : []),
+                      ...(shown ? [] : [t("Click to preview this page")]),
+                    ];
                   return (
-                    <button key={page.page} type="button" className={`wf-page-tile${empty ? " is-empty" : ""}${selectedFieldScope ? selectedFieldScope.rule(page.page) ? " is-field-on" : " is-field-off" : ""}`} aria-pressed={shown}
-                      disabled={page.fromTemplate || isPositionLocked("native:chart")} title={title} aria-label={title}
-                      onClick={() => showChartPage(page.page)}>
-                      <span className="wf-page-tile-number" aria-hidden="true">{index + 1}</span>
-                      <span className="wf-page-tile-glyph" aria-hidden="true">
-                        {bars ? <ChartColumn size={15} /> : page.page === "sun" || page.page === "moon" ? <ChartSpline size={15} /> : <Hash size={14} />}
+                    <span key={page.page} className="wf-page-tile-wrap">
+                      <button type="button" className={`wf-page-tile${empty ? " is-empty" : ""}${selectedFieldScope ? selectedFieldScope.rule(page.page) ? " is-field-on" : " is-field-off" : ""}`} aria-pressed={shown}
+                        disabled={page.fromTemplate || isPositionLocked("native:chart")} aria-label={title}
+                        onClick={() => showChartPage(page.page)}>
+                        <span className="wf-page-tile-number" aria-hidden="true">{index + 1}</span>
+                        <span className="wf-page-tile-glyph" aria-hidden="true">
+                          {bars ? <ChartColumn size={15} /> : page.page === "sun" || page.page === "moon" ? <ChartSpline size={15} /> : <Hash size={14} />}
+                        </span>
+                        {shown ? <span className="wf-screen-tile-copy"><strong>{label}</strong><small>{graph}</small></span> : null}
+                        {bars ? <span className="wf-page-tile-phone" aria-hidden="true" /> : null}
+                      </button>
+                      <span className="wf-page-tip" role="tooltip" aria-hidden="true">
+                        <strong>{t("Page {{number}} · {{page}}", { number: index + 1, page: label })}</strong>
+                        <span className="wf-page-tip-kind">
+                          {bars ? <ChartColumn size={12} /> : page.page === "sun" || page.page === "moon" ? <ChartSpline size={12} /> : <Hash size={11} />}
+                          {kind}
+                        </span>
+                        {notes.filter(Boolean).map(note => <small key={note}>{note}</small>)}
                       </span>
-                      {shown ? <span className="wf-screen-tile-copy"><strong>{label}</strong><small>{graph}</small></span> : null}
-                      {bars ? <span className="wf-page-tile-phone" aria-hidden="true" /> : null}
-                    </button>
+                    </span>
                   );
                 })}
                 {chartPageAddOptions.length && !isPositionLocked("native:chart") ? (
