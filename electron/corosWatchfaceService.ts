@@ -2642,17 +2642,20 @@ export async function createCorosWatchfaceArchive(
 
   const requestedFirmwareType = normalizeOptionalFirmwareType(input.firmwareType);
   // A face with no 800px master (a phone-made face has only its watch's own
-  // layout) converts like a recovered one when the editor asks for it: built
-  // as is, then scaled from that layout for the other watch. The editor asks
-  // only on Convert, which never offers the face's own watch; a starter that
-  // names its watch is also checked here. (MIP watches share 240/260/280, so
-  // folder sizes can't tell two watches apart.)
+  // layout) converts like a recovered one when asked: built as is, then scaled
+  // from that layout for the other watch. The editor asks only on Convert,
+  // which never offers the face's own watch; a starter that names its watch is
+  // also checked here. (MIP watches share 240/260/280, so folder sizes can't
+  // tell two watches apart.) The phone's export also asks for the face's own
+  // watch when that watch's layouts are incomplete (PACE 4 needs 390 and 800),
+  // which the plain export refuses.
   const requestedTarget = getWatchfaceTarget(input.watchModel ?? requestedFirmwareType);
   const convertsNativeLayout = input.convertNativeLayout === true &&
     !verifiedSource.recoveredFromCompiled &&
     !verifiedSource.resolutionDirectories.includes("watchface_800x800") &&
     Boolean(requestedFirmwareType && requestedTarget) &&
-    (!source.firmwareType || requestedFirmwareType!.toUpperCase() !== source.firmwareType.toUpperCase());
+    (!source.firmwareType || requestedFirmwareType!.toUpperCase() !== source.firmwareType.toUpperCase() ||
+      requestedTarget!.sizes.some(size => !verifiedSource.resolutionDirectories.includes(`watchface_${size}x${size}`)));
   const scalesFromNativeLayout = verifiedSource.recoveredFromCompiled === true || convertsNativeLayout;
   // A recovered official face is scaled from its native tree at export, so it
   // can be built for any supported watch, not only the one it was decoded from.

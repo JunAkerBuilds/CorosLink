@@ -172,7 +172,13 @@ async function main() {
   });
   await assert.rejects(nativeBuild(pace4Pro), /was selected for COROS W336, not COROS W337/, "Without the flag a 390-only face still refuses another watch");
   const ownWatch = async (extra) => nativeBuild(pace4, extra).then(() => "built", (error) => error.message);
-  assert.equal(await ownWatch({ convertNativeLayout: true }), await ownWatch({}), "The flag does nothing for the face's own watch");
+  // On its own watch the plain export refuses a 390-only face (PACE 4 exports need 390 and 800); asked,
+  // it is built from its own layout, which also gives it the 800px master.
+  assert.match(await ownWatch({}), /requires 390×390 and 800×800/, "Unasked, the own-watch export is unchanged");
+  const ownBuilt = await nativeBuild(pace4, { convertNativeLayout: true });
+  assert.deepEqual(await sizesOf(ownBuilt), [390, 800]);
+  const ownScaled = service.parseCorosWatchfaceConfig(await (await read(ownBuilt)).text("watchface_390x390/config.txt"));
+  assert.equal(ownScaled.time_hour_high_pos, "{100,120}", "Its own layout keeps its coordinates");
   const nativeConverted = await nativeBuild(pace4Pro, { convertNativeLayout: true });
   assert.equal(nativeConverted.firmwareType, pace4Pro.firmwareType);
   assert.deepEqual(await sizesOf(nativeConverted), [466, 800]);
