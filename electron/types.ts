@@ -343,12 +343,19 @@ export interface CorosWatchfaceConversionInput {
   /** Optional preselected carrier for automation/backwards compatibility. */
   targetArchiveId?: string;
   configTextEdits?: Record<string, string>;
+  /**
+   * False: an AMOLED destination gets no always-on layout when the source has none (the phone's
+   * export, which nobody reviews). Default true: Studio creates an editable one from Current.
+   */
+  generateAod?: boolean;
 }
 
 export interface CorosWatchfaceConversionResult {
   archive: CorosWatchfaceArchive;
   appliedRawConfigEditCount: number;
   generatedAod: boolean;
+  /** How much the design's always-on sizes grow to stay put (an AOD only the physical layout had is now composed against the 800px master); 1 when nothing moved. */
+  aodDesignScale?: number;
   display: "mip" | "amoled";
 }
 

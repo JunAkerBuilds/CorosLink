@@ -2598,7 +2598,7 @@ export async function convertCorosWatchfaceArchive(
     throw new Error(`The destination template does not contain every ${target.label} resolution.`);
   }
   const [sourceEntries, carrierEntries] = await Promise.all([readEntries(source.path), readEntries(carrier.path)]);
-  const converted = convertWatchfaceEntries(sourceEntries, carrierEntries, target, rawEdits);
+  const converted = convertWatchfaceEntries(sourceEntries, carrierEntries, target, rawEdits, input.generateAod !== false);
   validateArchiveInventory(converted.entries.map(entry => ({ path: entry.name, type: "File", uncompressedSize: entry.data.length })), MAX_ARCHIVE_FILES, MAX_ARCHIVE_EXPANDED_BYTES, MAX_ARCHIVE_ENTRY_BYTES, 7, "converted watch-face archive");
   const bytes = createStoreZip(converted.entries);
   if (bytes.length > MAX_ARCHIVE_BYTES) throw new Error("The converted archive exceeds 100 MB.");
@@ -2609,7 +2609,8 @@ export async function convertCorosWatchfaceArchive(
     await fs.promises.writeFile(outputPath, bytes, { flag: "wx" });
     const archive = { ...(await inspectArchive(outputPath)), firmwareType: target.firmwareType };
     selectedArchives.set(archive.archiveId, archive);
-    return { archive: toPublicArchive(archive), appliedRawConfigEditCount: converted.appliedRawConfigEditCount, generatedAod: converted.generatedAod, display: target.display };
+    return { archive: toPublicArchive(archive), appliedRawConfigEditCount: converted.appliedRawConfigEditCount, generatedAod: converted.generatedAod,
+      ...(converted.aodDesignScale !== 1 ? { aodDesignScale: converted.aodDesignScale } : {}), display: target.display };
   } catch (error) {
     await fs.promises.rm(outputPath, { force: true });
     throw error;

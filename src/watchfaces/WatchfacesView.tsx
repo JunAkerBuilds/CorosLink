@@ -865,7 +865,8 @@ export function WatchfacesView({
         ...(targetArchive ? { targetArchiveId: targetArchive.archiveId } : {}),
         configTextEdits: design.configTextEdits
       });
-      const prepared = prepareWatchfaceConversion(design, { rawEditsApplied: true, generatedAod: converted.generatedAod });
+      const prepared = prepareWatchfaceConversion(design, { rawEditsApplied: true, generatedAod: converted.generatedAod,
+        ...(converted.aodDesignScale ? { aodDesignScale: converted.aodDesignScale } : {}) });
       const convertedName = convertedProjectName(name, target.firmwareType);
       clearWatchfaceAutomationEditor();
       api.setWatchfaceAutomationReady("editor", false);

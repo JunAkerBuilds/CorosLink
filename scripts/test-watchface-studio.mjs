@@ -301,6 +301,12 @@ assert.deepEqual(
   ],
   "AOD cleanup should discard faint residue and retain a binary outline"
 );
+// A soft sprite (enlarged from a small layout) has no nearly opaque pixels; the plain cutoff would
+// erase it, so its strokes are kept at half its strongest alpha.
+const softAodSprite = new Uint8ClampedArray(6 * 6 * 4);
+for (let index = 0; index < 36; index += 1) softAodSprite[index * 4 + 3] = index % 6 === 0 ? 40 : 200;
+sanitizeWatchfaceAodAlpha(softAodSprite, 6, 6);
+assert.equal(softAodSprite[1 * 4 + 3], 255, "a soft sprite keeps its strokes in the always-on layout");
 const smoothedAodEdge = new Uint8ClampedArray(5 * 5 * 4);
 const setAodAlpha = (x, y, alpha) => {
   smoothedAodEdge[(y * 5 + x) * 4 + 3] = alpha;

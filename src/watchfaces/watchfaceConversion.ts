@@ -33,11 +33,15 @@ export function firmwareTypeForWatchfaceArchive(
  */
 export function prepareWatchfaceConversion(
   design: CorosWatchfaceDesignState,
-  options: { rawEditsApplied?: boolean; generatedAod?: boolean } = {}
+  options: { rawEditsApplied?: boolean; generatedAod?: boolean; aodDesignScale?: number } = {}
 ): PreparedWatchfaceConversion {
   const sourceDesign = structuredClone(design);
   const portableDesign = structuredClone(sourceDesign);
   if (options.rawEditsApplied) delete portableDesign.configTextEdits;
+  const aodScale = options.aodDesignScale;
+  if (aodScale && aodScale !== 1 && portableDesign.modeDesigns?.aod) {
+    portableDesign.modeDesigns = { ...portableDesign.modeDesigns, aod: scaleAodDesignSizes(portableDesign.modeDesigns.aod, aodScale) };
+  }
   if (options.generatedAod && !portableDesign.modeDesigns?.aod) {
     const { version, modeDesigns, configTextEdits, archiveWatchFaceVersion, stripBlankConfigKeys, watchLanguages, ...visual } = structuredClone(portableDesign);
     portableDesign.modeDesigns = { aod: { ...visual, backgroundEdited: true } };
@@ -47,4 +51,22 @@ export function prepareWatchfaceConversion(
     sourceDesign,
     omittedRawConfigEditCount: 0
   };
+}
+
+/**
+ * A face whose always-on layout existed only at the watch's own size was laid out against that
+ * layout; after Convert the 800px master carries it, so font sizes and nudges (dx/dy) in master
+ * pixels grow by `scale` to draw the same. Absolute positions already follow the 800px master and stay.
+ */
+const AOD_SIZE_KEYS = new Set(["fontSize", "dx", "dy"]);
+
+export function scaleAodDesignSizes<T>(design: T, scale: number): T {
+  const walk = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(walk);
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key,
+      AOD_SIZE_KEYS.has(key) && typeof entry === "number" && Number.isFinite(entry) ? Math.round(entry * scale * 100) / 100
+        : typeof entry === "string" && entry.startsWith("data:") ? entry : walk(entry)]));
+  };
+  return walk(design) as T;
 }

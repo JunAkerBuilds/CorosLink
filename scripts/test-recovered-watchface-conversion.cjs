@@ -214,6 +214,37 @@ async function main() {
   assert.deepEqual(await sizesOf(mipConverted), [...apex4.sizes].sort((a, b) => a - b));
   assert.doesNotMatch(await nativeArchive.text("info.json"), /"o_template_id":0\b/, "Template identity comes from the destination carrier");
 
+  // convertWatchfaceEntries: an AOD only the watch tree carries (with a thinned 800 copy Studio
+  // synthesized), AM/PM declared only in the watch tree, and no invented AOD when not wanted.
+  {
+    const { convertWatchfaceEntries } = require("../dist-electron/watchfaceArchiveConversion.js");
+    const pace4Target = WATCHFACE_TARGETS.find(target => target.model === "pace-4");
+    const cfg = (text) => Buffer.from(text.replace(/\n/g, "\r\n"));
+    const source = [
+      { name: "info.json", data: Buffer.from('{"m_name":"Twin","m_app":"watchface_800x800","m_preview":"watchface_customize.png","o_template_id":1,"o_diy_version":1,"o_wf_ver":0}') },
+      { name: "watchface_customize.png", data: png(800) },
+      { name: "watchface_800x800/background.png", data: png(800) },
+      { name: "watchface_800x800/config.txt", data: cfg("[watchface_id]=0x00000020\n[background_icon]=background.png\n[time_hour_high_pos]={200,300}\n") },
+      // The thinned AOD Studio wrote for 800: positions only.
+      { name: "watchface_800x800/AODconfig.txt", data: cfg("[watchface_id]=0x00000020\n[time_hour_high_pos]={200,300}\n") },
+      { name: "watchface_416x416/background.png", data: png(416) },
+      { name: "watchface_416x416/aod_bg.png", data: png(416) },
+      { name: "watchface_416x416/config.txt", data: cfg("[watchface_id]=0x00000021\n[background_icon]=background.png\n[time_hour_high_pos]={104,156}\n[am_pm_icon_pos]=\n[am_icon]=\n[pm_icon]=\n") },
+      { name: "watchface_416x416/AODconfig.txt", data: cfg("[watchface_id]=0x00000021\n[background_icon]=aod_bg.png\n[time_hour_high_pos]={104,156}\n") }
+    ];
+    const carrierEntries = carrier(pace4Target.sizes, "90071992547409950");
+    const twin = convertWatchfaceEntries(source, carrierEntries, pace4Target);
+    const at = (name) => service.parseCorosWatchfaceConfig(twin.entries.find(entry => entry.name === name).data.toString("utf8"));
+    assert.equal(at("watchface_390x390/AODconfig.txt").background_icon, "cl_aod_source/aod_bg.png", "The complete 416 AOD wins over the thinned 800 copy");
+    assert.equal(twin.aodDesignScale, 800 / 416, "The AOD design grows by the master's size over the AOD tree's");
+    assert.equal(at("watchface_390x390/config.txt").am_icon, "", "AM/PM declared only in the watch tree stays declared");
+    const noAod = convertWatchfaceEntries(source.filter(entry => !/AODconfig/.test(entry.name)), carrierEntries, pace4Target, {}, false);
+    assert(!noAod.entries.some(entry => /AODconfig\.txt$/.test(entry.name)), "No AOD is invented when not wanted");
+    assert.equal(noAod.generatedAod, false);
+    const generated = convertWatchfaceEntries(source.filter(entry => !/AODconfig/.test(entry.name)), carrierEntries, pace4Target);
+    assert.equal(generated.generatedAod, true, "Studio still creates an editable AOD by default");
+  }
+
   console.log("Recovered watch-face conversion tests passed");
 }
 

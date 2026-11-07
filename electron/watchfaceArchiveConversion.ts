@@ -78,9 +78,11 @@ export function convertWatchfaceEntries(
   input: WatchfaceConversionEntry[],
   carrier: WatchfaceConversionEntry[],
   target: WatchfaceTarget,
-  configTextEdits: Record<string, string> = {}
-): { entries: WatchfaceConversionEntry[]; appliedRawConfigEditCount: number; generatedAod: boolean } {
-  return convertEntries(input, carrier, target, configTextEdits, false);
+  configTextEdits: Record<string, string> = {},
+  /** False leaves an AMOLED destination with no AOD when the source has none, instead of a copy of Current. */
+  generateAod = true
+): { entries: WatchfaceConversionEntry[]; appliedRawConfigEditCount: number; generatedAod: boolean; aodDesignScale: number } {
+  return convertEntries(input, carrier, target, configTextEdits, false, undefined, generateAod);
 }
 
 /** Final composed recovery export, not a replacement for the editor baseline. */
@@ -108,8 +110,10 @@ function convertEntries(
   target: WatchfaceTarget,
   configTextEdits: Record<string, string>,
   recoveredExport: boolean,
-  masterBackground?: Buffer
-): { entries: WatchfaceConversionEntry[]; appliedRawConfigEditCount: number; generatedAod: boolean } {
+  masterBackground?: Buffer,
+  // A finished export (recoveredExport) is never reviewed, so it never invents an AOD.
+  generateAod = !recoveredExport
+): { entries: WatchfaceConversionEntry[]; appliedRawConfigEditCount: number; generatedAod: boolean; aodDesignScale: number } {
   const source = new Map<string, Buffer>();
   for (const entry of input) {
     const name = normalizeConversionPath(entry.name);
@@ -178,7 +182,28 @@ function convertEntries(
     }
     return text;
   };
-  const current = applyRawChanges(textAt(masterSize, "config.txt")!, "config.txt");
+  // The 800px master may leave out or blank keys that the watch trees fill (Nixie's AM/PM exists only
+  // at 416; the SLENDER family fills colon_icon, negative_sign_icon and AM/PM only at 390). Every tree
+  // is built from the master, so take those keys from the largest tree that has them, scaled; the PNGs
+  // they name are filled in from that tree below, like any other image the master lacks.
+  const withDeviceOnlyKeys = (text: string) => {
+    const master = readConfig(text);
+    const filled = new Set<string>();
+    for (const size of resolutions.filter(size => size !== masterSize)) {
+      const device = readConfig(textAt(size, "config.txt") ?? "");
+      for (const [key, value] of Object.entries(device)) {
+        // A key the master leaves out is copied even blank (a dormant declaration such as AM/PM, which
+        // Studio fills only in trees that declare it); a key it blanks is filled only with a value.
+        if (key === "watchface_id" || key === "watchface_thmb_icon" || filled.has(key) || master[key] || (!value && key in master)) continue;
+        let scaled: string | undefined;
+        try { scaled = readConfig(scaleWatchfaceConfig(`[${key}]=${value}`, masterSize / size))[key]; } catch { continue; }
+        text = setConfigValue(text, key, scaled);
+        filled.add(key);
+      }
+    }
+    return text;
+  };
+  const current = applyRawChanges(withDeviceOnlyKeys(textAt(masterSize, "config.txt")!), "config.txt");
   const masterAssets = new Map<string, Buffer>();
   for (const [name, data] of source) {
     if (name.startsWith(`${dir(masterSize)}/`) && !CONFIG_FILE.test(name.slice(dir(masterSize).length + 1))) {
@@ -191,8 +216,15 @@ function convertEntries(
     if (!width) throw new Error("Cannot read the face's COROS background photo.");
     masterAssets.set(backgroundName, resizePng(customBackground, masterSize / width, "custom/custom_bg.png"));
   }
-  // Some official AMOLED templates only supply AOD at the physical size.
-  const aodSize = resolutions.find(size => textAt(size, "AODconfig.txt") || textAt(size, RETAINED_AOD_CONFIG));
+  // Some official AMOLED templates only supply AOD at the physical size. Studio's
+  // export then fills the missing 800px AOD by rescaling it, dropping every key
+  // whose AOD-only assets live in the physical tree alone (time digits,
+  // background). Take the most complete AOD, not simply the largest, or a second
+  // pass converts that thinned copy and the always-on screen comes out blank.
+  const aodText = (size: number) => textAt(size, "AODconfig.txt") ?? textAt(size, RETAINED_AOD_CONFIG);
+  const aodKeyCount = (size: number) => Object.values(readConfig(aodText(size) ?? "")).filter(value => value !== "").length;
+  const aodSize = resolutions.filter(size => aodText(size))
+    .reduce<number | undefined>((best, size) => best === undefined || aodKeyCount(size) > aodKeyCount(best) ? size : best, undefined);
   let aod = aodSize ? textAt(aodSize, "AODconfig.txt") ?? textAt(aodSize, RETAINED_AOD_CONFIG)! : current;
   if (aodSize && aodSize !== masterSize) {
     aod = scaleWatchfaceConfig(aod, masterSize / aodSize);
@@ -283,11 +315,16 @@ function convertEntries(
     for (const [file, text] of [["config.txt", current], [target.display === "amoled" ? "AODconfig.txt" : RETAINED_AOD_CONFIG, aod]] as const) {
       // On MIP retain only the master AOD, avoiding unused device mode files.
       if (file === RETAINED_AOD_CONFIG && (size !== 800 || !aodSize)) continue;
+      // With no source AOD, a generated one is a full-brightness copy of Current: only where it is reviewed.
+      if (file !== "config.txt" && !aodSize && !generateAod) continue;
       let scaled = scaleWatchfaceConfig(text, size / masterSize);
       if (id !== undefined) scaled = setConfigValue(scaled, "watchface_id", id);
       if (recoveredExport) scaled = setConfigValue(scaled, "watchface_thmb_icon", "thmb.png");
       entries.push({ name: `${dir(size)}/${file}`, data: Buffer.from(scaled) });
     }
   }
-  return { entries, appliedRawConfigEditCount: edits.length, generatedAod: !aodSize && target.display === "amoled" };
+  // An AOD that only the physical tree carried was composed against that tree; it is now
+  // composed against the master, so the design's AOD sizes grow by this much to stay put.
+  const aodDesignScale = aodSize && aodSize !== masterSize ? masterSize / aodSize : 1;
+  return { entries, appliedRawConfigEditCount: edits.length, generatedAod: !aodSize && generateAod && target.display === "amoled", aodDesignScale };
 }

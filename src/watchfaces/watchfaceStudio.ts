@@ -181,8 +181,24 @@ export function sanitizeWatchfaceAodAlpha(
   height = 0,
   cutoff = AOD_SAFE_ALPHA_CUTOFF
 ): Uint8ClampedArray {
-  const normalizedCutoff = Math.max(1, Math.min(255, Math.round(cutoff)));
+  let normalizedCutoff = Math.max(1, Math.min(255, Math.round(cutoff)));
   const pixelCount = Math.floor(pixels.length / 4);
+  // A soft sprite (one enlarged from a small layout, say 260 to 800 to 416) has few nearly opaque
+  // pixels, and the cutoff alone breaks its strokes into noise. When the cutoff would keep under a third
+  // of a sprite's ink, threshold at half its strongest alpha instead; crisp sprites keep the cutoff.
+  let maxAlpha = 0;
+  for (let index = 0; index < pixelCount; index += 1) maxAlpha = Math.max(maxAlpha, pixels[index * 4 + 3]!);
+  const half = Math.max(1, Math.round(maxAlpha / 2));
+  if (half < normalizedCutoff) {
+    let strong = 0;
+    let ink = 0;
+    for (let index = 0; index < pixelCount; index += 1) {
+      const alpha = pixels[index * 4 + 3]!;
+      if (alpha >= half) ink += 1;
+      if (alpha >= normalizedCutoff) strong += 1;
+    }
+    if (ink >= 16 && strong < ink / 3) normalizedCutoff = half;
+  }
   const sourceAlpha = new Uint8Array(pixelCount);
   const core = new Uint8Array(pixelCount);
   for (let index = 0; index < pixelCount; index += 1) {
@@ -2499,6 +2515,15 @@ export function getAmPmCapability(
   }
   let defaultPos = parseConfigPos(resolution.config["am_pm_icon_pos"]);
   if (!defaultPos) {
+    // A watch tree that places AM/PM (Studio's own export of a face whose master leaves it out).
+    const placed = details.resolutions.find((tree) => tree !== resolution && parseConfigPos(tree.config["am_pm_icon_pos"]));
+    const pos = placed && parseConfigPos(placed.config["am_pm_icon_pos"]);
+    if (placed && pos && placed.width > 0) {
+      const scale = resolution.width / placed.width;
+      defaultPos = { x: Math.round(pos.x * scale), y: Math.round(pos.y * scale) };
+    }
+  }
+  if (!defaultPos) {
     const minutePos = parseConfigPos(resolution.config["time_minute_low_pos"]);
     const minuteFile = findSpriteFolder(
       resolution,
@@ -2519,7 +2544,12 @@ export function getAmPmCapability(
   }
   return {
     icon: icons.am,
-    active: (resolution.config["am_icon"] ?? "") !== "",
+    // Studio writes AM/PM only into trees that declare it, so its own export of a face whose master
+    // leaves the keys out (Nixie) has AM/PM on in a watch tree only. A master that declares them blank
+    // keeps them dormant, as before.
+    active: (resolution.config["am_icon"] ?? "") !== "" ||
+      (!configDeclaresAmPm(resolution.config) &&
+        details.resolutions.some((tree) => (tree.config["am_icon"] ?? "").trim() !== "")),
     defaultPos
   };
 }
