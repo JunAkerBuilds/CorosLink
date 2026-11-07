@@ -2179,6 +2179,9 @@ body .wf-font-picker-panel .wf-png-set .wf-png-font-rules {
 /* Removed from this face: deleted template parts, each with Put back. */
 :root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-removed-group {
   display: grid;
+  /* One column: the generic layer row's "name | actions" columns would put
+     the open list beside a squeezed header. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   margin-top: 10px;
   padding-top: 8px;
@@ -2446,15 +2449,6 @@ body .wf-font-picker-panel .wf-png-set .wf-png-font-rules {
 body.wf-is-resizing-layers {
   cursor: col-resize;
   user-select: none;
-}
-
-/* Three row actions (delete, lock, eye) need room past the row's end too. */
-:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-layer-item:is(
-  :hover,
-  :focus-within,
-  :has(.is-selected)
-):has(.wf-layer-row-actions > :nth-child(3)) > .watchface-layer-row {
-  padding-right: 90px;
 }
 
 /* --- Chart page tiles: a bubble that says what each page is ------------- */
