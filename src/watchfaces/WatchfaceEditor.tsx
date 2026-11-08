@@ -1218,6 +1218,24 @@ export function WatchfaceEditor({
     handle.addEventListener("pointerup", end);
     handle.addEventListener("pointercancel", end);
   }
+  /** Arrow keys resize the Layers tray (Shift for bigger steps), Home/End jump to its limits, Enter resets it. */
+  function resizeLayersWithKeys(event: React.KeyboardEvent<HTMLDivElement>) {
+    const current = layersWidth ?? event.currentTarget.parentElement?.getBoundingClientRect().width ?? LAYERS_WIDTH_MIN;
+    const step = event.shiftKey ? 48 : 16;
+    const next = event.key === "ArrowLeft" ? current - step
+      : event.key === "ArrowRight" ? current + step
+      : event.key === "Home" ? LAYERS_WIDTH_MIN
+      : event.key === "End" ? LAYERS_WIDTH_MAX
+      : undefined;
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveLayersWidth(null);
+      return;
+    }
+    if (next === undefined) return;
+    event.preventDefault();
+    saveLayersWidth(Math.min(LAYERS_WIDTH_MAX, Math.max(LAYERS_WIDTH_MIN, next)));
+  }
   const [layerQuery, setLayerQuery] = useState("");
   const [collapsedLayerSections, setCollapsedLayerSections] = useState(
     createCollapsedWatchfaceLayerSections
@@ -10407,8 +10425,10 @@ export function WatchfaceEditor({
         /> : null}
         <aside className={`watchface-editor-layers wf-pane wf-layers-pane${layersOpen ? " is-open" : ""}`} aria-label={t("Layers")}>
           <div className="wf-layers-resize" role="separator" aria-orientation="vertical" aria-label={t("Resize Layers")}
+            tabIndex={0} aria-valuemin={LAYERS_WIDTH_MIN} aria-valuemax={LAYERS_WIDTH_MAX}
+            {...(layersWidth ? { "aria-valuenow": Math.round(layersWidth) } : {})}
             title={t("Drag to resize. Double-click to reset.")}
-            onPointerDown={startLayersResize} onDoubleClick={() => saveLayersWidth(null)} />
+            onPointerDown={startLayersResize} onDoubleClick={() => saveLayersWidth(null)} onKeyDown={resizeLayersWithKeys} />
           <div className="watchface-editor-pane-heading wf-pane-heading">
             <div className="wf-pane-heading-main">
               <span className="wf-pane-heading-icon" aria-hidden="true">

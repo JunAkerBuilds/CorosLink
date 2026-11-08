@@ -2439,7 +2439,12 @@ body .wf-font-picker-panel .wf-png-set .wf-png-font-rules {
     transition: opacity 120ms ease;
   }
 
+  :root .watchface-shell.watchface-shell--studio .wf-layers-resize:focus-visible {
+    outline: none;
+  }
+
   :root .watchface-shell.watchface-shell--studio .wf-layers-resize:hover::after,
+  :root .watchface-shell.watchface-shell--studio .wf-layers-resize:focus-visible::after,
   body.wf-is-resizing-layers .watchface-shell.watchface-shell--studio .wf-layers-resize::after {
     background: var(--atl-lume);
     opacity: 1;

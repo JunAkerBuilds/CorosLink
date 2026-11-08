@@ -301,12 +301,30 @@ assert.deepEqual(
   ],
   "AOD cleanup should discard faint residue and retain a binary outline"
 );
-// A soft sprite (enlarged from a small layout) has no nearly opaque pixels; the plain cutoff would
-// erase it, so its strokes are kept at half its strongest alpha.
-const softAodSprite = new Uint8ClampedArray(6 * 6 * 4);
-for (let index = 0; index < 36; index += 1) softAodSprite[index * 4 + 3] = index % 6 === 0 ? 40 : 200;
-sanitizeWatchfaceAodAlpha(softAodSprite, 6, 6);
-assert.equal(softAodSprite[1 * 4 + 3], 255, "a soft sprite keeps its strokes in the always-on layout");
+// A soft sprite (resampled up from a small layout) ramps across each stroke and has no nearly opaque
+// pixels; the plain cutoff would erase it, so its strokes are kept at half its strongest alpha.
+const aodSprite = (width, height, alphaAt) => {
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) pixels[(y * width + x) * 4 + 3] = alphaAt(x, y);
+  return pixels;
+};
+const aodAlpha = (pixels, width, x, y) => pixels[(y * width + x) * 4 + 3];
+const softStroke = [0, 50, 120, 190, 230, 190, 120, 50, 0];
+const softAodSprite = aodSprite(9, 8, (x) => softStroke[x]);
+sanitizeWatchfaceAodAlpha(softAodSprite, 9, 8);
+assert.equal(aodAlpha(softAodSprite, 9, 2, 3), 255, "a soft sprite keeps its strokes in the always-on layout");
+assert.equal(aodAlpha(softAodSprite, 9, 0, 3), 0, "a soft sprite's empty margin stays empty");
+// A glow around a crisp glyph: the halo is not artwork to rescue and is dropped as before.
+const glowProfile = [0, 150, 150, 150, 255, 255, 150, 150, 150, 0];
+const glowAodSprite = aodSprite(10, 8, (x) => glowProfile[x]);
+sanitizeWatchfaceAodAlpha(glowAodSprite, 10, 8);
+assert.equal(aodAlpha(glowAodSprite, 10, 4, 3), 255, "a glowing glyph keeps its core");
+assert.equal(aodAlpha(glowAodSprite, 10, 1, 3), 0, "a glow halo does not turn into a solid rim");
+// A crisp sprite at reduced layer opacity: a flat plateau below the cutoff, which still vanishes.
+const fadedAodSprite = aodSprite(8, 8, (x) => (x >= 2 && x <= 5 ? 128 : 0));
+sanitizeWatchfaceAodAlpha(fadedAodSprite, 8, 8);
+assert(Array.from({ length: 64 }, (_, index) => fadedAodSprite[index * 4 + 3]).every((alpha) => alpha === 0),
+  "a faded layer is not revived at full opacity in the always-on layout");
 const smoothedAodEdge = new Uint8ClampedArray(5 * 5 * 4);
 const setAodAlpha = (x, y, alpha) => {
   smoothedAodEdge[(y * 5 + x) * 4 + 3] = alpha;

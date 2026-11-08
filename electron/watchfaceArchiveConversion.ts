@@ -188,15 +188,26 @@ function convertEntries(
   // they name are filled in from that tree below, like any other image the master lacks.
   const withDeviceOnlyKeys = (text: string) => {
     const master = readConfig(text);
+    // Trees are visited largest first; the first tree with a value wins. A blank declaration only
+    // stands in until then, so a blank in a larger tree never hides a value a smaller one sets.
     const filled = new Set<string>();
+    const declared = new Set<string>();
     for (const size of resolutions.filter(size => size !== masterSize)) {
       const device = readConfig(textAt(size, "config.txt") ?? "");
       for (const [key, value] of Object.entries(device)) {
-        // A key the master leaves out is copied even blank (a dormant declaration such as AM/PM, which
-        // Studio fills only in trees that declare it); a key it blanks is filled only with a value.
-        if (key === "watchface_id" || key === "watchface_thmb_icon" || filled.has(key) || master[key] || (!value && key in master)) continue;
+        if (key === "watchface_id" || key === "watchface_thmb_icon" || filled.has(key) || master[key]) continue;
+        if (!value) {
+          // A key the master leaves out is copied even blank (a dormant declaration such as AM/PM, which
+          // Studio fills only in trees that declare it); a key the master blanks stays as it is.
+          if (key in master || declared.has(key)) continue;
+          text = setConfigValue(text, key, "");
+          declared.add(key);
+          continue;
+        }
         let scaled: string | undefined;
         try { scaled = readConfig(scaleWatchfaceConfig(`[${key}]=${value}`, masterSize / size))[key]; } catch { continue; }
+        // undefined would delete the key (setConfigValue), including a blank declaration copied above.
+        if (scaled === undefined) continue;
         text = setConfigValue(text, key, scaled);
         filled.add(key);
       }

@@ -65,6 +65,8 @@ async function main() {
   await fs.mkdir(cache, { recursive: true });
   for (const target of WATCHFACE_TARGETS) {
     await fs.writeFile(path.join(cache, `${target.model}.zip`), createStoreZip(carrier(target.sizes, `9007199254740${900 + WATCHFACE_TARGETS.indexOf(target)}`)));
+    // Marked as already scanned, so the service converts on these instead of fetching COROS's catalog.
+    await fs.writeFile(path.join(cache, `${target.model}.carrier.json`), JSON.stringify({ scanned: true, keys: ["watchface_id", "background_icon"] }));
   }
 
   // Saved projects reopen their starter tagged with the watch it was decoded
@@ -114,12 +116,11 @@ async function main() {
   assert(![...pace4Archive.files.keys()].some(name => name.startsWith("recovery/") || /\.bin$/i.test(name)), "No compiled data travels to the destination");
   const scaled = service.parseCorosWatchfaceConfig(await pace4Archive.text("watchface_390x390/config.txt"));
   assert.equal(scaled.time_hour_high_pos, `{${Math.round(nativeX * 390 / 416)},${Math.round(nativeY * 390 / 416)}}`, "Native coordinates scale directly to the destination size");
-  // The service ships its own carriers now, so identities are checked by shape, not by the fixtures above.
-  assert.notEqual(scaled.watchface_id, undefined, "Watch-face identity comes from the destination carrier");
-  assert.doesNotMatch(await pace4Archive.text("info.json"), /"o_template_id":"?90071992547409931\b/, "Template identity comes from the destination carrier");
+  assert.equal(scaled.watchface_id, "0x00000020", "Watch-face identity comes from the destination carrier");
+  assert.match(await pace4Archive.text("info.json"), new RegExp(`"o_template_id":9007199254740${900 + WATCHFACE_TARGETS.indexOf(pace4)}\\b`), "Template identity comes from the destination carrier");
   assert.match(await pace4Archive.text("info.json"), /"m_name":"Fixture"/, "The face keeps its name");
   assert.equal(PNG.sync.read(await pace4Archive.files.get("watchface_390x390/background.png").buffer()).width, 390);
-  assert(PNG.sync.read(await pace4Archive.files.get("watchface_390x390/thmb.png").buffer()).width > 0, "The thumbnail is rebuilt");
+  assert.equal(PNG.sync.read(await pace4Archive.files.get("watchface_390x390/thmb.png").buffer()).width, 160, "The thumbnail comes from the destination carrier");
 
   // A MIP destination gets every physical size plus the 800px master.
   const nomad = WATCHFACE_TARGETS.find(target => target.model === "nomad");
@@ -212,7 +213,8 @@ async function main() {
     previewDataUrl: dataUrl(260), firmwareType: apex4.firmwareType, watchModel: apex4.model, convertNativeLayout: true });
   assert.equal(mipConverted.firmwareType, apex4.firmwareType);
   assert.deepEqual(await sizesOf(mipConverted), [...apex4.sizes].sort((a, b) => a - b));
-  assert.doesNotMatch(await nativeArchive.text("info.json"), /"o_template_id":0\b/, "Template identity comes from the destination carrier");
+  assert.match(await (await read(mipConverted)).text("info.json"), new RegExp(`"o_template_id":9007199254740${900 + WATCHFACE_TARGETS.indexOf(apex4)}\\b`),
+    "Template identity comes from the destination carrier");
 
   // convertWatchfaceEntries: an AOD only the watch tree carries (with a thinned 800 copy Studio
   // synthesized), AM/PM declared only in the watch tree, and no invented AOD when not wanted.
@@ -243,6 +245,21 @@ async function main() {
     assert.equal(noAod.generatedAod, false);
     const generated = convertWatchfaceEntries(source.filter(entry => !/AODconfig/.test(entry.name)), carrierEntries, pace4Target);
     assert.equal(generated.generatedAod, true, "Studio still creates an editable AOD by default");
+
+    // The largest watch tree declares the colon blank and a smaller one draws it: the value wins over
+    // the blank, scaled from the tree that has it, and the image it names travels with it.
+    const tiers = [
+      ...source.filter(entry => !/AODconfig|416x416\/config/.test(entry.name)),
+      { name: "watchface_416x416/config.txt", data: cfg("[watchface_id]=0x00000021\n[background_icon]=background.png\n[colon_icon]=\n") },
+      { name: "watchface_260x260/background.png", data: png(260) },
+      { name: "watchface_260x260/colon.png", data: png(13) },
+      { name: "watchface_260x260/config.txt", data: cfg("[watchface_id]=0x00000022\n[background_icon]=background.png\n[colon_icon]=colon.png\n[colon_icon_pos]={130,65}\n") }
+    ];
+    const tiered = convertWatchfaceEntries(tiers, carrierEntries, pace4Target);
+    const tieredAt = (name) => service.parseCorosWatchfaceConfig(tiered.entries.find(entry => entry.name === name).data.toString("utf8"));
+    assert.equal(tieredAt("watchface_390x390/config.txt").colon_icon, "colon.png", "A blank in a larger tree does not hide a smaller tree's value");
+    assert.equal(tieredAt("watchface_390x390/config.txt").colon_icon_pos, `{${Math.round(130 * 390 / 260)},${Math.round(65 * 390 / 260)}}`);
+    assert(tiered.entries.some(entry => entry.name === "watchface_390x390/colon.png"), "The colon image travels with its key");
   }
 
   console.log("Recovered watch-face conversion tests passed");
