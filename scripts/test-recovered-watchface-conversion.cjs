@@ -237,7 +237,7 @@ async function main() {
     const carrierEntries = carrier(pace4Target.sizes, "90071992547409950");
     const twin = convertWatchfaceEntries(source, carrierEntries, pace4Target);
     const at = (name) => service.parseCorosWatchfaceConfig(twin.entries.find(entry => entry.name === name).data.toString("utf8"));
-    assert.equal(at("watchface_390x390/AODconfig.txt").background_icon, "cl_aod_source/aod_bg.png", "The complete 416 AOD wins over the thinned 800 copy");
+    assert.equal(at("watchface_390x390/AODconfig.txt").background_icon, "cl_aod_source\\aod_bg.png", "The complete 416 AOD wins over the thinned 800 copy (with the backslash path COROS's compiler reads)");
     assert.equal(twin.aodDesignScale, 800 / 416, "The AOD design grows by the master's size over the AOD tree's");
     assert.equal(at("watchface_390x390/config.txt").am_icon, "", "AM/PM declared only in the watch tree stays declared");
     const noAod = convertWatchfaceEntries(source.filter(entry => !/AODconfig/.test(entry.name)), carrierEntries, pace4Target, {}, false);
@@ -251,6 +251,8 @@ async function main() {
     const tiers = [
       ...source.filter(entry => !/AODconfig|416x416\/config/.test(entry.name)),
       { name: "watchface_416x416/config.txt", data: cfg("[watchface_id]=0x00000021\n[background_icon]=background.png\n[colon_icon]=\n") },
+      // Same file name in the larger tree, other artwork at another size: not the colon this key draws.
+      { name: "watchface_416x416/colon.png", data: png(40) },
       { name: "watchface_260x260/background.png", data: png(260) },
       { name: "watchface_260x260/colon.png", data: png(13) },
       { name: "watchface_260x260/config.txt", data: cfg("[watchface_id]=0x00000022\n[background_icon]=background.png\n[colon_icon]=colon.png\n[colon_icon_pos]={130,65}\n") }
@@ -259,7 +261,9 @@ async function main() {
     const tieredAt = (name) => service.parseCorosWatchfaceConfig(tiered.entries.find(entry => entry.name === name).data.toString("utf8"));
     assert.equal(tieredAt("watchface_390x390/config.txt").colon_icon, "colon.png", "A blank in a larger tree does not hide a smaller tree's value");
     assert.equal(tieredAt("watchface_390x390/config.txt").colon_icon_pos, `{${Math.round(130 * 390 / 260)},${Math.round(65 * 390 / 260)}}`);
-    assert(tiered.entries.some(entry => entry.name === "watchface_390x390/colon.png"), "The colon image travels with its key");
+    const colon = tiered.entries.find(entry => entry.name === "watchface_390x390/colon.png");
+    assert(colon, "The colon image travels with its key");
+    assert.equal(PNG.sync.read(colon.data).width, Math.round(13 * 390 / 260), "The colon image comes from the tree that supplies the key");
   }
 
   console.log("Recovered watch-face conversion tests passed");

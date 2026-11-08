@@ -1185,6 +1185,17 @@ export function WatchfaceEditor({
       return null;
     }
   });
+  // The tray's rendered width, so the resize handle reports a value at the default (CSS) width too.
+  const [layersPane, setLayersPane] = useState<HTMLElement | null>(null);
+  const [measuredLayersWidth, setMeasuredLayersWidth] = useState<number | null>(null);
+  useEffect(() => {
+    if (!layersPane || typeof ResizeObserver === "undefined") return;
+    const measure = () => setMeasuredLayersWidth(Math.round(layersPane.getBoundingClientRect().width) || null);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(layersPane);
+    return () => observer.disconnect();
+  }, [layersPane]);
   function saveLayersWidth(width: number | null) {
     setLayersWidth(width);
     try {
@@ -1220,7 +1231,7 @@ export function WatchfaceEditor({
   }
   /** Arrow keys resize the Layers tray (Shift for bigger steps), Home/End jump to its limits, Enter resets it. */
   function resizeLayersWithKeys(event: React.KeyboardEvent<HTMLDivElement>) {
-    const current = layersWidth ?? event.currentTarget.parentElement?.getBoundingClientRect().width ?? LAYERS_WIDTH_MIN;
+    const current = layersWidth ?? measuredLayersWidth ?? event.currentTarget.parentElement?.getBoundingClientRect().width ?? LAYERS_WIDTH_MIN;
     const step = event.shiftKey ? 48 : 16;
     const next = event.key === "ArrowLeft" ? current - step
       : event.key === "ArrowRight" ? current + step
@@ -8937,6 +8948,10 @@ export function WatchfaceEditor({
       );
       const command = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
+      // A focused separator (the Layers resize handle) uses arrows, Home/End and Enter itself, with or
+      // without a modifier. It marks each key it uses (preventDefault, which runs before this window
+      // listener); only unused command shortcuts (save, undo) still reach the canvas.
+      if (target?.closest("[role='separator']") && (!command || event.defaultPrevented)) return;
 
       if (cropSpriteId && event.key === "Escape") {
         event.preventDefault();
@@ -10423,10 +10438,10 @@ export function WatchfaceEditor({
           faceOptions={faceAddOptions}
           chartPagesOnFace={design.nativeData?.chart?.enabled ? stripChartPages.map(page => page.page) : []}
         /> : null}
-        <aside className={`watchface-editor-layers wf-pane wf-layers-pane${layersOpen ? " is-open" : ""}`} aria-label={t("Layers")}>
+        <aside ref={setLayersPane} className={`watchface-editor-layers wf-pane wf-layers-pane${layersOpen ? " is-open" : ""}`} aria-label={t("Layers")}>
           <div className="wf-layers-resize" role="separator" aria-orientation="vertical" aria-label={t("Resize Layers")}
             tabIndex={0} aria-valuemin={LAYERS_WIDTH_MIN} aria-valuemax={LAYERS_WIDTH_MAX}
-            {...(layersWidth ? { "aria-valuenow": Math.round(layersWidth) } : {})}
+            {...(layersWidth ?? measuredLayersWidth ? { "aria-valuenow": Math.round((layersWidth ?? measuredLayersWidth)!) } : {})}
             title={t("Drag to resize. Double-click to reset.")}
             onPointerDown={startLayersResize} onDoubleClick={() => saveLayersWidth(null)} onKeyDown={resizeLayersWithKeys} />
           <div className="watchface-editor-pane-heading wf-pane-heading">

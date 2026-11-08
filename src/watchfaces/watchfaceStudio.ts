@@ -179,34 +179,31 @@ export function sanitizeWatchfaceAodAlpha(
   pixels: Uint8ClampedArray,
   width = 0,
   height = 0,
-  cutoff = AOD_SAFE_ALPHA_CUTOFF
+  cutoff = AOD_SAFE_ALPHA_CUTOFF,
+  options: { keepCutoff?: boolean } = {}
 ): Uint8ClampedArray {
   let normalizedCutoff = Math.max(1, Math.min(255, Math.round(cutoff)));
   const pixelCount = Math.floor(pixels.length / 4);
-  // A soft sprite (one resampled up from a small layout, say 260 to 800 to 416) keeps hardly any nearly
-  // opaque pixels, so the cutoff alone breaks its strokes into noise; it is thresholded at half its
-  // strongest alpha instead, the usual way to rebinarize a resampled mask. Only a sprite whose own
-  // artwork is soft qualifies, and the test runs on the finished PNG, so preview and export agree:
-  // - a crisp core (glow, shadow or stroke around a crisp glyph) keeps the cutoff, so a halo is
-  //   still dropped instead of turning into a solid rim;
-  // - a faded layer (layer opacity: a flat plateau at the faded alpha) keeps the cutoff, so it
-  //   still vanishes as before instead of coming back at full opacity.
-  // A resampled sprite ramps from its strongest alpha down, so few of its pixels sit at the peak.
-  let maxAlpha = 0;
-  for (let index = 0; index < pixelCount; index += 1) maxAlpha = Math.max(maxAlpha, pixels[index * 4 + 3]!);
-  const half = Math.max(1, Math.round(maxAlpha / 2));
-  if (half < normalizedCutoff) {
-    const plateauFloor = maxAlpha * 0.95;
-    let strong = 0;
-    let ink = 0;
-    let plateau = 0;
-    for (let index = 0; index < pixelCount; index += 1) {
-      const alpha = pixels[index * 4 + 3]!;
-      if (alpha >= half) ink += 1;
-      if (alpha >= normalizedCutoff) strong += 1;
-      if (alpha >= plateauFloor) plateau += 1;
+  // A soft sprite (one resampled up from a small layout, say 260 to 800 to 416) has few nearly opaque
+  // pixels, so the cutoff alone breaks its strokes into noise. When the cutoff would keep under a third
+  // of its ink, it is thresholded at half its strongest alpha instead, the usual way to rebinarize a
+  // resampled mask; crisp sprites keep the cutoff. Alpha alone can't tell soft artwork from a layer
+  // faded by its opacity or a glow's halo, so callers that baked opacity, effects or strokes into the
+  // sprite pass keepCutoff: those still drop below the cutoff, as before.
+  if (!options.keepCutoff) {
+    let maxAlpha = 0;
+    for (let index = 0; index < pixelCount; index += 1) maxAlpha = Math.max(maxAlpha, pixels[index * 4 + 3]!);
+    const half = Math.max(1, Math.round(maxAlpha / 2));
+    if (half < normalizedCutoff) {
+      let strong = 0;
+      let ink = 0;
+      for (let index = 0; index < pixelCount; index += 1) {
+        const alpha = pixels[index * 4 + 3]!;
+        if (alpha >= half) ink += 1;
+        if (alpha >= normalizedCutoff) strong += 1;
+      }
+      if (ink >= 16 && strong * 3 < ink) normalizedCutoff = half;
     }
-    if (ink >= 16 && strong * 20 <= ink && plateau * 2 < ink) normalizedCutoff = half;
   }
   const sourceAlpha = new Uint8Array(pixelCount);
   const core = new Uint8Array(pixelCount);
@@ -1969,7 +1966,8 @@ export async function buildWatchfaceConfigAssetReplacements(
           replacements.push({
             path: source.path,
             dataUrl,
-            ...(templateCanvas?.native ? { allowDimensionOverride: true } : {})
+            ...(templateCanvas?.native ? { allowDimensionOverride: true } : {}),
+            ...(hasDecorations || opacity < 1 ? { aodKeepCutoff: true } : {})
           });
           continue;
         }
@@ -2032,7 +2030,8 @@ export async function buildWatchfaceConfigAssetReplacements(
             : `${resolution.directory}/${configAssetCreatedRelativePath(id)}`,
           dataUrl,
           create: !replaceInPlace,
-          ...(canvasSize.native ? { allowDimensionOverride: true } : {})
+          ...(canvasSize.native ? { allowDimensionOverride: true } : {}),
+          ...(hasDecorations || opacity < 1 ? { aodKeepCutoff: true } : {})
         });
       }
     }
@@ -2140,7 +2139,8 @@ export async function buildWatchfaceConfigAssetReplacements(
             dataUrl: await applyWatchfaceDataUrlOpacity(
               asset.dataUrl,
               controlBatteryOpacity
-            )
+            ),
+            aodKeepCutoff: true
           });
         }
       }
@@ -3952,7 +3952,9 @@ export async function renderWatchfaceSolidFontSprite(dataUrl: string): Promise<s
 
 /** Produces the exact binary-alpha PNG used by AOD preview and export. */
 export async function renderWatchfaceAodSafeSprite(
-  dataUrl: string
+  dataUrl: string,
+  /** The sprite carries baked layer opacity, effects or strokes (see sanitizeWatchfaceAodAlpha). */
+  keepCutoff = false
 ): Promise<string> {
   const image = await loadStudioImage(dataUrl, false);
   const canvas = document.createElement("canvas");
@@ -3965,7 +3967,7 @@ export async function renderWatchfaceAodSafeSprite(
   if (!context) return dataUrl;
   context.drawImage(image, 0, 0);
   const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-  sanitizeWatchfaceAodAlpha(imageData.data, canvas.width, canvas.height);
+  sanitizeWatchfaceAodAlpha(imageData.data, canvas.width, canvas.height, undefined, { keepCutoff });
   context.putImageData(imageData, 0, 0);
   return canvas.toDataURL("image/png");
 }
@@ -8878,12 +8880,11 @@ export async function buildLayerColorSpriteReplacements(
           job.color
         )
       : asset.dataUrl;
+    const opacity = resolveWatchfaceLayerOpacity(opacitySource, job.layerId);
     replacements.push({
       path,
-      dataUrl: await applyWatchfaceDataUrlOpacity(
-        renderedDataUrl,
-        resolveWatchfaceLayerOpacity(opacitySource, job.layerId)
-      )
+      dataUrl: await applyWatchfaceDataUrlOpacity(renderedDataUrl, opacity),
+      ...(opacity < 1 ? { aodKeepCutoff: true } : {})
     });
   }
   return replacements;
@@ -9375,7 +9376,9 @@ function drawStudioLayerImage(
   if (options.compiledPixels) options.onCompiledSprite?.(layerId ?? "sprite", image, x, y, width, height);
   const renderAodSafeAlpha = (
     source: CanvasImageSource,
-    alpha = 1
+    alpha = 1,
+    // Effects or strokes are drawn into source (see sanitizeWatchfaceAodAlpha).
+    decorated = false
   ): CanvasImageSource => {
     if (options.previewMode !== "aod" || options.compiledPixels) return source;
     const sized = source as {
@@ -9416,7 +9419,9 @@ function drawStudioLayerImage(
         mask.width,
         mask.height
       );
-      sanitizeWatchfaceAodAlpha(imageData.data, mask.width, mask.height);
+      sanitizeWatchfaceAodAlpha(imageData.data, mask.width, mask.height, undefined, {
+        keepCutoff: decorated || alpha < 1
+      });
       maskContext.putImageData(imageData, 0, 0);
       return mask;
     } catch {
@@ -9511,7 +9516,7 @@ function drawStudioLayerImage(
     !watchfaceLayerRequiresFixedSpriteBounds(layerId)
   );
   drawLayer(
-    renderAodSafeAlpha(rendered.canvas),
+    renderAodSafeAlpha(rendered.canvas, 1, true),
     x - rendered.padding.left,
     y - rendered.padding.top
   );
@@ -10376,7 +10381,7 @@ export async function drawStudioPreview(
     const aodOverlay = options.previewMode === "aod" &&
       !options.compiledPixels && analogCenterLayoutGroupId(configKey);
     const image = await loadStudioImage(aodOverlay
-      ? await renderWatchfaceAodSafeSprite(renderedDataUrl)
+      ? await renderWatchfaceAodSafeSprite(renderedDataUrl, hasAssetDecorations || assetOpacity < 1)
       : renderedDataUrl);
     configuredAssetImages.set(cacheKey, image);
     return image;

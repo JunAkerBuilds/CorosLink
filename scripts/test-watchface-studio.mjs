@@ -314,15 +314,22 @@ const softAodSprite = aodSprite(9, 8, (x) => softStroke[x]);
 sanitizeWatchfaceAodAlpha(softAodSprite, 9, 8);
 assert.equal(aodAlpha(softAodSprite, 9, 2, 3), 255, "a soft sprite keeps its strokes in the always-on layout");
 assert.equal(aodAlpha(softAodSprite, 9, 0, 3), 0, "a soft sprite's empty margin stays empty");
-// A glow around a crisp glyph: the halo is not artwork to rescue and is dropped as before.
+// A resampled stroke that kept a few crisp pixels at its spine is still soft artwork: rescued whole.
+const spineStroke = [0, 60, 140, 200, 255, 200, 140, 60, 0];
+const spineAodSprite = aodSprite(9, 8, (x) => spineStroke[x]);
+sanitizeWatchfaceAodAlpha(spineAodSprite, 9, 8);
+assert.equal(aodAlpha(spineAodSprite, 9, 2, 3), 255, "a resampled stroke with a crisp spine keeps its full width");
+// Alpha alone can't tell these from soft artwork, so the sprite's builder says what it baked in:
+// a glow's halo is dropped as before instead of turning into a solid rim...
 const glowProfile = [0, 150, 150, 150, 255, 255, 150, 150, 150, 0];
 const glowAodSprite = aodSprite(10, 8, (x) => glowProfile[x]);
-sanitizeWatchfaceAodAlpha(glowAodSprite, 10, 8);
+sanitizeWatchfaceAodAlpha(glowAodSprite, 10, 8, undefined, { keepCutoff: true });
 assert.equal(aodAlpha(glowAodSprite, 10, 4, 3), 255, "a glowing glyph keeps its core");
 assert.equal(aodAlpha(glowAodSprite, 10, 1, 3), 0, "a glow halo does not turn into a solid rim");
-// A crisp sprite at reduced layer opacity: a flat plateau below the cutoff, which still vanishes.
-const fadedAodSprite = aodSprite(8, 8, (x) => (x >= 2 && x <= 5 ? 128 : 0));
-sanitizeWatchfaceAodAlpha(fadedAodSprite, 8, 8);
+// ...and a layer at reduced opacity still vanishes rather than coming back at full opacity,
+// even one whose antialiased edges make it look like a ramp.
+const fadedAodSprite = aodSprite(8, 8, (x) => [0, 40, 90, 128, 128, 90, 40, 0][x]);
+sanitizeWatchfaceAodAlpha(fadedAodSprite, 8, 8, undefined, { keepCutoff: true });
 assert(Array.from({ length: 64 }, (_, index) => fadedAodSprite[index * 4 + 3]).every((alpha) => alpha === 0),
   "a faded layer is not revived at full opacity in the always-on layout");
 const smoothedAodEdge = new Uint8ClampedArray(5 * 5 * 4);

@@ -586,6 +586,11 @@ export interface CorosWatchfaceAssetReplacement {
   create?: boolean;
   /** Allows a supported state-sprite replacement to change template PNG dimensions. */
   allowDimensionOverride?: boolean;
+  /**
+   * Studio-only, never read by the service: layer opacity, effects or strokes are baked into this
+   * sprite, so the always-on cleanup keeps its plain cutoff instead of rescuing it as soft artwork.
+   */
+  aodKeepCutoff?: boolean;
 }
 
 /** One PNG inside a template archive, addressed by its zip entry path. */

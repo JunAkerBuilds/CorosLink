@@ -185,7 +185,8 @@ function convertEntries(
   // The 800px master may leave out or blank keys that the watch trees fill (Nixie's AM/PM exists only
   // at 416; the SLENDER family fills colon_icon, negative_sign_icon and AM/PM only at 390). Every tree
   // is built from the master, so take those keys from the largest tree that has them, scaled; the PNGs
-  // they name are filled in from that tree below, like any other image the master lacks.
+  // they name come from that same tree below (keySources), so artwork and position always match.
+  const keySources = new Map<string, { size: number; value: string }>();
   const withDeviceOnlyKeys = (text: string) => {
     const master = readConfig(text);
     // Trees are visited largest first; the first tree with a value wins. A blank declaration only
@@ -210,6 +211,7 @@ function convertEntries(
         if (scaled === undefined) continue;
         text = setConfigValue(text, key, scaled);
         filled.add(key);
+        keySources.set(key, { size, value });
       }
     }
     return text;
@@ -251,10 +253,26 @@ function convertEntries(
     aod = aod.replace(/^(\s*\[[^\]]+\]\s*=)([^\r\n]*)/gm, (_line, prefix: string, value: string) => {
       const relative = value.trim().replace(/\\/g, "/");
       const isAsset = [...masterAssets.keys()].some(name => name === `cl_aod_source/${relative}` || name.startsWith(`cl_aod_source/${relative}/`));
-      return prefix + (relative && isAsset ? `cl_aod_source/${relative}` : value);
+      // Config paths use backslashes: COROS's compiler reads a "/" path as no image (pointer 0), so the
+      // always-on artwork would compile blank. Zip entry names (masterAssets keys) keep "/".
+      return prefix + (relative && isAsset ? `cl_aod_source\\${relative.replace(/\//g, "\\")}` : value);
     });
   }
 
+  // A key taken from a watch tree brings the image (or frame folder) it names from that tree, ahead
+  // of a same-named file in a larger tree that may be other artwork at another size. The master's own
+  // files stay: other keys there already use them.
+  for (const { size, value } of keySources.values()) {
+    const relative = value.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+    if (!relative) continue;
+    for (const [name, data] of source) {
+      if (!name.startsWith(`${dir(size)}/`) || !/\.png$/i.test(name)) continue;
+      const file = name.slice(dir(size).length + 1);
+      if ((file === relative || file.startsWith(`${relative}/`)) && !masterAssets.has(file)) {
+        masterAssets.set(file, resizePng(data, masterSize / size, name));
+      }
+    }
+  }
   // Fill resources omitted from the master from the largest physical source.
   // Keep every state and every language, including ones not previewed in Studio.
   for (const size of resolutions.filter(size => size !== masterSize)) {

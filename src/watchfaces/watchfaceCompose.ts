@@ -111,12 +111,12 @@ export async function buildAodSafeSpriteReplacements(
   replacements: CorosWatchfaceAssetReplacement[]
 ): Promise<CorosWatchfaceAssetReplacement[]> {
   return Promise.all(
-    replacements.map(async (replacement) =>
+    replacements.map(async ({ aodKeepCutoff, ...replacement }) =>
       /\/studio\/aod_background(?:[\/_])/i.test(replacement.path)
         ? replacement
         : {
             ...replacement,
-            dataUrl: await renderWatchfaceAodSafeSprite(replacement.dataUrl)
+            dataUrl: await renderWatchfaceAodSafeSprite(replacement.dataUrl, aodKeepCutoff === true)
           }
     )
   );
@@ -343,7 +343,8 @@ async function applyFirmwareEffects(
       // Preserve an explicit false so archive validation does not treat that
       // replacement as a colliding newly-created entry.
       create: replacement.create === false ? false : true,
-      allowDimensionOverride: true
+      allowDimensionOverride: true,
+      aodKeepCutoff: true
     });
   }
   return { replacements: effected, padding };

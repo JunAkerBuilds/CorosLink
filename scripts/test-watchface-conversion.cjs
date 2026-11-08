@@ -126,7 +126,7 @@ async function main(){
  assert.equal(amoled.generatedAod,true);assert.equal(cfg(amoled.entries,'watchface_800x800/AODconfig.txt'),cfg(amoled.entries,'watchface_800x800/config.txt'));
  const physicalAod=source.filter(e=>e.name!=='watchface_800x800/AODconfig.txt');
  const derived=convertWatchfaceEntries(physicalAod,carrier,target);
- assert.match(cfg(derived.entries,`watchface_800x800/${RETAINED_AOD_CONFIG}`),/cl_aod_source\/digits/);
+ assert.match(cfg(derived.entries,`watchface_800x800/${RETAINED_AOD_CONFIG}`),/cl_aod_source\\digits/, 'AOD paths use the backslashes COROS compiles (a "/" path compiles blank)');
  assert(map(derived.entries).has('watchface_800x800/cl_aod_source/digits/00.png'));
  // Production service: automatic carrier lookup, export, and retained AOD sprites.
  const {createStoreZip}=require('../dist-electron/zipStore.js');
