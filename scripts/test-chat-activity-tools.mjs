@@ -185,13 +185,34 @@ const exercises = parseScheduledExercises({
       name: "Back Squat",
       sets: 4,
       reps: 8,
-      targetType: 6,
-      targetValue: 80000
+      targetType: 3,
+      targetValue: 8,
+      intensityType: 1,
+      intensityValue: 80
     }
   ]
 });
 assert.equal(exercises.length, 1);
+assert.equal(exercises[0].reps, 8);
+assert.equal(exercises[0].weight, 80);
 assert.match(formatScheduledExercisesForChat(exercises), /Back Squat/);
+
+// Swim steps in a 25 m pool: COROS stores distance in centimeters.
+const swimSteps = parseScheduledExercises({
+  exercises: [25, 75, 125, 1609].map((meters) => ({
+    name: `${meters}`,
+    targetType: 5,
+    targetValue: meters * 100
+  }))
+});
+assert.deepEqual(
+  swimSteps.map((step) => step.targetLabel),
+  ["0.025 km", "0.075 km", "0.125 km", "1.609 km"]
+);
+assert.equal(
+  formatScheduledExercisesForChat(swimSteps, "metric", true),
+  "25 · 25 m; 75 · 75 m; 125 · 125 m; 1609 · 1609 m"
+);
 
 const visualPreview = buildActivityVisualPreview(detail, "req-1");
 assert.ok(visualPreview);
@@ -421,9 +442,9 @@ const strengthDetail = parseActivityDetail({
 });
 assert.equal(strengthDetail.laps.length, 7, "raw lap rows include roll-ups and markers");
 const strengthText = formatActivityDetailForChat(strengthDetail, false);
-assert.match(strengthText, /^- T1178: 2 sets, 30 reps · 15 × 32 kg, 15 × 32 kg$/m);
-assert.match(strengthText, /^- T1176: 1 set, 6 reps · 6 reps$/m);
+assert.match(strengthText, /^- Two Arm Kettlebell Swings: 2 sets, 30 reps · set 1: 15 reps × 32 kg, work 0:35, rest 2:00; set 2: 15 reps × 32 kg, work 0:30$/m);
+assert.match(strengthText, /^- Snatches: 1 set, 6 reps · set 1: 6 reps, work 0:58$/m);
 assert.doesNotMatch(strengthText, /Laps:/);
-assert.match(formatActivityDetailForChat(strengthDetail, false, "imperial"), /15 × 71 lb/);
+assert.match(formatActivityDetailForChat(strengthDetail, false, "imperial"), /15 reps × 71 lb/);
 
 console.log("test-chat-activity-tools: ok");

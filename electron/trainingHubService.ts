@@ -1,3 +1,4 @@
+import { decodeCorosIntensity, formatWorkoutIntensity } from "./workoutCapabilities";
 import { programDescription, type ScheduledProgram } from "./remote/scheduledSteps";
 import { buildScheduledWorkoutEditRequest } from "./corosWorkoutEditor";
 import { annotateDiagnosticRequest } from "./diagnosticsLog";
@@ -6586,11 +6587,12 @@ export function parseScheduledExercises(
     const sets = toOptionalNumber(exercise.sets) ?? 1;
     const reps =
       toOptionalNumber(exercise.reps) ??
-      (targetType === 1 ? toOptionalNumber(exercise.targetValue) : undefined);
+      (targetType === 3 ? toOptionalNumber(exercise.targetValue) : undefined);
     const weight =
       toOptionalNumber(exercise.weight) ??
       toOptionalNumber(exercise.weightValue) ??
-      (targetType === 6 ? toOptionalNumber(exercise.targetValue) : undefined);
+      (toOptionalNumber(exercise.intensityType) === 1 && toOptionalNumber(exercise.intensityCustom) !== 1
+        ? toOptionalNumber(exercise.intensityValue) : undefined);
     const targetLabel = formatScheduledExerciseTarget(exercise, targetType);
 
     parsed.push({
@@ -6599,7 +6601,12 @@ export function parseScheduledExercises(
       reps,
       weight,
       targetType,
-      targetLabel
+      targetLabel,
+      ...(exercise.intensityType !== undefined ? { intensity: decodeCorosIntensity(exercise).intensity } : {}),
+      ...(toOptionalNumber(exercise.restType) === 1 ? { restSeconds: toOptionalNumber(exercise.restValue) } : {}),
+      ...(exercise.groupId !== undefined ? { groupId: String(exercise.groupId) } : {}),
+      ...(exercise.id !== undefined ? { id: String(exercise.id) } : {}),
+      ...(exercise.isGroup === true ? { isGroup: true } : {})
     });
   }
 
@@ -6612,19 +6619,24 @@ function formatScheduledExerciseTarget(
 ): string | undefined {
   const targetValue = toOptionalNumber(exercise.targetValue);
   if (targetType === 5 && targetValue) {
-    return `${(corosWorkoutDistanceToMeters(targetValue) / 1000).toFixed(2)} km`;
+    // Keep whole meters: two decimals of km turned 25 m swim steps into 30 m and 75 m into 70 m.
+    return `${Math.round(corosWorkoutDistanceToMeters(targetValue)) / 1000} km`;
   }
   if (targetType === 2 && targetValue) {
-    const seconds = Math.round(normalizeActivityDuration(targetValue) ?? targetValue);
+    const seconds = Math.round(targetValue);
     const minutes = Math.floor(seconds / 60);
     return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
   }
-  if (targetType === 1 && targetValue) {
+  if (targetType === 1) return "Open (until lap button)";
+  if (targetType === 3 && targetValue) {
     return `${Math.round(targetValue)} reps`;
   }
   if (targetType === 6 && targetValue) {
-    return `${Math.round(targetValue)} kg`;
+    return `training load ${Math.round(targetValue)}`;
   }
+  if (targetType === 7 && targetValue) return `HR below ${Math.round(targetValue)} bpm`;
+  if (targetType === 8 && targetValue) return `ascent ${corosWorkoutDistanceToMeters(targetValue)} m`;
+  if (targetType === 9 && targetValue) return `${Math.round(targetValue)} routes`;
   const intensity = pickString(exercise, ["intensityText", "intensity"]);
   return intensity;
 }
@@ -6649,7 +6661,8 @@ export function formatScheduledExercisesForChat(
       }
       if (exercise.weight) {
         parts.push(formatWeightValue(exercise.weight, unitSystem, 1));
-      } else if (exercise.targetLabel) {
+      }
+      if (exercise.targetLabel && !exercise.reps) {
         const distanceMatch = exercise.targetLabel.match(/^([\d.]+)\s*(km|m)$/i);
         if (distanceMatch) {
           const amount = Number(distanceMatch[1]);
@@ -6665,6 +6678,22 @@ export function formatScheduledExercisesForChat(
           parts.push(exercise.targetLabel);
         }
       }
+      let intensity = exercise.intensity;
+      if (intensity && intensity.type !== "none") {
+        if (intensity.type === "pace" || intensity.type === "effortPace") {
+          intensity = { ...intensity, displayUnit: unitSystem === "imperial" ? "mi" : "km" };
+        } else if (intensity.type === "speed") {
+          const factor = (intensity.unit === "mph" ? 1.609344 : 1) / (unitSystem === "imperial" ? 1.609344 : 1);
+          intensity = { ...intensity, low: intensity.low * factor, high: intensity.high * factor, unit: unitSystem === "imperial" ? "mph" : "km/h" };
+        }
+        // Partner workouts sometimes keep a zero pace and put the target in the step name.
+        const missingPace = (intensity.type === "pace" || intensity.type === "effortPace") && intensity.lowSecondsPerKm <= 0 && intensity.highSecondsPerKm <= 0;
+        const basis = intensity.type === "ftpPercent" ? " of FTP" : intensity.type === "thresholdPacePercent" ? " of threshold pace" : intensity.type === "effortPacePercent" ? " of threshold effort pace" : "";
+        if (!missingPace && (intensity.type !== "weight" || !exercise.weight)) parts.push(`intensity: ${formatWorkoutIntensity(intensity)}${basis}`);
+      }
+      if (exercise.restSeconds !== undefined) parts.push(`rest ${exercise.restSeconds} s`);
+      if (exercise.isGroup) parts.push(`repeat group ${exercise.id ?? ""}`);
+      else if (exercise.groupId && exercise.groupId !== "0") parts.push(`in group ${exercise.groupId}`);
       return parts.join(" · ");
     })
     .join("; ");

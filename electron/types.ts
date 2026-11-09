@@ -2933,6 +2933,11 @@ export interface TrainingHubActivityDetail {
 }
 
 export interface TrainingHubScheduledExercise {
+  intensity?: WorkoutIntensityInput;
+  restSeconds?: number;
+  groupId?: string;
+  id?: string;
+  isGroup?: boolean;
   name: string;
   sets?: number;
   reps?: number;

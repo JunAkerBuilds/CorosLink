@@ -1,3 +1,4 @@
+import { coachActivityDate } from "./coachActivityDate";
 import { isWorkoutEditTool } from "./workoutEditService";
 import { app, BrowserWindow, safeStorage, shell } from "electron";
 import { expectedError } from "./diagnosticsLog";
@@ -3049,7 +3050,7 @@ async function buildTrainingContext(
     sections.push(`## Recent activity mix (latest ${activities.value.length})`);
     sections.push(formatRecentActivityMix(activities.value, unitSystem));
     sections.push("");
-    sections.push("## Recent activities");
+    sections.push("## Recent activities (8 most recent shown; use list_recent_activities to page through history)");
     sections.push(formatActivities(activities.value.slice(0, 8), unitSystem));
     sections.push("");
     hasData = true;
@@ -3064,10 +3065,13 @@ async function buildTrainingContext(
     }
   }
   if (upcoming.status === "fulfilled" && upcoming.value.length > 0) {
-    sections.push("## Upcoming workouts");
+    sections.push("## Upcoming workouts (next 14 days)");
     sections.push(formatUpcoming(upcoming.value, unitSystem));
     sections.push("");
     hasData = true;
+  }
+  for (const [label, result] of [["Recent activities", activities], ["Fitness and recovery", dashboard], ["Upcoming workouts", upcoming]] as const) {
+    if (result.status === "rejected") sections.push(`${label}: unavailable because the data request failed. Do not interpret this as no training or an empty schedule.`, "");
   }
   const journal = formatWorkoutJournalContext({ past: includeActivities, upcoming: includeUpcoming });
   if (journal) {
@@ -3227,7 +3231,7 @@ function decodeJwtClaims(jwt: string): Record<string, unknown> | undefined {
 
 function isoDate(epochSeconds: number): string {
   // COROS start times are unix seconds.
-  return new Date(epochSeconds * 1000).toISOString().slice(0, 10);
+  return coachActivityDate(epochSeconds);
 }
 
 function formatDurationSeconds(value: number): string {

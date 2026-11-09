@@ -1,3 +1,4 @@
+import { coachActivityDate } from "./coachActivityDate";
 import { getFitIndexRow, listStoredTrainingActivities } from "./database";
 import {
   DECOUPLING_WARMUP_SEC,
@@ -88,7 +89,7 @@ function formatSignedSeconds(value: number): string {
 
 function formatDate(epochSeconds: number | undefined): string {
   if (!epochSeconds) return "unknown date";
-  return new Date(epochSeconds * 1000).toISOString().slice(0, 10);
+  return coachActivityDate(epochSeconds);
 }
 
 function formatDurationLabel(seconds: number): string {
