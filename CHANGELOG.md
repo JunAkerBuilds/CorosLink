@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Your workout steps in swims and runs.** For a pool swim, run or walk synced from your watch and done as a workout on it, the activity names the workout above its laps, says whether it came from your training calendar, and shows what its steps add up to, such as "Planned 350 m + 1:00". Each interval, lap and rest is labelled with its step, its round in a repeat and its target, such as "Freestyle · Warm-up 2/4 · Target 25 m", and a run's laps add the pace or heart-rate range the step asked for. Your AI Coach sees them too.
+- **More of what your watch records.** Each rest in a swim or workout run shows how far your heart rate dropped, and rests your watch detected on its own say Auto rest. Every run and walk shows the training load each lap added, and your AI Coach also gets each swim interval's load. Runs, walks and swims you already synced pick all this up the next time CorosLink starts.
+
 ### Fixed
 
+- **Swim workouts show every interval and length.** A pool swim done as a workout on the watch now lists each step as its own interval, with the rests between them, and keeps every drill length. Before, most intervals were missing and the lengths that were left were squeezed into one interval. A drill is never marked as the fastest interval, since its lengths are marked by hand.
+- **Open-water swims list every lap.** A swim with both automatic laps and laps you marked with the lap button now shows all of them, so some open-water swims gain laps.
+- **No made-up pace on steps without distance.** Rests and timed drills on the spot no longer show a pace or best pace copied from the lap before. Swims you already synced get these fixes the next time CorosLink starts.
 - **Official memory-in-pixel faces keep their thin lines.** Exporting a face such as MONO no longer redraws its background: while you leave the background as it is, the watch gets the face's own picture, so its dividers come out as solid and as wide as on the original. Rebuild and send the face again to get the fix.
 
 ## [0.1.75] - 2026-11-06

@@ -2,6 +2,7 @@ import { t, useLanguage } from "../../i18n/training";
 import type { TrainingHubActivityLap, UnitSystem } from "../../../electron/types";
 import { formatDistanceMeters, formatDurationSeconds, formatOptionalNumber } from "../formatters";
 import { formatSwimPace, swimStrokeLabel } from "./ActivitySwimSummary";
+import { LapStepCell } from "./LapStepCell";
 
 interface Column {
   key: string;
@@ -49,14 +50,23 @@ export function SwimLapTable({ rows, compact, units, fastest }: {
         avgHr,
         { key: "maxHr", label: t("Max HR"), optional: "wide", cell: (row) => formatOptionalNumber(row.maxHr) }
       ];
+  // A workout's step takes the stroke's column: its name on top, the stroke first on the line under it.
+  const showSteps = !compact && rows.some((row) => row.step !== undefined);
+  const restLabel = (row: TrainingHubActivityLap) => (row.autoRest ? t("Auto rest") : t("Rest"));
+  /** A rest step's own name, unless it just says rest. */
+  const restName = (row: TrainingHubActivityLap) => {
+    const name = row.step?.name?.trim();
+    return name && ![t("Rest"), "rest"].some((word) => word.toLowerCase() === name.toLowerCase()) ? name : undefined;
+  };
+  const strokeName = (row: TrainingHubActivityLap) => (row.stroke ? swimStrokeLabel(row.stroke) : undefined);
   let number = 0;
   return (
     <div className="training-swim-laps-frame">
-    <table className="training-swim-laps">
+    <table className={showSteps ? "training-swim-laps has-steps" : "training-swim-laps"}>
       <thead>
         <tr>
           <th>#</th>
-          <th>{t("Stroke")}</th>
+          <th>{showSteps ? t("Step") : t("Stroke")}</th>
           {columns.map((column) => (
             <th key={column.key} className={optionalClass(column)}>
               {column.label}{column.unit ? <> <span className="training-swim-unit">{column.unit}</span></> : null}
@@ -72,7 +82,22 @@ export function SwimLapTable({ rows, compact, units, fastest }: {
           return (
             <tr key={row.index} className={row.rest ? "is-rest" : isFastest ? "is-fastest" : undefined}>
               <td>{row.rest ? "" : ++number}</td>
-              <td>{row.rest ? t("Rest") : swimStrokeLabel(row.stroke)}</td>
+              {showSteps ? (
+                <LapStepCell
+                  row={row}
+                  units={units}
+                  swim
+                  hrDrop
+                  title={row.rest ? restLabel(row) : row.step?.name ?? strokeName(row) ?? swimStrokeLabel(row.stroke)}
+                  lead={row.rest ? restName(row) : row.step?.name ? strokeName(row) : undefined}
+                />
+              ) : (
+                <td>
+                  {row.rest ? restLabel(row) : swimStrokeLabel(row.stroke)}
+                  {/* How far heart rate fell over the rest. */}
+                  {row.rest && row.hrDrop !== undefined ? <small className="training-swim-rest-drop">{t("HR drop {{bpm}} bpm", { bpm: row.hrDrop })}</small> : null}
+                </td>
+              )}
               {columns.map((column) => {
                 // A rest leaves out what it doesn't have rather than filling the row with dashes.
                 const value = column.cell(row);

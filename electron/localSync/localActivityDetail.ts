@@ -1,9 +1,11 @@
 import { corosSportName } from "../corosSportTypes";
-import type { FitActivity, FitLap, FitLength } from "../fitActivity";
+import type { FitActivity, FitLap, FitLength, FitWorkoutStep } from "../fitActivity";
 import type {
   TrainingHubActivityDetail,
   TrainingHubActivityLap,
   TrainingHubActivityLapGroup,
+  TrainingHubActivityWorkout,
+  TrainingHubLapStep,
   TrainingHubActivitySeriesPoint,
   TrainingHubSwimStroke,
   TrainingHubSwimSummary,
@@ -213,7 +215,7 @@ const swimPace = (speed: number | undefined) => (speed !== undefined && speed > 
 /** A swim lap: its strokes, lengths and pace per 100 m (a rest has none). */
 function swimLapRow(lap: FitLap, row: TrainingHubActivityLap): TrainingHubActivityLap {
   const swim = lap.swim;
-  if (swim?.rest) return { ...row, rest: true, avgCadence: undefined };
+  if (swim?.rest) return { ...row, rest: true, avgCadence: undefined, ...(swim.autoRest ? { autoRest: true } : {}) };
   const fields: Partial<TrainingHubActivityLap> = {
     stroke: swimStroke(swim?.stroke),
     strokes: swim?.strokes,
@@ -223,6 +225,110 @@ function swimLapRow(lap: FitLap, row: TrainingHubActivityLap): TrainingHubActivi
     swimPace: swimPace(lap.avgSpeed ?? (lap.distanceM && lap.timerSec ? lap.distanceM / lap.timerSec : undefined))
   };
   return { ...row, ...Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) };
+}
+
+/**
+ * For each workout step, the repeat it's directly in: the first repeat after it whose range ([repeatFrom, its own
+ * index)) takes it in. Inner repeats come first in FIT's order, so an outer one only claims what they left.
+ */
+function repeatsOf(steps: FitWorkoutStep[]): Array<number | undefined> {
+  const inside: Array<number | undefined> = steps.map(() => undefined);
+  steps.forEach((step, at) => {
+    if (step.duration !== "repeat" || step.repeatFrom === undefined) return;
+    for (let index = Math.max(0, step.repeatFrom); index < at; index += 1) inside[index] ??= at;
+  });
+  return inside;
+}
+
+/** FIT intensity → the plan's kind of step. */
+const STEP_KINDS: Readonly<Record<number, TrainingHubLapStep["kind"]>> = { 0: "work", 1: "recovery", 2: "warmup", 3: "cooldown" };
+
+/** A step's range as a lap row shows it: a speed range reads as pace (s/km, the faster first) except on a bike. */
+function stepRange(target: FitWorkoutStep["target"], sportType: number): TrainingHubLapStep["range"] {
+  if (!target) return undefined;
+  if (target.kind !== "speed" || isRideSport(sportType)) return { ...target };
+  return target.low > 0 && target.high > 0 ? { kind: "pace", low: round(1000 / target.high, 1)!, high: round(1000 / target.low, 1)! } : undefined;
+}
+
+/**
+ * Each lap's workout step: its name, what it asked for, and the lap's round when the step repeats. A round is a
+ * pass through the step: a step closed as two laps stays one round, and a repeat inside another starts its rounds
+ * again each time the outer one comes back to it.
+ */
+function lapSteps(activity: FitActivity, sportType: number): Array<TrainingHubLapStep | undefined> {
+  const steps = activity.workout?.steps;
+  if (!steps?.length) return activity.laps.map(() => undefined);
+  const inside = repeatsOf(steps);
+  const passes = new Map<number, number>();
+  let previous: number | undefined;
+  return activity.laps.map((lap) => {
+    const index = lap.workoutStep;
+    const step = index === undefined ? undefined : steps[index];
+    if (!step || step.duration === "repeat") {
+      previous = undefined;
+      return undefined;
+    }
+    const repeatAt = inside[index!];
+    const repeat = repeatAt === undefined ? undefined : steps[repeatAt];
+    let pass: number | undefined;
+    if (repeat && repeatAt !== undefined) {
+      const from = repeat.repeatFrom!;
+      // Coming into the repeat from outside it starts its rounds over.
+      if (previous === undefined || previous < from || previous >= repeatAt) for (let at = from; at < repeatAt; at += 1) passes.delete(at);
+      if (previous !== index) passes.set(index!, (passes.get(index!) ?? 0) + 1);
+      pass = passes.get(index!);
+    }
+    previous = index;
+    const ref: TrainingHubLapStep = {
+      ...(step.name ? { name: step.name } : {}),
+      ...(repeat ? { ...(repeat.name ? { group: repeat.name } : {}), round: pass, rounds: repeat.repeatTimes } : {}),
+      ...(step.duration !== "open" && step.durationValue !== undefined ? { target: { kind: step.duration, value: step.durationValue } } : {}),
+      ...(swimStroke(step.stroke) ? { stroke: swimStroke(step.stroke) } : {}),
+      ...(stepRange(step.target, sportType) ? { range: stepRange(step.target, sportType) } : {}),
+      ...(step.intensity !== undefined && STEP_KINDS[step.intensity] ? { kind: STEP_KINDS[step.intensity] } : {})
+    };
+    return Object.keys(ref).length ? ref : undefined;
+  });
+}
+
+/** A FIT intensity for a rest step. */
+const INTENSITY_REST = 1;
+
+/**
+ * What a workout's steps add up to, each repeat's steps counted as often as it runs them: the metres of its
+ * distance steps and the seconds of its timed steps (rests left out). Each repeat's range is added up once.
+ */
+function plannedTotals(steps: FitWorkoutStep[]): { distance: number; time: number } {
+  const repeated = new Map<number, { distance: number; time: number }>();
+  const sum = (from: number, to: number): { distance: number; time: number } => {
+    const total = { distance: 0, time: 0 };
+    for (let index = Math.max(0, from); index < Math.min(to, steps.length); index += 1) {
+      const step = steps[index]!;
+      if (step.duration === "distance") total.distance += step.durationValue ?? 0;
+      else if (step.duration === "time" && step.intensity !== INTENSITY_REST) total.time += step.durationValue ?? 0;
+      else if (step.duration === "repeat" && step.repeatFrom !== undefined && step.repeatFrom < index && (step.repeatTimes ?? 1) > 1) {
+        if (!repeated.has(index)) repeated.set(index, sum(step.repeatFrom, index));
+        const inner = repeated.get(index)!;
+        total.distance += inner.distance * (step.repeatTimes! - 1);
+        total.time += inner.time * (step.repeatTimes! - 1);
+      }
+    }
+    return total;
+  };
+  return sum(0, steps.length);
+}
+
+function workoutSummary(activity: FitActivity): TrainingHubActivityWorkout | undefined {
+  const workout = activity.workout;
+  if (!workout || (!workout.name && !workout.steps.length)) return undefined;
+  const planned = plannedTotals(workout.steps);
+  const plain = (value: number) => (value > 0 && Number.isFinite(value) ? round(value, 1) : undefined);
+  return {
+    ...(workout.name ? { name: workout.name } : {}),
+    scheduled: workout.calendarEntry !== undefined,
+    ...(plain(planned.distance) !== undefined ? { plannedDistance: plain(planned.distance) } : {}),
+    ...(plain(planned.time) !== undefined ? { plannedTime: plain(planned.time) } : {})
+  };
 }
 
 /** A pool swim's lengths, numbered like the watch: a rest is a row of its own. */
@@ -274,9 +380,12 @@ function swimSummary(activity: FitActivity): TrainingHubSwimSummary | undefined 
   return present.length ? Object.fromEntries(present) as TrainingHubSwimSummary : undefined;
 }
 
-/** The row swum at the best pace, when one beats the others (a rest is never the fastest). */
+/**
+ * The row swum at the best pace, when one beats the others. A rest is never the fastest, nor a drill: its lengths
+ * are marked by hand, so its pace says nothing.
+ */
 function fastestSwum(rows: TrainingHubActivityLap[]): number[] {
-  const swum = rows.flatMap((row, position) => (!row.rest && row.swimPace !== undefined ? [{ position, pace: row.swimPace }] : []));
+  const swum = rows.flatMap((row, position) => (!row.rest && row.stroke !== "drill" && row.swimPace !== undefined ? [{ position, pace: row.swimPace }] : []));
   if (swum.length < 2) return [];
   const best = swum.reduce((fastest, row) => (row.pace < fastest.pace ? row : fastest));
   return swum.some((row) => row.pace > best.pace) ? [best.position] : [];
@@ -294,6 +403,7 @@ function swimLapGroups(activity: FitActivity, lapRows: TrainingHubActivityLap[])
 function laps(activity: FitActivity, sportType: number): TrainingHubActivityLap[] {
   const scale = cadenceScale(activity);
   const swim = activity.session?.sport === FIT_SPORT_SWIM;
+  const steps = lapSteps(activity, sportType);
   return activity.laps.map((lap, index) => {
     const duration = lap.timerSec ?? lap.elapsedSec;
     const row: TrainingHubActivityLap = {
@@ -306,7 +416,10 @@ function laps(activity: FitActivity, sportType: number): TrainingHubActivityLap[
       elevationGain: round(lap.ascentM, 1),
       avgPower: lap.avgPower && lap.avgPower > 0 ? round(lap.avgPower) : undefined,
       maxPower: lap.maxPower && lap.maxPower > 0 ? round(lap.maxPower) : undefined,
-      avgCadence: lap.avgCadence && lap.avgCadence > 0 ? round(lap.avgCadence * scale) : undefined
+      avgCadence: lap.avgCadence && lap.avgCadence > 0 ? round(lap.avgCadence * scale) : undefined,
+      ...(steps[index] ? { step: steps[index] } : {}),
+      ...(lap.trainingLoad !== undefined ? { trainingLoad: lap.trainingLoad } : {}),
+      ...(lap.hrDrop !== undefined ? { hrDrop: lap.hrDrop } : {})
     };
     return swim ? swimLapRow(lap, row) : row;
   });
@@ -338,6 +451,7 @@ export function localFitActivityDetail(activity: FitActivity, record: LocalActiv
   const swim = swimSummary(activity);
   const lapRows = laps(activity, record.sportType);
   const lapGroups = swimLapGroups(activity, lapRows);
+  const workout = workoutSummary(activity);
   return {
     activityId: record.activityId,
     name: record.name,
@@ -360,6 +474,7 @@ export function localFitActivityDetail(activity: FitActivity, record: LocalActiv
     ...(effect ? { trainingEffect: effect } : {}),
     ...(dynamics ? { runningDynamics: { ...dynamics } } : {}),
     ...(swim ? { swim } : {}),
+    ...(workout ? { workout } : {}),
     ...(session?.minHr !== undefined ? { minHr: session.minHr } : {}),
     ...(session?.avgTemperature !== undefined ? { avgTemperature: session.avgTemperature } : {}),
     laps: lapRows,

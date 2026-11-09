@@ -77,6 +77,8 @@ export interface FitSwimLap {
   firstLength?: number;
   lengths?: number;
   activeLengths?: number;
+  /** The watch's automatic rest detection closed the lap. */
+  autoRest?: boolean;
 }
 
 /** One pool length; an idle one is a rest. */
@@ -130,6 +132,36 @@ export interface FitLap {
   avgTemperature?: number;
   dynamics?: FitDynamics;
   swim?: FitSwimLap;
+  /** Training load the lap added. */
+  trainingLoad?: number;
+  /** wkt_step_index: the lap's step in `FitActivity.workout.steps`. */
+  workoutStep?: number;
+  /** Rests: how far heart rate fell, bpm. */
+  hrDrop?: number;
+}
+
+/** A workout step (workout_step), in FIT's order: a repeat step follows the steps it repeats. */
+export interface FitWorkoutStep {
+  name?: string;
+  /** FIT intensity: 0 active, 1 rest, 2 warm-up, 3 cool-down, 4 recovery, 5 interval, 6 other. */
+  intensity?: number;
+  duration: "time" | "distance" | "hrBelow" | "open" | "repeat";
+  /** Seconds, metres or bpm. */
+  durationValue?: number;
+  repeatFrom?: number;
+  repeatTimes?: number;
+  /** FIT swim_stroke the step asks for. */
+  stroke?: number;
+  /** A range to stay in: speed m/s (a pace target is a speed range), heart rate bpm, power W, cadence spm. */
+  target?: { kind: "speed" | "heartRate" | "power" | "cadence"; low: number; high: number };
+}
+
+/** The workout the activity followed. */
+export interface FitWorkout {
+  name?: string;
+  /** The training-calendar entry it was scheduled as (CorosLink's developer field). */
+  calendarEntry?: number;
+  steps: FitWorkoutStep[];
 }
 
 export interface FitSession {
@@ -166,6 +198,8 @@ export interface FitActivity {
   laps: FitLap[];
   /** Pool swims. */
   lengths: FitLength[];
+  /** The workout followed, when the file has one. */
+  workout?: FitWorkout;
   records: FitRecord[];
   /** Timer start/stop windows in unix seconds, derived from event messages. */
   activeWindows: Array<[number, number]>;
@@ -318,11 +352,13 @@ function swimLapOf(message: FitMessage): FitSwimLap | undefined {
     swolf: num(message, 73),
     firstLength: num(message, 35),
     lengths: num(message, 32),
-    activeLengths: num(message, 40)
+    activeLengths: num(message, 40),
+    autoRest: developerNumber(message, "Auto Rest") === 1 ? true : undefined
   });
   const rest = num(message, 23) === INTENSITY_REST;
   if (!fields && !rest) return undefined;
-  return { rest: rest || (fields?.activeLengths === 0 && !(num(message, 9) ?? 0)), ...fields };
+  // A lap with nothing swum and no stroke is a rest, whatever its intensity says; a timed drill step on the spot has its stroke.
+  return { rest: rest || (fields?.activeLengths === 0 && !(num(message, 9) ?? 0) && fields.stroke === undefined), ...fields };
 }
 
 /** Lap and session SWOLF a file leaves out: the mean of their lengths', as the watch averages them. */
@@ -391,8 +427,61 @@ function parseLap(message: FitMessage, index: number): FitLap | null {
     minHr: num(message, 63),
     avgTemperature: num(message, 50),
     dynamics: dynamicsOf(message, { vo: 77, gct: 79, vr: 118, step: 120 }),
-    swim: swimLapOf(message)
+    swim: swimLapOf(message),
+    ...defined({ trainingLoad: developerNumber(message, "Training Load"), workoutStep: num(message, 71), hrDrop: developerNumber(message, "HR Drop") })
   };
+}
+
+const FIT_DURATION_TIME = 0;
+const FIT_DURATION_DISTANCE = 1;
+const FIT_DURATION_HR_LESS_THAN = 2;
+const FIT_DURATION_REPEAT = 6;
+const FIT_TARGET_SPEED = 0;
+const FIT_TARGET_HEART_RATE = 1;
+const FIT_TARGET_CADENCE = 3;
+const FIT_TARGET_POWER = 4;
+const FIT_TARGET_SWIM_STROKE = 11;
+
+/** A step's custom target range: speed m/s × 1000, heart rate bpm + 100, power W + 1000, cadence; percentages and zones aren't kept. */
+function workoutTargetOf(message: FitMessage): FitWorkoutStep["target"] {
+  const type = num(message, 3);
+  const a = num(message, 5);
+  const b = num(message, 6);
+  if (a === undefined || b === undefined || (a === 0 && b === 0)) return undefined;
+  const [low, high] = a <= b ? [a, b] : [b, a];
+  switch (type) {
+    case FIT_TARGET_SPEED: return { kind: "speed", low: low / 1000, high: high / 1000 };
+    case FIT_TARGET_HEART_RATE: return low > 100 ? { kind: "heartRate", low: low - 100, high: high - 100 } : undefined;
+    case FIT_TARGET_POWER: return low > 1000 ? { kind: "power", low: low - 1000, high: high - 1000 } : undefined;
+    case FIT_TARGET_CADENCE: return { kind: "cadence", low, high };
+    default: return undefined;
+  }
+}
+/** message_index: the low 12 bits are the index. */
+const MESSAGE_INDEX_MASK = 0x0fff;
+/** Workout steps kept from a file; a watch plan has far fewer, and more would only cost time. */
+const MAX_WORKOUT_STEPS = 500;
+
+/** A workout_step: FIT durations are ms and cm; a heart rate of 100 or more is bpm + 100 (below, a percentage, not kept). */
+function parseWorkoutStep(message: FitMessage): { index?: number; step: FitWorkoutStep } {
+  const type = num(message, 1);
+  const value = num(message, 2);
+  const target = num(message, 4);
+  const name = message.fields.get(0);
+  const index = num(message, 254);
+  const base = defined({ name: typeof name === "string" && name.trim() ? name.trim() : undefined, intensity: num(message, 7) });
+  let step: FitWorkoutStep;
+  if (type === FIT_DURATION_REPEAT) step = { ...base, duration: "repeat", ...defined({ repeatFrom: value, repeatTimes: target }) };
+  else if (type === FIT_DURATION_TIME && value !== undefined) step = { ...base, duration: "time", durationValue: value / 1000 };
+  else if (type === FIT_DURATION_DISTANCE && value !== undefined) step = { ...base, duration: "distance", durationValue: value / 100 };
+  else if (type === FIT_DURATION_HR_LESS_THAN && value !== undefined && value >= 100) step = { ...base, duration: "hrBelow", durationValue: value - 100 };
+  else step = { ...base, duration: "open" };
+  if (type !== FIT_DURATION_REPEAT && num(message, 3) === FIT_TARGET_SWIM_STROKE && target !== undefined) step.stroke = target;
+  else if (type !== FIT_DURATION_REPEAT) {
+    const range = workoutTargetOf(message);
+    if (range) step.target = range;
+  }
+  return { index: index === undefined ? undefined : index & MESSAGE_INDEX_MASK, step };
 }
 
 /**
@@ -460,6 +549,8 @@ export function parseFitActivity(input: Uint8Array | ArrayBuffer): FitActivity {
   let fileCreatedTs: number | undefined;
   let manufacturer: number | undefined;
   let product: number | undefined;
+  let workout: FitWorkout | undefined;
+  const workoutSteps: Array<{ index?: number; step: FitWorkoutStep }> = [];
 
   for (const message of decoded.messages) {
     switch (message.globalNum) {
@@ -495,6 +586,14 @@ export function parseFitActivity(input: Uint8Array | ArrayBuffer): FitActivity {
         break;
       case FIT_MSG.EVENT:
         events.push(message);
+        break;
+      case FIT_MSG.WORKOUT: {
+        const name = message.fields.get(8);
+        workout = { ...defined({ name: typeof name === "string" && name.trim() ? name.trim() : undefined, calendarEntry: developerNumber(message, "Calendar Entry") }), steps: [] };
+        break;
+      }
+      case FIT_MSG.WORKOUT_STEP:
+        if (workoutSteps.length < MAX_WORKOUT_STEPS) workoutSteps.push(parseWorkoutStep(message));
         break;
       default:
         break;
@@ -548,10 +647,17 @@ export function parseFitActivity(input: Uint8Array | ArrayBuffer): FitActivity {
   if (session?.sport !== FIT_SPORT_SWIMMING) for (const lap of laps) delete lap.swim;
   else fillSwolf(session, laps, lengths);
 
+  // Steps in message_index order; a file with steps but no workout message still has a workout.
+  if (workoutSteps.length) {
+    const ordered = workoutSteps.every((entry) => entry.index !== undefined) ? [...workoutSteps].sort((a, b) => a.index! - b.index!) : workoutSteps;
+    workout = { ...(workout ?? {}), steps: ordered.map((entry) => entry.step) };
+  }
+
   return {
     session,
     laps,
     lengths,
+    ...(workout ? { workout } : {}),
     records,
     activeWindows,
     fileCreatedTs,
