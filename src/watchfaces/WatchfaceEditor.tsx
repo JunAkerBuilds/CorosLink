@@ -8319,9 +8319,11 @@ export function WatchfaceEditor({
       ]);
       // An untouched template background ships as its own files, not the
       // 800 px render scaled back down (memory-in-pixel dividers stay as COROS drew them).
-      // Only when the artwork came from a background file: a template whose design started from its
-      // preview picture (watchface_customize.png) has background files that never showed in Studio.
-      const keepTemplateBackground = Boolean(templateBackground && /(?:^|\/)(?:background|custom_bg)\.png$/i.test(templateBackground.path)) &&
+      // Only when the artwork came from a layout's background.png: a template whose design started from
+      // its preview picture (watchface_customize.png) has background files that never showed in Studio,
+      // and a COROS-app photo (custom/custom_bg.png) sits beside blank background.png files, which are
+      // all the watch build reads. Both go on from the render.
+      const keepTemplateBackground = Boolean(templateBackground && /(?:^|\/)background\.png$/i.test(templateBackground.path)) &&
         isTemplateBackgroundUntouched(currentDesign, templateBackground?.dataUrl);
       const {
         assetReplacements: composedAssetReplacements,

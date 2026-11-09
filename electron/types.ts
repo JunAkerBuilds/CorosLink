@@ -506,9 +506,11 @@ export interface CorosWatchfaceCreatorInput {
   backgroundDataUrl: string;
   /**
    * The design shows the template's background untouched: keep each layout's
-   * own background.png (and custom_bg.png) byte for byte instead of
-   * `backgroundDataUrl` scaled to its size. Memory-in-pixel backgrounds stay on
-   * the screen's levels, so the compiler passes them through as COROS wrote them.
+   * own background.png byte for byte instead of `backgroundDataUrl` scaled to
+   * its size. Memory-in-pixel backgrounds stay on the screen's levels, so the
+   * compiler passes them through as COROS wrote them. Never set it for a face
+   * whose picture is a COROS-app photo (custom/custom_bg.png): its
+   * background.png files are blank and the watch build reads only those.
    */
   keepTemplateBackground?: boolean;
   /** Fully composed face preview written to the archive's root preview PNG. */
