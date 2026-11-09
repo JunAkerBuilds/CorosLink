@@ -1,114 +1,127 @@
-/* "Put it on your watch" guide at the top of Media. Neutral glass surface;
-   colour only on the step marks (done = success, waiting = warning). */
+/* "Put it on your watch" guide under the Media tab bar.
+   Header: title + a three-step stepper. Below: one row for the step in hand.
+   Neutral glass; colour only on step marks and the detail tile
+   (done = success, needs-you = warning). */
 
 .watch-guide {
   flex-shrink: 0;
   margin-bottom: 20px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.035);
   box-shadow: var(--glass-inset);
 }
 
 :root[data-theme="paper"] .watch-guide {
-  background: rgba(38, 34, 28, 0.04);
+  background: rgba(38, 34, 28, 0.035);
 }
+
+/* Header ------------------------------------------------------------------ */
 
 .watch-guide-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px 6px 6px;
+  gap: 18px;
+  min-height: 52px;
+  padding: 8px 10px 8px 18px;
 }
 
-.watch-guide-toggle {
+.watch-guide-title {
+  flex: none;
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.watch-guide-stepper {
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   min-width: 0;
-  min-height: 36px;
-  padding: 4px 10px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.watch-guide-toggle:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.watch-guide-toggle strong {
-  flex: none;
-  font-size: 13.5px;
-  font-weight: 650;
-}
-
-.watch-guide-summary {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.watch-guide-chevron {
-  flex: none;
-  color: var(--text-secondary);
-  transition: transform 160ms ease;
-}
-
-.watch-guide.is-collapsed .watch-guide-chevron {
-  transform: rotate(-90deg);
-}
-
-.watch-guide-steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
   margin: 0;
-  padding: 0 6px 6px;
+  padding: 0;
   list-style: none;
 }
 
-.watch-guide-step {
+.watch-guide-stepper > li {
   display: flex;
-  gap: 12px;
   min-width: 0;
-  padding: 14px 14px 16px;
-  border-radius: 12px;
 }
 
-.watch-guide-step.is-current {
-  background: rgba(255, 255, 255, 0.045);
+.watch-guide-rail {
+  flex: 1 1 24px;
+  max-width: 72px;
+  height: 1px;
+  background: var(--glass-border);
 }
 
-:root[data-theme="paper"] .watch-guide-step.is-current {
-  background: rgba(38, 34, 28, 0.05);
+.watch-guide-rail.is-done {
+  background: var(--success-border);
+}
+
+.watch-guide-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 11px 0 5px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.watch-guide-step:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.watch-guide-step.is-shown {
+  border-color: var(--glass-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+:root[data-theme="paper"] .watch-guide-step:hover,
+:root[data-theme="paper"] .watch-guide-step.is-shown {
+  background: rgba(38, 34, 28, 0.06);
+}
+
+.watch-guide-step.is-current,
+.watch-guide-step.is-warning,
+.watch-guide-step.is-done {
+  color: var(--text-primary);
+}
+
+.watch-guide-step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .watch-guide-mark {
   display: grid;
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   border: 1px solid var(--glass-border);
   border-radius: 50%;
   color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
 .watch-guide-step.is-current .watch-guide-mark {
-  border-color: var(--text-secondary);
+  border-color: var(--text-primary);
   color: var(--text-primary);
 }
 
@@ -124,107 +137,117 @@
   color: var(--warning-text);
 }
 
-.watch-guide-body {
+.watch-guide-head-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.watch-guide-collapse {
   display: grid;
-  align-content: start;
-  gap: 6px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.watch-guide-collapse:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.watch-guide-collapse svg {
+  transition: transform 0.16s ease;
+}
+
+.watch-guide.is-collapsed .watch-guide-collapse svg {
+  transform: rotate(-90deg);
+}
+
+/* Detail row ---------------------------------------------------------------- */
+
+.watch-guide-detail {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 8px 8px;
+  padding: 12px 12px 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+:root[data-theme="paper"] .watch-guide-detail {
+  background: rgba(38, 34, 28, 0.045);
+}
+
+.watch-guide-tile {
+  display: grid;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  color: var(--text-primary);
+}
+
+.watch-guide-detail.is-done .watch-guide-tile {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.watch-guide-detail.is-warning .watch-guide-tile {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.watch-guide-copy {
+  display: grid;
+  flex: 1;
+  gap: 3px;
   min-width: 0;
 }
 
-.watch-guide-body h3 {
-  margin: 3px 0 0;
+.watch-guide-copy strong {
   color: var(--text-primary);
   font-size: 13.5px;
   font-weight: 650;
   line-height: 1.3;
 }
 
-.watch-guide-body p {
-  margin: 0;
+.watch-guide-copy > span {
+  display: grid;
+  gap: 8px;
   color: var(--text-secondary);
   font-size: 12.5px;
   line-height: 1.45;
 }
 
-.watch-guide-step.is-warning h3 {
-  color: var(--warning-text);
-}
-
-.watch-guide-body .watch-guide-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.watch-guide-note svg {
-  flex: none;
-  margin-top: 2px;
-}
-
-.watch-guide-sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.watch-guide-source {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 11px;
-  border: 1px solid var(--glass-border);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 550;
-  cursor: pointer;
-}
-
-.watch-guide-source:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.watch-guide-link {
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  gap: 6px;
-  min-height: 28px;
-  margin-top: 2px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 550;
-  cursor: pointer;
-}
-
-.watch-guide-link:hover:not(:disabled) {
-  text-decoration: underline;
-}
-
-.watch-guide-send {
-  justify-self: start;
-  margin-top: 6px;
-}
-
-.watch-guide-send.is-compact {
-  flex: none;
-  margin-top: 0;
+.watch-guide-track {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .watch-guide-progress {
+  display: block;
+  max-width: 420px;
   height: 4px;
   overflow: hidden;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+:root[data-theme="paper"] .watch-guide-progress {
+  background: rgba(38, 34, 28, 0.1);
 }
 
 .watch-guide-progress > span {
@@ -235,8 +258,98 @@
   transition: width 150ms linear;
 }
 
-@media (max-width: 900px) {
-  .watch-guide-steps {
-    grid-template-columns: 1fr;
+.watch-guide-action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.watch-guide-hint {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* Buttons sit on a 36 px row (the global 44 px min-height is for page actions). */
+.watch-guide .watch-guide-send,
+.watch-guide .watch-guide-check {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.watch-guide .watch-guide-send:disabled {
+  box-shadow: none;
+  cursor: default;
+  opacity: 0.45;
+}
+
+.watch-guide-sources {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.watch-guide-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.watch-guide-source:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+:root[data-theme="paper"] .watch-guide-source {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+:root[data-theme="paper"] .watch-guide-source:hover {
+  background: #ffffff;
+}
+
+/* Narrow windows: labels go first, then the action wraps under the copy. */
+@media (max-width: 1100px) {
+  .watch-guide-title {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .watch-guide-detail {
+    flex-wrap: wrap;
+  }
+
+  .watch-guide-action {
+    flex-basis: 100%;
+    padding-left: 50px;
+  }
+
+  .watch-guide-sources {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .watch-guide-step-label {
+    display: none;
+  }
+
+  .watch-guide-step {
+    padding: 0 5px;
   }
 }

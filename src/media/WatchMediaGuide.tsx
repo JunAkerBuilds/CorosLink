@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   BookOpen,
   Check,
@@ -6,10 +6,13 @@ import {
   FolderUp,
   Loader2,
   Music,
+  PartyPopper,
   Podcast,
   RefreshCw,
   Send,
   Smartphone,
+  Usb,
+  Watch,
 } from "lucide-react";
 import type { WatchStatus } from "../../electron/types";
 import { t, useLanguage } from "../i18n/tools";
@@ -37,6 +40,8 @@ export interface WatchMediaGuideProps {
 }
 
 type ConnectState = "connected" | "approve" | "unplugged";
+type StepId = 1 | 2 | 3;
+type StepTone = "done" | "current" | "warning" | "upcoming";
 
 function connectState(status: WatchStatus | null): ConnectState {
   if (status?.connected) return "connected";
@@ -61,7 +66,8 @@ function formatFree(bytes: number | undefined): string | null {
 /**
  * One path from "I want this on my watch" to "go for a run": pick something to
  * play, connect the watch (including the phone approval newer COROS firmware
- * asks for), then send everything in one tap.
+ * asks for), then send everything in one tap. A stepper shows where you are;
+ * one row below spells out the step in hand and its action.
  */
 export function WatchMediaGuide({
   watchStatus,
@@ -77,15 +83,22 @@ export function WatchMediaGuide({
   useLanguage();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [checking, setChecking] = useState(false);
+  // A step the person clicked to look at; null follows the current step.
+  const [viewed, setViewed] = useState<StepId | null>(null);
   const state = connectState(watchStatus);
   const haveAudio = pendingCount > 0 || onWatchCount > 0;
   const done = state === "connected" && pendingCount === 0 && onWatchCount > 0 && !sending;
+  const current: StepId = sending ? 3 : !haveAudio ? 1 : state !== "connected" ? 2 : 3;
+  const shown: StepId = viewed ?? current;
+
+  // Moving on (plugging in, finishing a send) returns the row to the live step.
+  useEffect(() => setViewed(null), [current]);
 
   useEffect(() => {
-    if (state === "connected" || collapsed) return;
+    if (state === "connected") return;
     const timer = window.setInterval(() => void onRefreshWatch(), WAITING_POLL_MS);
     return () => window.clearInterval(timer);
-  }, [state, collapsed, onRefreshWatch]);
+  }, [state, onRefreshWatch]);
 
   function toggleCollapsed() {
     const next = !collapsed;
@@ -106,17 +119,118 @@ export function WatchMediaGuide({
     }
   }
 
-  const summary = sending
-    ? t("Sending to your watch…")
-    : done
-      ? t("All set. Unplug your watch and go.")
+  const tones: Record<StepId, StepTone> = {
+    1: haveAudio ? "done" : "current",
+    2: state === "connected" ? "done" : state === "approve" ? "warning" : current === 2 ? "current" : "upcoming",
+    3: done ? "done" : current === 3 ? "current" : "upcoming",
+  };
+  const labels: Record<StepId, string> = {
+    1: t("Choose"),
+    2: state === "approve" ? t("Approve on phone") : t("Connect"),
+    3: t("Send"),
+  };
+  const canSend = state === "connected" && pendingCount > 0 && !sending;
+  const sendLabel = pendingCount > 0 ? t("Send {{p0}} to watch", { p0: pendingCount }) : t("Send to watch");
+  const sendButton = (
+    <button type="button" className="primary-button watch-guide-send" disabled={!canSend} onClick={onSendAll}>
+      {sending ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <Send size={15} aria-hidden="true" />}
+      {sendLabel}
+    </button>
+  );
+
+  let detail: { tone: StepTone; icon: ReactNode; title: string; body: ReactNode; action?: ReactNode };
+  if (shown === 1) {
+    detail = {
+      tone: haveAudio ? "done" : "current",
+      icon: <Podcast size={17} aria-hidden="true" />,
+      title: haveAudio ? t("Add more to play") : t("Choose something to play"),
+      body: pendingCount > 0
+        ? t("{{p0}} waiting in your Library. Downloads land there automatically.", { p0: pendingCount })
+        : t("Download a podcast episode or some music. It lands in your Library."),
+      action: (
+        <div className="watch-guide-sources" role="group" aria-label={t("Sources")}>
+          <button type="button" className="watch-guide-source" onClick={() => onOpenSource("apple-podcasts")}>
+            <Podcast size={15} aria-hidden="true" /> {t("Podcast")}
+          </button>
+          <button type="button" className="watch-guide-source" onClick={() => onOpenSource("youtube")}>
+            <Music size={15} aria-hidden="true" /> {t("Music")}
+          </button>
+          <button type="button" className="watch-guide-source" onClick={() => onOpenSource("audiobooks")}>
+            <BookOpen size={15} aria-hidden="true" /> {t("Audiobook")}
+          </button>
+          <button type="button" className="watch-guide-source" onClick={onImportFiles}>
+            <FolderUp size={15} aria-hidden="true" /> {t("My MP3s")}
+          </button>
+        </div>
+      ),
+    };
+  } else if (shown === 2) {
+    const checkButton = (
+      <button type="button" className="secondary-button watch-guide-check" disabled={checking} onClick={() => void checkAgain()}>
+        {checking ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <RefreshCw size={15} aria-hidden="true" />}
+        {t("Check again")}
+      </button>
+    );
+    detail = state === "connected"
+      ? {
+          tone: "done",
+          icon: <Watch size={17} aria-hidden="true" />,
+          title: t("{{p0}} connected", { p0: watchStatus?.name ?? t("Watch") }),
+          body: formatFree(watchStatus?.freeBytes)
+            ? t("{{p0}} free on the watch.", { p0: formatFree(watchStatus?.freeBytes) })
+            : t("Ready to receive audio."),
+        }
       : state === "approve"
-        ? t("Approve the connection on your phone")
-        : state === "unplugged"
-          ? t("Plug in your watch")
-          : pendingCount > 0
-            ? t("{{p0}} ready to send", { p0: pendingCount })
-            : t("Pick something to play");
+        ? {
+            tone: "warning",
+            icon: <Smartphone size={17} aria-hidden="true" />,
+            title: t("Approve the connection on your phone"),
+            body: t("Your watch is plugged in. Open the COROS app and allow it to connect to this computer. New watch? Pair it in the COROS app first."),
+            action: checkButton,
+          }
+        : {
+            tone: "current",
+            icon: <Usb size={17} aria-hidden="true" />,
+            title: t("Plug in your watch"),
+            body: t("Use its charging cable. Keep your phone close: the COROS app will ask you to allow the connection."),
+            action: checkButton,
+          };
+  } else if (sending && transferProgress) {
+    const percent = ((transferProgress.index - 1 + transferProgress.fileProgress) / transferProgress.total) * 100;
+    detail = {
+      tone: "current",
+      icon: <Loader2 size={17} className="spin" aria-hidden="true" />,
+      title: t("Sending {{p0}} of {{p1}}", { p0: transferProgress.index, p1: transferProgress.total }),
+      body: (
+        <>
+          <span className="watch-guide-track">{transferProgress.name}</span>
+          <span className="watch-guide-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
+            <span style={{ width: `${percent}%` }} />
+          </span>
+        </>
+      ),
+      action: <span className="watch-guide-hint">{t("Keep the watch plugged in")}</span>,
+    };
+  } else if (done) {
+    detail = {
+      tone: "done",
+      icon: <PartyPopper size={17} aria-hidden="true" />,
+      title: t("All set. Unplug and go"),
+      body: t("Start a run, then open Music on the watch to play it."),
+    };
+  } else {
+    detail = {
+      tone: current === 3 ? "current" : "upcoming",
+      icon: <Send size={17} aria-hidden="true" />,
+      title: t("Send to your watch"),
+      body: state !== "connected"
+        ? t("Once the watch is connected, everything new goes over in one tap.")
+        : pendingCount > 0
+          ? t("{{p0}} new item(s) will be copied. Leave the watch plugged in until it finishes.", { p0: pendingCount })
+          : t("Nothing new to send yet. Choose something to play first."),
+      action: sendButton,
+    };
+  }
 
   return (
     <section
@@ -124,165 +238,57 @@ export function WatchMediaGuide({
       aria-label={t("Put it on your watch")}
     >
       <header className="watch-guide-head">
-        <button
-          type="button"
-          className="watch-guide-toggle"
-          aria-expanded={!collapsed}
-          onClick={toggleCollapsed}
-        >
-          <strong>{t("Put it on your watch")}</strong>
-          <span className="watch-guide-summary">{summary}</span>
-          <ChevronDown size={15} aria-hidden="true" className="watch-guide-chevron" />
-        </button>
-        {collapsed && state === "connected" && pendingCount > 0 ? (
+        <span className="watch-guide-title">{t("Put it on your watch")}</span>
+        <ol className="watch-guide-stepper">
+          {([1, 2, 3] as const).map((step) => (
+            <Fragment key={step}>
+              {step > 1 ? (
+                <li className={tones[(step - 1) as StepId] === "done" ? "watch-guide-rail is-done" : "watch-guide-rail"} aria-hidden="true" />
+              ) : null}
+              <li>
+                <button
+                  type="button"
+                  className={`watch-guide-step is-${tones[step]}${shown === step && !collapsed ? " is-shown" : ""}`}
+                  aria-current={current === step ? "step" : undefined}
+                  onClick={() => {
+                    if (collapsed) toggleCollapsed();
+                    setViewed(step === current ? null : step);
+                  }}
+                >
+                  <span className="watch-guide-mark" aria-hidden="true">
+                    {tones[step] === "done" ? <Check size={12} strokeWidth={3} /> : step}
+                  </span>
+                  <span className="watch-guide-step-label">{labels[step]}</span>
+                </button>
+              </li>
+            </Fragment>
+          ))}
+        </ol>
+        <div className="watch-guide-head-end">
+          {collapsed && canSend ? sendButton : null}
           <button
             type="button"
-            className="primary-button watch-guide-send is-compact"
-            disabled={sending}
-            onClick={onSendAll}
+            className="watch-guide-collapse"
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? t("Show steps") : t("Hide steps")}
+            title={collapsed ? t("Show steps") : t("Hide steps")}
+            onClick={toggleCollapsed}
           >
-            <Send size={14} aria-hidden="true" />
-            {t("Send {{p0}}", { p0: pendingCount })}
+            <ChevronDown size={16} aria-hidden="true" />
           </button>
-        ) : null}
+        </div>
       </header>
 
       {collapsed ? null : (
-        <ol className="watch-guide-steps">
-          <li className={haveAudio ? "watch-guide-step is-done" : "watch-guide-step is-current"}>
-            <StepMark index={1} done={haveAudio} />
-            <div className="watch-guide-body">
-              <h3>{t("Choose something to play")}</h3>
-              <p>
-                {pendingCount > 0
-                  ? t("{{p0}} in your library, waiting to go on the watch. Add more any time.", { p0: pendingCount })
-                  : t("Download a podcast episode or some music. It lands in your Library.")}
-              </p>
-              <div className="watch-guide-sources">
-                <button type="button" className="watch-guide-source" onClick={() => onOpenSource("apple-podcasts")}>
-                  <Podcast size={15} aria-hidden="true" /> {t("Podcast")}
-                </button>
-                <button type="button" className="watch-guide-source" onClick={() => onOpenSource("youtube")}>
-                  <Music size={15} aria-hidden="true" /> {t("Music")}
-                </button>
-                <button type="button" className="watch-guide-source" onClick={() => onOpenSource("audiobooks")}>
-                  <BookOpen size={15} aria-hidden="true" /> {t("Audiobook")}
-                </button>
-                <button type="button" className="watch-guide-source" onClick={onImportFiles}>
-                  <FolderUp size={15} aria-hidden="true" /> {t("My MP3 files")}
-                </button>
-              </div>
-            </div>
-          </li>
-
-          <li
-            className={[
-              "watch-guide-step",
-              state === "connected" ? "is-done" : haveAudio ? "is-current" : "",
-              state === "approve" ? "is-warning" : "",
-            ].filter(Boolean).join(" ")}
-            aria-live="polite"
-          >
-            <StepMark index={2} done={state === "connected"} />
-            <div className="watch-guide-body">
-              <h3>
-                {state === "connected"
-                  ? t("{{p0}} connected", { p0: watchStatus?.name ?? t("Watch") })
-                  : state === "approve"
-                    ? t("Approve on your phone")
-                    : t("Plug in your watch")}
-              </h3>
-              {state === "connected" ? (
-                <p>
-                  {formatFree(watchStatus?.freeBytes)
-                    ? t("{{p0}} free on the watch.", { p0: formatFree(watchStatus?.freeBytes) })
-                    : t("Ready to receive audio.")}
-                </p>
-              ) : state === "approve" ? (
-                <>
-                  <p>
-                    {t("Your watch is plugged in but waiting for permission. Open the COROS app on your phone and allow the connection to this computer.")}
-                  </p>
-                  <p className="watch-guide-note">
-                    <Smartphone size={13} aria-hidden="true" />
-                    {t("New watch? Pair it in the COROS app first, then plug it in again.")}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p>{t("Connect it to this computer with its charging cable.")}</p>
-                  <p className="watch-guide-note">
-                    <Smartphone size={13} aria-hidden="true" />
-                    {t("Keep your phone nearby: since a recent COROS update, the COROS app asks you to allow the connection.")}
-                  </p>
-                </>
-              )}
-              {state !== "connected" ? (
-                <button type="button" className="watch-guide-link" disabled={checking} onClick={() => void checkAgain()}>
-                  {checking ? <Loader2 size={13} className="spin" aria-hidden="true" /> : <RefreshCw size={13} aria-hidden="true" />}
-                  {t("Check again")}
-                </button>
-              ) : null}
-            </div>
-          </li>
-
-          <li
-            className={[
-              "watch-guide-step",
-              done ? "is-done" : state === "connected" && pendingCount > 0 ? "is-current" : "",
-            ].filter(Boolean).join(" ")}
-          >
-            <StepMark index={3} done={done} />
-            <div className="watch-guide-body">
-              <h3>{done ? t("On your watch") : t("Send to your watch")}</h3>
-              {sending && transferProgress ? (
-                <>
-                  <p>
-                    {t("Sending {{p0}} of {{p1}}: {{p2}}", {
-                      p0: transferProgress.index,
-                      p1: transferProgress.total,
-                      p2: transferProgress.name,
-                    })}
-                  </p>
-                  <div className="watch-guide-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100}
-                    aria-valuenow={Math.round(((transferProgress.index - 1 + transferProgress.fileProgress) / transferProgress.total) * 100)}>
-                    <span style={{ width: `${((transferProgress.index - 1 + transferProgress.fileProgress) / transferProgress.total) * 100}%` }} />
-                  </div>
-                </>
-              ) : done ? (
-                <p>{t("Unplug the watch, then find it under Music on the watch when you start a run.")}</p>
-              ) : (
-                <p>
-                  {state !== "connected"
-                    ? t("Once the watch is connected, everything new goes over in one tap.")
-                    : pendingCount > 0
-                      ? t("{{p0}} new item(s) will be copied. Leave the watch plugged in until it finishes.", { p0: pendingCount })
-                      : t("Nothing new to send yet. Choose something to play first.")}
-                </p>
-              )}
-              {!done ? (
-                <button
-                  type="button"
-                  className="primary-button watch-guide-send"
-                  disabled={sending || state !== "connected" || pendingCount === 0}
-                  onClick={onSendAll}
-                >
-                  {sending ? <Loader2 size={14} className="spin" aria-hidden="true" /> : <Send size={14} aria-hidden="true" />}
-                  {pendingCount > 0 ? t("Send {{p0}} to watch", { p0: pendingCount }) : t("Send to watch")}
-                </button>
-              ) : null}
-            </div>
-          </li>
-        </ol>
+        <div className={`watch-guide-detail is-${detail.tone}`} aria-live="polite">
+          <span className="watch-guide-tile" aria-hidden="true">{detail.icon}</span>
+          <div className="watch-guide-copy">
+            <strong>{detail.title}</strong>
+            <span>{detail.body}</span>
+          </div>
+          {detail.action ? <div className="watch-guide-action">{detail.action}</div> : null}
+        </div>
       )}
     </section>
-  );
-}
-
-function StepMark({ index, done }: { index: number; done: boolean }) {
-  return (
-    <span className="watch-guide-mark" aria-hidden="true">
-      {done ? <Check size={14} strokeWidth={2.6} /> : index}
-    </span>
   );
 }
