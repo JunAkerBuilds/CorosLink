@@ -240,6 +240,19 @@ async function main() {
     assert.equal(at("watchface_390x390/AODconfig.txt").background_icon, "cl_aod_source\\aod_bg.png", "The complete 416 AOD wins over the thinned 800 copy (with the backslash path COROS's compiler reads)");
     assert.equal(twin.aodDesignScale, 800 / 416, "The AOD design grows by the master's size over the AOD tree's");
     assert.equal(at("watchface_390x390/config.txt").am_icon, "", "AM/PM declared only in the watch tree stays declared");
+    // An intact 800 AOD stays the source although the watch tree declares more keys (official STANDARD:
+    // AM/PM and a low-power battery icon, naming files neither tree ships). The design's AOD was
+    // composed against the 800 one, so nothing is rescaled.
+    const intact = convertWatchfaceEntries([
+      ...source.filter(entry => !/AODconfig/.test(entry.name)),
+      { name: "watchface_800x800/aod_bg.png", data: png(800) },
+      { name: "watchface_800x800/AODconfig.txt", data: cfg("[watchface_id]=0x00000020\n[background_icon]=aod_bg.png\n[time_hour_high_pos]={200,300}\n") },
+      { name: "watchface_416x416/AODconfig.txt", data: cfg("[watchface_id]=0x00000021\n[background_icon]=aod_bg.png\n[time_hour_high_pos]={104,156}\n[am_pm_icon_pos]={10,10}\n[am_icon]=icon\\am.png\n[pm_icon]=icon\\pm.png\n[battery_icon_lowpower]=battery\\lowpower.png\n") }
+    ], carrierEntries, pace4Target);
+    assert.equal(intact.aodDesignScale, 1, "An intact 800 AOD is not replaced by a watch tree that only declares more keys");
+    assert.equal(service.parseCorosWatchfaceConfig(intact.entries.find(entry => entry.name === "watchface_390x390/AODconfig.txt").data.toString("utf8")).background_icon,
+      "aod_bg.png", "The master's own AOD artwork is kept, not a cl_aod_source copy of the watch tree's");
+    assert(!intact.entries.some(entry => entry.name.includes("/cl_aod_source/")), "No watch-tree AOD assets are duplicated beside an intact master");
     const noAod = convertWatchfaceEntries(source.filter(entry => !/AODconfig/.test(entry.name)), carrierEntries, pace4Target, {}, false);
     assert(!noAod.entries.some(entry => /AODconfig\.txt$/.test(entry.name)), "No AOD is invented when not wanted");
     assert.equal(noAod.generatedAod, false);

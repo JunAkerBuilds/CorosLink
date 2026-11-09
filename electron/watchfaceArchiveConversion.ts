@@ -232,12 +232,25 @@ function convertEntries(
   // Some official AMOLED templates only supply AOD at the physical size. Studio's
   // export then fills the missing 800px AOD by rescaling it, dropping every key
   // whose AOD-only assets live in the physical tree alone (time digits,
-  // background). Take the most complete AOD, not simply the largest, or a second
-  // pass converts that thinned copy and the always-on screen comes out blank.
+  // background). A second pass must not convert that thinned copy, or the always-on
+  // screen comes out blank: a smaller tree's AOD wins over a larger one only when it
+  // draws with images the larger tree has no copy of. Counting keys is not enough:
+  // official templates with an intact 800px AOD declare a few more keys at the
+  // watch's size (STANDARD's AM/PM and low-power battery, naming files neither tree
+  // ships), and the design's AOD was composed against the 800px one.
   const aodText = (size: number) => textAt(size, "AODconfig.txt") ?? textAt(size, RETAINED_AOD_CONFIG);
-  const aodKeyCount = (size: number) => Object.values(readConfig(aodText(size) ?? "")).filter(value => value !== "").length;
+  const sourcePngs = [...source.keys()].filter(name => /\.png$/i.test(name));
+  const carriesImage = (size: number, relative: string) =>
+    sourcePngs.some(name => name === `${dir(size)}/${relative}` || name.startsWith(`${dir(size)}/${relative}/`));
+  const drawsWithOwnImages = (size: number, larger: number) => {
+    const kept = readConfig(aodText(larger)!);
+    return Object.entries(readConfig(aodText(size)!)).some(([key, value]) => {
+      const relative = value.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+      return Boolean(relative) && !kept[key] && carriesImage(size, relative) && !carriesImage(larger, relative);
+    });
+  };
   const aodSize = resolutions.filter(size => aodText(size))
-    .reduce<number | undefined>((best, size) => best === undefined || aodKeyCount(size) > aodKeyCount(best) ? size : best, undefined);
+    .reduce<number | undefined>((best, size) => best === undefined || drawsWithOwnImages(size, best) ? size : best, undefined);
   let aod = aodSize ? textAt(aodSize, "AODconfig.txt") ?? textAt(aodSize, RETAINED_AOD_CONFIG)! : current;
   if (aodSize && aodSize !== masterSize) {
     aod = scaleWatchfaceConfig(aod, masterSize / aodSize);
