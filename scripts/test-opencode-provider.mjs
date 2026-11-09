@@ -285,15 +285,26 @@ try {
   assert.equal(lifted.state, "connected");
   assert.equal(lifted.modelCount, 3);
 
-  // Cancelling ends the OpenCode process and reports a cancellation.
+  // Cancelling ends the OpenCode process and reports a cancellation. The stopped
+  // conversation is removed from OpenCode's history first, while the process can still take it.
   const controller = new AbortController();
   process.env.FAKE_OPENCODE_HANG = "1";
+  const deletedBeforeStop = (await deletedSessions()).length;
   await assert.rejects(
     run(fakeV2, { signal: controller.signal, onToken: () => controller.abort() }).result,
     (error) => error.kind === "cancelled"
   );
-  delete process.env.FAKE_OPENCODE_HANG;
+  assert.equal((await deletedSessions()).length, deletedBeforeStop + 1, "a stopped turn is removed from OpenCode's history");
   assert.deepEqual(await readdir(path.join(workspaceDir, "requests")), []);
+
+  // A turn that stops responding is removed too.
+  const deletedBeforeTimeout = (await deletedSessions()).length;
+  await assert.rejects(
+    run(fakeV2, { timeoutMs: 2_500 }).result,
+    (error) => error.kind === "timeout" && /stopped responding/.test(error.message)
+  );
+  assert.equal((await deletedSessions()).length, deletedBeforeTimeout + 1, "a timed-out turn is removed from OpenCode's history");
+  delete process.env.FAKE_OPENCODE_HANG;
 
   resetOpencodeCatalog();
   console.log(

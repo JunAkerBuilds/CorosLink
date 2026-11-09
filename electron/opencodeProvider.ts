@@ -593,6 +593,7 @@ async function startCoachSession(input: StartSessionInput): Promise<{
       );
     }
 
+    let discarded: Promise<void> | undefined;
     return {
       session: {
         agent,
@@ -600,17 +601,19 @@ async function startCoachSession(input: StartSessionInput): Promise<{
         get config() {
           return config;
         },
-        discard: async () => {
-          if (!canDelete) return;
-          let timer: ReturnType<typeof setTimeout> | undefined;
-          await Promise.race([
-            agent.request("session/delete", { sessionId }).catch(() => undefined),
-            new Promise((resolve) => {
-              timer = setTimeout(resolve, SESSION_DELETE_TIMEOUT_MS);
-            })
-          ]);
-          clearTimeout(timer);
-        }
+        // Asked once: a stopped turn discards before it closes, and the request's own cleanup follows.
+        discard: () =>
+          (discarded ??= (async () => {
+            if (!canDelete) return;
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            await Promise.race([
+              agent.request("session/delete", { sessionId }).catch(() => undefined),
+              new Promise((resolve) => {
+                timer = setTimeout(resolve, SESSION_DELETE_TIMEOUT_MS);
+              })
+            ]);
+            clearTimeout(timer);
+          })())
       },
       cleanup
     };
@@ -849,9 +852,26 @@ export async function streamOpencodeCompletion(
   let externallyCancelled = false;
   let timedOut = false;
   let agent: AcpAgent | undefined;
+  let session: CoachSession | undefined;
+  // A turn that is stopped or times out still has its conversation removed from
+  // OpenCode's history. Only a running process can take that request, so the
+  // turn is cancelled and discarded first (the discard gives up after
+  // SESSION_DELETE_TIMEOUT_MS) and the process is closed after.
+  const stop = () => {
+    const live = session;
+    if (!live) {
+      agent?.close();
+      return;
+    }
+    live.agent.notify("session/cancel", { sessionId: live.sessionId });
+    void live
+      .discard()
+      .catch(() => undefined)
+      .finally(() => live.agent.close());
+  };
   const onAbort = () => {
     externallyCancelled = true;
-    agent?.close();
+    stop();
   };
   options.signal.addEventListener("abort", onAbort, { once: true });
   // Inactivity timeout: long agent turns are fine while the stream produces.
@@ -862,7 +882,7 @@ export async function streamOpencodeCompletion(
     clearTimeout(timeout);
     timeout = setTimeout(() => {
       timedOut = true;
-      agent?.close();
+      stop();
     }, ms);
   };
   armIdleTimeout(Math.min(idleTimeoutMs, SESSION_START_TIMEOUT_MS));
@@ -870,7 +890,6 @@ export async function streamOpencodeCompletion(
   let fullText = "";
   let toolCalls = 0;
   let bridge: ToolBridge | undefined;
-  let session: CoachSession | undefined;
   let cleanup: (() => Promise<void>) | undefined;
 
   try {
