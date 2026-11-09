@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.76] - 2026-11-09
+
 ### Added
 
 - **OpenCode as a Coach provider (beta).** Pick OpenCode in the Coach's provider menu to coach with the [OpenCode](https://opencode.ai) installed on this computer and any model from the providers you connected in it, including local ones. It works with OpenCode 1.x and 2.x. OpenCode gets the same Coach tools as the other providers, and its own file, shell and web tools stay off. CorosLink never reads your OpenCode credentials, and on OpenCode 2.x each Coach conversation is removed from OpenCode's own history once it is answered or stopped. If OpenCode has no provider yet, run `opencode auth login` in a terminal, then choose Check again. Web lookups such as Find race with AI are not available with OpenCode.
