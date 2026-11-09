@@ -2974,4 +2974,7 @@ export const trainingChinese: Readonly<Record<string, string>> = {
   "Swim time": "游泳时间",
   "Best pace": "最佳配速",
   "Temperature": "温度",
+  "Sign in with your COROS account": "使用您的 COROS 账户登录",
+  "Use the same email and password as the COROS app on your phone. COROS may email you a 6-digit code to finish.": "请使用与手机上 COROS 应用相同的邮箱和密码。COROS 可能会通过邮件向您发送 6 位验证码以完成登录。",
+  "Only needed for training data. Music, podcasts and maps work without signing in.": "仅训练数据需要登录。音乐、播客和地图无需登录即可使用。",
 };

@@ -1196,4 +1196,5 @@ export const corePortuguese: Record<string, string> = {
   "Search settings": "Pesquisar definições",
   "No setting matches that search.": "Nenhuma definição corresponde a essa pesquisa.",
   "Watch faces · External AI": "Mostradores · IA externa",
+  "Same login as the COROS phone app. Unlocks Training Hub, Coach, Calendar and Strength. Music and podcasts don’t need it.": "O mesmo início de sessão da app COROS do telemóvel. Desbloqueia o Centro de treino, o treinador, o calendário e a força. A música e os podcasts não precisam dele.",
 };

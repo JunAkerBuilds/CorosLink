@@ -2949,4 +2949,7 @@ export const trainingGerman: Record<string, string> = {
   "Swim time": "Schwimmzeit",
   "Best pace": "Beste Pace",
   "Temperature": "Temperatur",
+  "Sign in with your COROS account": "Melde dich mit deinem COROS-Konto an",
+  "Use the same email and password as the COROS app on your phone. COROS may email you a 6-digit code to finish.": "Verwende dieselbe E-Mail-Adresse und dasselbe Passwort wie in der COROS-App auf deinem Smartphone. COROS sendet dir zum Abschluss möglicherweise einen 6-stelligen Code per E-Mail.",
+  "Only needed for training data. Music, podcasts and maps work without signing in.": "Nur für Trainingsdaten nötig. Musik, Podcasts und Karten funktionieren ohne Anmeldung.",
 };

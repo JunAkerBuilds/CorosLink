@@ -1199,4 +1199,5 @@ export const coreChinese: Readonly<Record<string, string>> = {
   "Search settings": "搜索设置",
   "No setting matches that search.": "没有符合该搜索的设置。",
   "Watch faces · External AI": "表盘·外部AI",
+  "Same login as the COROS phone app. Unlocks Training Hub, Coach, Calendar and Strength. Music and podcasts don’t need it.": "与手机上的 COROS 应用使用相同的登录信息。解锁 Training Hub、教练、日历和力量。音乐和播客无需登录。",
 };
