@@ -79,6 +79,8 @@ export const FIT_MSG = {
   LAP: 19,
   RECORD: 20,
   EVENT: 21,
+  WORKOUT: 26,
+  WORKOUT_STEP: 27,
   LENGTH: 101
 } as const;
 
@@ -88,6 +90,8 @@ const DEFAULT_WANTED = new Set<number>([
   FIT_MSG.LAP,
   FIT_MSG.RECORD,
   FIT_MSG.EVENT,
+  FIT_MSG.WORKOUT,
+  FIT_MSG.WORKOUT_STEP,
   FIT_MSG.LENGTH
 ]);
 

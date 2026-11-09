@@ -95,7 +95,7 @@ export interface DecodedSyncPayload {
 }
 
 /** Bump when the sport-record decoder or FIT output changes; stored watch activities are then re-decoded at startup. */
-export const COROS_SPORT_RECORD_DECODER = "coros-sport-record/v2";
+export const COROS_SPORT_RECORD_DECODER = "coros-sport-record/v3";
 
 /** One decoded watch activity as a FIT file; deterministic, so re-decoding the same payload yields the same bytes. */
 export function corosSessionToFit(session: CorosSession): Buffer {

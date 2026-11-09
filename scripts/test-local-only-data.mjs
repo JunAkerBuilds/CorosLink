@@ -37,9 +37,9 @@ const { pages, startRecord, syntheticPoolSwim, syntheticRun } = await import("./
 const { syntheticDaily } = await import("./fixtures/coros-daily-fixture.mjs");
 
 /** The decoders' names as stored with each payload, and stand-ins for another decoder version's. */
-const SPORT_DECODER = "coros-sport-record/v2";
+const SPORT_DECODER = "coros-sport-record/v3";
 const DAILY_DECODER = "coros-daily/v1";
-const OTHER_SPORT_DECODER = "coros-sport-record/v1";
+const OTHER_SPORT_DECODER = "coros-sport-record/v2";
 const OTHER_FAILED = `failed:${OTHER_SPORT_DECODER}`;
 
 let passed = 0;

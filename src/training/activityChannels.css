@@ -205,3 +205,8 @@
 .activity-hr-recovery-drops small { font-size: 11.5px; color: var(--text-secondary); }
 .activity-detail-effect-row .activity-hr-recovery-curve { height: 72px; }
 .activities-detail-sidebar .activity-hr-recovery-drops strong { font-size: 17px; }
+/* The workout an activity followed: what it was, its name, and how far it planned to go. */
+.activity-workout-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0 0 10px; }
+.activity-workout-line span { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.activity-workout-line strong { font-weight: 600; overflow-wrap: anywhere; }
+.activity-workout-line small { color: var(--text-muted); font-size: 12px; }

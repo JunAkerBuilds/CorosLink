@@ -2567,6 +2567,42 @@ export interface TrainingHubActivityLap {
   lengths?: number;
   /** Seconds per 100 m, rests inside the lap left out. */
   swimPace?: number;
+  /** The workout step the lap was, when the activity followed a workout. */
+  step?: TrainingHubLapStep;
+  /** Training load the lap added, as the watch worked it out. */
+  trainingLoad?: number;
+  /** Rests: how far heart rate fell, bpm (the rest's highest minus its last). */
+  hrDrop?: number;
+  /** The watch's automatic rest detection made this rest. */
+  autoRest?: boolean;
+}
+
+/** A lap's workout step: its name, its round in a repeat, and what it asked for. */
+export interface TrainingHubLapStep {
+  name?: string;
+  /** The repeat the step is in, and the lap's round of it. */
+  group?: string;
+  round?: number;
+  rounds?: number;
+  /** Seconds, metres or bpm ("hrBelow": until heart rate falls under it). */
+  target?: { kind: "time" | "distance" | "hrBelow"; value: number };
+  /** The stroke the step asked for. */
+  stroke?: TrainingHubSwimStroke;
+  /** The range the step asked to stay in: pace s/km (low is the faster), speed m/s, heart rate bpm, power W, cadence spm. */
+  range?: { kind: "pace" | "speed" | "heartRate" | "power" | "cadence"; low: number; high: number };
+  /** What kind of step it was in the plan. */
+  kind?: "warmup" | "work" | "recovery" | "cooldown";
+}
+
+/** The workout an activity followed on the watch. */
+export interface TrainingHubActivityWorkout {
+  name?: string;
+  /** It came from the training calendar. */
+  scheduled: boolean;
+  /** Metres the workout's distance steps add up to, repeats included. */
+  plannedDistance?: number;
+  /** Seconds its timed steps add up to, repeats included and rests left out. */
+  plannedTime?: number;
 }
 
 /** A swim's totals as the watch recorded them. */
@@ -2869,6 +2905,8 @@ export interface TrainingHubActivityDetail {
   trainingEffect?: TrainingHubTrainingEffect;
   runningDynamics?: TrainingHubRunningDynamics;
   swim?: TrainingHubSwimSummary;
+  /** The workout followed on the watch. */
+  workout?: TrainingHubActivityWorkout;
   minHr?: number;
   /** °C. */
   avgTemperature?: number;

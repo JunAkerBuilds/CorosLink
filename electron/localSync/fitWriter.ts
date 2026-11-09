@@ -21,12 +21,13 @@ const SIZES: Record<NumericType, number> = { 0x00: 1, 0x01: 1, 0x02: 1, 0x83: 2,
 const INVALID: Record<NumericType, number> = { 0x00: 0xff, 0x01: 0x7f, 0x02: 0xff, 0x83: 0x7fff, 0x84: 0xffff, 0x85: 0x7fff_ffff, 0x86: 0xffff_ffff, 0x88: Number.NaN };
 const STRING_BYTES = 32;
 
-type FieldSpec = readonly [fieldNumber: number, type: BaseType];
+/** A string field's size defaults to STRING_BYTES. */
+type FieldSpec = readonly [fieldNumber: number, type: BaseType, stringBytes?: number];
 /** A developer field: its number in the field_description, its base type, the developer data index. */
 type DeveloperFieldSpec = readonly [fieldNumber: number, type: NumericType, developerIndex: number];
 type FieldValue = number | string | undefined;
 
-const fieldSize = (type: BaseType) => (type === BaseType.string ? STRING_BYTES : SIZES[type]);
+const fieldSize = (type: BaseType, stringBytes = STRING_BYTES) => (type === BaseType.string ? stringBytes : SIZES[type]);
 
 const CRC_TABLE = [0x0000, 0xcc01, 0xd801, 0x1400, 0xf001, 0x3c00, 0x2800, 0xe401, 0xa001, 0x6c00, 0x7800, 0xb401, 0x5000, 0x9c01, 0x8801, 0x4400];
 
@@ -53,7 +54,7 @@ class FitBuilder {
     developerFields: readonly DeveloperFieldSpec[] = [],
     developerValues: readonly FieldValue[] = []
   ): void {
-    const key = `${globalNumber}:${fields.map(([number, type]) => `${number}/${type}`).join(",")}|${developerFields.map((field) => field.join("/")).join(",")}`;
+    const key = `${globalNumber}:${fields.map(([number, type, bytes]) => `${number}/${type}${bytes ? `/${bytes}` : ""}`).join(",")}|${developerFields.map((field) => field.join("/")).join(",")}`;
     let local = this.definitions.get(key);
     if (local === undefined) {
       local = this.definitions.size;
@@ -64,9 +65,9 @@ class FitBuilder {
       definition[0] = 0x40 | (developer ? 0x20 : 0) | local;
       definition.writeUInt16LE(globalNumber, 3);
       definition[5] = fields.length;
-      fields.forEach(([number, type], index) => {
+      fields.forEach(([number, type, bytes], index) => {
         definition[6 + index * 3] = number;
-        definition[7 + index * 3] = fieldSize(type);
+        definition[7 + index * 3] = fieldSize(type, bytes);
         definition[8 + index * 3] = type;
       });
       if (developer) {
@@ -80,17 +81,17 @@ class FitBuilder {
       }
       this.chunks.push(definition);
     }
-    const all: Array<[BaseType, FieldValue]> = [
-      ...fields.map(([, type], index): [BaseType, FieldValue] => [type, values[index]]),
-      ...developerFields.map(([, type], index): [BaseType, FieldValue] => [type, developerValues[index]])
+    const all: Array<[BaseType, FieldValue, number]> = [
+      ...fields.map(([, type, bytes], index): [BaseType, FieldValue, number] => [type, values[index], fieldSize(type, bytes)]),
+      ...developerFields.map(([, type], index): [BaseType, FieldValue, number] => [type, developerValues[index], fieldSize(type)])
     ];
-    const record = Buffer.alloc(1 + all.reduce((total, [type]) => total + fieldSize(type), 0));
+    const record = Buffer.alloc(1 + all.reduce((total, [, , size]) => total + size, 0));
     record[0] = local;
     let offset = 1;
-    for (const [type, raw] of all) {
+    for (const [type, raw, size] of all) {
       if (type === BaseType.string) {
-        // Null-terminated UTF-8 in a fixed-size field.
-        Buffer.from(typeof raw === "string" ? raw : "", "utf8").subarray(0, STRING_BYTES - 1).copy(record, offset);
+        // Null-terminated UTF-8 in a fixed-size field, never cut inside a character.
+        utf8Within(typeof raw === "string" ? raw : "", size - 1).copy(record, offset);
       } else if (type === BaseType.float32) {
         record.writeFloatLE(typeof raw === "number" && Number.isFinite(raw) ? raw : Number.NaN, offset);
         if (typeof raw !== "number" || !Number.isFinite(raw)) record.writeUInt32LE(0xffff_ffff, offset);
@@ -105,7 +106,7 @@ class FitBuilder {
           case BaseType.sint32: record.writeInt32LE(clamp(value, -0x8000_0000, 0x7fff_ffff), offset); break;
         }
       }
-      offset += fieldSize(type);
+      offset += size;
     }
     this.chunks.push(record);
   }
@@ -124,6 +125,15 @@ class FitBuilder {
     crc.writeUInt16LE(fitCrc(body));
     return Buffer.concat([body, crc]);
   }
+}
+
+/** UTF-8 bytes of `text`, at most `limit`, ending on a whole character. */
+function utf8Within(text: string, limit: number): Buffer {
+  const bytes = Buffer.from(text, "utf8");
+  if (bytes.length <= limit) return bytes;
+  let end = limit;
+  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end -= 1;
+  return bytes.subarray(0, end);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -176,6 +186,8 @@ export interface FitWriterSwimLap {
   firstLength?: number;
   lengths?: number;
   activeLengths?: number;
+  /** Closed by the watch's automatic rest detection (developer field). */
+  autoRest?: boolean;
 }
 
 /** A pool length (length message); an idle one is a rest. */
@@ -228,6 +240,35 @@ export interface FitWriterLap {
   descentM?: number;
   dynamics?: FitWriterDynamics;
   swim?: FitWriterSwimLap;
+  /** Training load the lap added (developer field). */
+  trainingLoad?: number;
+  /** wkt_step_index: the lap's step in `FitWriterActivity.workout.steps`. */
+  workoutStep?: number;
+  /** Rests: heart-rate drop, bpm (developer field). */
+  hrDrop?: number;
+}
+
+/** A workout step (workout_step message). */
+export interface FitWriterWorkoutStep {
+  name?: string;
+  /** FIT intensity. */
+  intensity?: number;
+  duration: "time" | "distance" | "hrBelow" | "open" | "repeat";
+  /** Seconds, metres or bpm. */
+  durationValue?: number;
+  repeatFrom?: number;
+  repeatTimes?: number;
+  /** FIT swim_stroke target. */
+  stroke?: number;
+  /** A range to stay in: pace s/km, speed m/s, heart rate bpm, power W, cadence spm. */
+  target?: { kind: "pace" | "speed" | "heartRate" | "power" | "cadence"; low: number; high: number };
+}
+
+/** The workout the activity followed (workout message, and a developer field for its calendar entry). */
+export interface FitWriterWorkout {
+  name?: string;
+  calendarEntry?: number;
+  steps: FitWriterWorkoutStep[];
 }
 
 /** The watch's training analysis, written as session developer fields (effects use the standard fields). */
@@ -261,6 +302,7 @@ export interface FitWriterActivity extends FitWriterLap {
   totalStrides?: number;
   training?: FitWriterTraining;
   swimTotals?: FitWriterSwim;
+  workout?: FitWriterWorkout;
   activeWindows: Array<[number, number]>;
   laps: FitWriterLap[];
   /** Pool swims. */
@@ -312,6 +354,20 @@ const SESSION_SWIM: readonly FieldSpec[] = [
   [33, BaseType.uint16], [42, BaseType.uint16], [44, BaseType.uint16], [46, BaseType.enum], [47, BaseType.uint16], [79, BaseType.uint16],
   [80, BaseType.uint16]
 ];
+/** Workout and step names keep the watch's (39 + 51 UTF-8 bytes, joined with a space). */
+const NAME_BYTES = 96;
+/** Workout: sport, num_valid_steps, wkt_name, sub_sport, pool_length, pool_length_unit. */
+const WORKOUT: readonly FieldSpec[] = [[4, BaseType.enum], [6, BaseType.uint16], [8, BaseType.string, NAME_BYTES], [11, BaseType.enum], [14, BaseType.uint16], [15, BaseType.enum]];
+/**
+ * Workout step: message_index, wkt_step_name, duration_type, duration_value, target_type, target_value, intensity,
+ * custom_target_value_low and _high.
+ */
+const WORKOUT_STEP: readonly FieldSpec[] = [
+  [254, BaseType.uint16], [0, BaseType.string, NAME_BYTES], [1, BaseType.enum], [2, BaseType.uint32], [3, BaseType.enum], [4, BaseType.uint32], [7, BaseType.enum],
+  [5, BaseType.uint32], [6, BaseType.uint32]
+];
+/** Lap: wkt_step_index. */
+const LAP_WORKOUT: readonly FieldSpec[] = [[71, BaseType.uint16]];
 const ACTIVITY: readonly FieldSpec[] = [[253, BaseType.uint32], [0, BaseType.uint32], [1, BaseType.uint16], [2, BaseType.enum], [3, BaseType.enum], [4, BaseType.enum]];
 
 const DEVELOPER_INDEX = 0;
@@ -333,8 +389,13 @@ const FIT_DEVELOPER_FIELDS = {
   swolf: { number: 13, type: BaseType.uint16, name: "SWOLF", units: "" },
   bestSwolf: { number: 14, type: BaseType.uint16, name: "Best SWOLF", units: "" },
   avgHeartRate: { number: 15, type: BaseType.uint8, name: "Avg Heart Rate", units: "bpm" },
-  maxHeartRate: { number: 16, type: BaseType.uint8, name: "Max Heart Rate", units: "bpm" }
+  maxHeartRate: { number: 16, type: BaseType.uint8, name: "Max Heart Rate", units: "bpm" },
+  hrDrop: { number: 17, type: BaseType.uint8, name: "HR Drop", units: "bpm" },
+  autoRest: { number: 18, type: BaseType.uint8, name: "Auto Rest", units: "" },
+  calendarEntry: { number: 19, type: BaseType.uint32, name: "Calendar Entry", units: "" }
 } as const;
+/** Lap developer fields: the training load a lap added, a rest's heart-rate drop, and a swim's automatic-rest flag. */
+const LAP_FIELDS = ["trainingLoad", "hrDrop", "autoRest"] as const;
 const LENGTH_FIELDS = ["swolf", "avgHeartRate", "maxHeartRate"] as const;
 const SESSION_TRAINING_FIELDS = [
   "trainingLoad", "aerobicLoad", "anaerobicLoad", "focus", "sevenDayLoad", "recommendedLoadMin", "recommendedLoadMax", "vo2max",
@@ -355,6 +416,14 @@ const LENGTH_IDLE = 0;
 const LENGTH_ACTIVE = 1;
 const INTENSITY_ACTIVE = 0;
 const INTENSITY_REST = 1;
+/** FIT wkt_step_duration and wkt_step_target. */
+const DURATION_TYPE = { time: 0, distance: 1, hrBelow: 2, open: 5, repeat: 6 } as const;
+const TARGET_SPEED = 0;
+const TARGET_HEART_RATE = 1;
+const TARGET_OPEN = 2;
+const TARGET_CADENCE = 3;
+const TARGET_POWER = 4;
+const TARGET_SWIM_STROKE = 11;
 const DISPLAY_METRIC = 0;
 const DISPLAY_STATUTE = 1;
 
@@ -372,22 +441,63 @@ const dynamicsValues = (dynamics: FitWriterDynamics | undefined) => [
   scaled(dynamics?.verticalOscillationMm, 10), scaled(dynamics?.groundTimeMs, 10), scaled(dynamics?.verticalRatio, 100), scaled(dynamics?.stepLengthMm, 10)
 ];
 
+/**
+ * duration_value, target_type, target_value and the custom range: ms, cm, bpm + 100 (FIT's offset for an absolute
+ * heart rate), or the repeat's first step and count. A pace range is a speed range (m/s × 1000; the faster pace is the
+ * higher speed), power W + 1000 (FIT's offset for absolute watts), cadence as is.
+ */
+function workoutStepValues(step: FitWriterWorkoutStep): [FieldValue, FieldValue, FieldValue, FieldValue, FieldValue] {
+  if (step.duration === "repeat") return [step.repeatFrom, undefined, step.repeatTimes, undefined, undefined];
+  const value = step.durationValue;
+  const duration = value === undefined ? undefined
+    : step.duration === "time" ? value * 1000 : step.duration === "distance" ? value * 100 : step.duration === "hrBelow" ? value + 100 : undefined;
+  if (step.stroke !== undefined) return [duration, TARGET_SWIM_STROKE, step.stroke, undefined, undefined];
+  const target = step.target;
+  switch (target?.kind) {
+    case "pace": return [duration, TARGET_SPEED, 0, 1_000_000 / target.high, 1_000_000 / target.low];
+    case "speed": return [duration, TARGET_SPEED, 0, target.low * 1000, target.high * 1000];
+    case "heartRate": return [duration, TARGET_HEART_RATE, 0, target.low + 100, target.high + 100];
+    case "power": return [duration, TARGET_POWER, 0, target.low + 1000, target.high + 1000];
+    case "cadence": return [duration, TARGET_CADENCE, 0, target.low, target.high];
+    default: return [duration, TARGET_OPEN, undefined, undefined, undefined];
+  }
+}
+
+const lapDeveloperValue = (lap: FitWriterLap, key: (typeof LAP_FIELDS)[number]): number | undefined =>
+  key === "trainingLoad" ? lap.trainingLoad : key === "hrDrop" ? lap.hrDrop : lap.swim?.autoRest ? 1 : undefined;
+
 export function writeFitActivity(activity: FitWriterActivity): Buffer {
   const fit = new FitBuilder();
   fit.message(0, FILE_ID, [4, MANUFACTURER_COROS, 0, fitTime(activity.createdTs)]);
   const hasEffort = activity.samples.some((sample) => sample.effortSpeed !== undefined);
   const swim = activity.swimTotals;
   const lengths = activity.lengths ?? [];
-  if (hasEffort || activity.training || swim) {
+  const workout = activity.workout;
+  // Only the ones some lap has.
+  const lapFields = LAP_FIELDS.filter((key) => activity.laps.some((lap) => lapDeveloperValue(lap, key) !== undefined));
+  // Every developer field a message carries is described first, or readers drop it.
+  const used = new Set<keyof typeof FIT_DEVELOPER_FIELDS>([
+    ...(hasEffort ? ["effortPace" as const] : []), ...(activity.training ? SESSION_TRAINING_FIELDS : []),
+    ...(swim ? ["bestSwolf" as const] : []), ...(lengths.length ? LENGTH_FIELDS : []), ...lapFields,
+    ...(workout?.calendarEntry !== undefined ? ["calendarEntry" as const] : [])
+  ]);
+  if (used.size) {
     fit.message(207, DEVELOPER_DATA_ID, [DEVELOPER_INDEX]);
-    const used = [
-      ...(hasEffort ? ["effortPace" as const] : []), ...(activity.training ? SESSION_TRAINING_FIELDS : []),
-      ...(swim ? ["bestSwolf" as const] : []), ...(lengths.length ? LENGTH_FIELDS : [])
-    ];
     for (const key of used) {
       const field = FIT_DEVELOPER_FIELDS[key];
       fit.message(206, FIELD_DESCRIPTION, [DEVELOPER_INDEX, field.number, field.type, field.name, field.units]);
     }
+  }
+
+  if (workout) {
+    fit.message(26, WORKOUT, [
+      activity.sport, workout.steps.length, workout.name, activity.subSport, scaled(swim?.poolLengthM, 100),
+      swim?.poolLengthUnit === undefined ? undefined : swim.poolLengthUnit === "yd" ? DISPLAY_STATUTE : DISPLAY_METRIC
+    ], workout.calendarEntry !== undefined ? [developerSpec("calendarEntry")] : [], [workout.calendarEntry]);
+    workout.steps.forEach((step, index) => {
+      const [duration, targetType, targetValue, low, high] = workoutStepValues(step);
+      fit.message(27, WORKOUT_STEP, [index, step.name, DURATION_TYPE[step.duration], duration, targetType, targetValue, step.intensity, low, high]);
+    });
   }
 
   const events = activity.activeWindows.flatMap(([start, end]) => [
@@ -422,9 +532,10 @@ export function writeFitActivity(activity: FitWriterActivity): Buffer {
       length.active ? LENGTH_ACTIVE : LENGTH_IDLE
     ], LENGTH_FIELDS.map(developerSpec), [length.swolf, length.avgHr, length.maxHr]);
   });
+  const lapSpecs = [...LAP, ...(swim ? LAP_SWIM : []), ...(workout ? LAP_WORKOUT : [])];
   activity.laps.forEach((lap, index) => {
     const lapSwim = lap.swim;
-    fit.message(19, swim ? [...LAP, ...LAP_SWIM] : LAP, [
+    fit.message(19, lapSpecs, [
       fitTime(lap.endTs), index, EVENT_LAP, EVENT_TYPE_STOP, fitTime(lap.startTs), scaled(lap.elapsedSec, 1000), scaled(lap.timerSec, 1000),
       scaled(lap.distanceM, 100), lap.calories, scaled(lap.avgSpeed, 1000), scaled(lap.maxSpeed, 1000), lap.avgHr, lap.maxHr,
       lap.avgCadence, lap.avgPower, lap.maxPower, lap.ascentM, lap.descentM, lap.avgTemperature, lap.minHr, ...dynamicsValues(lap.dynamics),
@@ -433,8 +544,9 @@ export function writeFitActivity(activity: FitWriterActivity): Buffer {
         lapSwim?.strokes, lapSwim?.rest ? INTENSITY_REST : INTENSITY_ACTIVE, lapSwim?.lengths, lapSwim?.firstLength,
         scaled(strokeDistance(lap.distanceM, lapSwim?.strokes), 100), lapSwim?.stroke, lapSwim?.activeLengths, lapSwim?.swolf,
         scaled(strokesPerLength(lapSwim?.strokes, lapSwim?.activeLengths), 10)
-      ] : [])
-    ]);
+      ] : []),
+      ...(workout ? [lap.workoutStep] : [])
+    ], lapFields.map(developerSpec), lapFields.map((key) => lapDeveloperValue(lap, key)));
   });
   const training = activity.training;
   const sessionDeveloper = [...(training ? SESSION_TRAINING_FIELDS.map(developerSpec) : []), ...(swim ? [developerSpec("bestSwolf")] : [])];
