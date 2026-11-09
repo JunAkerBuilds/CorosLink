@@ -130,6 +130,7 @@ import {
   type TrackTransferProgress,
 } from "./media/LibraryPanels";
 import { AudiobooksView } from "./media/AudiobooksView";
+import { WatchMediaGuide } from "./media/WatchMediaGuide";
 import { AppleBrandIcon, YouTubeMusicBrandIcon } from "./media/brandIcons";
 import {
   MEDIA_TAB_IDS,
@@ -716,6 +717,28 @@ export default function App() {
   useEffect(() => {
     watchConnectedRef.current = Boolean(watchStatus?.connected);
   }, [watchStatus?.connected]);
+
+  // The media guide polls this while it waits for the watch to be plugged in
+  // or approved on the phone; it skips the library listing refreshAll does.
+  const refreshWatchStatusOnly = useCallback(async () => {
+    if (!api) return;
+    try {
+      const watch = await api.getWatchStatus();
+      setWatchStatus((current) => (sameJson(current, watch) ? current : watch));
+    } catch {
+      // The next poll tries again; the app-wide refresh reports errors.
+    }
+  }, [api]);
+
+  const guideCounts = useMemo(() => {
+    const connected = Boolean(watchStatus?.connected);
+    const watchTracks = watchStatus?.tracks ?? [];
+    let onWatch = 0;
+    for (const track of downloads) {
+      if (isLocalTrackOnWatch(track, watchTracks, connected)) onWatch += 1;
+    }
+    return { pending: downloads.length - onWatch, onWatch };
+  }, [downloads, watchStatus?.connected, watchStatus?.tracks]);
 
   const refreshAll = useCallback(async () => {
     if (!api) {
@@ -2819,6 +2842,19 @@ export default function App() {
                 activeTab={activeMediaTab}
                 onTabChange={setActiveMediaTab}
                 onCustomize={() => openSettingsSection("media-tabs")}
+                guide={
+                  <WatchMediaGuide
+                    watchStatus={watchStatus}
+                    pendingCount={guideCounts.pending}
+                    onWatchCount={guideCounts.onWatch}
+                    sending={busy === "transfer-all"}
+                    transferProgress={busy === "transfer-all" ? transferProgress : null}
+                    onOpenSource={openMediaTab}
+                    onImportFiles={() => void handleImportDownloads()}
+                    onSendAll={() => void handleTransferAll()}
+                    onRefreshWatch={refreshWatchStatusOnly}
+                  />
+                }
               >
                 {activeMediaTab === "library" ? (
                   <MediaLibraryTab
@@ -3162,10 +3198,12 @@ interface MediaViewProps {
   activeTab: MediaTab;
   onTabChange: (tab: MediaTab) => void;
   onCustomize: () => void;
+  /** "Put it on your watch" guide, shown under the tab bar on every service. */
+  guide?: ReactNode;
   children: ReactNode;
 }
 
-function MediaView({ activeTab, onTabChange, onCustomize, children }: MediaViewProps) {
+function MediaView({ activeTab, onTabChange, onCustomize, guide, children }: MediaViewProps) {
   useLanguage();
   const hiddenTabs = useHiddenMediaTabs();
   const [menu, setMenu] = useState<{
@@ -3235,6 +3273,7 @@ function MediaView({ activeTab, onTabChange, onCustomize, children }: MediaViewP
           lockedTitle={t("Library always stays in Media.")}
         />
       ) : null}
+      {guide}
       {children}
     </>
   );

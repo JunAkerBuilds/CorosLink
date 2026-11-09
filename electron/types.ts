@@ -97,6 +97,13 @@ export interface WatchStatus {
   usedBytes?: number;
   tracks: WatchTrack[];
   candidates: DriveCandidate[];
+  /**
+   * A COROS watch is on the USB bus but exposes no storage drive. Recent COROS
+   * firmware keeps storage locked until the connection is approved in the COROS
+   * phone app (or the watch is paired there for the first time). Only set while
+   * `connected` is false.
+   */
+  usbAwaitingApproval?: { name: string };
   error?: string;
 }
 

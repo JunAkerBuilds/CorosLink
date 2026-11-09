@@ -197,6 +197,94 @@ export function invalidateWatchStatusCache(): void {
 }
 
 export async function getWatchStatus(): Promise<WatchStatus> {
+  const status = await readWatchStatus();
+  if (status.connected || process.env.COROS_WATCH_PATH) return status;
+  // No drive: say so when the watch is plugged in but storage is still locked,
+  // so people are told to approve the connection on their phone.
+  const awaiting = await detectLockedCorosUsbDevice();
+  return awaiting ? { ...status, usbAwaitingApproval: awaiting } : status;
+}
+
+// A plugged-in watch whose storage hasn't mounted shows up on the USB bus
+// only. Probing it is a single cheap system query, cached briefly because the
+// renderer polls while the media guide waits for the watch.
+const USB_PROBE_CACHE_TTL_MS = 2_500;
+const COROS_USB_NAME_PATTERN = /\bCOROS\b/i;
+let usbProbeCache: { at: number; result: { name: string } | null } | undefined;
+let usbProbeInFlight: Promise<{ name: string } | null> | undefined;
+
+async function detectLockedCorosUsbDevice(): Promise<{ name: string } | null> {
+  if (usbProbeCache && Date.now() - usbProbeCache.at < USB_PROBE_CACHE_TTL_MS) {
+    return usbProbeCache.result;
+  }
+  usbProbeInFlight ??= probeCorosUsbDevice()
+    .catch(() => null)
+    .then((result) => {
+      usbProbeCache = { at: Date.now(), result };
+      return result;
+    })
+    .finally(() => {
+      usbProbeInFlight = undefined;
+    });
+  return usbProbeInFlight;
+}
+
+async function probeCorosUsbDevice(): Promise<{ name: string } | null> {
+  if (process.platform === "darwin") {
+    const { stdout } = await execFileAsync("/usr/sbin/ioreg", ["-p", "IOUSB", "-l", "-w0"], {
+      timeout: 4_000,
+      maxBuffer: 8 * 1024 * 1024
+    });
+    return matchCorosUsbName(parseIoregUsbNames(stdout));
+  }
+
+  if (process.platform === "win32") {
+    const command = [
+      "Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue",
+      "| Where-Object { $_.InstanceId -like 'USB*' -or $_.Class -eq 'WPD' }",
+      "| ForEach-Object { $_.FriendlyName; $_.Manufacturer }"
+    ].join(" ");
+    const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", command], {
+      windowsHide: true,
+      timeout: 6_000
+    });
+    return matchCorosUsbName(stdout.split(/\r?\n/));
+  }
+
+  const base = "/sys/bus/usb/devices";
+  if (!isDirectory(base)) return null;
+  const names: string[] = [];
+  for (const entry of fs.readdirSync(base)) {
+    for (const file of ["manufacturer", "product"]) {
+      try {
+        names.push(fs.readFileSync(path.join(base, entry, file), "utf8").trim());
+      } catch {
+        // Hubs and interfaces don't all carry string descriptors.
+      }
+    }
+  }
+  return matchCorosUsbName(names);
+}
+
+/** Product and vendor strings of every device in `ioreg -p IOUSB -l` output. */
+export function parseIoregUsbNames(output: string): string[] {
+  const names: string[] = [];
+  const pattern = /"(?:USB Product Name|USB Vendor Name|kUSBProductString|kUSBVendorString)"\s*=\s*"([^"]*)"/g;
+  for (const match of output.matchAll(pattern)) {
+    if (match[1]) names.push(match[1]);
+  }
+  return names;
+}
+
+export function matchCorosUsbName(names: readonly string[]): { name: string } | null {
+  const hits = names.map((name) => name.trim()).filter((name) => COROS_USB_NAME_PATTERN.test(name));
+  if (hits.length === 0) return null;
+  // Prefer the model string ("COROS PACE 3") over a bare vendor ("COROS").
+  const best = hits.find((name) => !/^COROS(?: WEARABLES?)?(?: INC\.?)?$/i.test(name)) ?? hits[0];
+  return { name: best };
+}
+
+async function readWatchStatus(): Promise<WatchStatus> {
   try {
     const volumes = await listVolumes();
     const volumeKey = JSON.stringify(volumes);

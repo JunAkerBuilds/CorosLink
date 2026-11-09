@@ -1,0 +1,242 @@
+/* "Put it on your watch" guide at the top of Media. Neutral glass surface;
+   colour only on the step marks (done = success, waiting = warning). */
+
+.watch-guide {
+  flex-shrink: 0;
+  margin-bottom: 20px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: var(--glass-inset);
+}
+
+:root[data-theme="paper"] .watch-guide {
+  background: rgba(38, 34, 28, 0.04);
+}
+
+.watch-guide-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 6px 6px;
+}
+
+.watch-guide-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.watch-guide-toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.watch-guide-toggle strong {
+  flex: none;
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.watch-guide-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-guide-chevron {
+  flex: none;
+  color: var(--text-secondary);
+  transition: transform 160ms ease;
+}
+
+.watch-guide.is-collapsed .watch-guide-chevron {
+  transform: rotate(-90deg);
+}
+
+.watch-guide-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  padding: 0 6px 6px;
+  list-style: none;
+}
+
+.watch-guide-step {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 14px 16px;
+  border-radius: 12px;
+}
+
+.watch-guide-step.is-current {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+:root[data-theme="paper"] .watch-guide-step.is-current {
+  background: rgba(38, 34, 28, 0.05);
+}
+
+.watch-guide-mark {
+  display: grid;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-guide-step.is-current .watch-guide-mark {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.watch-guide-step.is-done .watch-guide-mark {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.watch-guide-step.is-warning .watch-guide-mark {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.watch-guide-body {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.watch-guide-body h3 {
+  margin: 3px 0 0;
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.watch-guide-body p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.watch-guide-step.is-warning h3 {
+  color: var(--warning-text);
+}
+
+.watch-guide-body .watch-guide-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.watch-guide-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.watch-guide-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.watch-guide-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.watch-guide-source:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.watch-guide-link {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  min-height: 28px;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.watch-guide-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.watch-guide-send {
+  justify-self: start;
+  margin-top: 6px;
+}
+
+.watch-guide-send.is-compact {
+  flex: none;
+  margin-top: 0;
+}
+
+.watch-guide-progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.watch-guide-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--success-text);
+  transition: width 150ms linear;
+}
+
+@media (max-width: 900px) {
+  .watch-guide-steps {
+    grid-template-columns: 1fr;
+  }
+}

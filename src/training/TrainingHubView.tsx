@@ -507,8 +507,9 @@ function TrainingHubContent({
           ) : (
           <form className="training-login-panel" onSubmit={onLogin}>
             <div className="training-login-panel-header">
-              <strong>{t("Welcome back")}</strong>
-              <p>{t("Sign in to access your COROS Training Hub data")}</p>
+              <strong>{t("Sign in with your COROS account")}</strong>
+              <p>{t("Use the same email and password as the COROS app on your phone. COROS may email you a 6-digit code to finish.")}</p>
+              <p className="training-login-scope">{t("Only needed for training data. Music, podcasts and maps work without signing in.")}</p>
             </div>
 
             {status?.sessionExpired ? (

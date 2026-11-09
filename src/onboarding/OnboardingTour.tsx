@@ -454,13 +454,13 @@ function ConnectStage({
         </span>
         <div className="onb-connect-copy">
           <strong>{t("COROS account")}</strong>
-          <span>{t("Unlocks Training Hub, Coach, Calendar and Strength.")}</span>
+          <span>{t("Same login as the COROS phone app. Unlocks Training Hub, Coach, Calendar and Strength. Music and podcasts don’t need it.")}</span>
         </div>
         {trainingConnected ? (
           <ConnectedBadge />
         ) : (
           <button type="button" className="onb-button is-raised" onClick={() => onExit("sign-in")}>
-            {t("Sign in")}
+            {t("Sign in to COROS")}
           </button>
         )}
       </div>

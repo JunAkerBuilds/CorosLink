@@ -119,6 +119,9 @@ function triggerState(snapshot: CorosNativeBleSnapshot | null, usbWatch: WatchSt
   if (usbWatch?.connected) {
     return { tone: "ok", name: usbWatch.name ?? t("Watch"), label: t("Connected"), title: usbWatch.rootPath ? t("USB storage at {{p0}}", { p0: usbWatch.rootPath }) : t("Connected over USB") };
   }
+  if (usbWatch?.usbAwaitingApproval) {
+    return { tone: "busy", name: t("Watch"), label: t("Approve on phone"), title: t("Approve the computer connection in the COROS phone app") };
+  }
   return { tone: "off", name: t("Watch"), label: t("Offline"), title: t("No watch connected") };
 }
 
@@ -364,13 +367,18 @@ function WatchMenuPanel({
         <MenuRow page="details" icon={Info} title={t("Connection details")} detail={t("Firmware, signal and watch key")} onClick={() => setPage("details")} />
       </ul> : null}
 
-      {usbWatch?.connected || usbWatch?.error ? <div className="watch-menu-usb">
-        <span className="watch-menu-usb-icon" aria-hidden="true"><Usb size={15} /></span>
+      {usbWatch?.connected || usbWatch?.error || usbWatch?.usbAwaitingApproval ? <div
+        className={usbWatch.usbAwaitingApproval && !usbWatch.connected ? "watch-menu-usb awaiting" : "watch-menu-usb"}
+        role={usbWatch.usbAwaitingApproval && !usbWatch.connected ? "status" : undefined}>
+        <span className="watch-menu-usb-icon" aria-hidden="true">{usbWatch.usbAwaitingApproval && !usbWatch.connected ? <Smartphone size={15} /> : <Usb size={15} />}</span>
         <div>
-          <strong>{usbWatch.connected ? t("USB storage · {{p0}}", { p0: usbWatch.name ?? t("Watch") }) : t("USB storage")}</strong>
+          <strong>{usbWatch.connected ? t("USB storage · {{p0}}", { p0: usbWatch.name ?? t("Watch") })
+            : usbWatch.usbAwaitingApproval ? t("Approve on your phone") : t("USB storage")}</strong>
           <span>{usbWatch.connected
             ? usbWatch.freeBytes !== undefined ? t("{{p0}} free · for music and maps", { p0: formatBytes(usbWatch.freeBytes) }) : t("Ready for music and maps")
-            : usbWatch.error}</span>
+            : usbWatch.usbAwaitingApproval
+              ? t("Your watch is plugged in. Open the COROS app on your phone and allow the connection to this computer. New watch? Pair it in the COROS app first.")
+              : usbWatch.error}</span>
         </div>
       </div> : null}
 
