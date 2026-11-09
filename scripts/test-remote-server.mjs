@@ -42,6 +42,7 @@ let chatSettings = {
   claudeCode: { model: "opus" },
   geminiCli: { model: "flash" },
   antigravity: {},
+  opencode: { model: "openai/gpt-5.4" },
   openRouter: { model: "openrouter/auto" },
   local: { model: "llama3" }
 };
@@ -528,7 +529,7 @@ try {
     // Provider and model: readable by anyone, changed with coach:operate, and shown to every client.
     const catalog = (await view.call("coach.getModels")).result;
     assert.equal(catalog.provider, "claude-code");
-    assert.deepEqual(catalog.providers.map((row) => row.id), ["chatgpt", "claude-code", "gemini-cli", "antigravity", "openrouter", "local"]);
+    assert.deepEqual(catalog.providers.map((row) => row.id), ["chatgpt", "claude-code", "gemini-cli", "antigravity", "opencode", "openrouter", "local"]);
     assert.equal(catalog.providers[1].model, "opus");
     assert.deepEqual(catalog.providers[1].models.map((row) => row.value), ["", "opus"], "the live Claude list");
     assert.ok(catalog.providers[0].models.length > 1, "ChatGPT falls back to the static list");
@@ -537,7 +538,9 @@ try {
     assert.ok(catalog.providers[2].models.some((row) => row.value === "flash"), "Gemini falls back to its aliases");
     assert.equal(catalog.providers[3].label, "Antigravity");
     assert.deepEqual(catalog.providers[3].models, [{ value: "", label: "Default" }], "Antigravity offers the account default until signed in");
-    assert.deepEqual(catalog.providers[5].models, [{ value: "llama3", label: "llama3" }]);
+    assert.equal(catalog.providers[4].label, "OpenCode");
+    assert.equal(catalog.providers[4].model, "openai/gpt-5.4");
+    assert.deepEqual(catalog.providers[6].models, [{ value: "llama3", label: "llama3" }]);
     assert.equal((await view.call("coach.setModel", { provider: "chatgpt", model: "gpt-5.5" })).error.requiredPermission, "coach:operate");
     assert.equal((await a.call("coach.setModel", { provider: "nope" })).error.code, "invalid");
     const changed = (await a.call("coach.setModel", { provider: "chatgpt", model: "gpt-5.5" })).result;
@@ -547,6 +550,9 @@ try {
     assert.equal(chatSettings.claudeCode.model, "opus", "other providers keep their model");
     assert.equal((await a.call("coach.setModel", { provider: "gemini-cli", model: "pro" })).result.provider, "gemini-cli");
     assert.equal(chatSettings.geminiCli.model, "pro");
+    assert.equal((await a.call("coach.setModel", { provider: "opencode", model: "deepseek/deepseek-flash" })).result.provider, "opencode");
+    assert.equal(chatSettings.opencode.model, "deepseek/deepseek-flash");
+    assert.equal(chatSettings.antigravity.model, undefined, "other providers keep their model");
     assert.equal((await a.call("coach.setModel", { provider: "claude-code", model: "" })).result.providers[1].model, "", "account default");
     assert.equal((await a.call("coach.setModel", { provider: "claude-code", model: "opus" })).result.provider, "claude-code");
 

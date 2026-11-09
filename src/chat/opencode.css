@@ -1,0 +1,53 @@
+/* OpenCode's setup panel and its tone in the provider and model pills; layout
+   comes from the shared CLI provider styles (chat-claude-*). */
+
+.chat-select--opencode,
+.chat-select-menu--opencode,
+.chat-provider-menu .app-select-option[data-value="opencode"] {
+  --chat-select-tone: #d8c8a6;
+  --chat-select-tone-strong: #efe4cc;
+  --chat-select-tone-soft: rgba(216, 200, 166, 0.14);
+}
+
+.chat-select--opencode,
+.chat-select-menu--opencode {
+  --chat-select-tone-shadow: rgba(216, 200, 166, 0.2);
+}
+
+:root[data-theme="paper"] .chat-select--opencode,
+:root[data-theme="paper"] .chat-select-menu--opencode,
+:root[data-theme="paper"] .chat-provider-menu .app-select-option[data-value="opencode"] {
+  --chat-select-tone: #7a6541;
+  --chat-select-tone-strong: #5a4a2e;
+  --chat-select-tone-soft: rgba(122, 101, 65, 0.11);
+}
+
+:root[data-theme="paper"] .chat-select--opencode,
+:root[data-theme="paper"] .chat-select-menu--opencode {
+  --chat-select-tone-shadow: rgba(122, 101, 65, 0.17);
+}
+
+.chat-opencode-login-panel > svg {
+  color: #efe4cc;
+}
+
+:root[data-theme="paper"] .chat-opencode-login-panel > svg {
+  color: #7a6541;
+}
+
+/* OpenCode's model names are long ("provider/Model name"): rows shrink to the
+   menu so a long one ends in an ellipsis instead of being cut by the menu's edge. */
+.chat-select-menu--opencode .app-select-menu-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* A command inside a status message. */
+.chat-opencode-command {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  color: var(--text-primary);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  white-space: nowrap;
+}

@@ -82,6 +82,7 @@
     "test:claude-code": "npm run build:electron && node scripts/test-claude-code-provider.mjs",
     "test:gemini-cli": "npm run build:electron && node scripts/test-gemini-cli-provider.mjs",
     "test:antigravity": "npm run build:electron && node scripts/test-antigravity-provider.mjs",
+    "test:opencode": "npm run build:electron && node scripts/test-opencode-provider.mjs",
     "test:chat-history-store": "npm run build:electron && node scripts/test-chat-history-store.mjs",
     "test:chat-activity-tools": "npm run build:electron && node scripts/test-chat-activity-tools.mjs && node scripts/test-coach-workout-data.mjs",
     "test:chat-analytics-tools": "npm run build:electron && node scripts/test-chat-analytics-tools.mjs",

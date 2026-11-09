@@ -1,6 +1,6 @@
 import { t, useLanguage } from "../i18n/tools";
 import { useEffect, useState } from "react";
-import { Gem, Network, Orbit, Sparkles, Terminal } from "lucide-react";
+import { Gem, Network, Orbit, Sparkles, SquareTerminal, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
 import {
   getChatModelOptions,
@@ -16,12 +16,13 @@ const LIVE_CATALOG_PROVIDERS = new Set<ChatProvider>([
   "claude-code",
   "gemini-cli",
   "antigravity",
+  "opencode",
   "chatgpt"
 ]);
 
 /**
  * The provider's live model catalog (Claude Code's, Gemini CLI's,
- * Antigravity's or the ChatGPT account's), starting from the last known or
+ * Antigravity's, OpenCode's or the ChatGPT account's), starting from the last known or
  * static list while it loads. `ready` going true (a sign-in finishing) reloads it.
  */
 export function useChatModelOptions(
@@ -76,6 +77,10 @@ function renderAntigravityIcon() {
   return <Orbit size={14} strokeWidth={2.1} aria-hidden="true" />;
 }
 
+function renderOpencodeIcon() {
+  return <SquareTerminal size={14} strokeWidth={2.1} aria-hidden="true" />;
+}
+
 function renderOpenRouterIcon() {
   return <Network size={14} strokeWidth={2.1} aria-hidden="true" />;
 }
@@ -116,17 +121,21 @@ export function ModelSwitch({
         ? "Gemini"
         : provider === "antigravity"
           ? "Antigravity"
-          : provider === "openrouter"
-            ? "OpenRouter"
-            : "ChatGPT";
+          : provider === "opencode"
+            ? "OpenCode"
+            : provider === "openrouter"
+              ? "OpenRouter"
+              : "ChatGPT";
   const tone =
     provider === "claude-code"
       ? "claude"
       : provider === "gemini-cli" || provider === "antigravity"
         ? "gemini"
-        : provider === "openrouter"
-          ? "openrouter"
-          : "gpt";
+        : provider === "opencode"
+          ? "opencode"
+          : provider === "openrouter"
+            ? "openrouter"
+            : "gpt";
   const renderIcon =
     provider === "claude-code"
       ? renderClaudeIcon
@@ -134,6 +143,8 @@ export function ModelSwitch({
         ? renderGeminiIcon
         : provider === "antigravity"
           ? renderAntigravityIcon
+        : provider === "opencode"
+          ? renderOpencodeIcon
         : provider === "openrouter"
           ? renderOpenRouterIcon
           : renderChatGptIcon;
@@ -152,6 +163,8 @@ export function ModelSwitch({
       title={t("{{p0}} model: {{p1}}", { p0: providerLabel, p1: selectedLabel })}
       disabled={disabled}
       portal
+      // OpenCode lists every model of every connected provider, by "provider/Model name".
+      {...(provider === "opencode" ? { menuMinWidth: 320, menuMaxHeight: 360 } : {})}
     />
   );
 }

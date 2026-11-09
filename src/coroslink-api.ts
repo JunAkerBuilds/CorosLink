@@ -129,6 +129,8 @@ import type {
   ClaudeCodeStatus,
   GeminiCliConnectionTest,
   GeminiCliStatus,
+  OpencodeConnectionTest,
+  OpencodeStatus,
   AntigravityConnectionTest,
   AntigravityStatus,
   PersistedChatEntry,
@@ -904,6 +906,11 @@ export interface CorosLinkApi {
   connectGeminiCli: () => Promise<GeminiCliStatus>;
   testGeminiCliConnection: () => Promise<GeminiCliConnectionTest>;
   openGeminiCliSetupGuide: (topic: "install" | "sign-in") => Promise<void>;
+  getOpencodeStatus: () => Promise<OpencodeStatus>;
+  /** Like getOpencodeStatus, but starts a session to see which models OpenCode offers now. */
+  recheckOpencode: () => Promise<OpencodeStatus>;
+  testOpencodeConnection: () => Promise<OpencodeConnectionTest>;
+  openOpencodeSetupGuide: (topic: "install" | "providers") => Promise<void>;
   getAntigravityStatus: () => Promise<AntigravityStatus>;
   /** Starts the verified runtime download; poll the status for progress. */
   installAntigravity: () => Promise<AntigravityStatus>;

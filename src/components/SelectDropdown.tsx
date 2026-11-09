@@ -34,6 +34,10 @@ export interface SelectDropdownProps<T extends string> {
   title?: string;
   /** Preserve the owning view's translation context for ambiguous option labels. */
   translateLabel?: (source: string) => string;
+  /** A portaled menu is at least this wide (and as wide as its trigger). Default 220. */
+  menuMinWidth?: number;
+  /** A portaled menu scrolls past this height. Default 280. */
+  menuMaxHeight?: number;
 }
 
 interface MenuPosition {
@@ -73,7 +77,9 @@ export function SelectDropdown<T extends string>({
   autoFocus = false,
   portal = false,
   title,
-  translateLabel = t
+  translateLabel = t,
+  menuMinWidth = 220,
+  menuMaxHeight = 280
 }: SelectDropdownProps<T>) {
   useLanguage();
   const dropdownId = useId();
@@ -128,10 +134,10 @@ export function SelectDropdown<T extends string>({
     const viewportMargin = 8;
     const menuGap = 6;
     const menuWidth = Math.min(
-      Math.max(trigger.width, 220),
+      Math.max(trigger.width, menuMinWidth),
       window.innerWidth - viewportMargin * 2
     );
-    const preferredHeight = Math.min(menuRef.current?.scrollHeight ?? 280, 280);
+    const preferredHeight = Math.min(menuRef.current?.scrollHeight ?? menuMaxHeight, menuMaxHeight);
     const roomBelow = window.innerHeight - trigger.bottom - viewportMargin;
     const roomAbove = trigger.top - viewportMargin;
     const opensUp = roomBelow < preferredHeight + menuGap && roomAbove > roomBelow;
@@ -151,7 +157,7 @@ export function SelectDropdown<T extends string>({
       fontFamily: computedStyle.fontFamily,
       fontSize: computedStyle.fontSize
     } as PortalTheme);
-  }, [portal]);
+  }, [portal, menuMinWidth, menuMaxHeight]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -340,7 +346,7 @@ export function SelectDropdown<T extends string>({
         left: menuPosition?.left ?? 0,
         top: menuPosition?.top ?? 0,
         width: menuPosition?.width ?? 0,
-        maxHeight: menuPosition?.maxHeight ?? 280,
+        maxHeight: menuPosition?.maxHeight ?? menuMaxHeight,
         transform: menuPosition?.transform,
         visibility: menuPosition ? "visible" : "hidden"
       } satisfies CSSProperties) : undefined}

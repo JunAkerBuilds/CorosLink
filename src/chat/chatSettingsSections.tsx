@@ -9,6 +9,7 @@ import {
   Plug,
   Smartphone,
   Sparkles,
+  SquareTerminal,
   UserRound,
   Waypoints,
   type LucideIcon
@@ -24,6 +25,7 @@ export type ChatSettingsSectionId =
   | "claude"
   | "gemini"
   | "antigravity"
+  | "opencode"
   | "local"
   | "mcp";
 
@@ -95,6 +97,13 @@ export const CHAT_SETTINGS_SECTIONS: ReadonlyArray<{
     label: "Antigravity",
     description: "Google's Antigravity agent with your Google account",
     icon: Orbit,
+    group: "Providers"
+  },
+  {
+    id: "opencode",
+    label: "OpenCode",
+    description: "Use OpenCode with the model providers you connected in it",
+    icon: SquareTerminal,
     group: "Providers"
   },
   {

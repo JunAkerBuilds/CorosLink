@@ -129,6 +129,8 @@ import type {
   ClaudeCodeStatus,
   GeminiCliConnectionTest,
   GeminiCliStatus,
+  OpencodeConnectionTest,
+  OpencodeStatus,
   AntigravityConnectionTest,
   AntigravityStatus,
   PersistedChatEntry,
@@ -1363,6 +1365,14 @@ const api = {
     ipcRenderer.invoke("chat:testGeminiCliConnection"),
   openGeminiCliSetupGuide: (topic: "install" | "sign-in"): Promise<void> =>
     ipcRenderer.invoke("chat:openGeminiCliSetupGuide", topic),
+  getOpencodeStatus: (): Promise<OpencodeStatus> =>
+    ipcRenderer.invoke("chat:getOpencodeStatus"),
+  recheckOpencode: (): Promise<OpencodeStatus> =>
+    ipcRenderer.invoke("chat:recheckOpencode"),
+  testOpencodeConnection: (): Promise<OpencodeConnectionTest> =>
+    ipcRenderer.invoke("chat:testOpencodeConnection"),
+  openOpencodeSetupGuide: (topic: "install" | "providers"): Promise<void> =>
+    ipcRenderer.invoke("chat:openOpencodeSetupGuide", topic),
   getAntigravityStatus: (): Promise<AntigravityStatus> =>
     ipcRenderer.invoke("chat:getAntigravityStatus"),
   installAntigravity: (): Promise<AntigravityStatus> =>

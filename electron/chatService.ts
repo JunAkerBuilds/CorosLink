@@ -129,6 +129,15 @@ import {
   testGeminiCliConnection as runGeminiCliConnectionTest
 } from "./geminiCliProvider";
 import {
+  OpencodeProviderError,
+  getOpencodeSessionModels,
+  getOpencodeStatus as inspectOpencodeStatus,
+  listOpencodeModels,
+  recheckOpencodeStatus,
+  streamOpencodeCompletion,
+  testOpencodeConnection as runOpencodeConnectionTest
+} from "./opencodeProvider";
+import {
   AntigravityProviderError,
   getAntigravitySessionModels,
   getAntigravityStatus as inspectAntigravityStatus,
@@ -162,6 +171,7 @@ import {
   CHATGPT_AUTO_CATALOG,
   CHATGPT_FALLBACK_MODELS,
   ANTIGRAVITY_MODEL_OPTIONS,
+  OPENCODE_MODEL_OPTIONS,
   CLAUDE_MODEL_OPTIONS,
   GEMINI_MODEL_OPTIONS,
   chatGptModelOptionsFromCatalog,
@@ -190,6 +200,8 @@ import type {
   CorosMcpTool,
   GeminiCliConnectionTest,
   GeminiCliStatus,
+  OpencodeConnectionTest,
+  OpencodeStatus,
   AntigravityConnectionTest,
   AntigravityStatus,
   LocalChatDiscovery,
@@ -483,6 +495,51 @@ export async function testGeminiCliConnection(): Promise<GeminiCliConnectionTest
 /** As recordClaudeCodeStatus: written on a change of state, path never pinned. */
 function recordGeminiCliStatus(status: GeminiCliStatus): void {
   saveCliConnectionStatus(chatSettingsStore, "gemini-cli", status.state, status.checkedAt);
+}
+
+/** CorosLink's own OpenCode folder: the empty directory Coach sessions run in. */
+function opencodeWorkspaceDir(): string {
+  return path.join(app.getPath("userData"), "opencode-coach");
+}
+
+async function opencodeStatusForTurn(): Promise<OpencodeStatus> {
+  const status = await inspectOpencodeStatus(
+    getChatSettings().opencode.executablePath,
+    opencodeWorkspaceDir()
+  );
+  recordOpencodeStatus(status);
+  return status;
+}
+
+export async function getOpencodeConnectionStatus(): Promise<OpencodeStatus> {
+  return opencodeStatusForTurn();
+}
+
+/** "Check": starts a session to see which models OpenCode offers now. */
+export async function recheckOpencodeConnectionStatus(): Promise<OpencodeStatus> {
+  const status = await recheckOpencodeStatus(
+    getChatSettings().opencode.executablePath,
+    opencodeWorkspaceDir()
+  );
+  opencodeModelCache = null;
+  recordOpencodeStatus(status);
+  return status;
+}
+
+export async function testOpencodeConnection(): Promise<OpencodeConnectionTest> {
+  const settings = getChatSettings();
+  const result = await runOpencodeConnectionTest(
+    settings.opencode.executablePath,
+    opencodeWorkspaceDir(),
+    settings.opencode.model
+  );
+  recordOpencodeStatus(result.status);
+  return result;
+}
+
+/** As recordClaudeCodeStatus: written on a change of state, path never pinned. */
+function recordOpencodeStatus(status: OpencodeStatus): void {
+  saveCliConnectionStatus(chatSettingsStore, "opencode", status.state, status.checkedAt);
 }
 
 /** CorosLink's own Antigravity folder: runtime, private home and workspace. */
@@ -1233,6 +1290,85 @@ export async function streamChat(
       return;
     }
 
+    if (settings.provider === "opencode") {
+      stage("provider");
+      const status = await unlessCancelled(opencodeStatusForTurn(), signal);
+      if (!status.authenticated || !status.executablePath) {
+        throw new OpencodeProviderError(
+          status.message,
+          status.installed ? "auth" : "not-installed"
+        );
+      }
+
+      stage("tools");
+      await unlessCancelled(ensureAllMcpConnected(), signal);
+      const chatTools = getAllChatTools();
+      stage("context");
+      const prompt = await unlessCancelled(
+        buildTrainingContext(undefined, unitSystem, settings.customInstructions),
+        signal
+      );
+      const effectiveInstructions = composeCoachInstructions(prompt, chatTools, historyNote);
+      const { hasData } = prompt;
+
+      send("chat:streamStart", { requestId });
+      send("chat:streamInfo", {
+        requestId,
+        kind: "context",
+        snapshotIncluded: hasData,
+        mcpEnabled: chatTools.length > 0
+      });
+      stage("model");
+
+      const result = await streamOpencodeCompletion({
+        executablePath: status.executablePath,
+        workspaceDir: opencodeWorkspaceDir(),
+        instructions: effectiveInstructions,
+        messages: history.messages,
+        tools: chatTools,
+        signal,
+        model: settings.opencode.model,
+        onToken: (delta) => {
+          fullText += delta;
+          send("chat:streamToken", { requestId, delta });
+        },
+        onThinking: (delta) => {
+          send("chat:streamInfo", { requestId, kind: "thinking", delta });
+        },
+        onToolCallStart: (toolName) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: toolName,
+            status: "call"
+          });
+        },
+        onToolCallError: (toolName, message) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: toolName,
+            status: "failed",
+            message
+          });
+        },
+        // The tool bridge offers only chatTools and refuses any other name.
+        onToolCall: async (toolName, args) => {
+          console.log("[chat] OpenCode tool call:", toolName);
+          return executeChatTool(toolName, args, send, requestId, unitSystem);
+        }
+      });
+      fullText = result.fullText;
+      recordOpencodeStatus({
+        ...status,
+        state: "connected",
+        checkedAt: new Date().toISOString(),
+        message: "OpenCode is connected and ready for Coach conversations."
+      });
+      send("chat:streamDone", { requestId, fullText });
+      return;
+    }
+
     if (settings.provider === "antigravity") {
       stage("provider");
       const status = await unlessCancelled(getAntigravityConnectionStatus(), signal);
@@ -1661,6 +1797,28 @@ export async function streamChat(
           checkedAt: new Date().toISOString(),
           message: error instanceof Error ? error.message : "Gemini request failed."
         });
+      }
+      if (provider === "opencode") {
+        const failure =
+          error instanceof OpencodeProviderError ? error.kind : "connection";
+        // A cancelled turn says nothing about the connection.
+        if (failure !== "cancelled") {
+          recordOpencodeStatus({
+            state:
+              failure === "usage-limit"
+                ? "usage-limit-reached"
+                : failure === "auth"
+                  ? "sign-in-required"
+                  : failure === "not-installed"
+                    ? "not-installed"
+                    : "connection-failed",
+            installed: failure !== "not-installed",
+            authenticated: failure !== "auth" && failure !== "not-installed",
+            executablePath: getChatSettings().opencode.executablePath,
+            checkedAt: new Date().toISOString(),
+            message: error instanceof Error ? error.message : "OpenCode request failed."
+          });
+        }
       }
       if (provider === "antigravity") {
         const failure =
@@ -2197,6 +2355,24 @@ async function completeOnce(
     return result.fullText || text;
   }
 
+  if (provider === "opencode") {
+    const status = await opencodeStatusForTurn();
+    if (!status.authenticated || !status.executablePath) throw new Error(status.message);
+    const result = await streamOpencodeCompletion({
+      executablePath: status.executablePath,
+      workspaceDir: opencodeWorkspaceDir(),
+      instructions,
+      messages,
+      tools: [],
+      signal,
+      timeoutMs: TITLE_TIMEOUT_MS,
+      model: settings.opencode.model,
+      onToken,
+      onToolCall: async () => ""
+    });
+    return result.fullText || text;
+  }
+
   if (provider === "antigravity") {
     const status = await inspectAntigravityStatus(antigravityRoot());
     if (!status.authenticated) throw new Error(status.message);
@@ -2297,6 +2473,7 @@ function chatProviderLabel(provider: ChatProvider): string {
     "claude-code": "Claude Code",
     "gemini-cli": "Gemini CLI",
     antigravity: "Antigravity",
+    opencode: "OpenCode",
     openrouter: "OpenRouter",
     local: "Local model"
   };
@@ -2737,6 +2914,41 @@ async function listAntigravityModelOptions(): Promise<ChatModelOption[]> {
   return options;
 }
 
+let opencodeModelCache:
+  | { at: number; executablePath: string; options: Promise<ChatModelOption[]> }
+  | null = null;
+
+/** The models of the providers connected in OpenCode, from a session that sends no prompt. */
+async function listOpencodeModelOptions(): Promise<ChatModelOption[]> {
+  const status = await inspectOpencodeStatus(getChatSettings().opencode.executablePath);
+  if (!status.installed || !status.executablePath || status.state === "connection-failed") {
+    return OPENCODE_MODEL_OPTIONS;
+  }
+  const executablePath = status.executablePath;
+  if (
+    opencodeModelCache?.executablePath === executablePath &&
+    Date.now() - opencodeModelCache.at < MODELS_CACHE_MS
+  ) {
+    return opencodeModelCache.options;
+  }
+  const options = listOpencodeModels(executablePath, opencodeWorkspaceDir())
+    .then((listed) => {
+      if (listed.length < 2) throw new Error("OpenCode listed no models");
+      return listed;
+    })
+    .catch((error: unknown) => {
+      console.warn(
+        "[chat] OpenCode model list unavailable:",
+        error instanceof Error ? error.message : error
+      );
+      if (opencodeModelCache?.options === options) opencodeModelCache = null;
+      const seen = getOpencodeSessionModels(executablePath);
+      return seen.length >= 2 ? seen : OPENCODE_MODEL_OPTIONS;
+    });
+  opencodeModelCache = { at: Date.now(), executablePath, options };
+  return options;
+}
+
 /**
  * Model picker rows for a Coach provider, from the provider's own live
  * catalog where it has one. Falls back to the static list on any failure.
@@ -2747,6 +2959,7 @@ export async function listChatModelOptions(
   if (provider === "claude-code") return listClaudeModelOptions();
   if (provider === "gemini-cli") return listGeminiModelOptions();
   if (provider === "antigravity") return listAntigravityModelOptions();
+  if (provider === "opencode") return listOpencodeModelOptions();
   if (provider === "chatgpt") {
     return chatGptModelOptionsFromCatalog(await listChatGptModels());
   }

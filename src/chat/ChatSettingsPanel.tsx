@@ -28,6 +28,7 @@ import { AthleteMemorySettings } from "./AthleteMemorySettings";
 import { RemoteAccessSettings } from "./RemoteAccessSettings";
 import { McpServersPanel } from "./McpServersPanel";
 import { AntigravitySettingsSection, type AntigravityControls } from "./antigravity";
+import { OpencodeSettingsSection, type OpencodeControls } from "./opencode";
 import { formatChatModelLabel, useChatModelOptions } from "./ModelSwitch";
 import {
   ChatSettingsSectionHeader,
@@ -94,6 +95,7 @@ export function ChatSettingsPanel({
   claudeStatus,
   gemini,
   antigravity,
+  opencode,
   openRouterApiKey,
   openRouterConnection,
   localApiKey,
@@ -138,6 +140,7 @@ export function ChatSettingsPanel({
   claudeStatus: ClaudeCodeStatus | null;
   gemini: GeminiSettingsControls;
   antigravity: AntigravityControls;
+  opencode: OpencodeControls;
   openRouterApiKey: string;
   openRouterConnection: OpenRouterConnectionTest | null;
   localApiKey: string;
@@ -668,6 +671,13 @@ export function ChatSettingsPanel({
         api={api}
         chatSettings={chatSettings}
         controls={antigravity}
+        busy={busy}
+      />
+
+      <OpencodeSettingsSection
+        api={api}
+        chatSettings={chatSettings}
+        controls={opencode}
         busy={busy}
       />
 

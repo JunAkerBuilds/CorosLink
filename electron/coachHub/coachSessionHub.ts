@@ -177,7 +177,7 @@ interface SessionState {
 
 type EntryChange = { event: "entry.appended" | "entry.updated"; index: number; entry: ChatEntry };
 
-const PROVIDERS: ChatProvider[] = ["chatgpt", "claude-code", "gemini-cli", "antigravity", "openrouter", "local"];
+const PROVIDERS: ChatProvider[] = ["chatgpt", "claude-code", "gemini-cli", "antigravity", "opencode", "openrouter", "local"];
 const MAX_REMEMBERED_SENDS = 256;
 /**
  * After an unclean stop the live events of the turn in progress were never

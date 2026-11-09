@@ -22,7 +22,9 @@ export class AcpError extends Error {
     message: string,
     readonly code?: number,
     /** The agent's own detail, when it sent one. */
-    readonly detail?: string
+    readonly detail?: string,
+    /** The error's raw `data`, for agents that name the failure there. */
+    readonly data?: unknown
   ) {
     super(message);
     this.name = "AcpError";
@@ -146,6 +148,11 @@ export class AcpAgent {
     return this.stderrTail;
   }
 
+  /** Resolves when the process has exited. */
+  whenExited(): Promise<void> {
+    return this.exitedPromise;
+  }
+
   /** Resolves when the process has exited, or after `waitMs`. */
   async waitForExit(waitMs: number): Promise<void> {
     await Promise.race([
@@ -198,7 +205,8 @@ export class AcpAgent {
             new AcpError(
               message.error.message || `${this.options.label} request failed.`,
               message.error.code,
-              acpErrorDetail(message.error.data)
+              acpErrorDetail(message.error.data),
+              message.error.data
             )
           );
         } else {
@@ -250,6 +258,8 @@ export interface ToolBridge {
   token: string;
   /** Requests that reached the bridge so far, authorized or not (for failure reports). */
   requestCount(): number;
+  /** Resolves once the agent has fetched the tool list, so a prompt sent after it sees the tools. */
+  toolsListed: Promise<void>;
   close(): Promise<void>;
 }
 
@@ -362,13 +372,21 @@ export async function startToolBridge(
         "Use only these CorosLink tools for approved training data, plan drafts, and calendar changes. Uploads and deletions always require explicit athlete confirmation via the buttons in chat."
     }
   );
-  server.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description ?? "CorosLink Coach tool",
-      inputSchema: { ...tool.inputSchema, type: "object" as const }
-    }))
-  }));
+  let markToolsListed: () => void = () => undefined;
+  const toolsListed = new Promise<void>((resolve) => {
+    markToolsListed = resolve;
+  });
+  server.server.setRequestHandler(ListToolsRequestSchema, async () => {
+    // After the reply is on its way: the agent registers the tools once it has read them.
+    setImmediate(markToolsListed);
+    return {
+      tools: tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description ?? "CorosLink Coach tool",
+        inputSchema: { ...tool.inputSchema, type: "object" as const }
+      }))
+    };
+  });
   server.server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
     const name = request.params.name;
     if (!tools.some((tool) => tool.name === name)) {
@@ -425,6 +443,7 @@ export async function startToolBridge(
     url: `http://127.0.0.1:${port}${MCP_ENDPOINT}`,
     token,
     requestCount: () => requests,
+    toolsListed,
     close: async () => {
       await server.close().catch(() => undefined);
       httpServer.closeAllConnections();

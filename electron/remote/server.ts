@@ -332,12 +332,13 @@ function stringParam(params: Record<string, unknown>, key: string, maxLength = 2
   return value;
 }
 
-const PROVIDERS: ChatProvider[] = ["chatgpt", "claude-code", "gemini-cli", "antigravity", "openrouter", "local"];
+const PROVIDERS: ChatProvider[] = ["chatgpt", "claude-code", "gemini-cli", "antigravity", "opencode", "openrouter", "local"];
 const PROVIDER_LABELS: Record<ChatProvider, string> = {
   chatgpt: "ChatGPT",
   "claude-code": "Claude",
   "gemini-cli": "Gemini",
   antigravity: "Antigravity",
+  opencode: "OpenCode",
   openrouter: "OpenRouter",
   local: "Local model"
 };
@@ -353,6 +354,7 @@ function currentModel(settings: ChatSettings, provider: ChatProvider): string {
     case "claude-code": return settings.claudeCode.model ?? "";
     case "gemini-cli": return settings.geminiCli.model ?? "";
     case "antigravity": return settings.antigravity?.model ?? "";
+    case "opencode": return settings.opencode?.model ?? "";
     case "openrouter": return settings.openRouter.model ?? "";
     case "local": return settings.local.model ?? "";
     default: return settings.chatgpt.model ?? "";
@@ -366,6 +368,7 @@ export function applyModelChoice(settings: ChatSettings, provider: ChatProvider,
   if (provider === "claude-code") next.claudeCode = { ...settings.claudeCode, model: chosen };
   else if (provider === "gemini-cli") next.geminiCli = { ...settings.geminiCli, model: chosen };
   else if (provider === "antigravity") next.antigravity = { ...settings.antigravity, model: chosen };
+  else if (provider === "opencode") next.opencode = { ...settings.opencode, model: chosen };
   else if (provider === "chatgpt") next.chatgpt = { ...settings.chatgpt, model: chosen };
   else if (provider === "openrouter") next.openRouter = { ...settings.openRouter, model: chosen ?? "openrouter/auto" };
   return next;

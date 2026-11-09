@@ -40,6 +40,10 @@ export const GEMINI_MODEL_OPTIONS: ChatModelOption[] = [
 // only the account default is offered.
 export const ANTIGRAVITY_MODEL_OPTIONS: ChatModelOption[] = [{ value: "", label: "Default" }];
 
+// OpenCode lists the models of the providers connected in it when a session
+// starts; until then only its own default is offered.
+export const OPENCODE_MODEL_OPTIONS: ChatModelOption[] = [{ value: "", label: "Default" }];
+
 export const OPENROUTER_MODEL_OPTIONS: ChatModelOption[] = [
   { value: "openrouter/auto", label: "Auto Router" },
   { value: "openrouter/free", label: "Free Router" }
@@ -81,6 +85,7 @@ export function getChatModelOptions(provider: string): ChatModelOption[] {
   if (provider === "claude-code") return CLAUDE_MODEL_OPTIONS;
   if (provider === "gemini-cli") return GEMINI_MODEL_OPTIONS;
   if (provider === "antigravity") return ANTIGRAVITY_MODEL_OPTIONS;
+  if (provider === "opencode") return OPENCODE_MODEL_OPTIONS;
   if (provider === "openrouter") return OPENROUTER_MODEL_OPTIONS;
   return CHATGPT_MODEL_OPTIONS;
 }

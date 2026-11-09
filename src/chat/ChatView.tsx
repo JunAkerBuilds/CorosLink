@@ -124,6 +124,7 @@ import { FitnessTrendCard } from "./FitnessTrendCard";
 import { HrZoneCard } from "./HrZoneCard";
 import { ChatSettingsModal } from "./ChatSettingsModal";
 import { AntigravityGatePanel, useAntigravity, type AntigravityControls } from "./antigravity";
+import { OpencodeGatePanel, opencodeReady, useOpencode, type OpencodeControls } from "./opencode";
 import { ChatSidebar } from "./ChatSidebar";
 import { CoachTurnStatus, coachTurnStatusLabel } from "./CoachTurnStatus";
 import { ModelSwitch } from "./ModelSwitch";
@@ -155,6 +156,7 @@ const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   },
   geminiCli: {},
   antigravity: {},
+  opencode: {},
   openRouter: {
     model: "openrouter/auto",
     hasApiKey: false
@@ -2317,6 +2319,7 @@ export function ChatView({
   const [geminiStatus, setGeminiStatus] = useState<GeminiCliStatus | null>(null);
   // Set once the Antigravity hook below has run; earlier effects reach it here.
   const antigravityRef = useRef<AntigravityControls | null>(null);
+  const opencodeRef = useRef<OpencodeControls | null>(null);
   const [checkingGemini, setCheckingGemini] = useState(false);
   const [connectingGemini, setConnectingGemini] = useState(false);
   const [testingGemini, setTestingGemini] = useState(false);
@@ -2631,6 +2634,9 @@ export function ChatView({
         if (providerRef.current === "antigravity") {
           antigravityRef.current?.reload();
         }
+        if (providerRef.current === "opencode") {
+          opencodeRef.current?.reload();
+        }
       } else if (frame.event === "entry.updated") {
         // Saves land on any device; refresh the Training views when one does.
         const before = state.entries[frame.data.index];
@@ -2729,6 +2735,7 @@ export function ChatView({
           await api.getGeminiCliStatus().then(setGeminiStatus).catch(() => undefined);
         }
         if (settings.provider === "antigravity") antigravityRef.current?.reload();
+        if (settings.provider === "opencode") opencodeRef.current?.reload();
         await ensureActiveSession(settings.provider);
       })
       .finally(() => {
@@ -2785,6 +2792,7 @@ export function ChatView({
   useEffect(() => {
     if (!api || !settingsOpen) return;
     if (!antigravityRef.current?.status) antigravityRef.current?.reload();
+    if (!opencodeRef.current?.status) opencodeRef.current?.reload();
     if (geminiStatus) return;
     void api.getGeminiCliStatus().then(setGeminiStatus).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3188,6 +3196,7 @@ export function ChatView({
         setGeminiStatus(status);
       }
       if (provider === "antigravity") antigravity.reload();
+      if (provider === "opencode") opencode.reload();
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : t("Provider change failed."));
     }
@@ -3218,6 +3227,14 @@ export function ChatView({
               ...chatSettings,
               antigravity: {
                 ...chatSettings.antigravity,
+                model: normalizedModel
+              }
+            }
+        : chatSettings.provider === "opencode"
+          ? {
+              ...chatSettings,
+              opencode: {
+                ...chatSettings.opencode,
                 model: normalizedModel
               }
             }
@@ -3383,6 +3400,14 @@ export function ChatView({
     onError
   });
   antigravityRef.current = antigravity;
+
+  const opencode = useOpencode({
+    api,
+    chatSettings,
+    onUpdateChatSettings: handleUpdateChatSettings,
+    onError
+  });
+  opencodeRef.current = opencode;
 
   const handleSaveLocalSettings = async () => {
     if (!api) return;
@@ -3859,6 +3884,7 @@ export function ChatView({
   const isClaudeProvider = chatSettings.provider === "claude-code";
   const isGeminiProvider = chatSettings.provider === "gemini-cli";
   const isAntigravityProvider = chatSettings.provider === "antigravity";
+  const isOpencodeProvider = chatSettings.provider === "opencode";
   const isOpenRouterProvider = chatSettings.provider === "openrouter";
   const isChatGptProvider = chatSettings.provider === "chatgpt";
   const localModelConfigured = chatSettings.local.model.trim().length > 0;
@@ -3896,6 +3922,8 @@ export function ChatView({
     isGeminiProvider && geminiStatus?.state !== "connected";
   const showAntigravityGate =
     isAntigravityProvider && antigravity.status?.state !== "connected";
+  // One model's provider failing is no gate: the others stay usable.
+  const showOpencodeGate = isOpencodeProvider && !opencodeReady(opencode.status);
   const showOpenRouterGate =
     isOpenRouterProvider && !chatSettings.openRouter.hasApiKey;
   const showPlanPanel = useMediaQuery("(min-width: 1400px)");
@@ -3968,6 +3996,8 @@ export function ChatView({
         ? chatSettings.geminiCli.model ?? ""
       : chatSettings.provider === "antigravity"
         ? chatSettings.antigravity?.model ?? ""
+      : chatSettings.provider === "opencode"
+        ? chatSettings.opencode?.model ?? ""
       : chatSettings.provider === "openrouter"
         ? chatSettings.openRouter.model
         : chatSettings.chatgpt.model ?? "";
@@ -4026,6 +4056,7 @@ export function ChatView({
         void handleUpdateGeminiCli(patch)
     },
     antigravity,
+    opencode,
     openRouterApiKey,
     openRouterConnection,
     localApiKey,
@@ -4288,6 +4319,37 @@ export function ChatView({
               </div>
             </div>
             <AntigravityGatePanel controls={antigravity} />
+            <div className="chat-composer-toolbar chat-composer-toolbar-login">
+              {providerControls}
+            </div>
+          </div>
+        </div>
+        <ChatSettingsModal {...settingsModalProps} />
+      </div>
+    );
+  }
+
+  if (showOpencodeGate) {
+    return (
+      <div className="chat-view chat-view-login">
+        <div className="chat-layout">
+          <ChatSidebar {...sidebarProps} />
+          <div className="chat-main chat-main-login">
+            <div className="chat-header">
+              <div className="chat-header-title">
+                <span>{t("Training Coach")}</span>
+              </div>
+              <div className="chat-header-end">
+                <button
+                  type="button"
+                  className="chat-settings-button"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <Settings2 size={16} aria-hidden="true" />
+                  {t("Settings")}</button>
+              </div>
+            </div>
+            <OpencodeGatePanel controls={opencode} />
             <div className="chat-composer-toolbar chat-composer-toolbar-login">
               {providerControls}
             </div>

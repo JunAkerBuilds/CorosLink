@@ -476,6 +476,9 @@ import {
   getClaudeCodeConnectionStatus,
   getGeminiCliConnectionStatus,
   recheckGeminiCliConnectionStatus,
+  getOpencodeConnectionStatus,
+  recheckOpencodeConnectionStatus,
+  testOpencodeConnection,
   getChatAuthStatus,
   getChatSessionEntries,
   getChatSettings,
@@ -2194,6 +2197,20 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("chat:testGeminiCliConnection", () =>
     testGeminiCliConnection()
+  );
+
+  ipcMain.handle("chat:getOpencodeStatus", () => getOpencodeConnectionStatus());
+
+  ipcMain.handle("chat:recheckOpencode", () => recheckOpencodeConnectionStatus());
+
+  ipcMain.handle("chat:testOpencodeConnection", () => testOpencodeConnection());
+
+  ipcMain.handle("chat:openOpencodeSetupGuide", (_event, topic: unknown) =>
+    shell.openExternal(
+      topic === "install"
+        ? "https://opencode.ai/docs/"
+        : "https://opencode.ai/docs/providers/"
+    )
   );
 
   ipcMain.handle("chat:openGeminiCliSetupGuide", (_event, topic: unknown) =>

@@ -27,6 +27,10 @@ export const CHAT_SETTINGS_KEYS = {
   antigravityModel: "chat.antigravity.model",
   antigravityLastConnectionStatus: "chat.antigravity.lastConnectionStatus",
   antigravityLastCheckedAt: "chat.antigravity.lastCheckedAt",
+  opencodeExecutablePath: "chat.opencode.executablePath",
+  opencodeModel: "chat.opencode.model",
+  opencodeLastConnectionStatus: "chat.opencode.lastConnectionStatus",
+  opencodeLastCheckedAt: "chat.opencode.lastCheckedAt",
   localBaseUrl: "chat.local.baseUrl",
   localModel: "chat.local.model",
   localApiKey: "chat.local.apiKey",
@@ -103,6 +107,16 @@ export function readChatSettingsFromStore(
       ),
       lastCheckedAt:
         store.get(CHAT_SETTINGS_KEYS.antigravityLastCheckedAt) || undefined
+    },
+    opencode: {
+      executablePath:
+        store.get(CHAT_SETTINGS_KEYS.opencodeExecutablePath) || undefined,
+      model: store.get(CHAT_SETTINGS_KEYS.opencodeModel) || undefined,
+      lastConnectionStatus: normalizeCliConnectionStatus(
+        store.get(CHAT_SETTINGS_KEYS.opencodeLastConnectionStatus)
+      ),
+      lastCheckedAt:
+        store.get(CHAT_SETTINGS_KEYS.opencodeLastCheckedAt) || undefined
     },
     local: {
       baseUrl:
@@ -214,6 +228,18 @@ export function saveChatSettingsToStore(
   } else {
     store.delete([CHAT_SETTINGS_KEYS.antigravityModel]);
   }
+  const opencodeExecutablePath = settings.opencode?.executablePath?.trim();
+  if (opencodeExecutablePath) {
+    store.set(CHAT_SETTINGS_KEYS.opencodeExecutablePath, opencodeExecutablePath);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.opencodeExecutablePath]);
+  }
+  const opencodeModel = settings.opencode?.model?.trim();
+  if (opencodeModel) {
+    store.set(CHAT_SETTINGS_KEYS.opencodeModel, opencodeModel);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.opencodeModel]);
+  }
   store.set(
     CHAT_SETTINGS_KEYS.localBaseUrl,
     normalizeLocalChatBaseUrl(settings.local.baseUrl)
@@ -279,7 +305,7 @@ export function saveChatSettingsToStore(
  */
 export function saveCliConnectionStatus(
   store: ChatSettingsStore,
-  provider: "claude-code" | "gemini-cli" | "antigravity",
+  provider: "claude-code" | "gemini-cli" | "antigravity" | "opencode",
   state: NonNullable<ChatSettings["antigravity"]["lastConnectionStatus"]>,
   checkedAt: string
 ): boolean {
@@ -288,10 +314,12 @@ export function saveCliConnectionStatus(
       ? [CHAT_SETTINGS_KEYS.claudeLastConnectionStatus, CHAT_SETTINGS_KEYS.claudeLastCheckedAt]
       : provider === "gemini-cli"
         ? [CHAT_SETTINGS_KEYS.geminiLastConnectionStatus, CHAT_SETTINGS_KEYS.geminiLastCheckedAt]
-        : [
-            CHAT_SETTINGS_KEYS.antigravityLastConnectionStatus,
-            CHAT_SETTINGS_KEYS.antigravityLastCheckedAt
-          ];
+        : provider === "opencode"
+          ? [CHAT_SETTINGS_KEYS.opencodeLastConnectionStatus, CHAT_SETTINGS_KEYS.opencodeLastCheckedAt]
+          : [
+              CHAT_SETTINGS_KEYS.antigravityLastConnectionStatus,
+              CHAT_SETTINGS_KEYS.antigravityLastCheckedAt
+            ];
   if (store.get(keys[0]) === state) return false;
   store.set(keys[0], state);
   store.set(keys[1], checkedAt);
@@ -304,6 +332,7 @@ function normalizeProvider(value: unknown): ChatProvider {
     value === "claude-code" ||
     value === "gemini-cli" ||
     value === "antigravity" ||
+    value === "opencode" ||
     value === "openrouter"
   ) {
     return value;

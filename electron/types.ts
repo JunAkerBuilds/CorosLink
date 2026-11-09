@@ -3242,6 +3242,7 @@ export type ChatProvider =
   | "claude-code"
   | "gemini-cli"
   | "antigravity"
+  | "opencode"
   | "openrouter"
   | "local";
 
@@ -3315,6 +3316,36 @@ export interface GeminiCliStatus {
 export interface GeminiCliConnectionTest {
   ok: boolean;
   status: GeminiCliStatus;
+  message: string;
+}
+
+export type OpencodeConnectionState = ClaudeCodeConnectionState;
+
+export interface OpencodeConfig {
+  /** Optional user-selected path. CorosLink never reads OpenCode's credential files. */
+  executablePath?: string;
+  /** "provider/model" as OpenCode lists it. Empty = OpenCode's own default. */
+  model?: string;
+  lastConnectionStatus?: OpencodeConnectionState;
+  lastCheckedAt?: string;
+}
+
+export interface OpencodeStatus {
+  state: OpencodeConnectionState;
+  installed: boolean;
+  /** OpenCode has at least one model to offer. */
+  authenticated: boolean;
+  executablePath?: string;
+  version?: string;
+  /** How many models OpenCode offers, once a session has listed them. */
+  modelCount?: number;
+  checkedAt: string;
+  message: string;
+}
+
+export interface OpencodeConnectionTest {
+  ok: boolean;
+  status: OpencodeStatus;
   message: string;
 }
 
@@ -3411,6 +3442,7 @@ export interface ChatSettings {
   claudeCode: ClaudeCodeConfig;
   geminiCli: GeminiCliConfig;
   antigravity: AntigravityConfig;
+  opencode: OpencodeConfig;
   openRouter: OpenRouterConfig;
   local: LocalChatConfig;
   sidebarOpen?: boolean;

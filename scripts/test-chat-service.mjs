@@ -976,8 +976,24 @@ const saved = saveChatSettingsToStore(
     apiKey: "secret",
     toolsEnabled: false
   },
+  opencode: {
+    executablePath: "  /opt/homebrew/bin/opencode ",
+    model: "deepseek/deepseek-flash"
+  },
   customInstructions: "  Keep answers short.  "
   }
+);
+assert.deepEqual(
+  { executablePath: saved.opencode.executablePath, model: saved.opencode.model },
+  { executablePath: "/opt/homebrew/bin/opencode", model: "deepseek/deepseek-flash" }
+);
+assert.equal(
+  saveChatSettingsToStore(fakeStore, fakeApiKeyStore, fakeOpenRouterApiKeyStore, { ...saved, provider: "opencode" }).provider,
+  "opencode"
+);
+assert.equal(
+  saveChatSettingsToStore(fakeStore, fakeApiKeyStore, fakeOpenRouterApiKeyStore, saved).provider,
+  "claude-code"
 );
 assert.equal(saved.provider, "claude-code");
 assert.equal(saved.chatgpt.model, "gpt-5.6-terra");
