@@ -1,3 +1,4 @@
+import { activityMovingSeconds } from "./activityTime";
 import { corosSportName } from "./corosSportTypes";
 import {
   WORKOUT_SPORT_CAPABILITIES,
@@ -309,7 +310,7 @@ export function formatRecentActivityMix(
       trainingLoad: 0
     };
     current.count += 1;
-    current.duration += activity.duration ?? 0;
+    current.duration += activityMovingSeconds(activity) ?? 0;
     current.distance += activity.distance ?? 0;
     current.trainingLoad += activity.trainingLoad ?? 0;
     groups.set(sport.key, current);
