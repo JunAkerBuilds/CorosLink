@@ -111,12 +111,14 @@ export function lapRecord(lap) {
   body.writeUInt16LE(lap.ascent, 31); body.writeUInt16LE(lap.descent, 33);
   body[35] = lap.stepCadence;
   body[28] = lap.minHr ?? 0; body.writeInt8(lap.temperature ?? 0, 29); body[37] = lap.stepLengthCm ?? 0;
+  // A workout's step type (byte 30), plan step (51) and, for a rest step, the heart-rate drop (56).
+  body[30] = lap.kind ?? 0; body[51] = lap.planStep ?? 0; body[56] = lap.hrDrop ?? 0;
   return info(4, body);
 }
 
-/** Lap extension: power and running-dynamics averages (vertical ratio × 10, ground contact ms, oscillation in 1/16 mm). */
-export const lapExtensionRecord = (index, { avgPower, maxPower, verticalRatioX10 = 0, groundTimeMs = 0, oscillation16 = 0 }) =>
-  info(6, u16(index), u16(avgPower), u16(maxPower), u16(0), u16(verticalRatioX10), u16(groundTimeMs), u16(oscillation16), Buffer.alloc(44));
+/** Lap extension: power and running-dynamics averages (vertical ratio × 10, ground contact ms, oscillation in 1/16 mm), and the lap's training load (u16 @16). */
+export const lapExtensionRecord = (index, { avgPower, maxPower, verticalRatioX10 = 0, groundTimeMs = 0, oscillation16 = 0, load = 0 }) =>
+  info(6, u16(index), u16(avgPower), u16(maxPower), u16(0), u16(verticalRatioX10), u16(groundTimeMs), u16(oscillation16), Buffer.alloc(2), u16(load), Buffer.alloc(40));
 
 /**
  * Science summary part 2: the watch's training analysis, laid out like a PACE 4
@@ -183,8 +185,10 @@ export function pages(records) {
  * correct decoder must produce.
  */
 export function syntheticRun({ startUnix = 1_767_247_200, deviceSport = 0, corruptHeartRate = false, vo2max = 43,
-  recovery = 7200, balance = { baseFitness: 48, loadImpact: 61, fatigue: 127 } } = {}) {
+  recovery = 7200, balance = { baseFitness: 48, loadImpact: 61, fatigue: 127 }, workout } = {}) {
+  // `workout`: the plan file the watch saved (none for a free run) and each lap's step bytes and load.
   const t0 = startUnix;
+  const step = (index) => workout?.laps?.[index] ?? {};
   const hr = Array.from({ length: 30 }, (_, i) => 120 + ((i * 7) % 23));
   hr[12] = 200; // a jump wider than the base width, for the variable-width path
   const lat = Array.from({ length: 30 }, (_, i) => 108_057_578 + i * 37 - (i % 3) * 11);
@@ -202,6 +206,7 @@ export function syntheticRun({ startUnix = 1_767_247_200, deviceSport = 0, corru
   const ratio = Array.from({ length: 16 }, (_, i) => (i === 0 ? 0 : 75 + (i % 4)));
   const records = [
     startRecord(t0, 250, deviceSport),
+    ...(workout?.plan ? workoutRecords(workout.plan) : []),
     seriesRecord(0x02, 1, t0 + 1, encodeDeltaPack(hr, { variable: true }), { corruptChecksum: corruptHeartRate }),
     seriesRecord(0x28, 1, t0 + 1, encodeDeltaPack(lon, { sizeShift: 2, group: 0 })),
     seriesRecord(0x28, 1, t0 + 1, encodeDeltaPack(lat, { sizeShift: 2, mode: "offset", group: 1 })),
@@ -221,11 +226,11 @@ export function syntheticRun({ startUnix = 1_767_247_200, deviceSport = 0, corru
     ...Array.from({ length: 70 }, (_, i) => record(5, Buffer.concat([Buffer.from([7]), u32(device(t0 + 5)), Buffer.from(`ALGO[10]:log line ${String(i).padStart(30, "0")}\r\n\0`)]))),
     pauseRecord(t0 + 10, 500),
     resumeRecord(t0 + 20),
-    lapRecord({ index: 1, endUnix: t0 + 15, timerCs: 1000, distanceCm: 4000, smallCalories: 8000, bestPace: 320, avgHr: 130, maxHr: 145, ascent: 2, descent: 1, stepCadence: 168, minHr: 110, temperature: 24, stepLengthCm: 101 }),
-    lapExtensionRecord(1, { avgPower: 185, maxPower: 195, verticalRatioX10: 76, groundTimeMs: 255, oscillation16: 1288 }),
+    lapRecord({ index: 1, endUnix: t0 + 15, timerCs: 1000, distanceCm: 4000, smallCalories: 8000, bestPace: 320, avgHr: 130, maxHr: 145, ascent: 2, descent: 1, stepCadence: 168, minHr: 110, temperature: 24, stepLengthCm: 101, ...step(0) }),
+    lapExtensionRecord(1, { avgPower: 185, maxPower: 195, verticalRatioX10: 76, groundTimeMs: 255, oscillation16: 1288, load: step(0).load }),
     pauseRecord(t0 + 30, 750),
-    lapRecord({ index: 2, endUnix: t0 + 30, timerCs: 1000, distanceCm: 2000, smallCalories: 7500, bestPace: 300, avgHr: 150, maxHr: 200, ascent: 2, descent: 1, stepCadence: 172, minHr: 120, temperature: 25, stepLengthCm: 99 }),
-    lapExtensionRecord(2, { avgPower: 192, maxPower: 199 }),
+    lapRecord({ index: 2, endUnix: t0 + 30, timerCs: 1000, distanceCm: 2000, smallCalories: 7500, bestPace: 300, avgHr: 150, maxHr: 200, ascent: 2, descent: 1, stepCadence: 172, minHr: 120, temperature: 25, stepLengthCm: 99, ...step(1) }),
+    lapExtensionRecord(2, { avgPower: 192, maxPower: 199, load: step(1).load }),
     trainingRecord({ aerobicLoad: 30, anaerobicLoad: 5, lowLoad: 20, midLoad: 12, highLoad: 3, focus: 3, aerobicEffect: 27, anaerobicEffect: 8, performance: 102, recovery, sevenDayLoad: 310, recommendedLoadMin: 200, recommendedLoadMax: 500, vo2max, ...balance }),
     summaryRecord({ distanceCm: 6000, timerCs: 2000, smallCalories: 15_500, bestPace: 300, avgHr: 140, maxHr: 200, ascent: 4, descent: 2, altitudeOffset: -40, stepCadence: 170, maxStepCadence: 180, avgPower: 188, minHr: 110, temperature: 24, steps: 61, stepLengthCm: 100 })
   ];
@@ -261,9 +266,23 @@ export function swimPartRecord(part) {
   body[30] = part.kind;
   body[31] = part.stroke ?? 0;
   body.writeUInt16LE(part.strokes ?? 0, 32); body.writeUInt16LE(part.strokeRate ?? 0, 34); body.writeUInt16LE(part.swolf ?? 0, 36);
+  body[38] = part.step ?? 0;
   body[39] = part.interval ?? 0;
   body.writeUInt16LE(part.endMs ?? 0, 40);
+  body[42] = part.planStep ?? 0;
+  body.writeUInt16LE(part.load ?? 0, 45);
+  body[47] = part.autoRest ? 1 : 0;
+  body[52] = part.hrDrop ?? 0;
   return info(4, body);
+}
+
+/** A workout as the watch saves it with an activity (sport info 14): an "HF" workout file split into numbered parts. */
+export function workoutRecords(file, partBytes = 60) {
+  const records = [];
+  for (let at = 0, part = 0; at < file.length; at += partBytes, part += 1) {
+    records.push(info(14, Buffer.from([part]), file.subarray(at, at + partBytes)));
+  }
+  return records;
 }
 
 /** A swim's summary: active lengths u16 @8, average pace u16 @14 (s/100 m), strokes u16 @26, best / average SWOLF @30 / @32, stroke rate max @34 / average @35. */
@@ -357,6 +376,54 @@ export function syntheticPoolSwimAtTheWall({ startUnix = 1_767_513_600 } = {}) {
     pauseRecord(t0 + 232, 0),
     swimPartRecord({ kind: 0x44, index: 1, endUnix: t0 + 240, endMs: 0, timerCs: 14_500, pausedCs: 9500, distanceCm: 5 * yard, smallCalories: 25_000, avgPace: 120, bestPace: 120, avgHr: 110, maxHr: 115, stroke: 0xff, strokes: 72, strokeRate: 30, swolf: 44, interval: 1 }),
     swimSummaryRecord({ distanceCm: 5 * yard, timerCs: 14_500, activeLengths: 5, smallCalories: 25_000, avgPace: 120, bestPace: 120, avgHr: 110, maxHr: 115, minHr: 105, temperature: 27, strokes: 72, bestSwolf: 42, avgSwolf: 44, maxStrokeRate: 32, avgStrokeRate: 30 })
+  ];
+  return { file: pages(records), expected: { t0 } };
+}
+
+/** A run workout: three fast 400s at a pace, each followed by a walk with a heart-rate range. */
+export const RUN_WORKOUT_PROGRAM = {
+  name: "3 × 400 m", sportType: 1,
+  exercises: [
+    { id: "1", name: "Repeats", isGroup: true, sets: 3 },
+    { id: "2", groupId: "1", name: "Fast 400", targetType: 5, targetValue: 40000, exerciseType: 2, intensityType: 3, intensityValue: 270000, intensityValueExtend: 280000, intensityMultiplier: 1000 },
+    { id: "3", groupId: "1", name: "Walk", targetType: 2, targetValue: 60, exerciseType: 4, intensityType: 2, hrType: 2, intensityValue: 100, intensityValueExtend: 130 }
+  ]
+};
+
+/** A watch workout's plan, as the Training Library stores it: a repeat of two steps, a timed drill on the spot, a cool-down. */
+export const WORKOUT_PROGRAM = {
+  name: "Easy Drills: Breathe & Glide", sportType: 3, idInPlan: "24",
+  exercises: [
+    { id: "1", name: "Warm-up", isGroup: true, sets: 2 },
+    { id: "2", groupId: "1", name: "Easy free", targetType: 5, targetValue: 2500, exerciseType: 1, intensityType: 5, intensityValue: 1 },
+    { id: "3", groupId: "1", name: "Rest", targetType: 2, targetValue: 20, exerciseType: 4 },
+    { id: "4", name: "Bobs: 10 hum-outs", targetType: 2, targetValue: 60, exerciseType: 2, intensityType: 5, intensityValue: 6 },
+    { id: "5", name: "Side kick, switch side each length", targetType: 5, targetValue: 5000, exerciseType: 3, intensityType: 5, intensityValue: 6 }
+  ]
+};
+
+/**
+ * A pool swim done as a watch workout (2026-11-08's layout): step closers 0x40 / 0x44 / 0x4c and rests 0x48, each with
+ * its plan step (byte 42), training load and, for rests, the heart-rate drop; `plan` is the workout file the watch saved.
+ */
+export function syntheticWorkoutSwim({ startUnix = 1_767_600_000, plan }) {
+  const t0 = startUnix;
+  const part = (kind, index, { end, timer, step, planStep, load, hrDrop, paused = 0, stroke = 1, swum = kind === 0x00 }) => swimPartRecord({
+    kind, index, endUnix: t0 + end, endMs: 0, timerCs: timer * 100, pausedCs: paused * 100, distanceCm: swum ? 2500 : 0, smallCalories: 5000,
+    avgPace: swum ? 160 : 0, avgHr: 110, maxHr: 125, stroke, strokes: swum ? 15 : 0, step, interval: 1, planStep, load, hrDrop
+  });
+  const records = [
+    startRecord(t0, 0, 3, { poolCm: 2500 }),
+    ...workoutRecords(plan),
+    part(0x00, 1, { end: 40, timer: 40, step: 1 }), part(0x40, 1, { end: 40, timer: 40, step: 1, planStep: 0, load: 1, swum: true }),
+    part(0x48, 2, { end: 60, timer: 20, step: 1, planStep: 1, load: 0, hrDrop: 12, stroke: 0 }),
+    part(0x00, 2, { end: 100, timer: 40, step: 2 }), part(0x40, 3, { end: 100, timer: 40, step: 2, planStep: 0, load: 2, swum: true }),
+    part(0x48, 4, { end: 120, timer: 20, step: 2, planStep: 1, load: 1, hrDrop: 7, stroke: 0 }),
+    part(0x44, 5, { end: 180, timer: 60, step: 3, planStep: 2, load: 1, stroke: 6 }),
+    part(0x00, 3, { end: 220, timer: 40, step: 4, stroke: 6 }), part(0x4c, 6, { end: 220, timer: 40, step: 4, planStep: 3, load: 2, stroke: 6, swum: true }),
+    pauseRecord(t0 + 225, 0),
+    part(0x44, 7, { end: 230, timer: 5, paused: 5, step: 5, planStep: 0xff, load: 0, stroke: 0 }),
+    swimSummaryRecord({ distanceCm: 7500, timerCs: 22500, activeLengths: 3, smallCalories: 20000, avgPace: 160, bestPace: 160, avgHr: 110, maxHr: 125, minHr: 100, temperature: 29, strokes: 45, bestSwolf: 55, avgSwolf: 55, maxStrokeRate: 20, avgStrokeRate: 18 })
   ];
   return { file: pages(records), expected: { t0 } };
 }

@@ -46,6 +46,32 @@ async function yardDetail() {
     activityId: 'yards', name: 'Pool Swim', sportType: 300, source: 'watch-ble', provenance: 'watch', format: 'fit', sha256: '1'.repeat(64)
   });
 }
+async function workoutDetail() {
+  const { syntheticWorkoutSwim, WORKOUT_PROGRAM } = await load('scripts/fixtures/coros-sport-record-fixture.mjs');
+  const { encodeProgramLite, encodeWatchFile } = await load('dist-electron/corosBleTrainingProtocol.js');
+  const { decodeCorosSportRecordFile } = await load('dist-electron/localSync/corosSportRecord.js');
+  const { corosSessionToFit } = await load('dist-electron/localSync/syncPayloadDecoder.js');
+  const { parseFitActivity } = await load('dist-electron/fitActivity.js');
+  const { localFitActivityDetail } = await load('dist-electron/localSync/localActivityDetail.js');
+  const [session] = decodeCorosSportRecordFile(syntheticWorkoutSwim({ plan: encodeWatchFile(encodeProgramLite(WORKOUT_PROGRAM), 41) }).file).sessions;
+  return localFitActivityDetail(parseFitActivity(corosSessionToFit(session)), {
+    activityId: 'workout', name: 'Pool Swim', sportType: 300, source: 'watch-ble', provenance: 'watch', format: 'fit', sha256: '2'.repeat(64)
+  });
+}
+async function runWorkoutDetail() {
+  const { syntheticRun, RUN_WORKOUT_PROGRAM } = await load('scripts/fixtures/coros-sport-record-fixture.mjs');
+  const { encodeProgramLite, encodeWatchFile } = await load('dist-electron/corosBleTrainingProtocol.js');
+  const { decodeCorosSportRecordFile } = await load('dist-electron/localSync/corosSportRecord.js');
+  const { corosSessionToFit } = await load('dist-electron/localSync/syncPayloadDecoder.js');
+  const { parseFitActivity } = await load('dist-electron/fitActivity.js');
+  const { localFitActivityDetail } = await load('dist-electron/localSync/localActivityDetail.js');
+  const plan = encodeWatchFile(encodeProgramLite(RUN_WORKOUT_PROGRAM), 41);
+  const laps = [{ kind: 0x04, planStep: 0, load: 3 }, { kind: 0x10, planStep: 1, hrDrop: 18, load: 1 }];
+  const [session] = decodeCorosSportRecordFile(syntheticRun({ workout: { plan, laps } }).file).sessions;
+  return localFitActivityDetail(parseFitActivity(corosSessionToFit(session)), {
+    activityId: 'run-workout', name: 'Run', sportType: 100, source: 'watch-ble', provenance: 'watch', format: 'fit', sha256: '4'.repeat(64)
+  });
+}
 async function main() {
   await app.whenReady();
   const real = process.env.COROSLINK_SWIM_DETAIL;
@@ -63,7 +89,8 @@ async function main() {
     const js = code => window.webContents.executeJavaScript(code, true).catch(error => {
       throw new Error(`${error.message}\nScript: ${code}\nRenderer errors: ${errors.join('\n')}`);
     });
-    const text = selector => js(`Array.from(document.querySelectorAll(${JSON.stringify(selector)}), el => el.textContent.trim())`);
+    // A step's parts keep their words together with no-break spaces; read them as plain ones.
+    const text = selector => js(`Array.from(document.querySelectorAll(${JSON.stringify(selector)}), el => el.textContent.replace(/\u00a0/g, ' ').trim())`);
     await window.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/scripts/fixtures/swim-detail.html`);
     await until(() => js('typeof window.setSwimDetail'), type => type === 'function', 'fixture');
     await js(`window.setSwimDetail(${JSON.stringify(detail)}); void 0`);
@@ -101,8 +128,8 @@ async function main() {
     assert.ok((await text('.swim-showcase .activity-channels-chip')).includes('Water temperature'), 'water temperature can be charted');
     assert.deepEqual(await text('.swim-showcase .training-laps-section thead th'), ['#', 'Stroke', 'Lengths', 'Distance', 'Duration', 'Pace /100m', 'Strokes', 'SWOLF', 'Stroke rate', 'Avg HR', 'Max HR']);
     assert.deepEqual(await text('.swim-showcase .training-laps-section tbody tr'), [
-      '1Mixed250 m1:202:40345725108119', 'Rest0:30101108', '2Backstroke125 m0:402:40206030112118'
-    ], 'rests unnumbered, without the figures they don\'t have');
+      '1Mixed250 m1:202:40345725108119', 'RestHR drop 0 bpm0:30101108', '2Backstroke125 m0:402:40206030112118'
+    ], 'rests unnumbered, without the figures they don\'t have, with how far heart rate fell; no lap load in a swim');
     assert.equal(await js(`document.querySelectorAll('.swim-showcase tr.is-rest').length`), 1, 'the rest row is marked');
     await js(`Array.from(document.querySelectorAll('.swim-showcase .training-laps-groups button')).find(b => b.textContent === 'Lengths').click(); void 0`);
     await until(() => text('.swim-showcase .training-laps-section tbody tr'), rows => rows.length === 4, 'lengths view');
@@ -143,8 +170,70 @@ async function main() {
     await js(`window.setSwimDetail(${JSON.stringify(await yardDetail())}); void 0`);
     await until(() => text('.swim-showcase .activity-effect dl > div'), items => items[0] === 'Pool length25yd', 'yard pool');
     assert.ok((await text('.swim-showcase .activity-detail-stat')).includes('Distance125yd'));
+
+    // A watch workout: named above the laps with what its steps add up to; each interval and rest shows its step in the
+    // stroke's place, the stroke first on the line under it, then its repeat and round, target and a rest's heart-rate drop.
+    await js(`window.setSwimDetail(${JSON.stringify(await workoutDetail())}); void 0`);
+    await until(() => text('.swim-showcase .activity-workout-line'), shown => shown.length === 1, 'workout');
+    assert.deepEqual(await text('.swim-showcase .activity-workout-line'), ['Scheduled workoutEasy Drills: Breathe & GlidePlanned 100 m + 1:00']);
+    assert.equal((await text('.swim-showcase .activity-effect dl > div'))[0], 'Pool length25m', 'the swim card keeps to what was recorded');
+    assert.deepEqual(await text('.swim-showcase .training-laps-section thead th'), ['#', 'Step', 'Distance', 'Duration', 'Pace /100m', 'Strokes', 'SWOLF', 'Stroke rate', 'Avg HR', 'Max HR']);
+    assert.deepEqual(await text('.swim-showcase td.training-lap-step'), [
+      'Easy freeFreestyle · Warm-up 1/2 · Target 25 m', 'RestWarm-up 1/2 · Target 0:20 · HR drop 12 bpm',
+      'Easy freeFreestyle · Warm-up 2/2 · Target 25 m', 'RestWarm-up 2/2 · Target 0:20 · HR drop 7 bpm',
+      'Bobs: 10 hum-outsDrill · Target 1:00', 'Side kick, switch side each lengthDrill · Target 50 m', 'Rest'
+    ], 'the timed drill on the spot is an interval; what ran after the plan is a rest with no step');
+    assert.equal(await js(`getComputedStyle(document.querySelector('.swim-showcase td.training-lap-step strong')).color !== getComputedStyle(document.querySelector('.swim-showcase td.training-lap-step small')).color`), true,
+      'the step\'s name stands out from its details');
+    // The step takes room: narrower, strokes and stroke rate go first, then max HR; the table never scrolls sideways.
+    for (const width of ['', '900px', '700px', '620px']) {
+      await js(`document.querySelector('.swim-showcase .training-laps-section').style.width = ${JSON.stringify(width)}; void 0`);
+      await until(() => js(`(() => { const shell = document.querySelector('.swim-showcase .table-shell'); return shell.scrollWidth <= shell.clientWidth + 1; })()`), fits => fits, `workout table fits at ${width || 'full width'}`);
+    }
+    await js(`document.querySelector('.swim-showcase .training-laps-section').style.width = ''; void 0`);
+    assert.equal(await js(`document.querySelectorAll('.swim-compact td.training-lap-step').length`), 0, 'the aside keeps its six columns');
+    const workoutShot = path.join(os.tmpdir(), 'coroslink-swim-workout.png');
+    await js(`document.querySelector('.swim-showcase .training-laps-section').scrollIntoView(); void 0`);
+    await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 300))))');
+    await fs.writeFile(workoutShot, (await window.webContents.capturePage()).toPNG());
+    await js(`window.setTestLanguage('fr'); void 0`);
+    await until(() => text('.swim-showcase .activity-workout-line'), shown => shown[0]?.startsWith('Séance planifiée'), 'French workout');
+    assert.equal((await text('.swim-showcase td.training-lap-step'))[0], 'Easy freeNage libre · Warm-up 1/2 · Objectif 25 m');
+    await js(`window.setTestLanguage('en'); void 0`);
+
+    // A rest the watch's automatic rest detection made says so.
+    const auto = await syntheticDetail();
+    await js(`window.setSwimDetail(${JSON.stringify({ ...auto, laps: auto.laps.map(lap => (lap.rest ? { ...lap, autoRest: true } : lap)), lapGroups: auto.lapGroups.map((group, index) => (index === 0 ? { ...group, laps: group.laps.map(lap => (lap.rest ? { ...lap, autoRest: true } : lap)) } : group)) })}); void 0`);
+    await until(() => text('.swim-showcase tr.is-rest td:nth-child(2)'), cells => cells[0]?.startsWith('Auto rest'), 'auto rest');
+
+    // A run done as a watch workout: each lap's kind of step, its step with its round, target and pace or heart-rate
+    // range, how far heart rate fell over the walk, and each lap's load.
+    await js(`window.setSwimDetail(${JSON.stringify(await runWorkoutDetail())}); void 0`);
+    await until(() => text('.swim-showcase .training-laps-section thead th'), th => th.includes('Step'), 'run workout laps');
+    assert.deepEqual(await text('.swim-showcase .training-laps-section thead th'), ['#', 'Step', 'Distance', 'Duration', 'Avg Pace', 'Avg HR', 'Max HR', 'Elevation', 'Load']);
+    assert.deepEqual(await text('.swim-showcase td.training-lap-step'), [
+      'Type: WorkFast 400Repeats 1/3 · Target 0.40 km · 4:30–4:40 /km', 'Type: RecoveryWalkRepeats 1/3 · Target 1:00 · 100–130 bpm · HR drop 18 bpm'
+    ], 'the kind of step leads its name, labelled for screen readers');
+    assert.deepEqual(await text('.swim-showcase .training-lap-kind'), ['Work', 'Recovery']);
+    assert.deepEqual(await text('.swim-showcase .activity-workout-line'), ['Workout3 × 400 mPlanned 1.20 km'], 'a run names its workout above the laps, as a swim does');
+    // Narrow, the load gives way and the table still fits.
+    for (const width of ['', '700px', '620px']) {
+      await js(`document.querySelector('.swim-showcase .training-laps-section').style.width = ${JSON.stringify(width)}; void 0`);
+      await until(() => js(`(() => { const shell = document.querySelector('.swim-showcase .table-shell'); return shell.scrollWidth <= shell.clientWidth + 1; })()`), fits => fits, `run workout table fits at ${width || 'full width'}`);
+    }
+    await js(`document.querySelector('.swim-showcase .training-laps-section').style.width = ''; void 0`);
+    assert.equal(await js(`document.querySelectorAll('.swim-compact td.training-lap-step').length`), 0, 'the aside keeps its columns');
+    assert.ok(await js(`(() => { const shell = document.querySelector('.swim-showcase .table-shell'); return shell.scrollWidth <= shell.clientWidth + 1; })()`), 'no sideways scroll');
+    await js(`window.setTestUnits('imperial'); void 0`);
+    await until(() => text('.swim-showcase td.training-lap-step'), cells => cells[0]?.includes('/mi'), 'pace range in miles');
+    assert.match((await text('.swim-showcase td.training-lap-step'))[0], /7:15–7:31 \/mi/);
+    await js(`window.setTestUnits('metric'); void 0`);
+    const runShot = path.join(os.tmpdir(), 'coroslink-run-workout.png');
+    await js(`document.querySelector('.swim-showcase .training-laps-section').scrollIntoView(); void 0`);
+    await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 300))))');
+    await fs.writeFile(runShot, (await window.webContents.capturePage()).toPNG());
     assert.deepEqual(errors, []);
-    console.log(`Swim detail UI passed: swim card, pace per 100 m and swim time, no empty route, intervals with stroke, strokes, SWOLF and stroke rate, unnumbered rests, the fastest marked, lengths view, water temperature chart, compact aside, narrow table, pool units, French. Screenshot: ${shot}`);
+    console.log(`Swim detail UI passed: swim card, pace per 100 m and swim time, no empty route, intervals with stroke, strokes, SWOLF and stroke rate, unnumbered rests, the fastest marked, lengths view, water temperature chart, compact aside, narrow table, pool units, French, workout steps, rest heart-rate drop, lap load, auto rest, run workout laps. Screenshots: ${shot} ${workoutShot} ${runShot}`);
   } catch (error) {
     // app.exit in `finally` ends the process before main()'s rejection can be handled.
     console.error(error);

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { encodeDeltaPack, marker, pages, pauseRecord, record, resumeRecord, seriesRecord, startRecord, summaryRecord, swimPartRecord, swimSummaryRecord, syntheticOpenWaterSwim, syntheticPoolSwim, syntheticPoolSwimAtTheWall, syntheticRun } from "./fixtures/coros-sport-record-fixture.mjs";
+import { encodeDeltaPack, marker, pages, pauseRecord, record, resumeRecord, seriesRecord, startRecord, summaryRecord, swimPartRecord, swimSummaryRecord, syntheticOpenWaterSwim, syntheticPoolSwim, syntheticPoolSwimAtTheWall, syntheticRun, syntheticWorkoutSwim, WORKOUT_PROGRAM, RUN_WORKOUT_PROGRAM } from "./fixtures/coros-sport-record-fixture.mjs";
 
 // Decoder for the PACE 4 sport-record file (SyncData file 14) and the FIT
 // writer that stores decoded activities. Runs against the compiled
@@ -18,10 +18,12 @@ import { encodeDeltaPack, marker, pages, pauseRecord, record, resumeRecord, seri
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const load = (file) => import(pathToFileURL(path.join(repoRoot, "dist-electron", file)).href);
 const { decodeDeltaPack, decodeCorosSportRecordFile, walkCorosRecords, CorosSportRecordFormatError, MAX_SESSION_SECONDS } = await load("localSync/corosSportRecord.js");
-const { fitCrc } = await load("localSync/fitWriter.js");
+const { fitCrc, writeFitActivity } = await load("localSync/fitWriter.js");
+const { decodeWorkoutPlan } = await load("localSync/corosWorkoutPlan.js");
 const { decodeSportSyncPayload, corosSessionToFit } = await load("localSync/syncPayloadDecoder.js");
 const { corosSportTypeFromFit, fitSportFromCorosType, localFitActivityDetail } = await load("localSync/localActivityDetail.js");
 const { parseFitActivity } = await load("fitActivity.js");
+const { encodeProgramLite, encodeWatchFile } = await load("corosBleTrainingProtocol.js");
 
 let passed = 0;
 function test(name, body) {
@@ -329,7 +331,7 @@ test("FIT writer: valid header and CRC, and CorosLink's parser reads it back", (
 test("payload decoder: sport records become FIT activities with the watch's sport type", () => {
   const { file } = syntheticRun({ deviceSport: 7 }); // mountain climb: FIT has no equivalent
   const decoded = decodeSportSyncPayload(file);
-  assert.equal(decoded.decoder, "coros-sport-record/v2");
+  assert.equal(decoded.decoder, "coros-sport-record/v3");
   assert.equal(decoded.records.length, 1);
   assert.equal(decoded.records[0].sportType, 105);
   assert.equal(decoded.records[0].headline.startTime, syntheticRun().expected.t0);
@@ -348,6 +350,7 @@ const RUN_FIT_SHA256 = "27768875d9a3d4b939bcf6c4d5b8a8fe8232229e2209cd188b54af86
 const FIT_FREESTYLE = 0;
 const FIT_BACKSTROKE = 1;
 const FIT_BREASTSTROKE = 2;
+const FIT_DRILL = 4;
 const FIT_MIXED = 5;
 const localRecord = (sportType) => ({ activityId: "local", sportType, source: "watch-ble", provenance: "watch", format: "fit", sha256: "0".repeat(64) });
 
@@ -526,6 +529,244 @@ test("a damaged closing-interval stamp doesn't stretch the swim over the activit
   assert.deepEqual([damaged.sessions.map((session) => session.endTs - T0), damaged.rejected], [[60, 3670], 0], "ends at the stop; the next swim is kept");
 });
 
+test("a watch workout: each step owns its lengths, rests are steps too, and drill lengths are all kept", () => {
+  // As a PACE 4 records a workout (2026-11-08): step closers 0x40 / 0x44 / 0x4c, rests 0x48, byte 38 the step's interval
+  // number, byte 39 always 1. Drill lengths, which the watch doesn't count, repeat the last length's number.
+  const part = (kind, index, { end, timer, step, paused = 0, stroke = 1, swum = kind === 0x00 }) => swimPartRecord({
+    kind, index, endUnix: T0 + end, endMs: 0, timerCs: timer * 100, pausedCs: paused * 100, distanceCm: swum ? 2500 : 0,
+    smallCalories: 5000, avgPace: swum ? 160 : 0, avgHr: 110, maxHr: 115, stroke, strokes: swum && stroke === 1 ? 15 : 0, step, interval: 1
+  });
+  const drillLength = part(0x00, 1, { end: 170, timer: 50, step: 3, stroke: 6 });
+  const records = [
+    startRecord(T0, 0, 3, { poolCm: 2500 }),
+    part(0x00, 1, { end: 40, timer: 40, step: 1 }), part(0x40, 1, { end: 40, timer: 40, step: 1, swum: true }),
+    part(0x48, 2, { end: 60, timer: 20, step: 1, stroke: 0 }),
+    // A timed drill step on the spot: no lengths.
+    part(0x44, 3, { end: 120, timer: 60, step: 2, stroke: 6 }),
+    drillLength, drillLength, part(0x44, 4, { end: 170, timer: 50, step: 3, stroke: 6, swum: true }),
+    part(0x48, 5, { end: 200, timer: 30, step: 3, stroke: 0 }),
+    part(0x00, 1, { end: 250, timer: 50, step: 4, stroke: 6 }), part(0x44, 6, { end: 250, timer: 50, step: 4, stroke: 6, swum: true }),
+    part(0x00, 2, { end: 290, timer: 40, step: 5 }), part(0x4c, 7, { end: 290, timer: 40, step: 5, swum: true }),
+    pauseRecord(T0 + 300, 0),
+    // The watch closes what ran after the last step when the swim is saved.
+    part(0x44, 8, { end: 310, timer: 10, paused: 10, step: 6, stroke: 0 }),
+    swimSummaryRecord({ distanceCm: 10000, timerCs: 30000, activeLengths: 4, smallCalories: 20000, avgPace: 180, bestPace: 160, avgHr: 110, maxHr: 115, minHr: 100, temperature: 29, strokes: 30, bestSwolf: 55, avgSwolf: 60, maxStrokeRate: 20, avgStrokeRate: 18 })
+  ];
+  const [session] = decodeCorosSportRecordFile(pages(records)).sessions;
+  assert.deepEqual(session.laps.map((lap) => [lap.startTs - T0, lap.elapsedSec, lap.distanceM, lap.swim.rest, lap.swim.lengths, lap.swim.activeLengths]), [
+    [0, 40, 25, false, 1, 1], [40, 20, 0, true, 1, 0], [60, 60, 0, false, 1, 0], [120, 50, 25, false, 1, 1], [170, 30, 0, true, 1, 0],
+    [200, 50, 25, false, 1, 1], [250, 40, 25, false, 1, 1], [290, 20, 0, true, 1, 0]
+  ]);
+  assert.deepEqual(session.lengths.map((length) => [length.startTs - T0, length.endTs - T0, length.timerSec, length.active, length.stroke]), [
+    [0, 40, 40, true, FIT_FREESTYLE], [40, 60, 20, false, undefined], [60, 120, 60, false, undefined], [120, 170, 50, true, FIT_DRILL],
+    [170, 200, 30, false, undefined], [200, 250, 50, true, FIT_DRILL], [250, 290, 40, true, FIT_FREESTYLE], [290, 310, 10, false, undefined]
+  ], "both drill lengths, the page read twice counted once");
+  assert.deepEqual([session.elapsedSec, session.endTs - T0], [310, 310]);
+  const parsed = assertSwimFitConsistent(corosSessionToFit(session), "watch workout");
+  assert.deepEqual([parsed.laps.length, parsed.lengths.filter((length) => length.active).length], [8, 4]);
+  // The timed drill step stays an interval with its stroke and no pace; what ran after the last step is a rest.
+  assert.deepEqual(parsed.laps.map((lap) => lap.swim.rest), [false, true, false, false, true, false, false, true]);
+  assert.deepEqual([parsed.laps[2].swim.stroke, parsed.laps[2].avgSpeed, parsed.laps[2].maxSpeed], [FIT_DRILL, undefined, undefined]);
+  const rows = localFitActivityDetail(parsed, localRecord(300)).lapGroups[0].laps;
+  assert.deepEqual(rows.map((row) => row.rest ? "rest" : row.stroke), ["freestyle", "rest", "drill", "drill", "rest", "drill", "freestyle", "rest"]);
+  assert.equal(rows[2].swimPace, undefined, "nothing swum, no pace");
+});
+
+test("a watch workout's plan names each interval; laps carry their training load and each rest its heart-rate drop", () => {
+  const plan = encodeWatchFile(encodeProgramLite(WORKOUT_PROGRAM), 41);
+  const { file } = syntheticWorkoutSwim({ startUnix: T0, plan });
+  const [session] = decodeCorosSportRecordFile(file).sessions;
+  assert.deepEqual(session.workout, {
+    name: "Easy Drills: Breathe & Glide", calendarEntry: 24, steps: [
+      { name: "Easy free", intensity: 2, duration: "distance", durationValue: 25, stroke: FIT_FREESTYLE },
+      { name: "Rest", intensity: 1, duration: "time", durationValue: 20 },
+      { name: "Warm-up", duration: "repeat", repeatFrom: 0, repeatTimes: 2 },
+      { name: "Bobs: 10 hum-outs", intensity: 0, duration: "time", durationValue: 60, stroke: FIT_DRILL },
+      { name: "Side kick, switch side each length", intensity: 3, duration: "distance", durationValue: 50, stroke: FIT_DRILL }
+    ]
+  }, "FIT's order: a repeat follows its steps");
+  assert.deepEqual(session.laps.map((lap) => [lap.workoutStep, lap.trainingLoad, lap.hrDrop]), [
+    [0, 1, undefined], [1, 0, 12], [0, 2, undefined], [1, 1, 7], [3, 1, undefined], [4, 2, undefined], [undefined, 0, undefined]
+  ], "what ran after the plan ended has no step");
+  assert.equal(session.laps.reduce((total, lap) => total + lap.trainingLoad, 0), 7);
+
+  const parsed = assertSwimFitConsistent(corosSessionToFit(session), "workout with a plan");
+  assert.deepEqual(parsed.workout, session.workout, "the workout and its steps survive the FIT file, long names whole");
+  assert.deepEqual(parsed.laps.map((lap) => [lap.workoutStep, lap.trainingLoad, lap.hrDrop]), session.laps.map((lap) => [lap.workoutStep, lap.trainingLoad, lap.hrDrop]));
+  const detail = localFitActivityDetail(parsed, localRecord(300));
+  assert.deepEqual(detail.workout, { name: "Easy Drills: Breathe & Glide", scheduled: true, plannedDistance: 100, plannedTime: 60 },
+    "2 × 25 m, then 50 m; the 60 s drill on the spot, rests left out");
+  assert.deepEqual(detail.laps.map((row) => [row.rest ?? false, row.step, row.trainingLoad, row.hrDrop]), [
+    [false, { name: "Easy free", group: "Warm-up", round: 1, rounds: 2, target: { kind: "distance", value: 25 }, stroke: "freestyle", kind: "warmup" }, 1, undefined],
+    [true, { name: "Rest", group: "Warm-up", round: 1, rounds: 2, target: { kind: "time", value: 20 }, kind: "recovery" }, 0, 12],
+    [false, { name: "Easy free", group: "Warm-up", round: 2, rounds: 2, target: { kind: "distance", value: 25 }, stroke: "freestyle", kind: "warmup" }, 2, undefined],
+    [true, { name: "Rest", group: "Warm-up", round: 2, rounds: 2, target: { kind: "time", value: 20 }, kind: "recovery" }, 1, 7],
+    [false, { name: "Bobs: 10 hum-outs", target: { kind: "time", value: 60 }, stroke: "drill", kind: "work" }, 1, undefined],
+    [false, { name: "Side kick, switch side each length", target: { kind: "distance", value: 50 }, stroke: "drill", kind: "cooldown" }, 2, undefined],
+    [true, undefined, 0, undefined]
+  ]);
+});
+
+test("a run done as a watch workout: each lap's step (byte 51), its pace or heart-rate range, a rest's heart-rate drop and every lap's load", () => {
+  const plan = encodeWatchFile(encodeProgramLite(RUN_WORKOUT_PROGRAM), 41);
+  const laps = [{ kind: 0x04, planStep: 0, load: 3 }, { kind: 0x10, planStep: 1, hrDrop: 18, load: 1 }];
+  const [session] = decodeCorosSportRecordFile(syntheticRun({ workout: { plan, laps } }).file).sessions;
+  assert.deepEqual(session.workout, {
+    name: "3 × 400 m", steps: [
+      { name: "Fast 400", intensity: 0, duration: "distance", durationValue: 400, target: { kind: "pace", low: 270, high: 280 } },
+      { name: "Walk", intensity: 1, duration: "time", durationValue: 60, target: { kind: "heartRate", low: 100, high: 130 } },
+      { name: "Repeats", duration: "repeat", repeatFrom: 0, repeatTimes: 3 }
+    ]
+  }, "a run step's target is a range, never a stroke");
+  assert.deepEqual(session.laps.map((lap) => [lap.workoutStep, lap.trainingLoad, lap.hrDrop]), [[0, 3, undefined], [1, 1, 18]]);
+
+  const parsed = parseFitActivity(corosSessionToFit(session));
+  assert.deepEqual(parsed.workout.steps.map((step) => step.target), [
+    { kind: "speed", low: 3.571, high: 3.704 }, { kind: "heartRate", low: 100, high: 130 }, undefined
+  ], "a pace range is a FIT speed range");
+  const detail = localFitActivityDetail(parsed, localRecord(100));
+  assert.deepEqual(detail.workout, { name: "3 × 400 m", scheduled: false, plannedDistance: 1200 }, "the walks are rests, so no time is planned");
+  assert.deepEqual(detail.laps.map((row) => [row.step, row.trainingLoad, row.hrDrop]), [
+    [{ name: "Fast 400", group: "Repeats", round: 1, rounds: 3, target: { kind: "distance", value: 400 }, range: { kind: "pace", low: 270, high: 280 }, kind: "work" }, 3, undefined],
+    [{ name: "Walk", group: "Repeats", round: 1, rounds: 3, target: { kind: "time", value: 60 }, range: { kind: "heartRate", low: 100, high: 130 }, kind: "recovery" }, 1, 18]
+  ]);
+
+  // Without a plan (a free run) the same bytes name no step: 0x10 is then a lap-button lap, not a rest.
+  const [free] = decodeCorosSportRecordFile(syntheticRun({ workout: { laps } }).file).sessions;
+  assert.deepEqual([free.workout, free.laps.map((lap) => [lap.workoutStep, lap.hrDrop, lap.trainingLoad])], [undefined, [[undefined, undefined, 3], [undefined, undefined, 1]]]);
+});
+
+test("a run workout's lap-button lap isn't a rest, and a rest without max heart rate has no drop", () => {
+  const plan = encodeWatchFile(encodeProgramLite(RUN_WORKOUT_PROGRAM), 41);
+  // A lap-button lap on the fast step shares the rest's kind byte (0x10); the plan says it's work.
+  const laps = [{ kind: 0x10, planStep: 0, hrDrop: 9, load: 3 }, { kind: 0x10, planStep: 1, hrDrop: 18, load: 1 }];
+  const [session] = decodeCorosSportRecordFile(syntheticRun({ workout: { plan, laps } }).file).sessions;
+  assert.deepEqual(session.laps.map((lap) => lap.hrDrop), [undefined, 18]);
+  const noMax = decodeCorosSportRecordFile(pages([
+    startRecord(T0, 0, 3, { poolCm: 2500 }),
+    swimPartRecord({ kind: 0x00, index: 1, endUnix: T0 + 40, endMs: 0, timerCs: 4000, distanceCm: 2500, avgPace: 160, avgHr: 120, maxHr: 130, stroke: 1, strokes: 15 }),
+    swimPartRecord({ kind: 0x10, index: 1, endUnix: T0 + 40, endMs: 0, timerCs: 4000, distanceCm: 2500, avgPace: 160, avgHr: 120, maxHr: 130, stroke: 1, strokes: 15, interval: 1 }),
+    swimPartRecord({ kind: 0x14, index: 2, endUnix: T0 + 70, endMs: 0, timerCs: 3000, avgHr: 110, maxHr: 0, interval: 1, hrDrop: 0 }),
+    pauseRecord(T0 + 70, 0),
+    swimSummaryRecord({ distanceCm: 2500, timerCs: 7000, activeLengths: 1, smallCalories: 5000, avgPace: 160, bestPace: 160, avgHr: 115, maxHr: 130, minHr: 100, temperature: 29, strokes: 15, bestSwolf: 55, avgSwolf: 55, maxStrokeRate: 20, avgStrokeRate: 18 })
+  ])).sessions[0];
+  assert.equal(noMax.laps[1].hrDrop, undefined, "no max heart rate, nothing to fall from");
+});
+
+test("a lap load reaches the FIT file even when nothing else needs developer fields", () => {
+  const [session] = decodeCorosSportRecordFile(syntheticRun({ workout: { laps: [{ load: 7 }, { load: 2 }] } }).file).sessions;
+  // As a walk can be: no training analysis, no effort pace.
+  const bare = { ...session, training: undefined, samples: session.samples.map(({ effortSpeed: _effort, ...sample }) => sample) };
+  const parsed = parseFitActivity(corosSessionToFit(bare));
+  assert.deepEqual(parsed.laps.map((lap) => lap.trainingLoad), [7, 2]);
+});
+
+test("a saved plan: names split by the watch come back whole, and damaged values are left out", () => {
+  const plan = (program) => decodeWorkoutPlan(encodeWatchFile(encodeProgramLite(program), 41), { swim: false });
+  const named = plan({ name: "保持呼吸节奏的轻松游泳训练课程第一周", sportType: 1, exercises: [
+    { id: "1", name: "Intervalltrainingsdurchgangsabschnittsbezeichnung", targetType: 2, targetValue: 60, exerciseType: 2 },
+    { id: "2", name: "Easy run with strides and drills, then a long cool down jog home", targetType: 2, targetValue: 60, exerciseType: 2 }
+  ] });
+  assert.equal(named.workout.name, "保持呼吸节奏的轻松游泳训练课程第一周", "a Chinese name joins without a space");
+  assert.deepEqual(named.workout.steps.map((step) => step.name), [
+    "Intervalltrainingsdurchgangsabschnittsbezeichnung", "Easy run with strides and drills, then a long cool down jog home"
+  ], "a word cut in two joins back; a name split at a space gets it back");
+
+  const damaged = plan({ name: "Damaged", sportType: 1, exercises: [
+    { name: "No id", isGroup: true, sets: 3 },
+    { id: "2", name: "Too fast", targetType: 5, targetValue: 100000, exerciseType: 2, intensityType: 3, intensityValue: 10, intensityValueExtend: 20, intensityMultiplier: 1000 },
+    { id: "3", name: "Forever", isGroup: true, sets: 5000 },
+    { id: "4", groupId: "3", name: "Lap", targetType: 2, targetValue: 10 ** 9, exerciseType: 2 }
+  ] });
+  assert.deepEqual(damaged.workout.steps, [
+    { name: "Too fast", intensity: 0, duration: "distance", durationValue: 1000 },
+    { name: "Lap", intensity: 0, duration: "open" },
+    { name: "Forever", duration: "repeat", repeatFrom: 1, repeatTimes: 999 }
+  ], "a group without an id takes no steps; an impossible pace, time or repeat count is left out or capped");
+
+  const long = plan({ name: "Long", sportType: 1, exercises: Array.from({ length: 300 }, (_, index) => ({ id: String(index + 1), name: `Step ${index + 1}`, targetType: 2, targetValue: 30, exerciseType: 2 })) });
+  assert.equal(long.planSteps.length, 255, "byte 0xff means the plan has ended, however long it is");
+  assert.equal(long.planSteps[0xff], undefined);
+});
+
+test("rounds: a step closed as two laps is one round, and an inner repeat starts over each outer round", () => {
+  // Outer ×2: warm-up, then (fast, easy) ×2, as FIT orders them.
+  const steps = [
+    { name: "Warm-up", intensity: 2, duration: "time", durationValue: 300 },
+    { name: "Fast", intensity: 0, duration: "distance", durationValue: 400 },
+    { name: "Easy", intensity: 1, duration: "time", durationValue: 60 },
+    { name: "Pairs", duration: "repeat", repeatFrom: 1, repeatTimes: 2 },
+    { name: "Sets", duration: "repeat", repeatFrom: 0, repeatTimes: 2 }
+  ];
+  const order = [0, 0, 1, 2, 1, 2, 0, 1, 2, 1, 2];
+  const activity = {
+    session: { startTs: T0, sport: 1 }, lengths: [], records: [], activeWindows: [], workout: { steps },
+    laps: order.map((workoutStep, index) => ({ index: index + 1, startTs: T0 + index * 60, elapsedSec: 60, timerSec: 60, distanceM: 100, workoutStep }))
+  };
+  const rows = localFitActivityDetail(activity, localRecord(100)).laps;
+  assert.deepEqual(rows.map((row) => `${row.step.name} ${row.step.round}/${row.step.rounds}`), [
+    "Warm-up 1/2", "Warm-up 1/2", "Fast 1/2", "Easy 1/2", "Fast 2/2", "Easy 2/2", "Warm-up 2/2", "Fast 1/2", "Easy 1/2", "Fast 2/2", "Easy 2/2"
+  ]);
+});
+
+test("a FIT file with a huge workout keeps the first 500 steps and stays quick", () => {
+  const steps = Array.from({ length: 3000 }, (_, index) => (index % 2 ? { name: `Repeat ${index}`, duration: "repeat", repeatFrom: 0, repeatTimes: 2 } : { name: `Step ${index}`, intensity: 0, duration: "distance", durationValue: 100 }));
+  const laps = Array.from({ length: 5000 }, (_, index) => ({ startTs: T0 + index * 10, endTs: T0 + index * 10 + 10, elapsedSec: 10, timerSec: 10, distanceM: 30, workoutStep: (index * 2) % 3000 }));
+  const fit = writeFitActivity({
+    sport: 1, subSport: 0, startTs: T0, endTs: T0 + 50_000, elapsedSec: 50_000, timerSec: 50_000, distanceM: 150_000, calories: 1,
+    activeWindows: [[T0, T0 + 50_000]], laps, samples: [], createdTs: T0 + 50_000, workout: { name: "Huge", steps }
+  });
+  const started = performance.now();
+  const parsed = parseFitActivity(fit);
+  const detail = localFitActivityDetail(parsed, localRecord(100));
+  assert.equal(parsed.workout.steps.length, 500);
+  assert.equal(detail.laps.length, 5000);
+  assert.ok(performance.now() - started < 2000, `took ${Math.round(performance.now() - started)} ms`);
+});
+
+test("a drill is never the fastest interval: its lengths are marked by hand", () => {
+  const plan = encodeWatchFile(encodeProgramLite(WORKOUT_PROGRAM), 41);
+  const [session] = decodeCorosSportRecordFile(syntheticWorkoutSwim({ startUnix: T0, plan }).file).sessions;
+  // Make the drill length absurdly quick, as a lap pressed early is.
+  const quick = { ...session, laps: session.laps.map((lap) => (lap.swim?.stroke === FIT_DRILL && lap.distanceM ? { ...lap, avgSpeed: 5 } : lap)) };
+  const detail = localFitActivityDetail(parseFitActivity(corosSessionToFit(quick)), localRecord(300));
+  const fastest = detail.lapGroups[0].fastestLaps.map((position) => detail.lapGroups[0].laps[position].stroke);
+  assert.ok(!fastest.includes("drill"), `marked ${fastest}`);
+});
+
+test("free swim: rests the watch's automatic rest detection made are marked", () => {
+  const part = (kind, index, end, timer, extra = {}) => swimPartRecord({
+    kind, index, endUnix: T0 + end, endMs: 0, timerCs: timer * 100, distanceCm: kind === 0x14 ? 0 : 2500, smallCalories: 5000, avgPace: kind === 0x14 ? 0 : 160,
+    avgHr: 120, maxHr: 130, stroke: kind === 0x14 ? 0 : 1, strokes: kind === 0x14 ? 0 : 15, ...extra
+  });
+  const [session] = decodeCorosSportRecordFile(pages([
+    startRecord(T0, 0, 3, { poolCm: 2500 }),
+    part(0x00, 1, 40, 40, { interval: 0 }), part(0x10, 1, 40, 40, { interval: 1, autoRest: true }),
+    part(0x14, 2, 70, 30, { interval: 1, autoRest: true, hrDrop: 18 }),
+    part(0x00, 2, 110, 40, { interval: 1 }), part(0x10, 3, 110, 40, { interval: 2 }),
+    pauseRecord(T0 + 110, 0),
+    swimSummaryRecord({ distanceCm: 5000, timerCs: 11000, activeLengths: 2, smallCalories: 10000, avgPace: 160, bestPace: 160, avgHr: 120, maxHr: 130, minHr: 100, temperature: 29, strokes: 30, bestSwolf: 55, avgSwolf: 55, maxStrokeRate: 20, avgStrokeRate: 18 })
+  ])).sessions;
+  assert.equal(session.workout, undefined);
+  const rows = localFitActivityDetail(assertSwimFitConsistent(corosSessionToFit(session), "auto rest"), localRecord(300)).laps;
+  assert.deepEqual(rows.map((row) => [row.rest ?? false, row.autoRest, row.hrDrop, row.step]), [
+    [false, undefined, undefined, undefined], [true, true, 18, undefined], [false, undefined, undefined, undefined]
+  ], "only a rest says it was automatic");
+});
+
+test("open water: auto laps and lap-button laps are all kept, in the order the watch closed them", () => {
+  const lap = (kind, index, end, distanceCm) => swimPartRecord({
+    kind, index, endUnix: T0 + end, endMs: 0, timerCs: 3000, distanceCm, smallCalories: 5000, avgPace: 100, bestPace: 90, avgHr: 120, maxHr: 125, stroke: 1, strokes: 20, strokeRate: 40, swolf: 50
+  });
+  const [session] = decodeCorosSportRecordFile(pages([
+    startRecord(T0, 0, 2, { poolCm: 50_000 }),
+    lap(0x10, 1, 30, 3000), lap(0x00, 1, 60, 3000), lap(0x10, 2, 90, 3000),
+    pauseRecord(T0 + 90, 0),
+    swimSummaryRecord({ distanceCm: 9000, timerCs: 9000, smallCalories: 15000, avgPace: 100, bestPace: 90, avgHr: 120, maxHr: 125, minHr: 115, temperature: 18, strokes: 60, bestSwolf: 50, avgSwolf: 50, maxStrokeRate: 40, avgStrokeRate: 40 })
+  ])).sessions;
+  assert.deepEqual(session.laps.map((lap) => [lap.startTs - T0, lap.elapsedSec, lap.distanceM]), [[0, 30, 30], [30, 30, 30], [60, 30, 30]]);
+});
+
 test("a swim stopped mid-interval: the lap's timer is the time the timer ran, wall time included", () => {
   // Two 30 s lengths with 20 s at the wall after each, stopped at 100 s with no interval closed.
   const [session] = decodeCorosSportRecordFile(pages(poolSwim(T0, { lengths: [[30, 30, 0], [80, 30, 0]], stop: 100 }))).sessions;
@@ -591,10 +832,12 @@ test("an imported pool swim without SWOLF gets it from its lengths; another spor
   assert.ok(asRun.laps.every((lap) => lap.swim === undefined));
 });
 
-test("a run's FIT file is unchanged by swim decoding", () => {
+test("a run's FIT file is unchanged by swim decoding, apart from each lap's training load", () => {
   const { file } = syntheticRun();
-  const fit = corosSessionToFit(decodeCorosSportRecordFile(file).sessions[0]);
-  // The run decoder's output as released; a change here changes every stored run.
+  const session = decodeCorosSportRecordFile(file).sessions[0];
+  assert.deepEqual(session.laps.map((lap) => lap.trainingLoad), [0, 0], "the lap extension's load");
+  // The run decoder's output as released, once the laps' load is set aside; a change here changes every stored run.
+  const fit = corosSessionToFit({ ...session, laps: session.laps.map(({ trainingLoad: _load, ...lap }) => lap) });
   assert.equal(createHash("sha256").update(fit).digest("hex"), RUN_FIT_SHA256);
 });
 

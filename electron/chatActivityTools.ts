@@ -19,6 +19,8 @@ import type {
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityLap,
+  TrainingHubActivityWorkout,
+  TrainingHubLapStep,
   TrainingHubSwimStroke,
   TrainingHubSwimSummary,
   UnitSystem
@@ -95,7 +97,10 @@ export function getChatActivityTools(): CorosMcpTool[] {
         "strokes, SWOLF and stroke rate, rests included. " +
         "A COROS stroke is one full cycle of the arm wearing the watch, not a single arm pull; stroke rate, SWOLF " +
         "and distance per stroke use that count, so in freestyle and backstroke they differ from figures that count " +
-        "both arms. " +
+        "both arms. A swim done as a watch workout also has the workout's name, " +
+        "each interval's step (name, repeat round, target), the training load each lap added, and how far heart rate fell over each rest. " +
+        "A run done as a watch workout likewise has the workout and each lap's step, target distance or time and pace or heart-rate range, " +
+        "and every run's laps carry the training load they added. " +
         "Use activity_id and sport_type from " +
         "list_recent_activities or the training snapshot. Prefer this local tool over " +
         "COROS MCP for lap and split analysis.",
@@ -520,6 +525,7 @@ export function formatActivityDetailForChat(
   const sections = ["Activity detail", summaryParts.join("\n")];
   if (detail.swim) sections.push("", formatSwimSummary(detail.swim, swimUnits, unitSystem));
   if (swim && hasSwimStrokeFigures(detail, includeSeries)) sections.push("", SWIM_STROKE_NOTE);
+  if (detail.workout) sections.push("", formatWorkout(detail.workout, swim ? swimUnits : unitSystem, swim));
   const swimRows = swim && detail.laps.some((lap) => lap.rest || lap.stroke !== undefined || lap.strokes !== undefined || lap.swolf !== undefined);
 
   // A gym lap list mixes work sets, rests and per-exercise roll-ups, so a lap
@@ -619,17 +625,79 @@ function formatSwimSummary(swim: TrainingHubSwimSummary, swimUnits: UnitSystem, 
 }
 
 /** A swim's intervals or lengths: stroke, strokes, SWOLF and stroke rate per row, with the rests between them. */
+/** The workout followed on the watch. */
+function formatWorkout(workout: TrainingHubActivityWorkout, units: UnitSystem, swim: boolean): string {
+  const planned = [
+    workout.plannedDistance !== undefined ? `${formatDistanceValue(workout.plannedDistance, units, { swim })} of distance steps` : undefined,
+    workout.plannedTime !== undefined ? `${formatDurationSeconds(workout.plannedTime)} of timed steps (rests not counted)` : undefined
+  ].filter(Boolean);
+  return [
+    `Workout${workout.scheduled ? " (scheduled from the training calendar)" : ""}: ${tableText(workout.name ?? "unnamed")}`,
+    planned.length ? `Planned: ${planned.join(" and ")}` : undefined
+  ].filter(Boolean).join("\n");
+}
+
+/** A name in a "|" table: no column breaks or line breaks of its own. */
+const tableText = (text: string) => text.replace(/[|\r\n]+/g, " ").trim();
+
+const STEP_KIND_NAMES: Record<NonNullable<TrainingHubLapStep["kind"]>, string> = { warmup: "warm-up", work: "work", recovery: "recovery", cooldown: "cool-down" };
+
+/** The range a workout step asked to stay in. */
+function formatStepRange(range: TrainingHubLapStep["range"], unitSystem: UnitSystem): string | undefined {
+  if (!range) return undefined;
+  const whole = (value: number) => Math.round(value);
+  switch (range.kind) {
+    case "pace": return `${formatPaceSeconds(range.low, unitSystem)}–${formatPaceSeconds(range.high, unitSystem)}`;
+    case "speed": return `${formatSpeedValue(range.low * 3.6, unitSystem)}–${formatSpeedValue(range.high * 3.6, unitSystem)}`;
+    case "heartRate": return `HR ${whole(range.low)}–${whole(range.high)} bpm`;
+    case "power": return `${whole(range.low)}–${whole(range.high)} W`;
+    case "cadence": return `cadence ${whole(range.low)}–${whole(range.high)}/min`;
+  }
+}
+
+/** A lap's workout step: name, kind of step, repeat round, target. */
+function formatLapStep(step: TrainingHubLapStep | undefined, units: UnitSystem, swim = true): string {
+  if (!step) return "—";
+  const target = !step.target ? undefined
+    : step.target.kind === "distance" ? formatDistanceValue(step.target.value, units, { swim })
+      : step.target.kind === "time" ? formatDurationSeconds(step.target.value)
+        : `HR below ${Math.round(step.target.value)} bpm`;
+  const range = formatStepRange(step.range, units);
+  const round = step.round !== undefined && step.rounds !== undefined ? `${step.round}/${step.rounds}` : undefined;
+  return [
+    tableText(step.name ?? "step"),
+    // A swim's rests and strokes already say what kind of step it was.
+    !swim && step.kind ? ` [${STEP_KIND_NAMES[step.kind]}]` : "",
+    step.group ? ` (${tableText(step.group)}${round ? ` ${round}` : ""})` : round ? ` (round ${round})` : "",
+    target ? `, target ${target}` : "",
+    range ? ` at ${range}` : ""
+  ].join("");
+}
+
 function formatSwimRows(title: "Intervals" | "Laps" | "Lengths", rows: TrainingHubActivityLap[], swimUnits: UnitSystem, max: number): string {
   const capped = rows.slice(0, max);
-  const header = `# | Stroke | Lengths | Distance | Duration | Pace | Strokes | SWOLF | Stroke rate | Avg HR | Max HR`;
+  // Workout steps, rest heart-rate drops and per-lap load only when the swim has them.
+  const steps = rows.some((row) => row.step !== undefined);
+  const drops = rows.some((row) => row.hrDrop !== undefined);
+  const loads = rows.some((row) => row.trainingLoad !== undefined);
+  const header = ["#", ...(steps ? ["Step"] : []), "Stroke", "Lengths", "Distance", "Duration", "Pace", "Strokes", "SWOLF", "Stroke rate", "Avg HR", "Max HR",
+    ...(drops ? ["HR drop"] : []), ...(loads ? ["Load"] : [])].join(" | ");
+  const extra = (row: TrainingHubActivityLap) => [
+    ...(drops ? [row.hrDrop !== undefined ? `${row.hrDrop} bpm` : ""] : []),
+    ...(loads ? [row.trainingLoad ?? "—"] : [])
+  ];
   let number = 0;
   const lines = capped.map((row) => {
     if (row.rest) {
-      return ["rest", "", "", "", row.duration ? formatDurationSeconds(row.duration) : "—", "", "", "", "", row.avgHr ?? "—", row.maxHr ?? "—"].join(" | ");
+      return [
+        row.autoRest ? "rest (auto-detected)" : "rest", ...(steps ? [row.step ? formatLapStep(row.step, swimUnits) : ""] : []), "", "", "",
+        row.duration ? formatDurationSeconds(row.duration) : "—", "", "", "", "", row.avgHr ?? "—", row.maxHr ?? "—", ...extra(row)
+      ].join(" | ");
     }
     number += 1;
     return [
       String(number),
+      ...(steps ? [formatLapStep(row.step, swimUnits)] : []),
       row.stroke ? SWIM_STROKE_NAMES[row.stroke] : "—",
       row.lengths ?? "—",
       row.distance ? formatDistanceValue(row.distance, swimUnits, { swim: true }) : "—",
@@ -639,7 +707,8 @@ function formatSwimRows(title: "Intervals" | "Laps" | "Lengths", rows: TrainingH
       row.swolf ?? "—",
       row.strokeRate !== undefined ? `${row.strokeRate}/min` : "—",
       row.avgHr ?? "—",
-      row.maxHr ?? "—"
+      row.maxHr ?? "—",
+      ...extra(row)
     ].join(" | ");
   });
   const result = [`${title} (rests between them as "rest" rows):`, header, ...lines];
@@ -677,14 +746,21 @@ function formatLapTable(
   const optionalColumns = LAP_SENSOR_COLUMNS.filter((column) =>
     capped.some((lap) => lap[column.key] !== undefined)
   );
+  // A watch workout's steps, rest heart-rate drops and each lap's load, when the activity has them.
+  const steps = capped.some((lap) => lap.step !== undefined);
+  const drops = capped.some((lap) => lap.hrDrop !== undefined);
+  const loads = capped.some((lap) => lap.trainingLoad !== undefined);
   const header = [
-    `Lap | Distance | Duration | Avg HR | Max HR | ${cycling ? "Speed" : "Pace"}`,
+    `Lap${steps ? " | Step" : ""} | Distance | Duration | Avg HR | Max HR | ${cycling ? "Speed" : "Pace"}`,
     // A swim's cadence columns are its stroke rate.
-    ...optionalColumns.map((column) => swim && column.unit === "cadence" ? column.label.replace("Cadence", "Stroke Rate") : column.label)
+    ...optionalColumns.map((column) => swim && column.unit === "cadence" ? column.label.replace("Cadence", "Stroke Rate") : column.label),
+    ...(drops ? ["HR drop"] : []),
+    ...(loads ? ["Load"] : [])
   ].join(" | ");
   const rows = capped.map((lap) => {
     const cols = [
       String(lap.index),
+      ...(steps ? [formatLapStep(lap.step, unitSystem, swim)] : []),
       lap.distance ? formatDistanceValue(lap.distance, unitSystem, { swim }) : "—",
       lap.duration ? formatDurationSeconds(lap.duration) : "—",
       lap.avgHr ? `${lap.avgHr}` : "—",
@@ -698,7 +774,9 @@ function formatLapTable(
           return "—";
         }
         return column.unit === "W" ? `${value} W` : formatCadence(value, cycling, swim);
-      })
+      }),
+      ...(drops ? [lap.hrDrop !== undefined ? `${lap.hrDrop} bpm` : ""] : []),
+      ...(loads ? [lap.trainingLoad ?? "—"] : [])
     ];
     return cols.join(" | ");
   });

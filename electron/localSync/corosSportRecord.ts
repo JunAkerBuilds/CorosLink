@@ -1,4 +1,5 @@
 import { COROS_MOBILE_EPOCH } from "./activityProtocol";
+import { decodeWorkoutPlan, SWIM_STROKES, type CorosWorkout } from "./corosWorkoutPlan";
 
 /**
  * Decoder for the watch's sport-record file (SyncData file 14) as a PACE 4
@@ -70,6 +71,8 @@ const INFO_LAP = 4;
 const INFO_SUMMARY = 5;
 const INFO_LAP_EXTENSION = 6;
 const INFO_SCIENCE = 0x0f;
+/** The workout the activity followed, split over records (corosWorkoutPlan.ts). */
+const INFO_WORKOUT = 0x0e;
 const SCIENCE_TRAINING = 2;
 
 /** Series channel types (record byte 1) and the group within a channel (u16 header >> 11). */
@@ -97,21 +100,19 @@ const DEVICE_OPEN_WATER = 2;
 const DEVICE_POOL_SWIM = 3;
 /**
  * What a swim lap record is (sport info 4, byte 30): a length, a rest, or an
- * interval (0x10, or 0x44 when the whole swim is one interval). Other values
- * have not been seen and are ignored.
+ * interval. A free swim writes intervals 0x10 and rests 0x14. A watch workout
+ * sets bit 0x40, with the plan's step type in bits 2-3: 0x40 warm-up, 0x44 main
+ * (also what runs after the plan ends), 0x48 rest, 0x4c cool-down. These are
+ * all the values the PACE 4 firmware writes; others are ignored.
  */
 const SWIM_LENGTH = 0x00;
-const SWIM_REST = 0x14;
-const SWIM_INTERVALS: readonly number[] = [0x10, 0x44];
+const SWIM_RESTS: readonly number[] = [0x14, 0x48];
+const SWIM_INTERVALS: readonly number[] = [0x10, 0x40, 0x44, 0x4c];
+const SWIM_WORKOUT_STEP = 0x40;
 /** Time the timer ran between two lengths, shorter than this, is turning at the wall, not an idle stretch. */
 const MIN_IDLE_SECONDS = 5;
 /** The watch writes a pool swim's closing interval when the swim is saved, 5–22 s after the stop on real swims. */
 const MAX_SAVE_SECONDS = 60;
-/**
- * The watch's stroke codes → FIT swim_stroke, as COROS's export maps them
- * (checked by probing each code). 0 and 5 have no FIT stroke.
- */
-const SWIM_STROKES: Readonly<Record<number, number>> = { 1: 0, 2: 2, 3: 1, 4: 3, 6: 4, 7: 6, 0xff: 5 };
 /** FIT swim_stroke for a mix of strokes. */
 const FIT_STROKE_MIXED = 5;
 /** A pool length that is a whole number of yards (and not of metres) is a yard pool. */
@@ -128,6 +129,14 @@ const DEVICE_SPORT_TYPES: Readonly<Record<number, number>> = {
 
 /** Run sports, where the step-cadence channel is steps per minute (reported per leg, like FIT). */
 const RUN_SPORT_TYPES: ReadonlySet<number> = new Set([100, 101, 102, 103]);
+/**
+ * Sports whose laps the watch writes with the run lap writer (firmware 3.2008.0 FUN_60448b98): a workout step at
+ * byte 51, its type at byte 30, a rest's heart-rate drop at byte 56, and the lap's training load in the lap
+ * extension record (u16 @16). Checked on real runs and a walk; other sports' writers lay laps out differently.
+ */
+const RUN_LAP_SPORT_TYPES: ReadonlySet<number> = new Set([...RUN_SPORT_TYPES, 900]);
+/** A workout step's FIT intensity for a rest: the plan says which steps are rests (a lap's kind byte can't, a lap-button lap shares 0x10). */
+const STEP_REST = 1;
 
 // ----- Compressed series -----
 
@@ -297,6 +306,10 @@ interface LapDraft {
   minHr: number;
   temperature: number;
   stepLengthCm: number;
+  /** Byte 51, in a workout: the step's index among the plan's steps that aren't repeat groups; 0xff after the plan ends. */
+  planStep?: number;
+  /** Byte 56, rest steps: heart-rate drop, bpm. */
+  hrDrop?: number;
 }
 
 /**
@@ -307,8 +320,10 @@ interface LapDraft {
 interface SwimPartDraft {
   kind: number;
   index: number;
-  /** Byte 39: on a length, the number of intervals closed before it; the k-th interval (from 0) owns the lengths showing k. */
+  /** Byte 39, in a free swim: on a length, the number of intervals closed before it; the k-th interval (from 0) owns the lengths showing k. */
   interval: number;
+  /** Byte 38, in a watch workout: the step's interval number (from 1), shared by the step's lengths, its closing record and the rest after it. 0 in a free swim. */
+  step: number;
   endTs: number;
   /** Exact end, Unix seconds with milliseconds. */
   endExact: number;
@@ -327,10 +342,20 @@ interface SwimPartDraft {
   strokes: number;
   strokeRate: number;
   swolf: number;
+  /** Byte 42, in a workout: the step's index among the plan's steps that aren't repeat groups; 0xff after the plan ends. */
+  planStep?: number;
+  /** u16 @45: training load the lap added. */
+  load?: number;
+  /** Byte 47 bit 0: closed by the watch's automatic rest detection. */
+  autoRest: boolean;
+  /** Byte 52, rests: heart-rate drop, bpm. */
+  hrDrop?: number;
 }
 
 /** Lap extension (sport info 6): power and running-dynamics averages. */
 interface LapExtension {
+  /** u16 @16: training load the lap added. */
+  load?: number;
   avgPower: number;
   maxPower: number;
   verticalRatioX10: number;
@@ -400,6 +425,8 @@ export interface CorosSwimLap {
   firstLength?: number;
   lengths?: number;
   activeLengths?: number;
+  /** The watch's automatic rest detection closed the lap. */
+  autoRest?: boolean;
 }
 
 /** One pool length, or an idle stretch (a rest, or interval time outside any length). */
@@ -456,6 +483,12 @@ export interface CorosLap {
   descentM?: number;
   dynamics: CorosDynamics;
   swim?: CorosSwimLap;
+  /** Training load the lap added (swims, runs and walks; the laps add up to the activity's). */
+  trainingLoad?: number;
+  /** The workout step the lap was, an index into `CorosSession.workout.steps`. */
+  workoutStep?: number;
+  /** Rests: how far heart rate fell, bpm (the rest's highest minus its last). */
+  hrDrop?: number;
 }
 
 export interface CorosSample {
@@ -511,6 +544,8 @@ export interface CorosSession {
   dynamics: CorosDynamics;
   training?: CorosTraining;
   swimTotals?: CorosSwimSummary;
+  /** The workout followed on the watch (swims, runs and walks). */
+  workout?: CorosWorkout;
   /** Timer-running periods, inclusive Unix seconds. */
   activeWindows: Array<[number, number]>;
   laps: CorosLap[];
@@ -537,7 +572,7 @@ interface SessionDraft {
   resumes: number[];
   laps: LapDraft[];
   swimParts: SwimPartDraft[];
-  /** Kind and number of each swim part read: a page read twice repeats them. */
+  /** Kind, number and end time of each swim part read: a page read twice repeats them. */
   swimPartKeys: Set<string>;
   lapIndexes: Set<number>;
   /** Start record u16 @6: the pool length in cm (pool swims). */
@@ -546,6 +581,8 @@ interface SessionDraft {
   training?: CorosTraining;
   summary?: Buffer;
   series: CorosSeriesSegment[];
+  /** Sport info 14 parts by number, part byte removed. */
+  workoutParts: Map<number, Buffer>;
 }
 
 const unixTs = (deviceSeconds: number) => deviceSeconds + COROS_MOBILE_EPOCH;
@@ -582,7 +619,9 @@ function readLap(info: Buffer): LapDraft | undefined {
     stepCadence: info[35]!,
     minHr: info[28]!,
     temperature: info.readInt8(29),
-    stepLengthCm: info[37]!
+    stepLengthCm: info[37]!,
+    planStep: info.length > 51 ? info[51] : undefined,
+    hrDrop: info.length > 56 ? info[56] : undefined
   };
 }
 
@@ -594,6 +633,7 @@ function readSwimPart(info: Buffer): SwimPartDraft | undefined {
     kind: info[30]!,
     index: info.readUInt16LE(4),
     interval: info[39]!,
+    step: info[38]!,
     endTs,
     endExact: endTs + Math.min(info.readUInt16LE(40), 999) / 1000,
     timerCs: info.readUInt32LE(6),
@@ -609,13 +649,18 @@ function readSwimPart(info: Buffer): SwimPartDraft | undefined {
     stroke: info[31]!,
     strokes: info.readUInt16LE(32),
     strokeRate: info.readUInt16LE(34),
-    swolf: info.readUInt16LE(36)
+    swolf: info.readUInt16LE(36),
+    planStep: info.length > 42 ? info[42] : undefined,
+    load: info.length > 46 ? info.readUInt16LE(45) : undefined,
+    autoRest: info.length > 47 && (info[47]! & 1) === 1,
+    hrDrop: info.length > 52 ? info[52] : undefined
   };
 }
 
 function readLapExtension(info: Buffer): LapExtension | undefined {
   if (info.length < 14) return undefined;
   return {
+    load: info.length > 17 ? info.readUInt16LE(16) : undefined,
     avgPower: info.readUInt16LE(2),
     maxPower: info.readUInt16LE(4),
     verticalRatioX10: info.readUInt16LE(8),
@@ -716,11 +761,18 @@ function toSigned32(value: number): number {
 class ImplausibleSessionError extends Error {}
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
-const byIndex = (a: SwimPartDraft, b: SwimPartDraft) => a.index - b.index;
+/** In the watch's order. Drill lengths, which the watch doesn't count, repeat the last length's number; their end times order them. */
+const byIndex = (a: SwimPartDraft, b: SwimPartDraft) => a.index - b.index || a.endExact - b.endExact;
 const centiseconds = (seconds: number) => Math.round(seconds * 100) / 100;
 
-function swimLap(part: SwimPartDraft, index: number): CorosLap {
-  const rest = part.kind === SWIM_REST;
+/** `planSteps`: for each step the watch counts (lap byte 42), its index in the workout's steps. */
+function swimLap(part: SwimPartDraft, index: number, planSteps?: readonly number[]): CorosLap {
+  const restKind = SWIM_RESTS.includes(part.kind);
+  // An interval with nothing swum and no stroke (what ran after a workout's plan ended) is a rest too; a timed drill on the spot has its stroke.
+  const rest = restKind || (part.distanceCm === 0 && SWIM_STROKES[part.stroke] === undefined);
+  const workoutStep = planSteps && part.planStep !== undefined ? planSteps[part.planStep] : undefined;
+  // Nothing swum (a rest, or a timed step on the spot) has no pace; the watch copies the lap before's best into it.
+  const swum = !rest && part.distanceCm > 0;
   const timerSec = part.timerCs / 100;
   const elapsedSec = (part.timerCs + part.pausedCs) / 100;
   return {
@@ -732,8 +784,8 @@ function swimLap(part: SwimPartDraft, index: number): CorosLap {
     distanceM: part.distanceCm / 100,
     calories: Math.round(part.calories / 1000),
     // The watch's pace leaves out the time spent resting inside an interval, as COROS reports it.
-    avgSpeed: rest ? undefined : part.avgPace > 0 ? 100 / part.avgPace : timerSec > 0 ? part.distanceCm / 100 / timerSec : undefined,
-    maxSpeed: !rest && part.bestPace > 0 ? 100 / part.bestPace : undefined,
+    avgSpeed: !swum ? undefined : part.avgPace > 0 ? 100 / part.avgPace : timerSec > 0 ? part.distanceCm / 100 / timerSec : undefined,
+    maxSpeed: swum && part.bestPace > 0 ? 100 / part.bestPace : undefined,
     avgHr: optional(part.avgHr),
     maxHr: optional(part.maxHr),
     minHr: optional(part.minHr),
@@ -741,7 +793,14 @@ function swimLap(part: SwimPartDraft, index: number): CorosLap {
     // A swim's lap cadence is its stroke rate.
     avgCadence: rest ? undefined : optional(part.strokeRate),
     dynamics: {},
-    swim: rest ? { rest } : { rest, stroke: SWIM_STROKES[part.stroke], strokes: part.strokes, swolf: optional(part.swolf) }
+    swim: {
+      ...(rest ? { rest } : { rest, stroke: SWIM_STROKES[part.stroke], strokes: part.strokes, swolf: optional(part.swolf) }),
+      ...(part.autoRest ? { autoRest: true } : {})
+    },
+    ...(part.load !== undefined ? { trainingLoad: part.load } : {}),
+    ...(workoutStep !== undefined ? { workoutStep } : {}),
+    // Only the watch's rests have a drop, and one without heart rate has nothing to fall.
+    ...(restKind && part.hrDrop !== undefined && part.avgHr > 0 && part.maxHr > 0 ? { hrDrop: part.hrDrop } : {})
   };
 }
 
@@ -867,53 +926,59 @@ function lapFromLengths(
 
 /**
  * A swim's laps and, in a pool, its lengths. Pool laps are the watch's
- * intervals and rests in the order it numbered them; the k-th interval owns
- * the lengths whose interval count (byte 39) is k, and a rest is an idle
- * length. Open-water laps are the lap records themselves.
+ * intervals and rests in the order it numbered them, and a rest is an idle
+ * length. In a free swim the k-th interval owns the lengths whose interval
+ * count (byte 39) is k; in a watch workout each step owns the lengths with its
+ * interval number (byte 38). Open-water laps are the lap records themselves.
  */
 function swimLapsAndLengths(
-  draft: SessionDraft, windows: Array<[number, number]>, sessionStart: number, stop: number
+  draft: SessionDraft, windows: Array<[number, number]>, sessionStart: number, stop: number, planSteps?: readonly number[]
 ): { laps: CorosLap[]; lengths?: CorosLength[]; closed?: boolean } {
   const parts = draft.swimParts;
   const clock = timerClock(windows);
   if (draft.deviceSportType !== DEVICE_POOL_SWIM) {
-    // Laps, unless the watch wrote only interval records.
-    const kinds = parts.some((part) => part.kind === SWIM_LENGTH) ? [SWIM_LENGTH, SWIM_REST] : [...SWIM_INTERVALS, SWIM_REST];
+    // Every lap in the order the watch closed them, as COROS lists them: in open water 0x00 is an auto lap (or what is
+    // left at the save) and 0x10 a lap-button lap, one after the other.
+    const kinds = [SWIM_LENGTH, ...SWIM_INTERVALS, ...SWIM_RESTS];
     const lapRecords = parts.filter((part) => kinds.includes(part.kind)).sort((a, b) => a.endExact - b.endExact);
     return {
       laps: lapRecords.map((part, index) => {
         // The watch closes the last lap when the swim is saved; the swim itself ended at the stop.
-        const lap = swimLap(part, index + 1);
+        const lap = swimLap(part, index + 1, planSteps);
         if (part.endExact <= stop) return lap;
         const lapStart = part.endExact - lap.elapsedSec;
         return { ...lap, endTs: Math.floor(stop), elapsedSec: centiseconds(Math.max(stop - lapStart, lap.timerSec)) };
       })
     };
   }
+  const closers = parts.filter((part) => SWIM_RESTS.includes(part.kind) || SWIM_INTERVALS.includes(part.kind)).sort(byIndex);
+  // A workout's lengths carry their step's interval number (byte 38); a free swim's, how many intervals closed before them (byte 39).
+  const workout = closers.some((closer) => closer.kind & SWIM_WORKOUT_STEP);
   const byInterval = new Map<number, SwimPartDraft[]>();
   for (const part of parts) {
     if (part.kind !== SWIM_LENGTH) continue;
-    const own = byInterval.get(part.interval) ?? [];
+    const key = workout ? part.step : part.interval;
+    const own = byInterval.get(key) ?? [];
     own.push(part);
-    byInterval.set(part.interval, own);
+    byInterval.set(key, own);
   }
-  const closers = parts.filter((part) => part.kind === SWIM_REST || SWIM_INTERVALS.includes(part.kind)).sort(byIndex);
   const laps: CorosLap[] = [];
   const lengths: CorosLength[] = [];
   let interval = 0;
   let lapEnd = sessionStart;
   for (const closer of closers) {
-    const lap = swimLap(closer, laps.length + 1);
+    const lap = swimLap(closer, laps.length + 1, planSteps);
     const lapStart = closer.endExact - lap.elapsedSec;
     const firstLength = lengths.length;
-    if (closer.kind === SWIM_REST) {
+    if (SWIM_RESTS.includes(closer.kind)) {
       lengths.push({
         startTs: lap.startTs, endTs: closer.endTs, elapsedSec: lap.elapsedSec, timerSec: lap.timerSec, calories: lap.calories, active: false,
         avgHr: lap.avgHr, maxHr: lap.maxHr
       });
     } else {
-      lengths.push(...intervalLengths(byInterval.get(interval) ?? [], lapStart, closer.endExact, clock));
-      byInterval.delete(interval);
+      const key = workout ? closer.step : interval;
+      lengths.push(...intervalLengths(byInterval.get(key) ?? [], lapStart, closer.endExact, clock));
+      byInterval.delete(key);
       interval += 1;
     }
     const own = lengths.slice(firstLength);
@@ -984,7 +1049,12 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
   );
   const sessionStartExact = draft.startTs + draft.startMs / 1000;
   const sessionEndExact = stop.ts + stop.ms / 1000;
-  const swim = isSwim ? swimLapsAndLengths(draft, activeWindows, sessionStartExact, sessionEndExact) : undefined;
+  // The workout followed: its parts in order, as the watch split it over records. Only sports whose laps say which step they were.
+  const runLaps = RUN_LAP_SPORT_TYPES.has(sportType);
+  const plan = (isSwim || runLaps) && draft.workoutParts.size
+    ? decodeWorkoutPlan(Buffer.concat([...draft.workoutParts.entries()].sort(([a], [b]) => a - b).map(([, part]) => part)), { swim: isSwim })
+    : undefined;
+  const swim = isSwim ? swimLapsAndLengths(draft, activeWindows, sessionStartExact, sessionEndExact, plan?.planSteps) : undefined;
   // A pool records no speed: during a length the record takes the length's average speed, as COROS exports it.
   const lengthSpeeds = (swim?.lengths ?? []).filter((length) => length.active && length.avgSpeed !== undefined);
   let lengthCursor = 0;
@@ -1058,6 +1128,9 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
     const last = position === sortedLaps.length - 1;
     const lapTimer = lap.timerCs / 100;
     const extension = draft.lapExtensions.get(lap.index);
+    const workoutStep = plan && runLaps && lap.planStep !== undefined ? plan.planSteps[lap.planStep] : undefined;
+    // In a workout, a rest step: how far heart rate fell over it (a rest without heart rate has nothing to fall).
+    const restStep = workoutStep !== undefined && plan?.workout.steps[workoutStep]?.intensity === STEP_REST;
     laps.push({
       index: lap.index,
       startTs: lapStart,
@@ -1082,7 +1155,10 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
         verticalOscillationMm: optional(Math.floor((extension?.verticalOscillation16 ?? 0) / 16)),
         verticalRatio: optional(extension?.verticalRatioX10 ?? 0) === undefined ? undefined : extension!.verticalRatioX10 / 10,
         stepLengthMm: optional(lap.stepLengthCm * 10)
-      }
+      },
+      ...(runLaps && extension?.load !== undefined ? { trainingLoad: extension.load } : {}),
+      ...(workoutStep !== undefined ? { workoutStep } : {}),
+      ...(restStep && lap.hrDrop !== undefined && lap.avgHr > 0 && lap.maxHr > 0 ? { hrDrop: lap.hrDrop } : {})
     });
     lapStart = lap.endTs;
   });
@@ -1105,6 +1181,7 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
     minHr: optional(summary[24]!),
     avgTemperature: summary.readInt8(25) !== 0 ? summary.readInt8(25) : undefined,
     ...(draft.training ? { training: draft.training } : {}),
+    ...(plan && !isSwim ? { workout: plan.workout } : {}),
     activeWindows,
     laps,
     samples
@@ -1135,7 +1212,8 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
         avgSwolf: optional(summary.readUInt16LE(32)),
         bestSwolf: optional(summary.readUInt16LE(30))
       },
-      ...(swim.lengths ? { lengths: swim.lengths } : {})
+      ...(swim.lengths ? { lengths: swim.lengths } : {}),
+      ...(plan ? { workout: plan.workout } : {})
     };
   }
   return {
@@ -1180,7 +1258,8 @@ export function decodeCorosSportRecordFile(file: Buffer, visit?: (session: Coros
         if (current?.startTs === ts) continue;
         current = {
           startTs: ts, startMs: info.readUInt16LE(14), deviceSportType: info[13]!, poolLengthCm: info.readUInt16LE(6),
-          pauses: [], resumes: [], laps: [], swimParts: [], swimPartKeys: new Set(), lapIndexes: new Set(), lapExtensions: new Map(), series: []
+          pauses: [], resumes: [], laps: [], swimParts: [], swimPartKeys: new Set(), lapIndexes: new Set(), lapExtensions: new Map(), series: [],
+          workoutParts: new Map()
         };
         drafts.push(current);
       } else if (!current) {
@@ -1190,9 +1269,10 @@ export function decodeCorosSportRecordFile(file: Buffer, visit?: (session: Coros
       } else if (type === INFO_RESUME) {
         current.resumes.push(ts);
       } else if (type === INFO_LAP && (current.deviceSportType === DEVICE_POOL_SWIM || current.deviceSportType === DEVICE_OPEN_WATER)) {
-        // Lengths have their own numbers; intervals and rests share one count.
+        // Lengths have their own numbers; intervals and rests share one count. Drill lengths repeat the last length's
+        // number, so a record read twice is the same kind, number and end time.
         const part = readSwimPart(info);
-        const key = part && `${part.kind}:${part.index}`;
+        const key = part && `${part.kind}:${part.index}:${part.endExact}`;
         if (part && !current.swimPartKeys.has(key!)) {
           current.swimPartKeys.add(key!);
           current.swimParts.push(part);
@@ -1206,6 +1286,9 @@ export function decodeCorosSportRecordFile(file: Buffer, visit?: (session: Coros
       } else if (type === INFO_LAP_EXTENSION) {
         const extension = readLapExtension(info);
         if (extension) current.lapExtensions.set(info.readUInt16LE(0), extension);
+      } else if (type === INFO_WORKOUT && info.length > 1) {
+        // A page read twice repeats a part; the first copy stands.
+        if (!current.workoutParts.has(info[0]!)) current.workoutParts.set(info[0]!, Buffer.from(info.subarray(1)));
       } else if (type === INFO_SCIENCE) {
         current.training = readTraining(info) ?? current.training;
       } else if (type === INFO_SUMMARY) {

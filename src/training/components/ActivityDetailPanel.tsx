@@ -12,6 +12,7 @@ import { ActivityHeartRateRecovery } from "./ActivityHeartRateRecovery";
 import { ActivityRunningDynamics, ActivityTrainingEffect } from "./ActivityTrainingEffect";
 import { ActivitySwimSummary, formatSwimPace } from "./ActivitySwimSummary";
 import { SwimLapTable } from "./SwimLapTable";
+import { LapStepCell } from "./LapStepCell";
 import type {
   TrainingHubActivity,
   TrainingHubActivityDetail,
@@ -392,7 +393,19 @@ export function ActivityDetailPanel({
 
   // --- Laps: kind, pace bar and the stretch each one covers -----------------
   const streamLapsMatch = Boolean(streams && lapGroup?.kind === "laps" && streams.laps.length === lapRows.length);
-  const lapKinds = streams?.structured && streamLapsMatch ? streams.laps.map((lap) => lap.kind) : null;
+  // A watch workout's laps name their steps; as with COROS's own laps, only mixed kinds of step make a structured session.
+  const stepKinds = lapRows.map((lap) => lap.step?.kind);
+  const structuredSteps = stepKinds.includes("work") && new Set(stepKinds.filter(Boolean)).size > 1;
+  const lapKinds = streams?.structured && streamLapsMatch
+    ? streams.laps.map((lap) => lap.kind)
+    : structuredSteps ? stepKinds.map((kind) => kind ?? "lap") : null;
+  const lapSteps = showcase && lapRows.some((lap) => lap.step !== undefined);
+  const lapLoads = showcase && lapRows.some((lap) => lap.trainingLoad !== undefined);
+  // A pool's planned distance reads in the pool's unit, like its laps.
+  const plannedParts = [
+    detail.workout?.plannedDistance !== undefined ? formatDistanceMeters(detail.workout.plannedDistance, swim ? swimUnits : unitSystem, swim) : undefined,
+    detail.workout?.plannedTime !== undefined ? formatDurationSeconds(detail.workout.plannedTime) : undefined
+  ].filter((part): part is string => Boolean(part));
   const allDistances = lapRows.every((lap) => lap.distance !== undefined && lap.distance > 0);
   const allDurations = lapRows.every((lap) => lap.duration !== undefined && lap.duration > 0);
   const lapSpans: LapSpan[] = [];
@@ -634,20 +647,31 @@ export function ActivityDetailPanel({
                   </div>
                 ) : null}
               </div>
+              {/* The workout followed on the watch, and what its distance and timed steps add up to. */}
+              {detail.workout?.name ? (
+                <p className="activity-workout-line">
+                  <span>{detail.workout.scheduled ? t("Scheduled workout") : t("Workout")}</span>
+                  <strong>{detail.workout.name}</strong>
+                  {plannedParts.length ? <small>{t("Planned")} {plannedParts.join(" + ")}</small> : null}
+                </p>
+              ) : null}
               <div className="table-shell">
                 {swimLaps ? (
                   <SwimLapTable rows={lapRows} compact={!showcase} units={swimUnits} fastest={fastestLaps} />
                 ) : (
-                <table className={showcase ? "training-laps-table" : undefined}>
+                <div className="training-laps-frame">
+                <table className={[showcase ? "training-laps-table" : "", lapSteps ? "has-steps" : ""].filter(Boolean).join(" ") || undefined}>
                   <thead>
                     <tr>
                       <th>#</th>
-                      {lapKinds ? <th>{t("Type")}</th> : null}
+                      {/* With a step column, the kind of step sits in it. */}
+                      {lapKinds && !lapSteps ? <th>{t("Type")}</th> : null}
+                      {lapSteps ? <th>{t("Step")}</th> : null}
                       {showcase ? (
                         <>
                           <th>{t("Distance")}</th>
                           <th>{t("Duration")}</th>
-                          {!swim ? <th>{paceLabel}</th> : null}
+                          {!swim ? <th>{t(paceLabel)}</th> : null}
                         </>
                       ) : (
                         <>
@@ -657,7 +681,9 @@ export function ActivityDetailPanel({
                       )}
                       <th>{t("Avg HR")}</th>
                       <th>{t("Max HR")}</th>
-                      <th>{showcase ? t("Elevation") : t("Elev.")}</th>
+                      <th className="training-lap-elevation">{showcase ? t("Elevation") : t("Elev.")}</th>
+                      {/* The load each lap added gives way first on a narrow table. */}
+                      {lapLoads ? <th className="is-optional-narrow">{t("Load", undefined, "lapLoad")}</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -684,8 +710,16 @@ export function ActivityDetailPanel({
                               </button>
                             ) : lap.index}
                           </td>
-                          {lapKinds ? (
+                          {lapKinds && !lapSteps ? (
                             <td><span className={`training-lap-kind is-${kind ?? "lap"}`}>{t(LAP_KIND_LABELS[kind ?? "lap"])}</span></td>
+                          ) : null}
+                          {lapSteps ? (
+                            <LapStepCell
+                              row={lap}
+                              units={unitSystem}
+                              hrDrop
+                              badge={lapKinds ? <span className={`training-lap-kind is-${kind ?? "lap"}`}>{t(LAP_KIND_LABELS[kind ?? "lap"])}</span> : undefined}
+                            />
                           ) : null}
                           {showcase ? (
                             <>
@@ -712,12 +746,14 @@ export function ActivityDetailPanel({
                           )}
                           <td>{formatOptionalNumber(lap.avgHr)}</td>
                           <td>{formatOptionalNumber(lap.maxHr)}</td>
-                          <td>{formatElevationMeters(lap.elevationGain, unitSystem)}</td>
+                          <td className="training-lap-elevation">{formatElevationMeters(lap.elevationGain, unitSystem)}</td>
+                          {lapLoads ? <td className="is-optional-narrow">{formatOptionalNumber(lap.trainingLoad)}</td> : null}
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
+                </div>
                 )}
               </div>
             </div>
