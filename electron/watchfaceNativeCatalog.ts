@@ -48,7 +48,7 @@ export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
   number("weather_temp_max", "Maximum temperature", "Weather", "24", 0, { unit: "°",
     note: "The watch draws the maximum straight after the minimum and its separator, not at a position of its own. With both shown, move the minimum to place the reading." }),
   number("weather_wind", "Wind speed", "Weather", "14", 0),
-  { id: "weather_direction", label: "Wind direction", category: "Weather", kind: "state", sample: "2", version: 0, stateKey: "weather_direction_icon_dir", positionKey: "weather_direction_icon_pos", stateCount: 16 },
+  { id: "weather_direction", label: "Wind direction", category: "Weather", kind: "state", sample: "2", version: 0, stateKey: "weather_direction_icon_dir", positionKey: "weather_direction_icon_pos", stateCount: 8 },
   number("weather_rainfall", "Rain probability", "Weather", "35", 0, { unit: "%", percentKey: "weather_rainfall_percent_icon" }),
   number("weather_humidity", "Humidity", "Weather", "62", 0, { unit: "%", percentKey: "weather_humidity_percent_icon" }),
   // The level artwork is a categorical set: official DASHBOARD ships six frames

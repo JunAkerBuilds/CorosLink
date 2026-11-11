@@ -120,7 +120,7 @@ for (const set of ["day", "night"]) {
 }
 assert.equal(component("weather:units").verification.supported, false, "the preview cannot select alternate firmware units");
 assert.deepEqual(component("native:sunriseset:symbols").stateIndices, ["3"], "a sparse colon key must not be renumbered to zero");
-assert.equal(component("native:weather_direction:states").spriteCount, 8, "recovered state count overrides catalog's 16-state default");
+assert.equal(component("native:weather_direction:states").spriteCount, 8, "a recovered state count is kept");
 assert.equal(component("native:chart:states").spriteCount, 30);
 assert.equal(component("native:chart:plot").spriteCount, 0);
 assert.equal(component("kcalProgress").spriteCount, 0);

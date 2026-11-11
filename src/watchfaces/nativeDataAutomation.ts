@@ -42,7 +42,9 @@ function nativeSpriteMeaning(id: string, style: CorosWatchfaceNativeDataStyle, r
         : `Lunar day ${index + 1} ${text}`);
     }
     if (id === "weather_aqi" && count === 7) return preview(["No AQI data", "Good AQI (0–50)", "Moderate AQI (51–100)", "Unhealthy for sensitive groups (101–150)", "Unhealthy AQI (151–200)", "Very unhealthy AQI (201–300)", "Hazardous AQI (301+)"][index]);
-    if (id === "weather_direction" && count === 16) return preview(`Direction arrow rotated ${index * 22.5}° clockwise from up; firmware direction mapping unverified`);
+    if (id === "weather_direction") return index < 8
+      ? known(`Wind from ${["N", "NE", "E", "SE", "S", "SW", "W", "NW"][index]} (the watch picks frame 0–7 by the sector the wind comes from); Studio's arrow points downwind`)
+      : known("Unused: the watch only draws frames 0–7");
     if (id === "chart" && style.chartSource === "chart_moon") return preview(`Moon phase index ${index} of 30; editor cycle starts dark at 0, full at 15; firmware phase mapping unverified`);
     if (id === "sedentary" && count === 7) return { meaning: index < 5 ? `Seated with filling ring, state ${index}; timing threshold unknown` : index === 5 ? "Move reminder" : "Inactive (dimmed)", meaningSource: "recovered-template" as const };
   }

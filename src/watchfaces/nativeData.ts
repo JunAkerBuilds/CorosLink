@@ -197,7 +197,11 @@ export async function nativeDataAsset(id: string, style: Style, role: Role, inde
       // Letter spacing also follows the last character; centre the visible text.
       fillWatchfaceText(ctx, text, (cell + fontSize * part.letterSpacing) / 2, height / 2, cell);
     } else if (role === "states" && id === "weather_direction") {
-      ctx.translate(width / 2, height / 2); ctx.rotate(index * Math.PI / 8);
+      // The watch draws frame N for the compass sector the wind comes from
+      // (0 N, 1 NE … 7 NW, as COROS's own faces label them), so each frame is
+      // 45° on, whatever the frame count, and the arrow points downwind: a
+      // north wind is ↓.
+      ctx.translate(width / 2, height / 2); ctx.rotate(Math.PI + index * Math.PI / 4);
       const r = Math.min(width, height) * 0.35;
       ctx.strokeStyle = part.color; ctx.lineWidth = Math.max(1, height / 16);
       ctx.beginPath(); ctx.moveTo(0, r); ctx.lineTo(0, -r); ctx.lineTo(-r / 2, -r / 2);
