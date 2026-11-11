@@ -4716,7 +4716,8 @@ export type WatchfaceComplicationId =
   | "sunrise"
   | "sunset"
   | "battery"
-  | "temperature";
+  | "temperature"
+  | "date";
 
 interface WatchfaceFixedMetricDefinition {
   id: WatchfaceMetricId;
@@ -5295,6 +5296,24 @@ export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
   { id: "temperature", label: "Temperature (watch sensor)", controlPrefix: "temperature", sampleValue: "18" }
 ];
 
+/**
+ * Official faces such as MAX offer the date (day number over a weekday label)
+ * as one of the selectable slot's choices, through control_<language>_date_*
+ * keys. Studio cannot synthesize it, so it is a choice only on faces that
+ * already declare it, and it is kept out of WATCHFACE_COMPLICATIONS (the
+ * choices Studio can add). The prefix makes the generic control_<prefix>_font
+ * and control_<prefix>_rect lookups resolve to the day-number keys.
+ */
+export const CONTROL_DATE_COMPLICATION: WatchfaceComplicationDefinition = {
+  id: "date",
+  label: "Date",
+  controlPrefix: "english_date_day",
+  sampleValue: "27"
+};
+
+/** Every control_<language>_date_{day,week,month}_{rect,font} declaration. */
+const CONTROL_DATE_KEY_PATTERN = /^control_[a-z_]+_date_(day|week|month)_(rect|font)$/;
+
 export type WatchfaceMetricChanges = Partial<Record<WatchfaceMetricId, boolean>>;
 
 export interface WatchfaceMetricCapability {
@@ -5470,7 +5489,7 @@ export function getAvailableComplications(
   if (!resolution) {
     return [];
   }
-  return WATCHFACE_COMPLICATIONS.filter(
+  return [CONTROL_DATE_COMPLICATION, ...WATCHFACE_COMPLICATIONS].filter(
     (complication) =>
       resolutionHasControlComplication(resolution, complication) &&
       Boolean(
@@ -5488,7 +5507,7 @@ export function hasControlComplication(
   id: WatchfaceComplicationId
 ): boolean {
   const resolution = pickPreviewResolution(details);
-  const complication = WATCHFACE_COMPLICATIONS.find(
+  const complication = [CONTROL_DATE_COMPLICATION, ...WATCHFACE_COMPLICATIONS].find(
     (candidate) => candidate.id === id
   );
   return Boolean(
@@ -5506,6 +5525,19 @@ interface ControlComplicationSelection {
   controlSunsetEnabled?: boolean;
   controlFloorEnabled?: boolean;
   controlTemperatureEnabled?: boolean;
+}
+
+/**
+ * The selectable-slot choices the editor lists in the current face: every
+ * choice Studio can add, led by the date when the face declares it (the
+ * official preview shows the date there, so it is also the default).
+ */
+export function watchfaceComplicationChoices(
+  details: CorosWatchfaceTemplateDetails
+): WatchfaceComplicationDefinition[] {
+  return hasControlComplication(details, "date")
+    ? [CONTROL_DATE_COMPLICATION, ...WATCHFACE_COMPLICATIONS]
+    : WATCHFACE_COMPLICATIONS;
 }
 
 function legacyControlComplicationSetting(
@@ -5647,6 +5679,7 @@ const COMPLICATION_ICON_NAMES: Record<WatchfaceComplicationId, string[]> = {
   sunrise: ["sunrise.png"],
   sunset: ["sunset.png"],
   battery: ["battery.png"],
+  date: [],
   temperature: ["temperature.png", "temp.png"]
 };
 
@@ -5976,12 +6009,23 @@ export function buildControlComplicationConfigurationOverrides(
         !aod ||
         hasUsableControlSlot(config);
       const values: Record<string, string> = {};
-      for (const complication of WATCHFACE_COMPLICATIONS) {
+      for (const complication of watchfaceComplicationChoices(details)) {
         const enabled = isControlComplicationEnabled(
           details,
           design,
           complication.id
         );
+        if (complication.id === "date") {
+          // Never synthesized; disabling drops every language's date keys.
+          if (!enabled) {
+            for (const key of Object.keys(config)) {
+              if (CONTROL_DATE_KEY_PATTERN.test(key)) {
+                values[key] = COROS_CONFIG_DELETE_VALUE;
+              }
+            }
+          }
+          continue;
+        }
         if (enabled && canAdd) {
           Object.assign(
             values,
@@ -8548,17 +8592,19 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
   {
     id: "weekday",
     label: "Weekday",
-    patterns: [/^[a-z_]+_date_week_rect$/]
+    // control_<language>_date_* rects belong to the selectable slot and are
+    // relative to its origin, so they are not fixed date layers.
+    patterns: [/^(?!control_)[a-z_]+_date_week_rect$/]
   },
   {
     id: "dateMonth",
     label: "Date month",
-    patterns: [/^[a-z_]+_date_month_rect$/]
+    patterns: [/^(?!control_)[a-z_]+_date_month_rect$/]
   },
   {
     id: "dateDay",
     label: "Date day",
-    patterns: [/^[a-z_]+_date_day_rect$/]
+    patterns: [/^(?!control_)[a-z_]+_date_day_rect$/]
   },
   {
     id: "separators",
@@ -10022,7 +10068,8 @@ export async function drawStudioPreview(
               ? `control_${complicationPrefix}_${rectSuffix}_rect`
               : `control_${complicationPrefix}_rect`;
           const rect = parseConfigRect(config[key]);
-          const provided = options.previewValues?.[complication.id];
+          const provided = options.previewValues?.[complication.id] ??
+            (complication.id === "date" ? String(now.getDate()) : undefined);
           const previewValue = provided === undefined ? sampleValue
             : rectSuffix ? provided.split(/[:.]/)[partIndex] ?? sampleValue : provided;
           return rect ? [{ rect, sampleValue: previewValue, configValue: config[key] }] : [];
@@ -10090,6 +10137,22 @@ export async function drawStudioPreview(
       (options.tintIcons ? options.accentColor : null);
     wantedSprites.set(complicationIcon.path, {
       color: complicationIconColor
+    });
+  }
+  // The date choice pairs its day number with a weekday label table
+  // (Monday-first, like the fixed weekday) in its own slot-relative rect.
+  const controlWeekRect = complication?.id === "date"
+    ? parseConfigRect(config.control_english_date_week_rect)
+    : null;
+  const controlWeekSource = controlWeekRect
+    ? findSpriteFolder(resolution, config.control_english_date_week_font)
+    : null;
+  const controlWeekFile = controlWeekSource?.files[weekdayIndex] ??
+    controlWeekSource?.files[0] ?? null;
+  if (controlWeekFile && options.previewComplicationContent !== "icon") {
+    wantedSprites.set(controlWeekFile.path, {
+      color: options.layerColors?.complication ??
+        (options.tintLabels ? options.digitColor : null)
     });
   }
   const controlColonValue = config.control_colon_icon?.replace(/\\/g, "/");
@@ -10973,6 +11036,35 @@ export async function drawStudioPreview(
     );
   }
 
+  if (
+    controlWeekRect &&
+    controlWeekFile &&
+    options.previewComplicationContent !== "icon"
+  ) {
+    const image = loaded.get(controlWeekFile.path);
+    if (image) {
+      const rectWidth = controlWeekRect.x1 - controlWeekRect.x0;
+      const x = controlOrigin.x + controlWeekRect.x0 + horizontalAlignOffset(
+        rectWidth,
+        controlWeekFile.width,
+        configRectHorizontalAlign(config.control_english_date_week_rect)
+      );
+      const y = controlOrigin.y +
+        (controlWeekRect.y0 + controlWeekRect.y1 - controlWeekFile.height) / 2;
+      drawStudioLayerImage(
+        context,
+        image,
+        x * scale,
+        y * scale,
+        controlWeekFile.width * scale,
+        controlWeekFile.height * scale,
+        scale,
+        options,
+        "complication",
+        false
+      );
+    }
+  }
   if (complicationIcon && complicationIconPos) {
     const image =
       complication?.id === "battery" && controlBatteryReplacement

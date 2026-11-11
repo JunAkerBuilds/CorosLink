@@ -9,6 +9,7 @@ import {
   detailsForCompositionMode,
   getAmPmCapability,
   getAvailableComplications,
+  watchfaceComplicationChoices,
   inferExerciseSeparatorStyle,
   isControlComplicationEnabled,
   watchfaceArcCutIsDateSlash,
@@ -57,7 +58,7 @@ function setControlBatteryVisible(
   };
   const candidates = mode === "aod"
     ? getAvailableComplications(details)
-    : WATCHFACE_COMPLICATIONS;
+    : watchfaceComplicationChoices(details);
   const fallbackComplication = candidates.find(
     (complication) =>
       complication.id !== "battery" &&

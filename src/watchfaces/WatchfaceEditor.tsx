@@ -348,6 +348,7 @@ import {
   getAmPmCapability,
   scaleAmPmStyleForResolution,
   getAvailableComplications,
+  watchfaceComplicationChoices,
   getFixedMetricCapabilities,
   getTemplateBackgroundAssetPaths,
   hasControlComplication,
@@ -6421,7 +6422,7 @@ export function WatchfaceEditor({
       };
       const candidates = previewMode === "aod"
         ? getAvailableComplications(sourceDetails)
-        : WATCHFACE_COMPLICATIONS;
+        : watchfaceComplicationChoices(sourceDetails);
       const fallbackComplication = candidates.find(
         (complication) =>
           complication.id !== id &&
@@ -14635,7 +14636,7 @@ export function WatchfaceEditor({
     }
     const supported = previewMode === "aod"
       ? getAvailableComplications(modeSourceDetails)
-      : WATCHFACE_COMPLICATIONS;
+      : watchfaceComplicationChoices(modeSourceDetails);
     const previewChoices = supported.filter((complication) =>
       isControlComplicationEnabled(modeSourceDetails, design, complication.id)
     );
