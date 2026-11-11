@@ -3089,6 +3089,13 @@ export function applyCorosWatchfaceConfigOverrides(
     "time_minute_high_font",
     "time_minute_low_pos",
     "time_minute_low_font",
+    // Seconds digits, like hours and minutes: a face made on a template with
+    // seconds converts onto one without them (the phone's blank local carrier
+    // declares none, so without these a seconds face can't convert there).
+    "time_second_high_pos",
+    "time_second_high_font",
+    "time_second_low_pos",
+    "time_second_low_font",
     "colon_icon",
     "negative_sign_icon",
     // Weekday/month/day Studio adds to a template that lays out no date.
