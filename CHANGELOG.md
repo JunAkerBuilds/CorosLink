@@ -7,10 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.77] - 2026-11-11
+
 ### Added
 
 - **Attach FIT files in Coach.** Drop or attach a `.fit` activity file from any watch or app, and your AI Coach reads the whole activity: its summary, laps, the watch's training analysis, and every recorded second of pace, heart rate, cadence, power, altitude and running dynamics. Long activities are averaged over a few seconds per row so the whole session still fits. Use it when you want a second-by-second look at pace against heart rate, or for an activity that isn't in your COROS account. Clicking the file in the conversation shows it in Finder or Explorer. (#171)
 - **DeepSeek, Qwen and Xiaomi MiMo in Coach.** Coach settings → Local model now has one-click Hosted APIs buttons that fill in the server and a default model for DeepSeek, Qwen (International or China) and Xiaomi MiMo, with a link to get that provider's API key. Paste the key, test, and save. (#157)
+
+### Fixed
+
+- **OpenCode starts on Windows.** With OpenCode installed through npm, Coach picked a file Windows can't run and OpenCode never started. It now starts the right one. With OpenCode 1.x, Coach answers start sooner, and stopping a reply while it is starting no longer shortens the model list.
+- **Repeated workout steps count their rounds.** In a workout that repeats a single step, such as 4 × 100 m strides, every lap was labelled round 1. Laps now read 1/4, 2/4 and so on, and a round you closed as two laps stays one round.
+- **Wind direction arrows point the way the wind blows.** Studio's wind arrows now point downwind, so a north wind shows ↓, in eight 45° steps like the watch. Before, a north wind showed ↑ and other directions were off.
+- **Selectable date on official faces.** On official faces such as MAX that offer the date (day over weekday) as a selectable choice, Studio lists it as a Date choice, previews it like the watch and removes it cleanly when you turn it off.
+- **Convert keeps seconds on templates without them.** Converting a face with seconds onto a template that has no seconds digits, such as the blank one used without a COROS sign-in, no longer fails with "The template's config does not define: time_second_*".
+- **Lighter watch checks in Media.** The "Put it on your watch" guide checks for the watch only while it is open and on screen, and on Windows it checks the USB bus less often.
 
 ## [0.1.76] - 2026-11-09
 
