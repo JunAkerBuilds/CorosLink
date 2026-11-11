@@ -709,6 +709,29 @@ test("rounds: a step closed as two laps is one round, and an inner repeat starts
   ]);
 });
 
+test("rounds: a repeat of a single step counts up, and a round closed as two laps stays one", () => {
+  const rounds = (steps, laps) => {
+    const activity = {
+      session: { startTs: T0, sport: 1 }, lengths: [], records: [], activeWindows: [], workout: { steps },
+      laps: laps.map(([workoutStep, distanceM, timerSec = 60], index) => ({ index: index + 1, startTs: T0 + index * 60, elapsedSec: timerSec, timerSec, distanceM, workoutStep }))
+    };
+    return localFitActivityDetail(activity, localRecord(100)).laps.map((row) => `${row.step.name} ${row.step.round}/${row.step.rounds}`);
+  };
+  const strides = [
+    { name: "Stride", intensity: 0, duration: "distance", durationValue: 100 },
+    { name: "Strides", duration: "repeat", repeatFrom: 0, repeatTimes: 4 },
+    { name: "Cool-down", intensity: 3, duration: "open" }
+  ];
+  assert.deepEqual(rounds(strides, [[0, 100], [0, 99], [0, 101], [0, 100], [2, 800]]).slice(0, 4), ["Stride 1/4", "Stride 2/4", "Stride 3/4", "Stride 4/4"]);
+  assert.deepEqual(rounds(strides, [[0, 100], [0, 60]]), ["Stride 1/4", "Stride 2/4"], "stopped early: each lap was still a round");
+  // More laps than rounds: the second round was closed as two laps (60 m, then the last 40 m).
+  assert.deepEqual(rounds(strides, [[0, 100], [0, 60], [0, 40], [0, 100], [0, 100]]), ["Stride 1/4", "Stride 2/4", "Stride 2/4", "Stride 3/4", "Stride 4/4"]);
+  const timed = [{ name: "Hill", intensity: 0, duration: "time", durationValue: 90 }, { name: "Hills", duration: "repeat", repeatFrom: 0, repeatTimes: 2 }];
+  assert.deepEqual(rounds(timed, [[0, 200, 45], [0, 200, 45], [0, 400, 90]]), ["Hill 1/2", "Hill 1/2", "Hill 2/2"]);
+  const open = [{ name: "Drill", intensity: 0, duration: "open" }, { name: "Drills", duration: "repeat", repeatFrom: 0, repeatTimes: 2 }];
+  assert.deepEqual(rounds(open, [[0, 50], [0, 50], [0, 50]]), ["Drill 1/2", "Drill 2/2", "Drill 3/2"], "a step with no length ends with each lap");
+});
+
 test("a FIT file with a huge workout keeps the first 500 steps and stays quick", () => {
   const steps = Array.from({ length: 3000 }, (_, index) => (index % 2 ? { name: `Repeat ${index}`, duration: "repeat", repeatFrom: 0, repeatTimes: 2 } : { name: `Step ${index}`, intensity: 0, duration: "distance", durationValue: 100 }));
   const laps = Array.from({ length: 5000 }, (_, index) => ({ startTs: T0 + index * 10, endTs: T0 + index * 10 + 10, elapsedSec: 10, timerSec: 10, distanceM: 30, workoutStep: (index * 2) % 3000 }));

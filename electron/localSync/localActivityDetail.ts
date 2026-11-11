@@ -250,18 +250,48 @@ function stepRange(target: FitWorkoutStep["target"], sportType: number): Trainin
   return target.low > 0 && target.high > 0 ? { kind: "pace", low: round(1000 / target.high, 1)!, high: round(1000 / target.low, 1)! } : undefined;
 }
 
+/** For each lap, how many laps in a row (it among them) are on its workout step. */
+function stepRuns(laps: FitActivity["laps"]): number[] {
+  const runs = laps.map(() => 1);
+  for (let start = 0; start < laps.length; ) {
+    let end = start + 1;
+    while (end < laps.length && laps[end].workoutStep === laps[start].workoutStep) end += 1;
+    runs.fill(end - start, start, end);
+    start = end;
+  }
+  return runs;
+}
+
+/** How much of a step a lap got through, in the step's own unit: metres or seconds. Nothing for a step without a length. */
+function stepProgress(step: FitWorkoutStep, lap: FitActivity["laps"][number]): number | undefined {
+  if (!step.durationValue || step.durationValue <= 0) return undefined;
+  if (step.duration === "distance") return lap.distanceM ?? 0;
+  if (step.duration === "time") return lap.timerSec ?? 0;
+  return undefined;
+}
+
+/** A step counts as done a little short of its length: a watch closes a 400 m step at 398 m as readily as at 402 m. */
+const STEP_DONE_SHARE = 0.95;
+
 /**
  * Each lap's workout step: its name, what it asked for, and the lap's round when the step repeats. A round is a
  * pass through the step: a step closed as two laps stays one round, and a repeat inside another starts its rounds
  * again each time the outer one comes back to it.
+ *
+ * A repeat of a single step never leaves that step, so its rounds are told apart another way: laps in a row no
+ * longer than the repeat is a round each; a longer row means some round was closed as several laps, and a new
+ * round starts once the laps so far covered the step's length.
  */
 function lapSteps(activity: FitActivity, sportType: number): Array<TrainingHubLapStep | undefined> {
   const steps = activity.workout?.steps;
   if (!steps?.length) return activity.laps.map(() => undefined);
   const inside = repeatsOf(steps);
+  const runs = stepRuns(activity.laps);
   const passes = new Map<number, number>();
   let previous: number | undefined;
-  return activity.laps.map((lap) => {
+  /** What the laps of the round in hand have covered of a single-step repeat's step. */
+  let covered = 0;
+  return activity.laps.map((lap, at) => {
     const index = lap.workoutStep;
     const step = index === undefined ? undefined : steps[index];
     if (!step || step.duration === "repeat") {
@@ -275,7 +305,14 @@ function lapSteps(activity: FitActivity, sportType: number): Array<TrainingHubLa
       const from = repeat.repeatFrom!;
       // Coming into the repeat from outside it starts its rounds over.
       if (previous === undefined || previous < from || previous >= repeatAt) for (let at = from; at < repeatAt; at += 1) passes.delete(at);
-      if (previous !== index) passes.set(index!, (passes.get(index!) ?? 0) + 1);
+      const progress = stepProgress(step, lap);
+      const nextRound = previous !== index
+        || (repeatAt - from === 1 && (runs[at] <= (repeat.repeatTimes ?? 0) || progress === undefined || covered >= step.durationValue! * STEP_DONE_SHARE));
+      if (nextRound) {
+        passes.set(index!, (passes.get(index!) ?? 0) + 1);
+        covered = 0;
+      }
+      covered += progress ?? 0;
       pass = passes.get(index!);
     }
     previous = index;
