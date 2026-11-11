@@ -206,9 +206,11 @@ export async function getWatchStatus(): Promise<WatchStatus> {
 }
 
 // A plugged-in watch whose storage hasn't mounted shows up on the USB bus
-// only. Probing it is a single cheap system query, cached briefly because the
-// renderer polls while the media guide waits for the watch.
-const USB_PROBE_CACHE_TTL_MS = 2_500;
+// only. Probing it is a single system query, cached briefly because the
+// renderer polls while the media guide waits for the watch. On Windows the
+// query starts PowerShell each time, so it is asked a good deal less often;
+// the drive itself is still looked for on every poll.
+const USB_PROBE_CACHE_TTL_MS = process.platform === "win32" ? 8_000 : 2_500;
 const COROS_USB_NAME_PATTERN = /\bCOROS\b/i;
 let usbProbeCache: { at: number; result: { name: string } | null } | undefined;
 let usbProbeInFlight: Promise<{ name: string } | null> | undefined;

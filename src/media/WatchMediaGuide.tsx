@@ -94,11 +94,15 @@ export function WatchMediaGuide({
   // Moving on (plugging in, finishing a send) returns the row to the live step.
   useEffect(() => setViewed(null), [current]);
 
+  // Only while the open guide is on screen: collapsed, or with the window in
+  // the background, the app-wide poll is enough.
   useEffect(() => {
-    if (state === "connected") return;
-    const timer = window.setInterval(() => void onRefreshWatch(), WAITING_POLL_MS);
+    if (state === "connected" || collapsed) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void onRefreshWatch();
+    }, WAITING_POLL_MS);
     return () => window.clearInterval(timer);
-  }, [state, onRefreshWatch]);
+  }, [state, collapsed, onRefreshWatch]);
 
   function toggleCollapsed() {
     const next = !collapsed;
