@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -27,6 +27,7 @@ const {
   opencodeMajor,
   opencodeModelOptions,
   parseOpencodeVersion,
+  pickOpencodeFromPath,
   readOpencodeSessionConfig,
   recheckOpencodeStatus,
   resetOpencodeCatalog,
@@ -49,6 +50,14 @@ try {
   });
   assert.ok(windowsCandidates.some((candidate) => candidate.endsWith(path.join("npm", "opencode.cmd"))));
   assert.equal(getOpencodeExecutableCandidates(" /custom/opencode ", "darwin", { HOME: "/h" })[0], "/custom/opencode");
+
+  // Windows: npm's extensionless shell script is listed first and can't be started.
+  const whereOutput = "C:\\Users\\tester\\AppData\\Roaming\\npm\\opencode\r\nC:\\Users\\tester\\AppData\\Roaming\\npm\\opencode.cmd\r\n";
+  assert.equal(pickOpencodeFromPath(whereOutput, "win32"), "C:\\Users\\tester\\AppData\\Roaming\\npm\\opencode.cmd");
+  assert.equal(pickOpencodeFromPath("C:\\tools\\opencode\r\n", "win32"), undefined, "nothing Windows can run");
+  assert.equal(pickOpencodeFromPath("C:\\tools\\OpenCode.EXE\r\n", "win32"), "C:\\tools\\OpenCode.EXE");
+  assert.equal(pickOpencodeFromPath("/opt/homebrew/bin/opencode\n/usr/local/bin/opencode\n", "darwin"), "/opt/homebrew/bin/opencode");
+  assert.equal(pickOpencodeFromPath("\n", "linux"), undefined);
 
   assert.equal(parseOpencodeVersion("opencode v2.0.22\n"), "2.0.22");
   assert.equal(parseOpencodeVersion("1.19.5"), "1.19.5");
@@ -199,6 +208,14 @@ try {
     return { events, result };
   };
 
+  // Request files an app that crashed left behind: the next request takes the old ones.
+  const requestsDir = path.join(workspaceDir, "requests");
+  for (const [name, ageHours] of [["crashed.json", 48], ["running.json", 1]]) {
+    await writeFile(path.join(requestsDir, name), "{}\n");
+    const when = new Date(Date.now() - ageHours * 60 * 60_000);
+    await utimes(path.join(requestsDir, name), when, when);
+  }
+
   // 2.x: answers session/new before it has read the request's configuration.
   const second = run(fakeV2, { model: "openai/gpt-fake" });
   const answer = await second.result;
@@ -220,12 +237,15 @@ try {
   assert.deepEqual(second.events.thinking, ["Checking the week"]);
   assert.deepEqual(second.events.tools, ["start:get_weekly_mileage", 'call:get_weekly_mileage:{"unit":"km"}']);
   assert.deepEqual(await deletedSessions(), ["s1", "s1"], "the Coach session was removed too");
-  assert.deepEqual(await readdir(path.join(workspaceDir, "requests")), [], "no request file is left behind");
+  assert.deepEqual(await readdir(requestsDir), ["running.json"], "no request file is left behind, and a recent one is not touched");
+  await rm(path.join(requestsDir, "running.json"));
   assert.deepEqual(await readdir(path.join(workspaceDir, "workspace")), [], "sessions run in an empty directory");
 
   // 1.x: the older configuration keys, and no session/delete.
+  const firstStarted = performance.now();
   const first = run(fakeV1);
   const older = await first.result;
+  assert.ok(performance.now() - firstStarted < 2_500, "1.x reads the tools as the prompt starts, so nothing is waited for");
   for (const check of ["dialect:v1", "system:ok", "locked:ok", "tools:get_weekly_mileage", "permission:selected:reject"]) {
     assert.ok(older.fullText.includes(check), `${check} in ${older.fullText}`);
   }
@@ -284,6 +304,16 @@ try {
   const lifted = await recheckOpencodeStatus(fakeV2, workspaceDir);
   assert.equal(lifted.state, "connected");
   assert.equal(lifted.modelCount, 3);
+
+  // A turn stopped while its session is still starting knows only what OpenCode said
+  // before it read the request's configuration; the picker keeps the full list.
+  process.env.FAKE_OPENCODE_SLOW_CONFIG = "1";
+  const early = new AbortController();
+  const stoppedEarly = run(fakeV2, { signal: early.signal });
+  setTimeout(() => early.abort(), 900);
+  await assert.rejects(stoppedEarly.result, (error) => error.kind === "cancelled");
+  delete process.env.FAKE_OPENCODE_SLOW_CONFIG;
+  assert.deepEqual(getOpencodeSessionModels(fakeV2), models, "the model list is not replaced by a half-started session's");
 
   // Cancelling ends the OpenCode process and reports a cancellation. The stopped
   // conversation is removed from OpenCode's history first, while the process can still take it.
@@ -387,7 +417,7 @@ async function handle(message) {
       send({ method: "session/update", params: { sessionId: "s1", update: { sessionUpdate: "config_option_update", configOptions: options(loadedModels, loadedMode, loadedModes) } } });
       // The bridge's tools arrive a little after the agents and models.
       setTimeout(() => connectBridge().catch((error) => { process.stderr.write(String(error.stack) + "\\n"); process.exit(1); }), 250);
-    }, 150);
+    }, process.env.FAKE_OPENCODE_SLOW_CONFIG ? 10_000 : 150);
     return;
   }
   if (message.method === "session/set_config_option") {

@@ -40,7 +40,10 @@ const CHECK_TIMEOUT_MS = 45_000;
 const COACH_AGENT_WAIT_MS = 20_000;
 /** Once OpenCode has reported its agents without the Coach agent, a correction gets this long. */
 const COACH_AGENT_GRACE_MS = 3_000;
-/** OpenCode 1.x reads the bridge's tools as the prompt starts, so it is not waited on for long. */
+/**
+ * How long OpenCode gets to read the bridge's tools before the prompt goes out.
+ * 1.x is only waited on at all when it has already reached for the bridge.
+ */
 const TOOLS_WAIT_MS = { v1: 3_000, v2: 20_000 };
 /** OpenCode registers the tools a moment after it has read the list. */
 const TOOLS_SETTLE_MS = 250;
@@ -167,13 +170,27 @@ async function findOnPath(name: string): Promise<string | undefined> {
       timeout: 5_000,
       windowsHide: true
     });
-    return stdout
-      .split(/\r?\n/)
-      .map((value) => value.trim())
-      .find(Boolean);
+    return pickOpencodeFromPath(stdout);
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The one to start among what `which` or `where.exe` found. On Windows an npm
+ * install lists its extensionless shell script ahead of `opencode.cmd`, and
+ * only a file Windows can run will start.
+ */
+export function pickOpencodeFromPath(
+  output: string,
+  platform = process.platform
+): string | undefined {
+  const found = output
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (platform !== "win32") return found[0];
+  return found.find((value) => /\.(exe|cmd|bat|com)$/i.test(value));
 }
 
 export async function detectOpencodeExecutable(
@@ -369,6 +386,24 @@ function sessionDirectory(workspaceDir: string): string {
   return path.join(workspaceDir, "workspace");
 }
 
+/** No request runs anywhere near this long, so a file this old was left by a crash or a force quit. */
+const STALE_REQUEST_CONFIG_MS = 24 * 60 * 60_000;
+
+/** A request removes its own file when it ends; this takes the ones whose app never got to. */
+async function removeStaleRequestConfigs(directory: string): Promise<void> {
+  const cutoff = Date.now() - STALE_REQUEST_CONFIG_MS;
+  const names = await readdir(directory).catch((): string[] => []);
+  await Promise.all(
+    names
+      .filter((name) => name.endsWith(".json"))
+      .map(async (name) => {
+        const file = path.join(directory, name);
+        const info = await stat(file).catch(() => undefined);
+        if (info?.isFile() && info.mtimeMs < cutoff) await rm(file, { force: true }).catch(() => undefined);
+      })
+  );
+}
+
 async function writeRequestConfig(
   workspaceDir: string,
   config: Record<string, unknown>
@@ -376,6 +411,7 @@ async function writeRequestConfig(
   const directory = path.join(workspaceDir, "requests");
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await mkdir(sessionDirectory(workspaceDir), { recursive: true, mode: 0o700 });
+  await removeStaleRequestConfigs(directory);
   const file = path.join(directory, `${crypto.randomUUID()}.json`);
   // Holds the bridge's bearer token, which ends with the request.
   await writeFile(file, `${JSON.stringify(config)}\n`, { mode: 0o600 });
@@ -463,6 +499,9 @@ let lastCatalog:
   | undefined;
 
 function rememberCatalog(executablePath: string, config: SessionConfig): void {
+  // A turn stopped while its session was starting hands back what OpenCode said
+  // before it had read the request's configuration: not the full list.
+  if (config.currentMode !== COACH_AGENT) return;
   lastCatalog = { executablePath, at: Date.now(), options: opencodeModelOptions(config) };
 }
 
@@ -962,16 +1001,20 @@ export async function streamOpencodeCompletion(
       }
     }
 
-    // A prompt sent before OpenCode has read the bridge's tools goes out without them.
-    let toolsTimer: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([
-      bridge.toolsListed.then(() => new Promise((resolve) => setTimeout(resolve, TOOLS_SETTLE_MS))),
-      new Promise((resolve) => {
-        toolsTimer = setTimeout(resolve, major === 1 ? TOOLS_WAIT_MS.v1 : TOOLS_WAIT_MS.v2);
-      }),
-      session.agent.whenExited()
-    ]);
-    clearTimeout(toolsTimer);
+    // A 2.x prompt sent before OpenCode has read the bridge's tools goes out without them.
+    // 1.x connects to the bridge as the prompt starts and holds the prompt until it has
+    // the tools, so one that hasn't touched the bridge yet has nothing to be waited for.
+    if (major !== 1 || bridge.requestCount() > 0) {
+      let toolsTimer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        bridge.toolsListed.then(() => new Promise((resolve) => setTimeout(resolve, TOOLS_SETTLE_MS))),
+        new Promise((resolve) => {
+          toolsTimer = setTimeout(resolve, major === 1 ? TOOLS_WAIT_MS.v1 : TOOLS_WAIT_MS.v2);
+        }),
+        session.agent.whenExited()
+      ]);
+      clearTimeout(toolsTimer);
+    }
     if (options.signal.aborted) throw new Error("cancelled");
     sessionStarted = true;
     armIdleTimeout();
