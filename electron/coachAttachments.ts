@@ -12,6 +12,7 @@ import type {
   CoachFileUpload,
   CoachFileUploadImage
 } from "./types";
+import { CoachFitFileError, describeFitForCoach } from "./coachFitAttachment";
 
 export const MAX_COACH_UPLOADS_PER_MESSAGE = 6;
 export const MAX_COACH_UPLOAD_BYTES = 32 * 1024 * 1024;
@@ -26,6 +27,8 @@ export const COACH_DOCUMENT_TURNS = 3;
 
 /** What the athlete may attach, by extension; also what Open may hand to the system. */
 const DOCUMENT_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".md", ".markdown", ".csv", ".tsv", ".json"]);
+/** Activity files: decoded here, never handed to the system to open. */
+const FIT_EXTENSION = ".fit";
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"]);
 
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
@@ -50,7 +53,7 @@ export interface CoachAttachmentStore {
   load(sessionId: string, id: string): Promise<LoadedCoachAttachment | null>;
   /** A stored file's summary, without reading its contents. */
   summary(sessionId: string, id: string): Promise<ChatFileAttachment | null>;
-  /** The kept original, when it is a type the system may open. */
+  /** The kept original, when it is a type the system may open (a FIT file is only revealed). */
   originalPath(sessionId: string, id: string): Promise<string | null>;
   /** The first image as a data URL, for transcript thumbnails. */
   preview(sessionId: string, id: string): Promise<string | null>;
@@ -141,7 +144,7 @@ export function createCoachAttachmentStore(root: string): CoachAttachmentStore {
       if (!meta) return null;
       const file = path.join(dir, path.basename(meta.originalFile));
       const extension = path.extname(file).toLowerCase();
-      if (!DOCUMENT_EXTENSIONS.has(extension) && !IMAGE_EXTENSIONS.has(extension)) return null;
+      if (!DOCUMENT_EXTENSIONS.has(extension) && !IMAGE_EXTENSIONS.has(extension) && extension !== FIT_EXTENSION) return null;
       try {
         await fs.access(file);
         return file;
@@ -194,8 +197,9 @@ function checkUpload(upload: CoachFileUpload): CheckedUpload {
   const extension = path.extname(name).toLowerCase();
   const kind = upload.kind;
   if (kind !== "image" && kind !== "document") throw new CoachAttachmentError(`${name} is not a supported file.`);
+  const fit = kind === "document" && extension === FIT_EXTENSION;
   const allowed = kind === "image" ? IMAGE_EXTENSIONS : DOCUMENT_EXTENSIONS;
-  if (!allowed.has(extension)) throw new CoachAttachmentError(`${name} is not a supported file.`);
+  if (!fit && !allowed.has(extension)) throw new CoachAttachmentError(`${name} is not a supported file.`);
   if (!(upload.original instanceof Uint8Array) || upload.original.byteLength === 0) {
     throw new CoachAttachmentError(`${name} is empty.`);
   }
@@ -220,8 +224,20 @@ function checkUpload(upload: CoachFileUpload): CheckedUpload {
   }
   if (kind === "image" && images.length !== 1) throw new CoachAttachmentError(`${name} could not be read as an image.`);
 
+  if (fit && images.length) throw new CoachAttachmentError(`${name} is not a supported file.`);
   let text = typeof upload.text === "string" ? upload.text.replace(/\r\n?/g, "\n").trim() : "";
   let truncated = upload.truncated === true;
+  if (fit) {
+    // The window's text is ignored: the samples are read from the file itself.
+    try {
+      ({ text, truncated } = describeFitForCoach(upload.original, MAX_COACH_DOCUMENT_CHARS));
+    } catch (error) {
+      if (error instanceof CoachFitFileError) {
+        throw new CoachAttachmentError(`${name} is not an activity FIT file Coach can read.`);
+      }
+      throw error;
+    }
+  }
   if (text.length > MAX_COACH_DOCUMENT_CHARS) {
     text = text.slice(0, MAX_COACH_DOCUMENT_CHARS);
     truncated = true;

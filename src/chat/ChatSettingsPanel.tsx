@@ -35,6 +35,7 @@ import {
   chatSettingsSectionDomId
 } from "./chatSettingsSections";
 import type { CorosLinkApi } from "../coroslink-api";
+import { HOSTED_CHAT_PRESETS, findHostedChatPreset } from "./hostedChatPresets";
 
 const CUSTOM_LOCAL_SERVER_OPTION = "__custom__";
 
@@ -201,6 +202,7 @@ export function ChatSettingsPanel({
     ? undefined
     : matchedLocalServer;
   const discoveredLocalModels = selectedLocalServer?.models ?? [];
+  const activeHostedPreset = findHostedChatPreset(chatSettings.local.baseUrl);
 
   return (
     <div className="chat-settings-panel">
@@ -688,6 +690,54 @@ export function ChatSettingsPanel({
       >
         <ChatSettingsSectionHeader id="local" />
         <div className="chat-local-settings chat-local-settings-panel">
+            <div className="chat-hosted-presets">
+              <span className="chat-hosted-presets-label">
+                {t("Hosted APIs")}
+              </span>
+              <div className="chat-hosted-presets-row">
+                {HOSTED_CHAT_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`chat-hosted-preset${
+                      activeHostedPreset?.id === preset.id ? " active" : ""
+                    }`}
+                    aria-pressed={activeHostedPreset?.id === preset.id}
+                    onClick={() => {
+                      setEnteringCustomLocalUrl(true);
+                      onUpdateLocalDraft({
+                        baseUrl: preset.baseUrl,
+                        model: preset.defaultModel,
+                        toolsEnabled: true
+                      });
+                    }}
+                    disabled={busy}
+                  >
+                    {preset.name}
+                    {preset.region ? (
+                      <span className="chat-hosted-preset-region">
+                        {t(preset.region)}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+              {activeHostedPreset ? (
+                <p className="chat-hosted-presets-hint">
+                  {t("Paste your {{provider}} API key below, then test the connection.", {
+                    provider: activeHostedPreset.name
+                  })}{" "}
+                  <a
+                    href={activeHostedPreset.keysUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t("Get an API key")}
+                    <ExternalLink size={12} aria-hidden="true" />
+                  </a>
+                </p>
+              ) : null}
+            </div>
             <label className="chat-local-field">
               <span>{t("Server")}</span>
               {availableLocalServers.length > 0 ? (

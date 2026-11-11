@@ -1,6 +1,7 @@
 // Turns a file the athlete attaches in Coach into what the model reads: a
 // document's text (PDF, Word, plain text), or a downscaled image. PDFs whose
 // pages carry no text, such as scans, also get their first pages as images.
+// FIT activity files go as they are; the main process decodes their samples.
 // The main process stores the result with the conversation (coachAttachments.ts).
 import type { CoachFileUpload, CoachFileUploadImage } from "../../electron/types";
 import { t } from "../i18n/toolsLocale";
@@ -19,15 +20,16 @@ const MAX_DOCX_XML_BYTES = 40 * 1024 * 1024;
 
 const DOCUMENT_EXTENSIONS = ["pdf", "docx", "txt", "md", "markdown", "csv", "tsv", "json"];
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif", "bmp", "avif"];
+const FIT_EXTENSION = "fit";
 
 /** For the file picker. */
-export const COACH_FILE_ACCEPT = [...DOCUMENT_EXTENSIONS, ...IMAGE_EXTENSIONS]
+export const COACH_FILE_ACCEPT = [...DOCUMENT_EXTENSIONS, FIT_EXTENSION, ...IMAGE_EXTENSIONS]
   .map((extension) => `.${extension}`)
   .join(",");
 
 export class CoachFileError extends Error {}
 
-type FileFormat = "pdf" | "docx" | "text" | "image";
+type FileFormat = "pdf" | "docx" | "text" | "image" | "fit";
 
 function extensionOf(name: string): string {
   const match = /\.([A-Za-z0-9]+)$/.exec(name);
@@ -38,6 +40,7 @@ function formatOf(file: File): FileFormat | null {
   const extension = extensionOf(file.name);
   if (extension === "pdf") return "pdf";
   if (extension === "docx") return "docx";
+  if (extension === FIT_EXTENSION) return "fit";
   if (DOCUMENT_EXTENSIONS.includes(extension)) return "text";
   if (IMAGE_EXTENSIONS.includes(extension)) return "image";
   return null;
@@ -66,7 +69,7 @@ export async function prepareCoachFile(file: File): Promise<CoachFileUpload> {
       );
     }
     throw new CoachFileError(
-      t("Coach can't read {{name}}. Attach a PDF, Word document, text file, or image.", { name: file.name })
+      t("Coach can't read {{name}}. Attach a PDF, Word document, text file, FIT activity file, or image.", { name: file.name })
     );
   }
   if (file.size === 0) throw new CoachFileError(t("{{name}} is empty.", { name: file.name }));
@@ -80,6 +83,12 @@ export async function prepareCoachFile(file: File): Promise<CoachFileUpload> {
   if (format === "image") {
     const image = await readImage(file, name);
     return { ...base, kind: "image", images: [image] };
+  }
+  if (format === "fit") {
+    if (!isFitFile(original)) {
+      throw new CoachFileError(t("{{name}} is not a FIT activity file.", { name }));
+    }
+    return { ...base, kind: "document" };
   }
   if (format === "pdf") {
     const pdf = await readPdf(original, name);
@@ -96,6 +105,7 @@ function mimeFromExtension(name: string): string {
     {
       pdf: "application/pdf",
       docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      fit: "application/vnd.ant.fit",
       csv: "text/csv",
       tsv: "text/tab-separated-values",
       json: "application/json",
@@ -110,6 +120,11 @@ function mimeFromExtension(name: string): string {
       avif: "image/avif"
     }[extension] ?? "text/plain"
   );
+}
+
+/** FIT files carry ".FIT" at byte 8 of their header. */
+function isFitFile(bytes: Uint8Array): boolean {
+  return bytes.byteLength >= 14 && bytes[8] === 0x2e && bytes[9] === 0x46 && bytes[10] === 0x49 && bytes[11] === 0x54;
 }
 
 function clip(text: string): { text: string; truncated?: boolean } {

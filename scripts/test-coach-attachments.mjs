@@ -21,6 +21,7 @@ const {
 const { toInputMessageItem } = await import(dist("chatResponsesProtocol.js"));
 const { claudePrompt } = await import(dist("claudeCodeProvider.js"));
 const { streamLocalChatCompletion } = await import(dist("localChatProvider.js"));
+const { writeFitActivity } = await import(dist("localSync/fitWriter.js"));
 
 const root = await mkdtemp(path.join(os.tmpdir(), "coach-attachments-"));
 const store = createCoachAttachmentStore(root);
@@ -100,6 +101,61 @@ try {
   await assert.rejects(store.save("../escape", { name: "a.txt", mimeType: "text/plain", kind: "document", original: pdf, text: "x" }), /Unknown conversation/);
   await assert.rejects(store.load(sessionId, "../../etc"), /Unknown attachment/);
   assert.equal(await store.load(sessionId, "00000000-0000-4000-8000-000000000000"), null);
+
+  // ----- FIT activity files: decoded from the bytes, samples as a table -----
+  const fitRun = (seconds) => {
+    const start = 1_783_262_048;
+    const samples = Array.from({ length: seconds }, (_, t) => ({
+      ts: start + t,
+      dist: t * 3.2,
+      speed: 3.2,
+      hr: 120 + Math.floor(t / 60),
+      cadence: 88,
+      alt: 40 + (t % 50) / 10
+    }));
+    const lap = { startTs: start, endTs: start + seconds, elapsedSec: seconds, timerSec: seconds, distanceM: seconds * 3.2, avgSpeed: 3.2, avgHr: 140, maxHr: 160 };
+    return Uint8Array.from(
+      writeFitActivity({
+        ...lap,
+        sport: 1,
+        subSport: 0,
+        activeWindows: [[start, start + seconds]],
+        laps: [lap],
+        samples,
+        createdTs: start
+      })
+    );
+  };
+  const short = await store.save(sessionId, {
+    name: "Tempo.fit",
+    mimeType: "application/vnd.ant.fit",
+    kind: "document",
+    original: fitRun(1800),
+    text: "ignored: the window does not decide what the model reads"
+  });
+  assert.equal(short.kind, "document");
+  assert.equal(short.truncated, undefined);
+  const shortText = (await store.load(sessionId, short.id)).text;
+  assert.doesNotMatch(shortText, /ignored/);
+  assert.match(shortText, /^FIT activity file/);
+  assert.match(shortText, /Distance: 5\.76 km/);
+  assert.match(shortText, /Average pace: 5:13 \/km/);
+  assert.match(shortText, /one row per recorded sample/);
+  assert.match(shortText, /\nt,dist_m,pace_s_km,hr,cadence,alt_m\n0,0,313,120,88,40\.0\n1,3,313,120,88,40\.2\n/);
+  assert.match(shortText, /\n1799,5757,313,149,88,4[45]\.\d$/);
+  assert.match(shortText, /Laps \(1\):/);
+
+  // Long activities average a few seconds per row instead of dropping the end.
+  const longRun = await store.save(sessionId, { name: "Long run.fit", mimeType: "application/vnd.ant.fit", kind: "document", original: fitRun(4 * 3600) });
+  const longRunText = (await store.load(sessionId, longRun.id)).text;
+  assert.ok(longRunText.length <= MAX_COACH_DOCUMENT_CHARS);
+  assert.equal(longRun.truncated, undefined);
+  const bucket = Number(/averaged over (\d+) s/.exec(longRunText)?.[1]);
+  assert.ok(bucket >= 2 && bucket <= 10, `bucket ${bucket}`);
+  assert.match(longRunText, new RegExp(`\\n${4 * 3600 - bucket},`));
+
+  await refuses({ name: "notes.fit", mimeType: "application/vnd.ant.fit", kind: "document", original: pdf, text: "x" }, /not an activity FIT file/);
+  await store.remove(sessionId, [short.id, longRun.id]);
 
   // ----- Expanding a conversation for a request -----
   const gone = { ...plan, id: "00000000-0000-4000-8000-000000000000", name: "Old plan.pdf" };
@@ -248,4 +304,4 @@ try {
   await rm(root, { recursive: true, force: true });
 }
 
-console.log("coach attachment tests passed (store, refusals, expansion, image budget, provider shapes)");
+console.log("coach attachment tests passed (store, refusals, FIT files, expansion, image budget, provider shapes)");

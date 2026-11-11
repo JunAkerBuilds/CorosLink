@@ -4983,7 +4983,7 @@ export function ChatView({
                 {t("Drop to attach to your message")}
               </span>
               <span className="chat-dropzone-hint">
-                {t("PDF, Word, text, or images")}
+                {t("PDF, Word, text, FIT, or images")}
               </span>
             </div>
           ) : null}

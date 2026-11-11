@@ -2383,6 +2383,11 @@ function registerIpcHandlers(): void {
       .originalPath(String(sessionId), String(attachmentId))
       .catch(() => null);
     if (!file) throw new Error("This file is no longer available.");
+    // Nothing on a desktop opens a FIT file usefully; show where it is kept.
+    if (path.extname(file).toLowerCase() === ".fit") {
+      shell.showItemInFolder(file);
+      return;
+    }
     const failure = await shell.openPath(file);
     if (failure) throw new Error(failure);
   });
