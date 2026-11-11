@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Attach FIT files in Coach.** Drop or attach a `.fit` activity file from any watch or app, and your AI Coach reads the whole activity: its summary, laps, the watch's training analysis, and every recorded second of pace, heart rate, cadence, power, altitude and running dynamics. Long activities are averaged over a few seconds per row so the whole session still fits. Use it when you want a second-by-second look at pace against heart rate, or for an activity that isn't in your COROS account. Clicking the file in the conversation shows it in Finder or Explorer. (#171)
+- **DeepSeek, Qwen and Xiaomi MiMo in Coach.** Coach settings → Local model now has one-click Hosted APIs buttons that fill in the server and a default model for DeepSeek, Qwen (International or China) and Xiaomi MiMo, with a link to get that provider's API key. Paste the key, test, and save. (#157)
 
 ## [0.1.76] - 2026-11-09
 
