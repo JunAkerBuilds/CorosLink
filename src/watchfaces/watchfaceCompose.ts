@@ -1,4 +1,5 @@
 import { composeNativeData, finalizeNativeControlOverrides } from "./nativeData";
+import { buildWatchThemeOverrides } from "./watchfaceThemeColor";
 import type {
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigOverride,
@@ -956,6 +957,7 @@ export async function composeWatchfaceReplacements(
       ),
       buildDisabledControlComplicationOverrides(details, design),
       nativeDataComposition.configOverrides,
+      buildWatchThemeOverrides(details, design),
       // Apply after asset replacements so they cannot resurrect a hidden colon.
       buildStaticSeparatorOverrides(details, design.staticSeparators, design.configAssetOverrides)
   );

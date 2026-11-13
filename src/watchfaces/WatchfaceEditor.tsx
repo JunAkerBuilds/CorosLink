@@ -6,6 +6,7 @@ import { watchfaceLayerSampleValue } from "./watchfaceLayerValues";
 import { WatchfaceHint } from "./WatchfaceHint";
 import { EditableNumberInput } from "./EditableNumberInput";
 import { collectWatchfaceFaceColors, recolorWatchfaceFace } from "./watchfaceFaceColors";
+import { applyWatchThemeToCanvas, effectiveWatchTheme, watchThemeSupport } from "./watchfaceThemeColor";
 import { loadWatchfaceGoogleFont, loadWatchfaceGoogleFontsFor, parseWatchfaceGoogleFontName } from "./watchfaceGoogleFonts";
 import { renameWatchfaceFontFamily } from "./watchfaceFontRename";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
@@ -771,6 +772,8 @@ interface WatchfacePreviewRenderRequest {
   previewWidth: number;
   loadAssets: WatchfaceAssetLoader;
   dragCommitId: number | null;
+  /** MIP theme row the watch recolors the face's reds with; null where none applies. */
+  watchTheme: number | null;
 }
 
 interface WatchfaceBackgroundRenderRequest {
@@ -977,6 +980,7 @@ export function WatchfaceEditor({
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
   const arcOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const watchThemeRef = useRef<number | null>(null);
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewStackRef = useRef<HTMLDivElement>(null);
@@ -2408,6 +2412,8 @@ export function WatchfaceEditor({
         exerciseProgressPreviewPercent: simulationScenario?.values?.exerciseProgress !== undefined ? Number(simulationScenario.values.exerciseProgress) : design.exerciseProgress?.previewPercent,
         accentColor: design.accentColor
       });
+      // Firmware themes progress arcs drawn in the face's reds as well.
+      applyWatchThemeToCanvas(canvas, watchThemeRef.current);
     },
     [previewResolution, design.kcalProgress, design.exerciseProgress, design.accentColor, simulationScenario?.values]
   );
@@ -2441,9 +2447,6 @@ export function WatchfaceEditor({
       window.cancelAnimationFrame(frame);
     };
   }, [stageScale, previewWidth]);
-  useEffect(() => {
-    paintArcOverlay();
-  }, [paintArcOverlay, canvasBackingRevision]);
   const watchPreviewResolution = useMemo(
     () => previewDetails?.resolutions.find(
       (resolution) => resolution.directory === watchPreviewDirectory
@@ -2459,6 +2462,14 @@ export function WatchfaceEditor({
       : previewDetails,
     [previewDetails, watchPreviewResolution]
   );
+  // MIP firmware draws the face's reds in the face's theme row; the preview
+  // shows the row the watch starts with (null on AMOLED or with theming off).
+  const watchThemeTemplate = useMemo(() => watchThemeSupport(renderedPreviewDetails), [renderedPreviewDetails]);
+  const watchTheme = watchThemeTemplate ? effectiveWatchTheme(renderedPreviewDetails, design) : null;
+  watchThemeRef.current = watchTheme;
+  useEffect(() => {
+    paintArcOverlay();
+  }, [paintArcOverlay, canvasBackingRevision, watchTheme]);
   const watchCoordinateResolution = watchPreviewResolution;
   const watchCoordinateWidth = watchCoordinateResolution?.width ?? previewWidth;
   const watchCoordinateHeight = watchCoordinateResolution?.height ?? previewWidth;
@@ -2884,10 +2895,11 @@ export function WatchfaceEditor({
         context.fillRect(0, 0, canvas.width, canvas.height);
       }
       if (image) context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      applyWatchThemeToCanvas(canvas, watchTheme);
     };
     void paint();
     return () => { cancelled = true; };
-  }, [previewBackgroundDataUrl, previewStudioOptions.previewMode, canvasBackingRevision]);
+  }, [previewBackgroundDataUrl, previewStudioOptions.previewMode, canvasBackingRevision, watchTheme]);
   const selectedElementId = selectedId.startsWith("bgel:")
     ? selectedId.slice("bgel:".length)
     : null;
@@ -3720,6 +3732,7 @@ export function WatchfaceEditor({
         );
       }
     }
+    applyWatchThemeToCanvas(frame, watchTheme);
     return frame;
   }
 
@@ -4386,6 +4399,7 @@ export function WatchfaceEditor({
                 );
               }
             }
+            applyWatchThemeToCanvas(frame, next.watchTheme);
             if (
               mountedRef.current &&
               previewSessionRef.current === next.sessionId &&
@@ -4457,7 +4471,8 @@ export function WatchfaceEditor({
       facePages: facePageIds,
       previewWidth,
       loadAssets,
-      dragCommitId: dragVisualRef.current?.awaitingCommitId ?? null
+      dragCommitId: dragVisualRef.current?.awaitingCommitId ?? null,
+      watchTheme
     });
   }, [
     renderedPreviewDetails,
@@ -4475,7 +4490,8 @@ export function WatchfaceEditor({
     loadAssets,
     queuePreviewRender,
     sessionId,
-    canvasBackingRevision
+    canvasBackingRevision,
+    watchTheme
   ]);
 
   // Draw placement aids on the circular interaction overlay.
@@ -11595,6 +11611,9 @@ export function WatchfaceEditor({
                 onShape={() => addElement("rect")}
                 faceColors={faceColors}
                 onRecolor={(from, to) => setDesign((prev) => recolorWatchfaceFace(prev, from, to))}
+                watchTheme={watchTheme ?? undefined}
+                watchThemeDefault={watchThemeTemplate?.templateDefault}
+                onWatchTheme={watchThemeTemplate ? (theme) => patchDesign({ watchThemeColor: theme }) : undefined}
               />
             ) : (
             <div className="wf-properties-empty">

@@ -3,6 +3,7 @@ import { t, useLanguage } from "../i18n/watchfaces";
 import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
 import { WatchfaceColorInput } from "./WatchfaceColorInput";
 import type { WatchfaceFaceColor } from "./watchfaceFaceColors";
+import { WATCH_THEME_ROWS, watchThemeSwatch } from "./watchfaceThemeColor";
 import {
   ChevronRight,
   Clock,
@@ -33,7 +34,18 @@ interface WatchfaceQuickStartProps {
   /** Colors set on this face's parts; picking a new one recolors them all. */
   faceColors?: WatchfaceFaceColor[];
   onRecolor?: (from: string, to: string) => void;
+  /** MIP theme row the face starts with; the picker shows only with onWatchTheme. */
+  watchTheme?: number;
+  /** The template's own row, marked in the picker. */
+  watchThemeDefault?: number;
+  onWatchTheme?: (theme: number) => void;
 }
+
+/** Swatch names, by the color each theme gives pure red. Translated when read. */
+const watchThemeName = (theme: number) => [
+  t("Red"), t("Orange"), t("Amber"), t("Yellow"), t("Lime"), t("Green"), t("Dark green"),
+  t("Mint"), t("Cyan"), t("Blue"), t("Purple"), t("Magenta"), t("Pink"), t("Slate")
+][theme] ?? t("Red");
 
 const SHORTCUTS: Array<{ keys: string[]; action: string }> = [
   { keys: ["Drag"], action: "Move with smart guides" },
@@ -57,7 +69,10 @@ export function WatchfaceQuickStart({
   photoDisabled,
   onTour,
   faceColors = [],
-  onRecolor
+  onRecolor,
+  watchTheme,
+  watchThemeDefault,
+  onWatchTheme
 }: WatchfaceQuickStartProps) {
   useLanguage();
   const simple = useWatchfaceStudioSimple();
@@ -124,6 +139,45 @@ export function WatchfaceQuickStart({
             ))}
           </div>
           <p className="wf-face-colors-hint">{t("Pick one to recolor every part that uses it.")}</p>
+        </div>
+      ) : null}
+
+      {onWatchTheme && watchTheme !== undefined ? (
+        <div className="wf-welcome-section wf-watch-theme">
+          <h3 id="wf-watch-theme-title">{t("Watch theme color")}<span>{watchThemeName(watchTheme)}</span></h3>
+          <div className="wf-watch-theme-swatches" role="radiogroup" aria-labelledby="wf-watch-theme-title">
+            {WATCH_THEME_ROWS.map((_, theme) => {
+              const name = watchThemeName(theme);
+              const label = theme === watchThemeDefault ? t("{{value1}} (this face's default)", { value1: name }) : name;
+              return (
+                <button
+                  key={theme}
+                  type="button"
+                  role="radio"
+                  aria-checked={theme === watchTheme}
+                  aria-label={label}
+                  title={label}
+                  tabIndex={theme === watchTheme ? 0 : -1}
+                  className={`wf-watch-theme-swatch${theme === watchThemeDefault ? " is-default" : ""}`}
+                  style={{ "--wf-watch-theme": watchThemeSwatch(theme) } as CSSProperties}
+                  onClick={() => onWatchTheme(theme)}
+                  onKeyDown={(event) => {
+                    const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1
+                      : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
+                    if (!step) return;
+                    // Arrows here pick a color; keep them from the editor's nudge shortcut.
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const next = (theme + step + WATCH_THEME_ROWS.length) % WATCH_THEME_ROWS.length;
+                    onWatchTheme(next);
+                    const group = event.currentTarget.parentElement;
+                    requestAnimationFrame(() => (group?.children[next] as HTMLElement | undefined)?.focus());
+                  }}
+                />
+              );
+            })}
+          </div>
+          <p className="wf-face-colors-hint">{t("Red parts of this face take the watch's Theme Color. Pick the one it starts with (the dot marks the face's own); you can change it on the watch later.")}</p>
         </div>
       ) : null}
 

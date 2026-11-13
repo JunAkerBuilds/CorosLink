@@ -1223,6 +1223,11 @@ export interface CorosWatchfaceDesignState {
    * Keys are archive-relative paths; values are full UTF-8 file bodies.
    */
   configTextEdits?: Record<string, string>;
+  /**
+   * MIP theme row (0–13) the face starts with: firmware recolors the face's
+   * reds with it (`watchface_default_theme_color`). Absent keeps the template's.
+   */
+  watchThemeColor?: number;
   /** Solid base colour painted behind artwork and freeform background elements. */
   backgroundColor?: string;
   accentColor: string;

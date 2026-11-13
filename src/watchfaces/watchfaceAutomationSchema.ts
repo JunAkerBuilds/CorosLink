@@ -124,6 +124,7 @@ export const WATCHFACE_AUTOMATION_DOCUMENT_JSON_SCHEMA = {
         stripBlankConfigKeys: { type: "boolean" },
         watchLanguages: { anyOf: [{ enum: ["all", "english"] }, { type: "array", uniqueItems: true, items: { type: "string", pattern: "^[a-z_]+$" } }], description: "Watch languages that get the custom weekday labels. Month/day digits always reach every language." },
         configTextEdits: stringMap,
+        watchThemeColor: { type: "integer", minimum: 0, maximum: 13, description: "MIP watches only: theme row the face starts with. Firmware redraws every pure-red shade of the face (#550000 #aa0000 #ff0000 #ff5555 #ffaaaa) in this row's colors; 0 keeps red, 3 is yellow. Absent keeps the template's." },
         chartPageModes: { type: "object", additionalProperties: false, properties: Object.fromEntries(["sun", "moon", "daily-a", "daily-b"].map(id => [id, { enum: ["hidden", "removed"] }])), description: "Chart pages kept on the watch with nothing visible (hidden) or taken off (removed), by page id. With no page at all the watch draws minimum/maximum temperature; once any page exists they draw only on a daily page. Prefer this over configTextEdits for chart pages." },
         backgroundColor: { $ref: "#/$defs/color", description: "Solid base painted first. Opaque artwork may cover it; set artworkVisible false to show only this color." },
         accentColor: { type: "string" },
@@ -610,6 +611,7 @@ export function validateWatchfaceAutomationDocument(
     issue(diagnostics, "style.languages", "watchLanguages must be all, english or an array of language prefixes.", "/design/watchLanguages");
   }
   if (design.archiveWatchFaceVersion !== undefined) finite(design.archiveWatchFaceVersion, diagnostics, "/design/archiveWatchFaceVersion", { minimum: 0, maximum: 1000, integer: true });
+  if (design.watchThemeColor !== undefined) finite(design.watchThemeColor, diagnostics, "/design/watchThemeColor", { minimum: 0, maximum: 13, integer: true });
   validateAdvancedCollections(design, diagnostics);
   if (objectOf(design.modeDesigns)) {
     for (const key of Object.keys(design.modeDesigns)) if (key !== "aod") issue(diagnostics, "mode.unknown", `Unknown display mode: ${key}.`, `/design/modeDesigns/${key}`);

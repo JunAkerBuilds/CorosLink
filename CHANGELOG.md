@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Split podcast episodes for the watch.** In Apple Podcasts, the new scissors button next to an episode downloads it and splits it into short mono parts, like an audiobook. It then appears in Audiobooks, ready to send. A long episode no longer starts over from the beginning after every sync. (#167)
 - **Continue from the part you're on.** Open a book's parts and choose **I'm here** on the part you're listening to: the parts before it come off the watch and aren't sent again, and the next book or episode you send plays after it. With nothing on the watch, **Start here** picks where the next send starts. (#167)
+- **Pick a MIP face's theme color in Studio.** On PACE 3, APEX 2, APEX 4, NOMAD, VERTIX 2 and other memory-in-pixel watches, the watch redraws a face's red parts in its **Theme Color**. Studio's preview now shows them that way, and **This face** has a **Watch theme color** picker with the watch's 14 colors to choose the one the face starts with; you can still change it on the watch.
 - **Eject the watch from Media.** When everything is copied, the guide offers **Eject**, so you can unplug without macOS or Windows warning about an improper removal. It also says what to expect after unplugging: about a minute of loading on the watch, and Music appears once headphones are connected. (#167)
 
 ### Changed
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Official MIP faces keep their accent color in Studio.** Opening TWILIGHT, NOMAD or NIGHT CLIMBER for a MIP watch showed their accents in red, and the copy you sent started in red too. Studio now keeps the face's own theme color (yellow for TWILIGHT). Copies opened before this update stay red until you pick the color under **Watch theme color**, or open the face again.
 - **`.MP3` files play on the watch.** The watch never plays a file whose name ends in capital `.MP3`. CorosLink now always copies with a lowercase `.mp3`, and the On watch list flags any other `.MP3` file with a one-click rename. (#167)
 
 ## [0.1.77] - 2026-11-11

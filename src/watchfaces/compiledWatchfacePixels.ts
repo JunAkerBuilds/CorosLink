@@ -3,6 +3,7 @@ import type { CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateAsset, Coro
 import { drawStudioPreview, loadStudioImage, parseConfigPos, type WatchfaceAssetLoader, type WatchfaceComplicationId, type WatchfacePreviewMode } from "./watchfaceStudio";
 import { drawNativeDataPreview } from "./nativeData";
 import { recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
+import { applyWatchThemeToCanvas, compiledWatchTheme } from "./watchfaceThemeColor";
 
 /** Something on the compiled face worth a look before it goes to the watch. */
 export interface CompiledWatchfaceCheck {
@@ -140,6 +141,8 @@ export async function renderCompiledWatchfacePreview(
       canvas.getContext("2d")!.drawImage(image, x, y, width, height);
     }
   }
+  // MIP firmware draws the face's reds in the theme row the face starts with.
+  applyWatchThemeToCanvas(canvas, compiledWatchTheme(resolution.width, resolution.config));
   const context = canvas.getContext("2d")!;
   context.globalCompositeOperation = "destination-in";
   context.beginPath(); context.ellipse(canvas.width / 2, canvas.height / 2, canvas.width / 2, canvas.height / 2, 0, 0, Math.PI * 2); context.fill();

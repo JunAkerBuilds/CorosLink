@@ -2995,6 +2995,8 @@ export function applyCorosWatchfaceConfigOverrides(
   const appendableKeys = new Set([
     ...NATIVE_DATA_CONFIG_KEYS,
     "watchface_id",
+    // Studio's MIP theme picker; most DIY templates only declare theme_color_off.
+    "watchface_default_theme_color",
     // Independent AOD artwork may add a flattened background to a valid
     // color-only AODconfig that did not originally declare a PNG.
     "background_icon_pos",

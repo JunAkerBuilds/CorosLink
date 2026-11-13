@@ -48,6 +48,7 @@ function draftConfig(mode) {
   const values = new Map([
     ["watchface_id", String(mode.id)],
     ["watchface_theme_color_off", String(Number(mode.themeColorOff))],
+    ["watchface_default_theme_color", String(mode.defaultTheme)],
     ["watchface_point_layer", String(mode.pointLayer)],
     ["watchface_time_format", String(mode.timeFormat)]
   ]);

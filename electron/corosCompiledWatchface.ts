@@ -34,6 +34,10 @@ const recoveredAsset = (block: BitmapBlock) => block.frameCount > 1 ? recoveredF
 function recoveredConfig(mode: CorosBinLayout["modes"][number], blocks: BitmapBlock[], bytes: Buffer): string {
   const values = new Map<string, string>([
     ["watchface_id", String(mode.id)], ["watchface_theme_color_off", String(Number(mode.themeColorOff))],
+    // High nibble of header 0x10: the theme row MIP firmware starts the face
+    // with (its reds are drawn in that row's colors). Without it the copy
+    // compiles as row 0 and the accents come out red.
+    ["watchface_default_theme_color", String(mode.defaultTheme)],
     ["watchface_point_layer", String(mode.pointLayer)], ["watchface_time_format", String(mode.timeFormat)],
     // Header 0x22 is the rgb222 fill behind the background image. Only light
     // faces set it: SATISFY's dial is transparent over 0x2a (grey 170), and
