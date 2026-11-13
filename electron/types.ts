@@ -37,6 +37,8 @@ export interface WatchTrack {
   absolutePath: string;
   sizeBytes: number;
   modifiedAt: string;
+  /** The name ends in ".MP3" or similar: the watch skips it until renamed. */
+  uppercaseExtension?: boolean;
 }
 
 export type WatchModelId =
@@ -4936,6 +4938,11 @@ export interface Audiobook {
   durationSeconds: number;
   sizeBytes: number;
   parts: AudiobookPart[];
+  /**
+   * First part still to play (1-based). Parts before it were listened to:
+   * they were removed from the watch and are not sent again.
+   */
+  resumePart: number;
   /** Where a downloaded book came from; absent for imported files. */
   source?: AudiobookSource;
 }
@@ -4963,10 +4970,11 @@ export interface AudiobookDraft {
 }
 
 export interface AudiobookSource {
-  kind: "librivox";
+  /** A LibriVox recording, or one podcast episode split into parts. */
+  kind: "librivox" | "podcast";
   identifier: string;
   pageUrl: string;
-  coverUrl: string;
+  coverUrl?: string;
 }
 
 /** A public-domain LibriVox recording, as listed or searched. */
@@ -5008,5 +5016,12 @@ export interface AudiobookProgress {
 export interface AudiobookTransferResult {
   copied: number;
   skipped: number;
+  watch: WatchStatus;
+}
+
+export interface AudiobookContinueResult {
+  book: Audiobook;
+  /** Earlier parts removed from the watch. */
+  removed: number;
   watch: WatchStatus;
 }

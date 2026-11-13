@@ -475,9 +475,11 @@ export async function transferFileToWatch(
 
   fs.mkdirSync(musicPath, { recursive: true });
 
+  // The watch never plays a file whose name ends in ".MP3" (PACE 4, issue
+  // #167), so the copy always gets a lowercase extension.
   const destination = nextAvailablePath(
     musicPath,
-    sanitizeFileName(path.basename(filePath))
+    withLowercaseMp3Extension(sanitizeFileName(path.basename(filePath)))
   );
   await copyFileToWatch(filePath, destination, onProgress);
   invalidateWatchStatusCache();
@@ -490,6 +492,107 @@ export async function transferFileToWatch(
     sizeBytes: stats.size,
     modifiedAt: stats.mtime.toISOString()
   };
+}
+
+/** "Talk.MP3" → "Talk.mp3"; any other name is returned unchanged. */
+export function withLowercaseMp3Extension(fileName: string): string {
+  return /\.mp3$/i.test(fileName) ? `${fileName.slice(0, -4)}.mp3` : fileName;
+}
+
+/**
+ * Renames a watch file whose name ends in ".MP3" (or ".Mp3") so the watch
+ * plays it. FAT is case-insensitive, so the rename goes through a temporary
+ * name; a direct case-only rename may be ignored.
+ */
+export async function fixWatchTrackExtension(relativePath: string): Promise<WatchStatus> {
+  const status = await getWatchStatus();
+  if (!status.connected || !status.musicPath) {
+    throw new Error("No COROS watch is connected.");
+  }
+
+  const sourcePath = safeResolveInside(status.musicPath, relativePath);
+  const fileName = path.basename(sourcePath);
+  if (!isWatchMusicFile(fileName)) {
+    throw new Error("Only MP3 files on the watch can be renamed.");
+  }
+  const fixedName = withLowercaseMp3Extension(fileName);
+  if (fixedName === fileName) {
+    return status;
+  }
+
+  const directory = path.dirname(sourcePath);
+  const siblings = fs.readdirSync(directory);
+  const taken = new Set(siblings.filter((name) => name !== fileName).map((name) => name.toLowerCase()));
+  if (taken.has(fixedName.toLowerCase())) {
+    throw new Error(`Another file on the watch is already named "${fixedName}".`);
+  }
+  const temporaryPath = path.join(directory, `${fixedName}.rename-${process.pid}`);
+  fs.renameSync(sourcePath, temporaryPath);
+  try {
+    fs.renameSync(temporaryPath, path.join(directory, fixedName));
+  } catch (caught) {
+    fs.renameSync(temporaryPath, sourcePath);
+    throw caught;
+  }
+  invalidateWatchStatusCache();
+  return getWatchStatus();
+}
+
+/**
+ * Safely ejects the watch's USB drive, so it can be unplugged without the
+ * operating system warning about an improper removal. Resolves once the
+ * drive is gone.
+ */
+export async function ejectWatch(): Promise<WatchStatus> {
+  const status = await getWatchStatus();
+  if (!status.connected || !status.rootPath) {
+    throw new Error("No COROS watch is connected.");
+  }
+  if (process.env.COROS_WATCH_PATH) {
+    throw new Error("This watch folder was set by COROS_WATCH_PATH and can't be ejected.");
+  }
+
+  const rootPath = status.rootPath;
+  try {
+    if (process.platform === "darwin") {
+      await execFileAsync("/usr/sbin/diskutil", ["eject", rootPath], { timeout: 30_000 });
+    } else if (process.platform === "win32") {
+      const drive = rootPath.replace(/[\\/]+$/, "");
+      if (!/^[A-Z]:$/i.test(drive)) {
+        throw new Error("Unexpected drive letter.");
+      }
+      // Namespace 17 is "This PC"; its Eject verb is what Explorer runs.
+      const command =
+        `(New-Object -ComObject Shell.Application).Namespace(17).ParseName('${drive}').InvokeVerb('Eject')`;
+      await execFileAsync("powershell.exe", ["-NoProfile", "-Command", command], {
+        windowsHide: true,
+        timeout: 30_000
+      });
+    } else {
+      try {
+        await execFileAsync("gio", ["mount", "--unmount", rootPath], { timeout: 30_000 });
+      } catch {
+        await execFileAsync("umount", [rootPath], { timeout: 30_000 });
+      }
+    }
+  } catch (caught) {
+    const detail = caught instanceof Error ? caught.message.split("\n").find(Boolean) : String(caught);
+    throw new Error(
+      `The watch could not be ejected. Close anything using its files and try again. (${detail})`
+    );
+  }
+
+  // Windows' Eject verb returns before the drive goes away; wait for it.
+  const deadline = Date.now() + 10_000;
+  while (fs.existsSync(rootPath) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  invalidateWatchStatusCache();
+  const after = await getWatchStatus();
+  if (after.connected && after.rootPath === rootPath) {
+    throw new Error("The watch is still mounted. Close anything using its files and try again.");
+  }
+  return after;
 }
 
 // Copy to the watch with a streamed, backpressure-aware loop so the main
@@ -716,12 +819,14 @@ async function walkFiles(
 async function listWatchTracks(musicPath: string): Promise<WatchTrack[]> {
   const tracks: WatchTrack[] = [];
   await walkFiles(musicPath, isWatchMusicFile, (absolutePath, stats) => {
+    const name = path.basename(absolutePath);
     tracks.push({
-      name: path.basename(absolutePath),
+      name,
       relativePath: path.relative(musicPath, absolutePath),
       absolutePath,
       sizeBytes: stats.size,
-      modifiedAt: stats.mtime.toISOString()
+      modifiedAt: stats.mtime.toISOString(),
+      ...(withLowercaseMp3Extension(name) !== name ? { uppercaseExtension: true } : {})
     });
   });
   return tracks.sort((left, right) => left.name.localeCompare(right.name));

@@ -374,6 +374,8 @@ import type { CommunityWatchfaceOpenRequest } from "./types";
 import type { CoachChartPreview, FitIndexSyncOptions } from "./types";
 import {
   deleteWatchTrack,
+  ejectWatch,
+  fixWatchTrackExtension,
   getWatchConnectionSmokeOption,
   getWatchStatus,
   setWatchConnectionSmokeOption,
@@ -383,6 +385,7 @@ import {
   AUDIOBOOK_EXTENSIONS,
   audiobookPartsOnWatch,
   cancelAudiobookConversion,
+  continueAudiobookFrom,
   deleteAudiobook,
   discardAudiobookDraft,
   getAudiobook,
@@ -390,9 +393,11 @@ import {
   listAudiobooks,
   findAudiobookBySource,
   normalizeSplitOptions,
+  podcastEpisodeIdentifier,
   prepareAudiobookDraft,
   startAudiobookImportFromDraft,
-  startFreeAudiobookImport
+  startFreeAudiobookImport,
+  startPodcastAudiobookImport
 } from "./audiobookService";
 import {
   listPopularFreeAudiobooks,
@@ -403,6 +408,7 @@ import type {
   Audiobook,
   AudiobookDraft,
   AudiobookProgress,
+  AudiobookContinueResult,
   AudiobookSplitOptions,
   AudiobookTransferResult
 } from "./types";
@@ -446,6 +452,7 @@ import {
   resetAppleMusicBrowserSession
 } from "./appleMusicBrowserService";
 import {
+  findApplePodcastEpisode,
   loadApplePodcast,
   searchApplePodcasts
 } from "./applePodcastsService";
@@ -1984,6 +1991,12 @@ function registerIpcHandlers(): void {
     return getWatchStatus();
   });
 
+  ipcMain.handle("watch:fixTrackExtension", (_event, relativePath: string) =>
+    fixWatchTrackExtension(String(relativePath ?? ""))
+  );
+
+  ipcMain.handle("watch:eject", () => ejectWatch());
+
   ipcMain.handle("watch:transferLocalTrack", async (_event, id: string) => {
     const download = getDownloadById(id);
     if (!download) {
@@ -3450,6 +3463,34 @@ function registerAudiobookIpcHandlers(): void {
     }
   );
 
+  ipcMain.handle(
+    "audiobooks:importPodcast",
+    async (
+      _event,
+      showIdOrUrl: string,
+      episodeId: string,
+      split: AudiobookSplitOptions
+    ): Promise<Audiobook> => {
+      // Re-resolve the episode from the feed here: the audio URL comes from
+      // the publisher, never from the renderer.
+      const { show, episode } = await findApplePodcastEpisode(
+        String(showIdOrUrl ?? ""),
+        String(episodeId ?? "")
+      );
+      const existing = findAudiobookBySource(podcastEpisodeIdentifier(show.id, episode.id));
+      if (existing) {
+        throw new Error(`"${existing.title}" is already in your audiobooks.`);
+      }
+      return startPodcastAudiobookImport(
+        show,
+        episode,
+        normalizeSplitOptions(split),
+        sendProgress,
+        sendUpdated
+      );
+    }
+  );
+
   // Choosing files only reads them; nothing converts until the renderer
   // confirms the draft with a split.
   ipcMain.handle("audiobooks:chooseFiles", async (): Promise<AudiobookDraft | null> => {
@@ -3508,10 +3549,13 @@ function registerAudiobookIpcHandlers(): void {
           throw new Error("Audiobook is not ready to transfer.");
         }
 
+        // Parts before the resume point were listened to and stay off the
+        // watch; sending them again would put them after the rest.
         const partPaths = getAudiobookPartPaths(id);
+        const toPlay = book.parts.filter((part) => part.index >= book.resumePart);
         const pending = book.parts
           .map((part, offset) => ({ part, filePath: partPaths[offset] }))
-          .filter(({ part }) => !part.onWatch);
+          .filter(({ part }) => !part.onWatch && part.index >= book.resumePart);
         const pendingBytes = pending.reduce((total, { part }) => total + part.sizeBytes, 0);
         if (status.freeBytes !== undefined && pendingBytes > status.freeBytes) {
           throw new Error(
@@ -3540,9 +3584,29 @@ function registerAudiobookIpcHandlers(): void {
 
         return {
           copied: pending.length,
-          skipped: book.parts.length - pending.length,
+          skipped: toPlay.length - pending.length,
           watch: await getWatchStatus()
         };
+      })
+  );
+
+  // "I'm on part N": earlier parts come off the watch, so the next book or
+  // episode sent plays after this one, and they are not sent again.
+  ipcMain.handle(
+    "audiobooks:continueFrom",
+    (_event, id: string, partIndex: number): Promise<AudiobookContinueResult> =>
+      withWatchLock(String(id ?? ""), "remove", async () => {
+        const status = await getWatchStatus();
+        const earlier = continueAudiobookFrom(String(id ?? ""), Number(partIndex), status.tracks);
+        for (const track of earlier) {
+          await deleteWatchTrack(track.relativePath);
+        }
+        const watch = await getWatchStatus();
+        const book = getAudiobook(String(id ?? ""), watch.tracks);
+        if (!book) {
+          throw new Error("Audiobook was not found.");
+        }
+        return { book, removed: earlier.length, watch };
       })
   );
 

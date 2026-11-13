@@ -19,6 +19,7 @@ import type {
   ActivityBackupPreview,
   ActivityBackupProgress,
   Audiobook,
+  AudiobookContinueResult,
   AudiobookDraft,
   AudiobookProgress,
   AudiobookSplitOptions,
@@ -464,6 +465,8 @@ export interface CorosLinkApi {
     optionId: WatchConnectionSmokeOptionId
   ) => Promise<WatchStatus>;
   deleteWatchTrack: (relativePath: string) => Promise<WatchStatus>;
+  fixWatchTrackExtension: (relativePath: string) => Promise<WatchStatus>;
+  ejectWatch: () => Promise<WatchStatus>;
   transferLocalTrack: (id: string) => Promise<TransferResult>;
   onWatchTransferProgress: (
     callback: (progress: WatchTransferProgress) => void
@@ -476,6 +479,12 @@ export interface CorosLinkApi {
   deleteAudiobook: (id: string) => Promise<Audiobook[]>;
   transferAudiobook: (id: string) => Promise<AudiobookTransferResult>;
   removeAudiobookFromWatch: (id: string) => Promise<WatchStatus>;
+  continueAudiobookFrom: (id: string, partIndex: number) => Promise<AudiobookContinueResult>;
+  importPodcastAudiobook: (
+    showIdOrUrl: string,
+    episodeId: string,
+    split: AudiobookSplitOptions
+  ) => Promise<Audiobook>;
   listPopularFreeAudiobooks: () => Promise<FreeAudiobook[]>;
   searchFreeAudiobooks: (query: string) => Promise<FreeAudiobook[]>;
   loadFreeAudiobook: (identifier: string) => Promise<FreeAudiobookDetail>;

@@ -1196,4 +1196,12 @@ export const coreSpanish: Record<string, string> = {
   "No setting matches that search.": "Ningún ajuste coincide con esa búsqueda.",
   "Watch faces · External AI": "Esferas · IA externa",
   "Same login as the COROS phone app. Unlocks Training Hub, Coach, Calendar and Strength. Music and podcasts don’t need it.": "El mismo inicio de sesión que en la app de COROS del teléfono. Desbloquea el Centro de entrenamiento, Coach, Calendario y Fuerza. La música y los podcasts no lo necesitan.",
+  "Ejected. You can unplug the watch.": "Expulsado. Ya puedes desconectar el reloj.",
+  "Renamed \"{{value0}}\" so the watch plays it.": "Se cambió el nombre de «{{value0}}» para que el reloj lo reproduzca.",
+  "\"{{p0}}\" is split into {{p1}} parts. Send it from Audiobooks.": "«{{p0}}» se dividió en {{p1}} partes. Envíalo desde Audiolibros.",
+  "Splitting \"{{p0}}\". It appears in Audiobooks when it's ready.": "Dividiendo «{{p0}}». Aparecerá en Audiolibros cuando esté listo.",
+  "Splitting into parts": "Dividiendo en partes",
+  "Split into parts. Find it in Audiobooks.": "Dividido en partes. Lo encontrarás en Audiolibros.",
+  "Split into short parts for the watch": "Dividir en partes cortas para el reloj",
+  "Split {{value0}} into parts for the watch": "Dividir {{value0}} en partes para el reloj",
 };

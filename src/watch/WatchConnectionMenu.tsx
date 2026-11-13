@@ -377,7 +377,11 @@ function WatchMenuPanel({
           <span>{usbWatch.connected
             ? usbWatch.freeBytes !== undefined ? t("{{p0}} free · for music and maps", { p0: formatBytes(usbWatch.freeBytes) }) : t("Ready for music and maps")
             : usbWatch.usbAwaitingApproval
-              ? t("Your watch is plugged in. Open the COROS app on your phone and allow the connection to this computer. New watch? Pair it in the COROS app first.")
+              // The watch keeps one Bluetooth link: while CorosLink holds it,
+              // the COROS app never receives the USB approval request (#167).
+              ? connected
+                ? t("The COROS app can't reach the watch while CorosLink is connected over Bluetooth, so the approval request won't arrive. Disconnect below, then approve in the COROS app.")
+                : t("Your watch is plugged in. Open the COROS app on your phone and allow the connection to this computer. New watch? Pair it in the COROS app first.")
               : usbWatch.error}</span>
         </div>
       </div> : null}

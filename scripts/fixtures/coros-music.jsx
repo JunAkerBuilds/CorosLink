@@ -37,7 +37,7 @@ function Fixture(){
   ]:[],candidates:[],checkedAt:'2026-10-10T12:00:00Z'}}
   watchConnected={usbConnected} busy={null} selectedPaths={new Set()}
   onToggleSelect={noop} onSelectTracks={noop} onClearSelection={noop}
-  onDeleteWatchTrack={noop} onDeleteWatchTracks={noop}
+  onDeleteWatchTrack={noop} onDeleteWatchTracks={noop} onFixWatchTrackName={noop}
  />;
  return <main style={{width:'min(100%, 440px)',padding:16}}><WatchMusicSourcePanel api={api} connection={connection} usbPanel={usbPanel}/></main>;
 }

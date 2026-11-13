@@ -1200,4 +1200,12 @@ export const coreChinese: Readonly<Record<string, string>> = {
   "No setting matches that search.": "没有符合该搜索的设置。",
   "Watch faces · External AI": "表盘·外部AI",
   "Same login as the COROS phone app. Unlocks Training Hub, Coach, Calendar and Strength. Music and podcasts don’t need it.": "与手机上的 COROS 应用使用相同的登录信息。解锁 Training Hub、教练、日历和力量。音乐和播客无需登录。",
+  "Ejected. You can unplug the watch.": "已推出。现在可以拔下手表了。",
+  "Renamed \"{{value0}}\" so the watch plays it.": "已重命名“{{value0}}”，手表现在可以播放它了。",
+  "\"{{p0}}\" is split into {{p1}} parts. Send it from Audiobooks.": "“{{p0}}”已分成 {{p1}} 段。请从“有声书”发送。",
+  "Splitting \"{{p0}}\". It appears in Audiobooks when it's ready.": "正在为“{{p0}}”分段。完成后会出现在“有声书”中。",
+  "Splitting into parts": "正在分段",
+  "Split into parts. Find it in Audiobooks.": "已分段，可在“有声书”中找到。",
+  "Split into short parts for the watch": "为手表切分成短分段",
+  "Split {{value0}} into parts for the watch": "为手表将“{{value0}}”分段",
 };

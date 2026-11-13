@@ -347,6 +347,24 @@
   background: var(--accent);
 }
 
+/* Listened parts: off the watch for good, so they read as done, not missing. */
+.audiobook-meter-ticks span.is-listened {
+  background: color-mix(in srgb, var(--text-secondary) 55%, transparent);
+}
+
+.audiobook-meter-track {
+  display: flex;
+}
+
+.audiobook-meter-listened {
+  height: 100%;
+  background: color-mix(in srgb, var(--text-secondary) 55%, transparent);
+}
+
+.audiobook-meter-track .audiobook-progress-bar {
+  border-radius: 0 3px 3px 0;
+}
+
 .audiobook-meter-label {
   color: var(--text-secondary);
   font-size: 12px;
@@ -456,7 +474,6 @@
 }
 
 .audiobook-parts {
-  display: grid;
   max-height: 320px;
   margin: 0 0 18px 108px;
   padding: 4px 0;
@@ -464,16 +481,78 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   background: var(--glass-bg);
+}
+
+/* Rows share one grid (subgrid) so the action column fits its longest label
+   in every language while lengths and states stay aligned. A subgrid's
+   padding comes out of its edge tracks, so the number track is 12 px (the
+   row padding) + 22 px wide. */
+.audiobook-parts > ol {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 64px 84px max-content;
+  column-gap: 12px;
+  margin: 0;
+  padding: 0;
   list-style: none;
+}
+
+.audiobook-parts-hint {
+  margin: 0;
+  padding: 8px 16px 10px 46px;
+  border-bottom: 1px solid var(--audiobook-rule);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .audiobook-parts li {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) 64px 84px;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 12px;
-  padding: 8px 16px 8px 12px;
+  min-height: 46px;
+  padding: 6px 12px;
   font-size: 12px;
+}
+
+.audiobook-part-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* A quiet text button: it only reads as a control on hover or focus. */
+.audiobook-part-continue {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.audiobook-part-continue:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.audiobook-part-continue:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.audiobook-parts li.is-listened .audiobook-part-name > span:first-child,
+.audiobook-parts li.is-listened .audiobook-part-length {
+  color: var(--text-muted);
 }
 
 .audiobook-parts li + li {
@@ -1594,6 +1673,14 @@
   color: var(--text-secondary);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+}
+
+.audiobook-convert-unknown {
+  margin: 0 0 6px;
+  padding: 0 10px 0 46px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .audiobook-convert-more {

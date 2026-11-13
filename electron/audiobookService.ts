@@ -4,10 +4,21 @@ import { once } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
+import {
+  SILENCE_MIN_SECONDS,
+  SILENCE_NOISE_DB,
+  createSilenceCollector,
+  partFileName,
+  planPauseCuts,
+  podcastEpisodeIdentifier,
+  type SilenceSpan
+} from "./audioSplitPlan";
 import { resolveBinary } from "./downloadService";
 import { isArchiveDownloadUrl } from "./freeAudiobooksService";
 import { normalizeMusicFileName } from "./musicFileNames";
 import type {
+  ApplePodcastEpisode,
+  ApplePodcastShowDetail,
   Audiobook,
   AudiobookPart,
   AudiobookProgress,
@@ -19,14 +30,18 @@ import type {
   WatchTrack
 } from "./types";
 
-// COROS watches play MP3 only and keep no bookmark inside a track, so a book
-// is cut into short, speech-tuned MP3 parts. Losing your place then costs at
-// most one part, and the watch's skip button jumps a whole part.
+// COROS watches play MP3 only. They keep your place inside a track until the
+// watch restarts or is mounted over USB, which every sync does (measured on a
+// PACE 4, issue #167). So a book is cut into short, speech-tuned MP3 parts:
+// losing your place then costs at most one part, and the watch's skip button
+// jumps a whole part.
 export const DEFAULT_AUDIOBOOK_SPLIT: AudiobookSplitOptions = {
   mode: "minutes",
   minutes: 10
 };
-export const MIN_PART_MINUTES = 1;
+// The watch leaves about 3 s of silence between tracks, so very short parts
+// waste listening time.
+export const MIN_PART_MINUTES = 3;
 export const MAX_PART_MINUTES = 180;
 // Chapter marks this close to the start or end of the book would only make
 // empty parts.
@@ -37,6 +52,9 @@ const MANIFEST_NAME = "book.json";
 const MAX_CAPTURED_LINES = 200;
 // About three seconds at 64 kbps.
 const TINY_TAIL_BYTES = 24_000;
+// Progress shares: finding pauses, then converting, then tagging the rest.
+const PAUSE_SCAN_SHARE = 0.2;
+const CONVERT_END = 0.95;
 // Applied before every user-supplied input: only local files, and only the
 // demuxers for the formats the import dialog offers. Without it, a file named
 // .m4b could be an ffmpeg concat script or playlist that makes ffmpeg open
@@ -89,6 +107,8 @@ interface AudiobookManifest {
   splitNote?: string;
   durationSeconds: number;
   parts: StoredPart[];
+  /** First part still to play; earlier parts were listened to and removed. */
+  resumePart?: number;
 }
 
 export interface ProbeChapter {
@@ -107,6 +127,8 @@ interface SegmentPlan {
   /** Chapter title for each expected segment, by position. */
   titles: Array<string | undefined>;
   note?: string;
+  /** Set for equal parts, whose cuts move to nearby pauses before converting. */
+  partSeconds?: number;
 }
 
 const DRAFT_TTL_MS = 60 * 60_000;
@@ -302,6 +324,139 @@ export function startFreeAudiobookImport(
       manifest.sourcePaths = [detail.pageUrl];
     }
   });
+}
+
+/**
+ * Downloads one podcast episode's audio and converts it like a book, so a long
+ * episode reaches the watch as short parts. The episode comes from the feed
+ * the main process parsed, never from the renderer.
+ */
+export function startPodcastAudiobookImport(
+  show: Pick<ApplePodcastShowDetail, "id" | "title" | "artworkUrl" | "applePodcastsUrl" | "feedUrl">,
+  episode: ApplePodcastEpisode,
+  split: AudiobookSplitOptions,
+  onProgress: (progress: AudiobookProgress) => void,
+  onUpdate: (book: Audiobook) => void
+): Audiobook {
+  const audioUrl = new URL(episode.audioUrl);
+  if (audioUrl.protocol !== "https:" && audioUrl.protocol !== "http:") {
+    throw new Error("Only HTTP(S) podcast audio can be downloaded.");
+  }
+  const manifest = createManifest(cleanTitle(episode.title), [], split);
+  manifest.author = show.title;
+  manifest.durationSeconds = episode.durationSeconds ?? 0;
+  manifest.source = {
+    kind: "podcast",
+    identifier: podcastEpisodeIdentifier(show.id, episode.id),
+    pageUrl: show.applePodcastsUrl ?? show.feedUrl ?? episode.audioUrl,
+    coverUrl: episode.artworkUrl ?? show.artworkUrl
+  };
+  writeManifest(manifest);
+
+  const controller = new AbortController();
+  // Until the first ffmpeg process starts, cancelling aborts the download.
+  runningConversions.set(manifest.id, {
+    kill: () => {
+      controller.abort();
+      return true;
+    }
+  } as unknown as ChildProcess);
+
+  return launchConversion(manifest, onUpdate, async () => {
+    const directory = path.join(bookDirectory(manifest.id), DOWNLOAD_DIRECTORY);
+    try {
+      fs.rmSync(directory, { recursive: true, force: true });
+      fs.mkdirSync(directory, { recursive: true });
+      const extension = path.extname(audioUrl.pathname).slice(1).toLowerCase();
+      const target = path.join(
+        directory,
+        `episode.${AUDIOBOOK_EXTENSIONS.includes(extension) ? extension : "mp3"}`
+      );
+      await downloadPodcastAudio(episode.audioUrl, target, episode.sizeBytes, controller.signal, (fraction) =>
+        onProgress({
+          id: manifest.id,
+          phase: "downloading",
+          progress: fraction,
+          message: "Downloading episode"
+        })
+      );
+      manifest.sourcePaths = [target];
+      await convertAudiobook(manifest, onProgress);
+    } finally {
+      // The downloaded episode is only conversion input.
+      fs.rmSync(directory, { recursive: true, force: true });
+      manifest.sourcePaths = [episode.audioUrl];
+    }
+  });
+}
+
+export { podcastEpisodeIdentifier };
+
+/**
+ * Streams a podcast enclosure to disk. Feeds route audio through analytics
+ * redirects and CDNs, so any HTTP(S) host is allowed; ffmpeg's input guard
+ * still accepts only audio formats when the file is converted.
+ */
+async function downloadPodcastAudio(
+  url: string,
+  target: string,
+  expectedBytes: number | undefined,
+  signal: AbortSignal,
+  onFraction: (fraction: number) => void
+): Promise<void> {
+  // Abort only when the transfer stalls; a long episode on a slow line may
+  // take far longer than any fixed timeout.
+  const stall = new AbortController();
+  let stallTimer = setTimeout(() => stall.abort(), DOWNLOAD_TIMEOUT_MS);
+  const touch = (): void => {
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => stall.abort(), DOWNLOAD_TIMEOUT_MS);
+  };
+  const output = fs.createWriteStream(target);
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": "coroslink" },
+      signal: AbortSignal.any([signal, stall.signal])
+    });
+    const finalUrl = new URL(response.url || url);
+    if (finalUrl.protocol !== "https:" && finalUrl.protocol !== "http:") {
+      throw new Error("The episode download left HTTP(S); stopped for safety.");
+    }
+    if (!response.ok || !response.body) {
+      throw new Error(`Episode download failed: ${response.status} ${response.statusText}.`);
+    }
+    const declared = Number(response.headers.get("content-length"));
+    if (declared > MAX_SECTION_BYTES) {
+      await response.body.cancel();
+      throw new Error("The episode is larger than 1 GB; stopped for safety.");
+    }
+    const total = declared > 0 ? declared : expectedBytes ?? 0;
+    let bytes = 0;
+    for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+      touch();
+      bytes += chunk.byteLength;
+      if (bytes > MAX_SECTION_BYTES) {
+        throw new Error("The episode is larger than 1 GB; stopped for safety.");
+      }
+      if (!output.write(chunk)) {
+        await once(output, "drain");
+      }
+      if (total > 0) onFraction(Math.min(bytes / total, 1));
+    }
+    output.end();
+    await once(output, "finish");
+    if (bytes === 0) {
+      throw new Error("The episode download was empty.");
+    }
+  } catch (caught) {
+    output.destroy();
+    if (stall.signal.aborted && !signal.aborted) {
+      throw new Error("The episode download stalled. Try again.");
+    }
+    throw caught;
+  } finally {
+    clearTimeout(stallTimer);
+  }
 }
 
 function createManifest(
@@ -556,28 +711,35 @@ async function convertAudiobook(
   fs.rmSync(workDir, { recursive: true, force: true });
   fs.mkdirSync(workDir, { recursive: true });
 
-  // One decode pass through the whole book, cut by ffmpeg's segment muxer.
-  // Several files are joined with the concat filter rather than the concat
-  // demuxer, so no user path is ever written into an ffmpeg script, and files
-  // with different sample rates or channel counts still join cleanly.
+  // One encode pass through the whole book, cut by ffmpeg's segment muxer.
   const inputArgs = manifest.sourcePaths.flatMap((sourcePath) => [
     ...INPUT_GUARD,
     "-i",
     sourcePath
   ]);
-  const mapArgs =
-    manifest.sourcePaths.length === 1
-      ? ["-map", "0:a:0"]
-      : [
-          "-filter_complex",
-          `${manifest.sourcePaths
-            .map((_, index) => `[${index}:a:0]aresample=44100,aformat=channel_layouts=mono[a${index}]`)
-            .join(";")};${manifest.sourcePaths.map((_, index) => `[a${index}]`).join("")}concat=n=${
-            manifest.sourcePaths.length
-          }:v=0:a=1[book]`,
-          "-map",
-          "[book]"
-        ];
+  const joined = manifest.sourcePaths.length > 1;
+  const mapArgs = joined
+    ? ["-filter_complex", joinGraph(manifest.sourcePaths.length), "-map", "[book]"]
+    : ["-map", "0:a:0"];
+
+  // Equal parts end at a pause near each mark rather than mid-word. Finding
+  // the pauses takes one quick decode pass before the real conversion.
+  let segmentArgs = plan.args;
+  let convertStart = 0;
+  if (plan.partSeconds) {
+    convertStart = PAUSE_SCAN_SHARE;
+    const silences = await findPauses(manifest, ffmpeg, inputArgs, joined, (seconds) =>
+      report(
+        Math.min(seconds / Math.max(manifest.durationSeconds, 1), 1) * PAUSE_SCAN_SHARE,
+        "Finding pauses between sentences"
+      )
+    );
+    const cuts = planPauseCuts(manifest.durationSeconds, plan.partSeconds, silences);
+    if (cuts.length > 0) {
+      segmentArgs = ["-segment_times", cuts.join(",")];
+    }
+  }
+
   await runFfmpeg(
     manifest.id,
     ffmpeg,
@@ -600,7 +762,7 @@ async function convertAudiobook(
       AUDIO_BITRATE,
       "-f",
       "segment",
-      ...plan.args,
+      ...segmentArgs,
       "-segment_format",
       "mp3",
       "-reset_timestamps",
@@ -614,7 +776,8 @@ async function convertAudiobook(
       if (match && manifest.durationSeconds > 0) {
         const seconds = Number(match[1]) / 1_000_000;
         report(
-          Math.min(seconds / manifest.durationSeconds, 1) * 0.95,
+          convertStart +
+            Math.min(seconds / manifest.durationSeconds, 1) * (CONVERT_END - convertStart),
           `Converting ${formatClock(seconds)} of ${formatClock(manifest.durationSeconds)}`
         );
       }
@@ -630,8 +793,9 @@ async function convertAudiobook(
   }
   await foldTinyTailSegment(manifest.id, ffmpeg, workDir, segments);
 
-  // Zero-padded names sort in play order, and the watch plays in transfer
-  // order, which follows this same order.
+  // The watch plays in transfer order, which follows part order. The part
+  // number leads each name because long names scroll on the watch, and the
+  // number is what tells you where you are.
   const width = Math.max(3, String(segments.length).length);
   const fileStem = sanitizeFileStem(title);
   const parts: StoredPart[] = [];
@@ -639,11 +803,11 @@ async function convertAudiobook(
   for (const [offset, segment] of segments.entries()) {
     const index = offset + 1;
     const number = String(index).padStart(width, "0");
-    const name = `${fileStem} ${number}.mp3`;
+    const name = partFileName(fileStem, number);
     const destination = path.join(bookDirectory(manifest.id), name);
     const chapterTitle = plan.titles[offset];
     const tags: Record<string, string> = {
-      title: chapterTitle ? `${number} ${chapterTitle}` : `${title} ${number}`,
+      title: `${number} ${chapterTitle ?? title}`,
       album: title,
       track: `${index}/${segments.length}`,
       genre: "Audiobook"
@@ -682,10 +846,70 @@ async function convertAudiobook(
       durationSeconds: (await probeAudio(ffmpeg, destination)).durationSeconds,
       chapterTitle
     });
-    report(0.95 + (index / segments.length) * 0.05, `Tagging part ${index} of ${segments.length}`);
+    report(
+      CONVERT_END + (index / segments.length) * (1 - CONVERT_END),
+      `Tagging part ${index} of ${segments.length}`
+    );
   }
 
   manifest.parts = parts;
+}
+
+/**
+ * Several files are joined with the concat filter rather than the concat
+ * demuxer, so no user path is ever written into an ffmpeg script, and files
+ * with different sample rates or channel counts still join cleanly.
+ */
+function joinGraph(count: number): string {
+  const inputs = Array.from({ length: count }, (_, index) => index);
+  return `${inputs
+    .map((index) => `[${index}:a:0]aresample=44100,aformat=channel_layouts=mono[a${index}]`)
+    .join(";")};${inputs.map((index) => `[a${index}]`).join("")}concat=n=${count}:v=0:a=1[book]`;
+}
+
+/** Decodes the book once and lists its pauses, in seconds from the start. */
+async function findPauses(
+  manifest: AudiobookManifest,
+  ffmpeg: string,
+  inputArgs: string[],
+  joined: boolean,
+  onSeconds: (seconds: number) => void
+): Promise<SilenceSpan[]> {
+  const detect = `silencedetect=noise=${SILENCE_NOISE_DB}dB:d=${SILENCE_MIN_SECONDS}`;
+  const graphArgs = joined
+    ? [
+        "-filter_complex",
+        `${joinGraph(manifest.sourcePaths.length)};[book]${detect}[quiet]`,
+        "-map",
+        "[quiet]"
+      ]
+    : ["-map", "0:a:0", "-af", `aformat=channel_layouts=mono,${detect}`];
+  const collector = createSilenceCollector();
+  await runFfmpeg(
+    manifest.id,
+    ffmpeg,
+    [
+      "-hide_banner",
+      "-nostats",
+      ...inputArgs,
+      ...graphArgs,
+      "-vn",
+      "-progress",
+      "pipe:1",
+      "-f",
+      "null",
+      "-"
+    ],
+    (line) => {
+      const progress = /^out_time_us=(\d+)$/.exec(line);
+      if (progress) {
+        onSeconds(Number(progress[1]) / 1_000_000);
+        return;
+      }
+      collector.push(line);
+    }
+  );
+  return collector.finish(manifest.durationSeconds);
 }
 
 /**
@@ -760,7 +984,8 @@ export function planSegments(
   const byMinutes = (note?: string): SegmentPlan => ({
     args: ["-segment_time", String(split.minutes * 60)],
     titles: [],
-    note
+    note,
+    partSeconds: split.minutes * 60
   });
   if (split.mode !== "chapters") {
     return byMinutes();
@@ -1001,8 +1226,40 @@ function toAudiobook(manifest: AudiobookManifest, watchTracks: WatchTrack[]): Au
     durationSeconds: manifest.durationSeconds,
     sizeBytes: parts.reduce((total, part) => total + part.sizeBytes, 0),
     parts,
+    resumePart: resumePartOf(manifest),
     source: manifest.source
   };
+}
+
+function resumePartOf(manifest: AudiobookManifest): number {
+  const resume = manifest.resumePart ?? 1;
+  return manifest.parts.some((part) => part.index === resume) ? resume : 1;
+}
+
+/**
+ * Records that listening continues from `partIndex`: later sends skip the
+ * parts before it. Returns the watch files of those earlier parts, which the
+ * caller removes so the watch picks up at this part.
+ */
+export function continueAudiobookFrom(
+  id: string,
+  partIndex: number,
+  watchTracks: WatchTrack[]
+): WatchTrack[] {
+  const manifest = requireManifest(id);
+  if (manifest.status !== "ready") {
+    throw new Error("Audiobook is not ready.");
+  }
+  const index = Math.round(Number(partIndex));
+  if (!manifest.parts.some((part) => part.index === index)) {
+    throw new Error("That part is not in this book.");
+  }
+  manifest.resumePart = index;
+  writeManifest(manifest);
+  const earlier = manifest.parts.filter((part) => part.index < index);
+  return watchTracks.filter((track) =>
+    earlier.some((part) => isSamePartFile(part.name, track.name))
+  );
 }
 
 /**

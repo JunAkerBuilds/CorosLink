@@ -96,7 +96,7 @@ async function run() {
   assert.equal(book.author, "Frank Herbert");
   assert.deepEqual(
     book.parts.map((part) => part.name),
-    ["Dune Book One 001.mp3", "Dune Book One 002.mp3", "Dune Book One 003.mp3"]
+    ["001 Dune Book One.mp3", "002 Dune Book One.mp3", "003 Dune Book One.mp3"]
   );
   assert.ok(progress.some((event) => event.message.startsWith("Converting")));
 
@@ -106,6 +106,7 @@ async function run() {
   assert.match(firstInfo, /mp3.*44100 Hz, mono/);
   assert.match(firstInfo, /64 kb\/s/);
   assert.match(firstInfo, /track\s+: 1\/3/);
+  assert.match(firstInfo, /title\s+: 001 Dune: Book One/);
   assert.match(firstInfo, /artist\s+: Frank Herbert/);
   assert.match(probe(partPaths[2]), /Duration: 00:0[45]:[0-9]{2}/);
 
@@ -121,6 +122,47 @@ async function run() {
     fs.statSync(path.join(watchRoot, "Music", part.name)).birthtimeMs
   );
   assert.deepEqual([...births].sort((a, b) => a - b), births);
+
+  // "I'm on part 2": part 1 comes off the watch and is never sent again.
+  assert.equal(listed[0].resumePart, 1);
+  const earlier = service.continueAudiobookFrom(book.id, 2, status.tracks);
+  assert.deepEqual(earlier.map((track) => track.name), [book.parts[0].name]);
+  for (const track of earlier) await watch.deleteWatchTrack(track.relativePath);
+  const resumed = service.getAudiobook(book.id, (await watch.getWatchStatus()).tracks);
+  assert.equal(resumed.resumePart, 2);
+  assert.deepEqual(resumed.parts.map((part) => part.onWatch), [false, true, true]);
+  assert.throws(() => service.continueAudiobookFrom(book.id, 9, status.tracks), /not in this book/);
+
+  // The watch never plays "*.MP3": copies get a lowercase extension, and a
+  // file already on the watch can be renamed in place.
+  const loud = path.join(tempRoot, "Loud.MP3");
+  makeMp3(loud, 5);
+  assert.equal((await watch.transferFileToWatch(loud, () => {})).name, "Loud.mp3");
+  fs.copyFileSync(loud, path.join(watchRoot, "Music", "Quiet.MP3"));
+  watch.invalidateWatchStatusCache();
+  const flagged = (await watch.getWatchStatus()).tracks.find((track) => track.name === "Quiet.MP3");
+  assert.equal(flagged.uppercaseExtension, true);
+  const renamed = await watch.fixWatchTrackExtension(flagged.relativePath);
+  assert.ok(renamed.tracks.some((track) => track.name === "Quiet.mp3" && !track.uppercaseExtension));
+  assert.ok(!renamed.tracks.some((track) => track.name === "Quiet.MP3"));
+  await assert.rejects(watch.ejectWatch(), /COROS_WATCH_PATH/);
+
+  // Equal parts end in a pause near the mark rather than on the exact minute:
+  // a one-second gap at 9:50 moves the first cut there.
+  const paused = path.join(tempRoot, "Paused.m4a");
+  execFileSync(ffmpegPath(), [
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-f", "lavfi", "-i", "aevalsrc='if(between(t,590,591),0,0.5*sin(2*PI*440*t))':s=44100:d=1500",
+    "-c:a", "aac", "-b:a", "96k", paused
+  ]);
+  const pausedBook = await importAndWait(service, [paused]);
+  assert.equal(pausedBook.book.status, "ready", pausedBook.book.error);
+  assert.ok(pausedBook.progress.some((event) => event.message.startsWith("Finding pauses")));
+  assert.equal(pausedBook.book.parts.length, 3);
+  assert.ok(
+    Math.abs(pausedBook.book.parts[0].durationSeconds - 590.6) < 1,
+    `first part ends in the pause, got ${pausedBook.book.parts[0].durationSeconds}`
+  );
 
   // Several files join into one book, in natural name order.
   const folder = path.join(tempRoot, "Hobbit");
@@ -241,7 +283,7 @@ async function run() {
   );
 
   // Out-of-range or malformed options are clamped.
-  assert.deepEqual(service.normalizeSplitOptions({ mode: "chapters", minutes: 0 }), { mode: "chapters", minutes: 1 });
+  assert.deepEqual(service.normalizeSplitOptions({ mode: "chapters", minutes: 0 }), { mode: "chapters", minutes: 3 });
   assert.deepEqual(service.normalizeSplitOptions({ mode: "bogus", minutes: 999 }), { mode: "minutes", minutes: 180 });
   assert.deepEqual(service.normalizeSplitOptions(undefined), { mode: "minutes", minutes: 10 });
 
@@ -362,6 +404,33 @@ async function run() {
     const offsiteBook = await importFree(freeDetail(offsiteId, [offsite]), TEN_MINUTES);
     assert.equal(offsiteBook.book.status, "failed");
     assert.match(offsiteBook.book.error, /left archive\.org/);
+
+    // A podcast episode downloads from its enclosure and splits like a book.
+    const episodeUrl = "https://cdn.example.com/shows/ep1.mp3";
+    routes.set(episodeUrl, { file: sectionOne });
+    const show = { id: "424242", title: "The Test Show", artworkUrl: "https://cdn.example.com/art.jpg", applePodcastsUrl: "https://podcasts.apple.com/us/podcast/id424242" };
+    const episode = { id: "guid-1", title: "Pod Episode", audioUrl: episodeUrl, durationSeconds: 200 };
+    const podcast = await new Promise((resolve) => {
+      const progress = [];
+      service.startPodcastAudiobookImport(show, episode, { mode: "minutes", minutes: 3 }, (event) => progress.push(event), (done) =>
+        resolve({ book: done, progress })
+      );
+    });
+    assert.equal(podcast.book.status, "ready", podcast.book.error);
+    assert.equal(podcast.book.title, "Pod Episode");
+    assert.equal(podcast.book.author, "The Test Show");
+    assert.equal(podcast.book.source.kind, "podcast");
+    assert.equal(podcast.book.source.identifier, "podcast:424242:guid-1");
+    assert.deepEqual(podcast.book.parts.map((part) => part.name), ["001 Pod Episode.mp3", "002 Pod Episode.mp3"]);
+    assert.ok(podcast.progress.some((event) => event.phase === "downloading"));
+    assert.equal(fs.existsSync(path.join(path.dirname(service.getAudiobookPartPaths(podcast.book.id)[0]), ".download")), false);
+    assert.equal(service.findAudiobookBySource("podcast:424242:guid-1").id, podcast.book.id);
+
+    const missingEpisode = await new Promise((resolve) => {
+      service.startPodcastAudiobookImport(show, { ...episode, id: "guid-2", audioUrl: "https://cdn.example.com/gone.mp3" }, TEN_MINUTES, () => {}, resolve);
+    });
+    assert.equal(missingEpisode.status, "failed");
+    assert.match(missingEpisode.error, /404/);
   } finally {
     global.fetch = realFetch;
   }

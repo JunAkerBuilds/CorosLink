@@ -930,6 +930,7 @@ interface WatchLibraryPanelProps {
   onClearSelection: () => void;
   onDeleteWatchTrack: (track: WatchTrack) => void;
   onDeleteWatchTracks: (tracks: WatchTrack[]) => void;
+  onFixWatchTrackName: (track: WatchTrack) => void;
 }
 
 export function WatchLibraryPanel({
@@ -942,6 +943,7 @@ export function WatchLibraryPanel({
   onClearSelection,
   onDeleteWatchTrack,
   onDeleteWatchTracks,
+  onFixWatchTrackName,
 }: WatchLibraryPanelProps) {
   const { language } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
@@ -1163,7 +1165,24 @@ export function WatchLibraryPanel({
                     </div>
                     <span className="library-track-meta">
                       <strong>{track.name}</strong>
-                      <small>{track.relativePath}</small>
+                      {track.uppercaseExtension ? (
+                        // The watch skips "*.MP3"; this line is the fix.
+                        <button
+                          type="button"
+                          className="library-track-fix"
+                          title={t("Won't play: the watch skips names ending in .MP3")}
+                          aria-label={t("Rename {{p0}} to .mp3", { p0: track.name })}
+                          disabled={!watchConnected || Boolean(busy)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onFixWatchTrackName(track);
+                          }}
+                        >
+                          {t("Rename to .mp3 so the watch plays it")}
+                        </button>
+                      ) : (
+                        <small>{track.relativePath}</small>
+                      )}
                     </span>
                     <span className="library-track-size">{formatBytes(track.sizeBytes)}</span>
                     <span className="library-track-date">{formatDate(track.modifiedAt)}</span>

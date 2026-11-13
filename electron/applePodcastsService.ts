@@ -97,6 +97,25 @@ export async function loadApplePodcast(
   return pageApplePodcastDetail(detail, offset);
 }
 
+/**
+ * Finds one episode in a show's parsed feed (cached, or fetched again), so a
+ * caller acts on the publisher's own enclosure rather than a URL from the
+ * renderer.
+ */
+export async function findApplePodcastEpisode(
+  showIdOrApplePodcastsUrl: string,
+  episodeId: string
+): Promise<{ show: ApplePodcastShowDetail; episode: ApplePodcastEpisode }> {
+  const input = resolveApplePodcastInput(showIdOrApplePodcastsUrl);
+  const cacheKey = `${input.storefront}:${input.collectionId}`;
+  const show = getCachedFeed(cacheKey) ?? await fetchApplePodcastFeed(input, cacheKey);
+  const episode = show.episodes.find((candidate) => candidate.id === episodeId);
+  if (!episode) {
+    throw new Error("That episode is no longer in the podcast's feed.");
+  }
+  return { show, episode };
+}
+
 async function fetchApplePodcastFeed(
   input: ApplePodcastInput,
   cacheKey: string

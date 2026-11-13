@@ -19,6 +19,7 @@ import type {
   ActivityBackupPreview,
   ActivityBackupProgress,
   Audiobook,
+  AudiobookContinueResult,
   AudiobookDraft,
   AudiobookProgress,
   AudiobookSplitOptions,
@@ -555,6 +556,9 @@ const api = {
     ipcRenderer.invoke("watch:setConnectionSmokeOption", optionId),
   deleteWatchTrack: (relativePath: string): Promise<WatchStatus> =>
     ipcRenderer.invoke("watch:deleteTrack", relativePath),
+  fixWatchTrackExtension: (relativePath: string): Promise<WatchStatus> =>
+    ipcRenderer.invoke("watch:fixTrackExtension", relativePath),
+  ejectWatch: (): Promise<WatchStatus> => ipcRenderer.invoke("watch:eject"),
   transferLocalTrack: (id: string): Promise<TransferResult> =>
     ipcRenderer.invoke("watch:transferLocalTrack", id),
   onWatchTransferProgress: (
@@ -585,6 +589,14 @@ const api = {
     ipcRenderer.invoke("audiobooks:transfer", id),
   removeAudiobookFromWatch: (id: string): Promise<WatchStatus> =>
     ipcRenderer.invoke("audiobooks:removeFromWatch", id),
+  continueAudiobookFrom: (id: string, partIndex: number): Promise<AudiobookContinueResult> =>
+    ipcRenderer.invoke("audiobooks:continueFrom", id, partIndex),
+  importPodcastAudiobook: (
+    showIdOrUrl: string,
+    episodeId: string,
+    split: AudiobookSplitOptions
+  ): Promise<Audiobook> =>
+    ipcRenderer.invoke("audiobooks:importPodcast", showIdOrUrl, episodeId, split),
   listPopularFreeAudiobooks: (): Promise<FreeAudiobook[]> =>
     ipcRenderer.invoke("freeAudiobooks:popular"),
   searchFreeAudiobooks: (query: string): Promise<FreeAudiobook[]> =>

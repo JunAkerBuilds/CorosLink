@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Split podcast episodes for the watch.** In Apple Podcasts, the new scissors button next to an episode downloads it and splits it into short mono parts, like an audiobook. It then appears in Audiobooks, ready to send. A long episode no longer starts over from the beginning after every sync. (#167)
+- **Continue from the part you're on.** Open a book's parts and choose **I'm here** on the part you're listening to: the parts before it come off the watch and aren't sent again, and the next book or episode you send plays after it. With nothing on the watch, **Start here** picks where the next send starts. (#167)
+- **Eject the watch from Media.** When everything is copied, the guide offers **Eject**, so you can unplug without macOS or Windows warning about an improper removal. It also says what to expect after unplugging: about a minute of loading on the watch, and Music appears once headphones are connected. (#167)
+
+### Changed
+
+- **Audiobook parts end at a pause.** Equal-length parts now end at a pause in the speech near each mark, not mid-word. Finding the pauses adds one quick pass before converting. (#167)
+- **Part names start with the part number** (`012 Dune.mp3` instead of `Dune 012.mp3`), because long names scroll on the watch and the number is what tells you where you are. Books you already converted keep their names. (#167)
+- **Parts are at least 3 minutes long.** The watch adds about 3 seconds of silence between tracks, so shorter parts wasted listening time. (#167)
+- **Clearer watch notes.** Audiobooks no longer claim the watch forgets your place inside a track: it remembers it until the watch restarts or is plugged in. The watch menu explains that the COROS app's USB approval can't arrive while CorosLink is connected over Bluetooth, and the guide suggests another port or dock when the watch charges but doesn't show up. (#167)
+
+### Fixed
+
+- **`.MP3` files play on the watch.** The watch never plays a file whose name ends in capital `.MP3`. CorosLink now always copies with a lowercase `.mp3`, and the On watch list flags any other `.MP3` file with a one-click rename. (#167)
+
 ## [0.1.77] - 2026-11-11
 
 ### Added

@@ -35,6 +35,7 @@ import {
 import type {
   Audiobook,
   AudiobookDraftChapter,
+  AudiobookPart,
   AudiobookProgress,
   AudiobookSplitMode,
   AudiobookSplitOptions,
@@ -42,19 +43,23 @@ import type {
   FreeAudiobookDetail,
   WatchStatus,
 } from "../../electron/types";
+import { partFileName } from "../../electron/audioSplitPlan";
 import { formatBytes } from "./libraryUtils";
 import "./audiobooks.css";
 
 const SPLIT_STORAGE_KEY = "audiobooks.split";
 const TAB_STORAGE_KEY = "audiobooks.tab";
-const MIN_PART_MINUTES = 1;
+// Matches the converter: the watch adds about 3 s between tracks, so shorter
+// parts waste listening time.
+const MIN_PART_MINUTES = 3;
 const MAX_PART_MINUTES = 180;
 const DEFAULT_SPLIT: AudiobookSplitOptions = { mode: "chapters", minutes: 10 };
 // Converted parts are 64 kbps mono: about 29 MB per hour of audio.
 const CONVERTED_BYTES_PER_SECOND = 8_000;
 // A final part shorter than this is merged into the previous one.
 const TINY_TAIL_SECONDS = 3;
-// Past this, stopping partway through a part costs a lot of listening.
+// Past this, plugging the watch in partway through a part costs a lot of
+// listening: the watch forgets your place in the track on every USB mount.
 const LONG_PART_SECONDS = 30 * 60;
 const PREVIEW_PART_COUNT = 5;
 
@@ -66,9 +71,12 @@ interface FreeSearch {
   serial: number;
 }
 
-/** What the conversion dialog needs, for an imported file or a LibriVox book. */
-interface ConversionRequest {
-  kind: "file" | "librivox";
+/**
+ * What the conversion dialog needs, for an imported file, a LibriVox book or
+ * one podcast episode.
+ */
+export interface ConversionRequest {
+  kind: "file" | "librivox" | "podcast";
   title: string;
   author?: string;
   coverUrl?: string;
@@ -246,6 +254,35 @@ export function AudiobooksView({
     });
   }
 
+  function handleContinueFrom(book: Audiobook, partIndex: number) {
+    const earlierOnWatch = book.parts.filter((part) => part.onWatch && part.index < partIndex).length;
+    if (
+      earlierOnWatch > 0 &&
+      !window.confirm(
+        t("Remove the {{p0}} before part {{p1}} from the watch? Anything you send next plays after part {{p1}}.", {
+          p0: partCountLabel(earlierOnWatch),
+          p1: partIndex,
+        }),
+      )
+    ) {
+      return;
+    }
+    void runBookAction(book.id, async () => {
+      const result = await api!.continueAudiobookFrom(book.id, partIndex);
+      onWatchStatusChange(result.watch);
+      setBooks((current) => current.map((item) => (item.id === book.id ? result.book : item)));
+      onMessage(
+        result.removed > 0
+          ? t("\"{{p0}}\" continues from part {{p1}}. Removed {{p2}} from the watch.", {
+              p0: book.title,
+              p1: partIndex,
+              p2: partCountLabel(result.removed),
+            })
+          : t("\"{{p0}}\" will be sent from part {{p1}}.", { p0: book.title, p1: partIndex }),
+      );
+    });
+  }
+
   function handleDelete(book: Audiobook) {
     const kept = book.source ? "" : t(" Your original file is kept.");
     if (!window.confirm(t("Delete \"{{p0}}\" from CorosLink?{{p1}}", { p0: book.title, p1: kept }))) {
@@ -353,6 +390,7 @@ export function AudiobooksView({
               onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
               onTransfer={handleTransfer}
               onRemoveFromWatch={handleRemoveFromWatch}
+              onContinueFrom={handleContinueFrom}
               onDelete={handleDelete}
               onCancel={(book) => void api?.cancelAudiobookConversion(book.id)}
               onImport={() => void handleChooseFile()}
@@ -389,7 +427,7 @@ export function AudiobooksView({
  * Asks how to split a book before anything is converted, with a preview of
  * the parts each choice makes and what conversion actually does.
  */
-function ConvertDialog({
+export function ConvertDialog({
   request,
   onClose,
   onConfirmed,
@@ -443,6 +481,9 @@ function ConvertDialog({
       : request.kind === "librivox"
         ? t("One part per LibriVox section, named after the section.")
         : t("One part per file you chose, named after the file.");
+  const downloads = request.kind === "librivox" || request.kind === "podcast";
+  // A feed may not list an episode's length; the parts are known once it's downloaded.
+  const lengthKnown = request.durationSeconds > 0;
 
   return createPortal(
     <div
@@ -480,10 +521,12 @@ function ConvertDialog({
             showTitle
           />
           <div className="audiobook-convert-heading">
-            <p className="audiobook-convert-kicker">{t("Convert for your watch")}</p>
+            <p className="audiobook-convert-kicker">
+              {request.kind === "podcast" ? t("Split for your watch") : t("Convert for your watch")}
+            </p>
             <h3 id={titleId}>{request.title}</h3>
             <p className="audiobook-convert-meta">
-              {[request.author, formatLength(request.durationSeconds)]
+              {[request.author, lengthKnown ? formatLength(request.durationSeconds) : undefined]
                 .filter((item): item is string => Boolean(item))
                 .map((item) => (
                   <span key={item}>{item}</span>
@@ -503,7 +546,7 @@ function ConvertDialog({
 
         <div className="audiobook-convert-body">
           <fieldset className="audiobook-split-options">
-            <legend>{t("Split the book into")}</legend>
+            <legend>{request.kind === "podcast" ? t("Split the episode into") : t("Split the book into")}</legend>
             <div className="audiobook-split-grid">
               <label
                 className={`audiobook-split-option${mode === "chapters" ? " is-selected" : ""}${
@@ -538,7 +581,9 @@ function ConvertDialog({
                 <span className="audiobook-split-option-hint">
                   {hasChapters
                     ? t("{{p0}} Longest is {{p1}}.", { p0: chapterDescription, p1: formatLength(longestChapter) })
-                    : t("This book has no chapter marks, so it can only be split by length.")}
+                    : request.kind === "podcast"
+                      ? t("Episodes are split by length.")
+                      : t("This book has no chapter marks, so it can only be split by length.")}
                 </span>
               </label>
 
@@ -562,7 +607,13 @@ function ConvertDialog({
                 </span>
                 <span className="audiobook-split-option-title">{t("Equal parts")}</span>
                 <span className="audiobook-split-count">
-                  <strong>{fixedCount}</strong> {fixedCount === 1 ? "part" : t("parts")}
+                  {lengthKnown ? (
+                    <>
+                      <strong>{fixedCount}</strong> {fixedCount === 1 ? "part" : t("parts")}
+                    </>
+                  ) : (
+                    t("{{p0}} min each", { p0: minutes })
+                  )}
                 </span>
                 <span className="audiobook-stepper">
                   <button
@@ -603,7 +654,7 @@ function ConvertDialog({
                   </button>
                 </span>
                 <span className="audiobook-split-option-hint">
-                  {t("Cuts at the same length every time, even mid-sentence. Short parts lose less when the watch restarts one.")}</span>
+                  {t("Each part ends at a pause near the mark, not mid-word. The watch adds about 3 s of silence between parts.")}</span>
               </label>
             </div>
           </fieldset>
@@ -612,31 +663,40 @@ function ConvertDialog({
             <p className="audiobook-convert-warning" role="note">
               <AlertTriangle size={16} aria-hidden="true" />
               <span>
-                {t("Some chapters run")} {formatLength(longestChapter)}{t(". If you stop partway through one, the watch starts that chapter again from the beginning. Equal parts keep the loss short.")}</span>
+                {t("Some chapters run")} {formatLength(longestChapter)}{t(". Plugging the watch in or restarting it sends you back to the start of the chapter you're in. Equal parts keep the loss short.")}</span>
             </p>
           ) : null}
 
           <section className="audiobook-convert-preview" aria-label={t("Parts preview")}>
             <h4>{t("Preview")}</h4>
+            {lengthKnown ? null : (
+              <p className="audiobook-convert-unknown">
+                {t("The feed doesn't list this episode's length. You'll see the parts once it's downloaded, named like this:")}
+              </p>
+            )}
             <ol>
-              {parts.slice(0, PREVIEW_PART_COUNT).map((part, index) => (
-                <li key={index}>
-                  <span className="audiobook-convert-index">{index + 1}</span>
-                  <span className="audiobook-convert-names">
-                    <span className="audiobook-convert-chapter">
-                      {part.title ?? t("Starts at {{p0}}", { p0: formatClock(part.startSeconds) })}
+              {(lengthKnown ? parts : [{ startSeconds: 0, durationSeconds: minutes * 60 }])
+                .slice(0, PREVIEW_PART_COUNT)
+                .map((part: PreviewPart, index) => (
+                  <li key={index}>
+                    <span className="audiobook-convert-index">{index + 1}</span>
+                    <span className="audiobook-convert-names">
+                      <span className="audiobook-convert-chapter">
+                        {part.title ?? t("Starts at {{p0}}", { p0: formatClock(part.startSeconds) })}
+                      </span>
+                      <span className="audiobook-convert-file">
+                        {partFileName(
+                          stem,
+                          String(index + 1).padStart(Math.max(3, String(parts.length).length), "0"),
+                        )}
+                      </span>
                     </span>
-                    <span className="audiobook-convert-file">
-                      {stem}{" "}
-                      {String(index + 1).padStart(Math.max(3, String(parts.length).length), "0")}
-                      .mp3
+                    <span className="audiobook-convert-length">
+                      {mode === "minutes" && !part.title ? "≈ " : ""}
+                      {formatLength(part.durationSeconds)}
                     </span>
-                  </span>
-                  <span className="audiobook-convert-length">
-                    {formatLength(part.durationSeconds)}
-                  </span>
-                </li>
-              ))}
+                  </li>
+                ))}
             </ol>
             {parts.length > PREVIEW_PART_COUNT ? (
               <p className="audiobook-convert-more">
@@ -652,22 +712,38 @@ function ConvertDialog({
               {request.kind === "librivox" ? (
                 <li>
                   {t("CorosLink downloads the recording from the Internet Archive")}{request.downloadBytes ? ` (${formatBytes(request.downloadBytes)})` : ""}  {t("and checks every file against its published checksum.")}</li>
+              ) : request.kind === "podcast" ? (
+                <li>
+                  {t("CorosLink downloads the episode from the podcast's feed.")}
+                  {request.downloadBytes ? ` (${formatBytes(request.downloadBytes)})` : ""}
+                </li>
               ) : null}
               <li>
                 {t("It converts the audio to mono 64 kbps MP3, the only format COROS watches play.")}{request.kind === "file" ? t(" Your original file isn't changed.") : ""}
               </li>
               <li>
-                {t("It cuts the result into the parts above, numbered in play order. The watch can't remember a position inside a track, so a part you stop halfway through starts again from its beginning.")}</li>
+                {t("It cuts the result into the parts above, numbered in play order. The watch keeps your place inside a part, but plugging it in or restarting it sends you back to the start of that part.")}</li>
               <li>
-                {t("When it's done, send the book from Your books. Parts are copied one at a time, first to last, because the watch plays files in the order they arrive.")}</li>
+                {request.kind === "podcast"
+                  ? t("The episode joins Audiobooks, under Your books. Send it from there: parts are copied one at a time, first to last, because the watch plays files in the order they arrive.")
+                  : t("When it's done, send the book from Your books. Parts are copied one at a time, first to last, because the watch plays files in the order they arrive.")}</li>
             </ol>
           </section>
         </div>
 
         <footer className="audiobook-convert-footer">
           <p className="audiobook-convert-summary">
-            <strong>{partCountLabel(parts.length)}</strong>
-            <span>{t("about")} {formatBytes(request.durationSeconds * CONVERTED_BYTES_PER_SECOND)}</span>
+            {lengthKnown ? (
+              <>
+                <strong>{partCountLabel(parts.length)}</strong>
+                <span>{t("about")} {formatBytes(request.durationSeconds * CONVERTED_BYTES_PER_SECOND)}</span>
+              </>
+            ) : (
+              <>
+                <strong>{t("{{p0}} min parts", { p0: minutes })}</strong>
+                <span>{t("about {{p0}} per hour", { p0: formatBytes(3600 * CONVERTED_BYTES_PER_SECOND) })}</span>
+              </>
+            )}
           </p>
           <button
             className="secondary-button compact-button"
@@ -684,12 +760,14 @@ function ConvertDialog({
           >
             {converting ? (
               <Loader2 className="spin" size={16} aria-hidden="true" />
-            ) : request.kind === "librivox" ? (
+            ) : downloads ? (
               <Download size={16} aria-hidden="true" />
             ) : null}
-            {request.kind === "librivox"
-              ? t("Download and convert")
-              : t("Convert into {{p0}}", { p0: partCountLabel(parts.length) })}
+            {request.kind === "podcast"
+              ? t("Download and split")
+              : request.kind === "librivox"
+                ? t("Download and convert")
+                : t("Convert into {{p0}}", { p0: partCountLabel(parts.length) })}
           </button>
         </footer>
       </div>
@@ -707,6 +785,7 @@ function BookShelf({
   onToggle,
   onTransfer,
   onRemoveFromWatch,
+  onContinueFrom,
   onDelete,
   onCancel,
   onImport,
@@ -720,6 +799,7 @@ function BookShelf({
   onToggle: (id: string) => void;
   onTransfer: (book: Audiobook) => void;
   onRemoveFromWatch: (book: Audiobook) => void;
+  onContinueFrom: (book: Audiobook, partIndex: number) => void;
   onDelete: (book: Audiobook) => void;
   onCancel: (book: Audiobook) => void;
   onImport: () => void;
@@ -736,7 +816,7 @@ function BookShelf({
         </div>
         <h2>{t("Put a book on your wrist")}</h2>
         <p>
-          {t("COROS watches play MP3 only and forget your place inside a track, so CorosLink cuts each book into short parts and sends them in order. You choose how it's split before anything is converted.")}</p>
+          {t("COROS watches play MP3 only and lose your place in a track whenever they're plugged in, so CorosLink cuts each book into short parts and sends them in order. You choose how it's split before anything is converted.")}</p>
         <div className="audiobook-empty-actions">
           <button className="primary-button compact-button" type="button" onClick={onBrowseFree}>
             <Search size={16} aria-hidden="true" />
@@ -765,6 +845,7 @@ function BookShelf({
           onToggle={() => onToggle(book.id)}
           onTransfer={() => onTransfer(book)}
           onRemoveFromWatch={() => onRemoveFromWatch(book)}
+          onContinueFrom={(partIndex) => onContinueFrom(book, partIndex)}
           onDelete={() => onDelete(book)}
           onCancel={() => onCancel(book)}
         />
@@ -783,6 +864,7 @@ function BookRow({
   onToggle,
   onTransfer,
   onRemoveFromWatch,
+  onContinueFrom,
   onDelete,
   onCancel,
 }: {
@@ -795,14 +877,24 @@ function BookRow({
   onToggle: () => void;
   onTransfer: () => void;
   onRemoveFromWatch: () => void;
+  onContinueFrom: (partIndex: number) => void;
   onDelete: () => void;
   onCancel: () => void;
 }) {
   const { language } = useLanguage();
   const ready = book.status === "ready";
-  const onWatch = book.parts.filter((part) => part.onWatch).length;
-  const total = book.parts.length;
+  // Parts before the resume point were listened to; they are never sent again.
+  const resume = book.resumePart ?? 1;
+  const toPlay = book.parts.filter((part) => part.index >= resume);
+  const onWatch = toPlay.filter((part) => part.onWatch).length;
+  const anyOnWatch = book.parts.some((part) => part.onWatch);
+  const total = toPlay.length;
   const allOnWatch = ready && total > 0 && onWatch === total;
+  // With parts on the watch, you can only move forward through them: sending
+  // an earlier part now would put it after the rest. With none on the watch,
+  // any part can be where the next send starts.
+  const canContinueFrom = (part: AudiobookPart) =>
+    connected && !anyBusy && (anyOnWatch ? part.onWatch && part.index > resume : part.index !== resume);
   const transferring = busy && progress?.phase === "transferring";
   const partsId = `audiobook-parts-${book.id}`;
   const partStarts = useMemo(() => {
@@ -853,7 +945,7 @@ function BookRow({
               {transferring ? (
                 <BookProgress progress={progress} />
               ) : (
-                <WatchMeter onWatch={onWatch} total={total} />
+                <WatchMeter parts={book.parts} resume={resume} />
               )}
               {book.splitNote ? <p className="audiobook-note">{book.splitNote}</p> : null}
             </>
@@ -929,27 +1021,54 @@ function BookRow({
       </div>
 
       {expanded && ready ? (
-        <ol className="audiobook-parts" id={partsId}>
-          {book.parts.map((part, offset) => (
-            <li key={part.index} className={part.onWatch ? "is-on-watch" : undefined}>
-              <span className="audiobook-part-number">{part.index}</span>
-              <span className="audiobook-part-name">
-                <span>{part.chapterTitle ?? t("From {{p0}}", { p0: formatClock(partStarts[offset] ?? 0) })}</span>
-                <small>{part.name}</small>
-              </span>
-              <span className="audiobook-part-length">{formatLength(part.durationSeconds)}</span>
-              <span className="audiobook-part-state">
-                {part.onWatch ? (
-                  <>
-                    <Check size={13} aria-hidden="true" />
-                    {t("On watch")}</>
-                ) : (
-                  t("Not sent")
-                )}
-              </span>
-            </li>
-          ))}
-        </ol>
+        <div className="audiobook-parts" id={partsId}>
+          {book.parts.length > 1 && connected ? (
+            <p className="audiobook-parts-hint">
+              {anyOnWatch
+                ? t("Finished some parts? Choose the one you're on: the parts before it come off the watch, and whatever you send next plays after this book.")
+                : t("Choose a part to start from. Sending copies it and the parts after it.")}
+            </p>
+          ) : null}
+          <ol>
+            {book.parts.map((part, offset) => {
+              const listened = part.index < resume;
+              const state = listened ? "is-listened" : part.onWatch ? "is-on-watch" : undefined;
+              return (
+                <li key={part.index} className={state}>
+                  <span className="audiobook-part-number">{part.index}</span>
+                  <span className="audiobook-part-name">
+                    <span>{part.chapterTitle ?? t("From {{p0}}", { p0: formatClock(partStarts[offset] ?? 0) })}</span>
+                    <small>{part.name}</small>
+                  </span>
+                  <span className="audiobook-part-length">{formatLength(part.durationSeconds)}</span>
+                  <span className="audiobook-part-state">
+                    {part.onWatch ? (
+                      <>
+                        <Check size={13} aria-hidden="true" />
+                        {t("On watch")}</>
+                    ) : listened ? (
+                      t("Listened")
+                    ) : (
+                      t("Not sent")
+                    )}
+                  </span>
+                  <span className="audiobook-part-action">
+                    {canContinueFrom(part) ? (
+                      <button
+                        type="button"
+                        className="audiobook-part-continue"
+                        aria-label={t("Continue {{p0}} from part {{p1}}", { p0: book.title, p1: part.index })}
+                        onClick={() => onContinueFrom(part.index)}
+                      >
+                        {anyOnWatch ? t("I'm here") : t("Start here")}
+                      </button>
+                    ) : null}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
       ) : null}
     </li>
   );
@@ -977,29 +1096,49 @@ function BookProgress({ progress }: { progress?: AudiobookProgress }) {
   );
 }
 
-/** One tick per part, so the order the watch will play in stays visible. */
-function WatchMeter({ onWatch, total }: { onWatch: number; total: number }) {
+/**
+ * One tick per part, so the order the watch will play in stays visible.
+ * Parts already listened to sit dimmed at the start.
+ */
+function WatchMeter({ parts, resume }: { parts: AudiobookPart[]; resume: number }) {
   useLanguage();
+  const total = parts.length;
   if (total === 0) return null;
-  const label =
+  const listened = parts.filter((part) => part.index < resume).length;
+  const remaining = total - listened;
+  const onWatch = parts.filter((part) => part.index >= resume && part.onWatch).length;
+  const status =
     onWatch === 0
       ? t("Not on the watch yet")
-      : onWatch === total
-        ? t("Every part is on the watch")
-        : t("{{p0}} of {{p1}} parts on the watch", { p0: onWatch, p1: total });
+      : onWatch === remaining
+        ? listened > 0
+          ? t("Every remaining part is on the watch")
+          : t("Every part is on the watch")
+        : t("{{p0}} of {{p1}} parts on the watch", { p0: onWatch, p1: remaining });
+  const label =
+    listened > 0 ? `${t("From part {{p0}} of {{p1}}", { p0: resume, p1: total })} · ${status}` : status;
   return (
     <div className="audiobook-meter" aria-label={label} role="img">
       {total <= 60 ? (
         <div className="audiobook-meter-ticks" aria-hidden="true">
-          {Array.from({ length: total }, (_, index) => (
-            <span key={index} className={index < onWatch ? "is-on" : undefined} />
+          {parts.map((part) => (
+            <span
+              key={part.index}
+              className={
+                part.index < resume ? "is-listened" : part.onWatch ? "is-on" : undefined
+              }
+            />
           ))}
         </div>
       ) : (
-        <div className="audiobook-progress-track" aria-hidden="true">
+        <div className="audiobook-progress-track audiobook-meter-track" aria-hidden="true">
+          <div
+            className="audiobook-meter-listened"
+            style={{ width: `${(listened / total) * 100}%` }}
+          />
           <div
             className="audiobook-progress-bar"
-            style={{ width: `${Math.round((onWatch / total) * 100)}%` }}
+            style={{ width: `${(onWatch / total) * 100}%` }}
           />
         </div>
       )}

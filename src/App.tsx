@@ -26,6 +26,7 @@ import {
   PanelLeft,
   Podcast,
   RefreshCw,
+  Scissors,
   Search,
   Settings,
   ShieldCheck,
@@ -84,8 +85,10 @@ import type {
   ApplePodcastEpisode,
   ApplePodcastShow,
   ApplePodcastShowDetail,
+  Audiobook,
   CommunityWatchfaceOpenRequest,
 } from "../electron/types";
+import { podcastEpisodeIdentifier } from "../electron/audioSplitPlan";
 import { TRAINING_HUB_EXPORT_FORMATS } from "../electron/types";
 import { buildTrainingHubSnapshot } from "./training/parsers";
 import { fetchTrainingDashboard, fetchUpcomingWorkouts } from "./training/api";
@@ -129,7 +132,7 @@ import {
   WatchLibraryPanel,
   type TrackTransferProgress,
 } from "./media/LibraryPanels";
-import { AudiobooksView } from "./media/AudiobooksView";
+import { AudiobooksView, ConvertDialog, type ConversionRequest } from "./media/AudiobooksView";
 import { WatchMediaGuide } from "./media/WatchMediaGuide";
 import { AppleBrandIcon, YouTubeMusicBrandIcon } from "./media/brandIcons";
 import {
@@ -2372,6 +2375,42 @@ export default function App() {
     }
   }
 
+  async function handleEjectWatch(): Promise<boolean> {
+    if (!api) {
+      return false;
+    }
+
+    setError(null);
+    try {
+      setWatchStatus(await api.ejectWatch());
+      setMessage(localizedText(() => t("Ejected. You can unplug the watch.")));
+      return true;
+    } catch (caught) {
+      setError(localizedText(() => toErrorMessage(caught)));
+      return false;
+    }
+  }
+
+  // The watch skips files named "*.MP3"; renaming to ".mp3" makes them play.
+  async function handleFixWatchTrackName(track: WatchTrack) {
+    if (!api) {
+      return;
+    }
+
+    setBusy(`rename-watch:${track.relativePath}`);
+    setError(null);
+    setMessage(null);
+
+    try {
+      setWatchStatus(await api.fixWatchTrackExtension(track.relativePath));
+      setMessage(localizedText(() => t("Renamed \"{{value0}}\" so the watch plays it.", { value0: track.name })));
+    } catch (caught) {
+      setError(localizedText(() => toErrorMessage(caught)));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleDeleteWatchTracks(tracks: WatchTrack[]) {
     if (!api || tracks.length === 0) {
       return;
@@ -2853,6 +2892,7 @@ export default function App() {
                     onImportFiles={() => void handleImportDownloads()}
                     onSendAll={() => void handleTransferAll()}
                     onRefreshWatch={refreshWatchStatusOnly}
+                    onEject={handleEjectWatch}
                   />
                 }
               >
@@ -2873,6 +2913,7 @@ export default function App() {
                     onImportDownloads={handleImportDownloads}
                     onDeleteWatchTrack={handleDeleteWatchTrack}
                     onDeleteWatchTracks={handleDeleteWatchTracks}
+                    onFixWatchTrackName={handleFixWatchTrackName}
                     bluetoothMusic={IS_DEVELOPMENT_BUILD && showDevelopmentTools}
                   />
                 ) : activeMediaTab === "youtube" ? (
@@ -3787,6 +3828,7 @@ interface MediaLibraryTabProps {
   onImportDownloads: (files?: File[]) => void;
   onDeleteWatchTrack: (track: WatchTrack) => void;
   onDeleteWatchTracks: (tracks: WatchTrack[]) => void;
+  onFixWatchTrackName: (track: WatchTrack) => void;
   /** Bluetooth library and Wi-Fi send; development builds only for now. */
   bluetoothMusic: boolean;
 }
@@ -3807,6 +3849,7 @@ function MediaLibraryTab({
   onImportDownloads,
   onDeleteWatchTrack,
   onDeleteWatchTracks,
+  onFixWatchTrackName,
   bluetoothMusic,
 }: MediaLibraryTabProps) {
   useLanguage();
@@ -3929,6 +3972,7 @@ function MediaLibraryTab({
       onClearSelection={clearWatchSelection}
       onDeleteWatchTrack={onDeleteWatchTrack}
       onDeleteWatchTracks={handleWatchBulkDelete}
+      onFixWatchTrackName={onFixWatchTrackName}
     />
   );
 
@@ -6412,6 +6456,9 @@ function ApplePodcastsView({
   const [busy, setBusy] = useState<"search" | "load" | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [jobs, setJobs] = useState<DownloadJob[]>([]);
+  const [splitRequest, setSplitRequest] = useState<ConversionRequest | null>(null);
+  // Episodes already split into audiobook parts, by source id, with their state.
+  const [splitBooks, setSplitBooks] = useState<Map<string, Audiobook["status"]>>(new Map());
 
   useEffect(() => {
     if (!api) {
@@ -6421,6 +6468,43 @@ function ApplePodcastsView({
     void api.listYouTubeJobs().then(setJobs).catch(() => {});
     return api.onYouTubeJobsUpdate(setJobs);
   }, [api]);
+
+  const refreshSplitBooks = useCallback(async () => {
+    if (!api) return;
+    const books = await api.listAudiobooks();
+    setSplitBooks(
+      new Map(
+        books.flatMap((book) =>
+          book.source?.kind === "podcast" && book.status !== "failed"
+            ? [[book.source.identifier, book.status] as const]
+            : [],
+        ),
+      ),
+    );
+  }, [api]);
+
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+
+    void refreshSplitBooks().catch(() => {});
+    return api.onAudiobookUpdated((book) => {
+      if (book.source?.kind === "podcast") {
+        if (book.status === "ready") {
+          onMessage(
+            t("\"{{p0}}\" is split into {{p1}} parts. Send it from Audiobooks.", {
+              p0: book.title,
+              p1: book.parts.length,
+            }),
+          );
+        } else if (book.status === "failed" && book.error) {
+          onError(`${book.title}: ${book.error}`);
+        }
+      }
+      void refreshSplitBooks().catch(() => {});
+    });
+  }, [api, onError, onMessage, refreshSplitBooks]);
 
   const jobByUrl = useMemo(() => {
     const map = new Map<string, DownloadJob>();
@@ -6510,6 +6594,38 @@ function ApplePodcastsView({
     } catch (caught) {
       onError(toErrorMessage(caught));
     }
+  }
+
+  // Long episodes go to the watch as short parts, like an audiobook, so a sync
+  // (which resets the watch's place in a track) costs at most one part.
+  function handleSplitEpisode(episode: ApplePodcastEpisode) {
+    if (!api || !show) {
+      return;
+    }
+
+    const currentShow = show;
+    setSplitRequest({
+      kind: "podcast",
+      title: episode.title,
+      author: currentShow.title,
+      coverUrl: episode.artworkUrl ?? currentShow.artworkUrl,
+      durationSeconds: episode.durationSeconds ?? 0,
+      chapters: [],
+      chapterSource: "none",
+      fileCount: 1,
+      downloadBytes: episode.sizeBytes,
+      confirm: async (split) => {
+        await api.importPodcastAudiobook(
+          currentShow.applePodcastsUrl ?? currentShow.id,
+          episode.id,
+          split,
+        );
+        onMessage(
+          t("Splitting \"{{p0}}\". It appears in Audiobooks when it's ready.", { p0: episode.title }),
+        );
+        await refreshSplitBooks().catch(() => {});
+      },
+    });
   }
 
   async function handleRetryEpisode(
@@ -6788,6 +6904,37 @@ function ApplePodcastsView({
                                   <Download size={16} aria-hidden="true" />
                                 </button>
                               )}
+                              {(() => {
+                                const splitState = splitBooks.get(
+                                  podcastEpisodeIdentifier(show.id, episode.id),
+                                );
+                                return (
+                                  <button
+                                    className="icon-button"
+                                    type="button"
+                                    title={
+                                      splitState === "converting"
+                                        ? t("Splitting into parts")
+                                        : splitState
+                                          ? t("Split into parts. Find it in Audiobooks.")
+                                          : t("Split into short parts for the watch")
+                                    }
+                                    aria-label={t("Split {{value0}} into parts for the watch", {
+                                      value0: episode.title,
+                                    })}
+                                    disabled={Boolean(splitState)}
+                                    onClick={() => handleSplitEpisode(episode)}
+                                  >
+                                    {splitState === "converting" ? (
+                                      <Loader2 className="spin" size={16} aria-hidden="true" />
+                                    ) : splitState ? (
+                                      <CheckCircle2 size={16} aria-hidden="true" />
+                                    ) : (
+                                      <Scissors size={16} aria-hidden="true" />
+                                    )}
+                                  </button>
+                                );
+                              })()}
                             </div>
                           </td>
                         </tr>
@@ -6831,6 +6978,14 @@ function ApplePodcastsView({
           )}
         </section>
       </div>
+      {splitRequest ? (
+        <ConvertDialog
+          request={splitRequest}
+          onClose={() => setSplitRequest(null)}
+          onConfirmed={() => setSplitRequest(null)}
+          onError={onError}
+        />
+      ) : null}
     </div>
   );
 }

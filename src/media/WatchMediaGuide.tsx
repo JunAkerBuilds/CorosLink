@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Send,
   Smartphone,
+  Unplug,
   Usb,
   Watch,
 } from "lucide-react";
@@ -37,6 +38,8 @@ export interface WatchMediaGuideProps {
   onImportFiles: () => void;
   onSendAll: () => void;
   onRefreshWatch: () => Promise<void> | void;
+  /** Ejects the watch's drive; resolves true once it is safe to unplug. */
+  onEject: () => Promise<boolean>;
 }
 
 type ConnectState = "connected" | "approve" | "unplugged";
@@ -79,10 +82,14 @@ export function WatchMediaGuide({
   onImportFiles,
   onSendAll,
   onRefreshWatch,
+  onEject,
 }: WatchMediaGuideProps) {
   useLanguage();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [checking, setChecking] = useState(false);
+  const [ejecting, setEjecting] = useState(false);
+  // Set by a successful eject; plugging the watch back in clears it.
+  const [ejected, setEjected] = useState(false);
   // A step the person clicked to look at; null follows the current step.
   const [viewed, setViewed] = useState<StepId | null>(null);
   const state = connectState(watchStatus);
@@ -93,6 +100,11 @@ export function WatchMediaGuide({
 
   // Moving on (plugging in, finishing a send) returns the row to the live step.
   useEffect(() => setViewed(null), [current]);
+
+  useEffect(() => {
+    if (state === "connected") setEjected(false);
+  }, [state]);
+  const showEjected = ejected && state !== "connected" && viewed === null;
 
   // Only while the open guide is on screen: collapsed, or with the window in
   // the background, the app-wide poll is enough.
@@ -114,6 +126,18 @@ export function WatchMediaGuide({
     }
   }
 
+  async function eject() {
+    setEjecting(true);
+    try {
+      if (await onEject()) {
+        setEjected(true);
+        setViewed(null);
+      }
+    } finally {
+      setEjecting(false);
+    }
+  }
+
   async function checkAgain() {
     setChecking(true);
     try {
@@ -123,11 +147,13 @@ export function WatchMediaGuide({
     }
   }
 
-  const tones: Record<StepId, StepTone> = {
-    1: haveAudio ? "done" : "current",
-    2: state === "connected" ? "done" : state === "approve" ? "warning" : current === 2 ? "current" : "upcoming",
-    3: done ? "done" : current === 3 ? "current" : "upcoming",
-  };
+  const tones: Record<StepId, StepTone> = ejected && state !== "connected"
+    ? { 1: "done", 2: "done", 3: "done" }
+    : {
+        1: haveAudio ? "done" : "current",
+        2: state === "connected" ? "done" : state === "approve" ? "warning" : current === 2 ? "current" : "upcoming",
+        3: done ? "done" : current === 3 ? "current" : "upcoming",
+      };
   const labels: Record<StepId, string> = {
     1: t("Choose"),
     2: state === "approve" ? t("Approve on phone") : t("Connect"),
@@ -135,6 +161,14 @@ export function WatchMediaGuide({
   };
   const canSend = state === "connected" && pendingCount > 0 && !sending;
   const sendLabel = pendingCount > 0 ? t("Send {{p0}} to watch", { p0: pendingCount }) : t("Send to watch");
+  // Nothing left to copy: the next move is to eject and unplug.
+  const canEject = state === "connected" && pendingCount === 0 && !sending;
+  const ejectButton = (
+    <button type="button" className="secondary-button watch-guide-eject" disabled={ejecting} onClick={() => void eject()}>
+      {ejecting ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <Unplug size={15} aria-hidden="true" />}
+      {t("Eject")}
+    </button>
+  );
   const sendButton = (
     <button type="button" className="primary-button watch-guide-send" disabled={!canSend} onClick={onSendAll}>
       {sending ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <Send size={15} aria-hidden="true" />}
@@ -143,7 +177,14 @@ export function WatchMediaGuide({
   );
 
   let detail: { tone: StepTone; icon: ReactNode; title: string; body: ReactNode; action?: ReactNode };
-  if (shown === 1) {
+  if (showEjected) {
+    detail = {
+      tone: "done",
+      icon: <PartyPopper size={17} aria-hidden="true" />,
+      title: t("Safe to unplug"),
+      body: t("After you unplug, the watch shows a loading icon for about a minute while it reads the new files. Music appears on the watch once your headphones are connected."),
+    };
+  } else if (shown === 1) {
     detail = {
       tone: haveAudio ? "done" : "current",
       icon: <Podcast size={17} aria-hidden="true" />,
@@ -183,20 +224,21 @@ export function WatchMediaGuide({
           body: formatFree(watchStatus?.freeBytes)
             ? t("{{p0}} free on the watch.", { p0: formatFree(watchStatus?.freeBytes) })
             : t("Ready to receive audio."),
+          action: canEject ? ejectButton : undefined,
         }
       : state === "approve"
         ? {
             tone: "warning",
             icon: <Smartphone size={17} aria-hidden="true" />,
             title: t("Approve the connection on your phone"),
-            body: t("Your watch is plugged in. Open the COROS app and allow it to connect to this computer. New watch? Pair it in the COROS app first."),
+            body: t("Your watch is plugged in. Open the COROS app and allow it to connect to this computer. No request in the app? If CorosLink connected to the watch over Bluetooth, reconnect the watch in the COROS app first."),
             action: checkButton,
           }
         : {
             tone: "current",
             icon: <Usb size={17} aria-hidden="true" />,
             title: t("Plug in your watch"),
-            body: t("Use its charging cable. Keep your phone close: the COROS app will ask you to allow the connection."),
+            body: t("Use its charging cable. Keep your phone close: the COROS app will ask you to allow the connection. Charging but not showing up? Try another USB port or a dock."),
             action: checkButton,
           };
   } else if (sending && transferProgress) {
@@ -219,8 +261,9 @@ export function WatchMediaGuide({
     detail = {
       tone: "done",
       icon: <PartyPopper size={17} aria-hidden="true" />,
-      title: t("All set. Unplug and go"),
-      body: t("Start a run, then open Music on the watch to play it."),
+      title: t("All set. Eject and go"),
+      body: t("Eject the watch, then unplug it. Start a run and open Music on the watch to play."),
+      action: ejectButton,
     };
   } else {
     detail = {
@@ -232,7 +275,7 @@ export function WatchMediaGuide({
         : pendingCount > 0
           ? t("{{p0}} new item(s) will be copied. Leave the watch plugged in until it finishes.", { p0: pendingCount })
           : t("Nothing new to send yet. Choose something to play first."),
-      action: sendButton,
+      action: canEject ? ejectButton : sendButton,
     };
   }
 
@@ -252,7 +295,7 @@ export function WatchMediaGuide({
               <li>
                 <button
                   type="button"
-                  className={`watch-guide-step is-${tones[step]}${shown === step && !collapsed ? " is-shown" : ""}`}
+                  className={`watch-guide-step is-${tones[step]}${(showEjected ? 3 : shown) === step && !collapsed ? " is-shown" : ""}`}
                   aria-current={current === step ? "step" : undefined}
                   onClick={() => {
                     if (collapsed) toggleCollapsed();
@@ -270,6 +313,7 @@ export function WatchMediaGuide({
         </ol>
         <div className="watch-guide-head-end">
           {collapsed && canSend ? sendButton : null}
+          {collapsed && canEject ? ejectButton : null}
           <button
             type="button"
             className="watch-guide-collapse"
