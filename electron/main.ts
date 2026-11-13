@@ -1486,7 +1486,8 @@ function registerIpcHandlers(): void {
     const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), "coroslink-compile-"));
     try {
       const filename = path.join(temporary, "source.dat");
-      await exportCorosWatchfaceArchive(input.archiveId, filename);
+      // The archive exactly as built: compiling reads every pixel, so it skips export compression.
+      await exportCorosWatchfaceArchive(input.archiveId, filename, { exact: true });
       const compiler = getCorosWatchfaceCompiler();
       const compiled = await compiler.compile(filename, input.name, target, { fullColor: input.fullColor === true, smoothEdges: input.smoothEdges === true });
       const preview = await corosNativeBle.prepareWatchface(compiled.filePath, true);
@@ -1848,8 +1849,8 @@ function registerIpcHandlers(): void {
       const destinationPath = result.filePath.toLowerCase().endsWith(".zip")
         ? result.filePath
         : `${result.filePath}.zip`;
-      await exportCorosWatchfaceArchive(input.archiveId, destinationPath);
-      return { saved: true, filePath: destinationPath };
+      const sizeFit = await exportCorosWatchfaceArchive(input.archiveId, destinationPath);
+      return { saved: true, filePath: destinationPath, ...(sizeFit ? { sizeFit } : {}) };
     }
   );
   // One Studio image (a template PNG or the user's replacement), saved so it
@@ -1917,8 +1918,8 @@ function registerIpcHandlers(): void {
       for (let copy = 2; fs.existsSync(destinationPath); copy++) {
         destinationPath = path.join(directory, `${baseName} ${copy}.zip`);
       }
-      await exportCorosWatchfaceArchive(input.archiveId, destinationPath);
-      return { saved: true, filePath: destinationPath };
+      const sizeFit = await exportCorosWatchfaceArchive(input.archiveId, destinationPath);
+      return { saved: true, filePath: destinationPath, ...(sizeFit ? { sizeFit } : {}) };
     }
   );
   ipcMain.handle(

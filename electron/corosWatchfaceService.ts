@@ -20,7 +20,7 @@ import {
   type WeatherForecastSummary,
   type WeatherStructReport
 } from "./corosWeatherDecode";
-import { recompressPngLossless } from "./pngRecompress";
+import { ARCHIVE_FIT_TRIGGER_BYTES, fitWatchfaceArchiveSize } from "./watchfaceArchiveFit";
 import { recoverCompiledCorosWatchface } from "./corosCompiledWatchface";
 import { parseCorosFaceMagic } from "./corosBinLayout";
 import { fitGeneratedWatchfaceFontRects } from "./watchfaceExportFontBounds";
@@ -37,6 +37,7 @@ import { formatWatchKeyCheckReport } from "./corosWatchKeyCheckReport";
 import { openWatchKeyBackup, sealWatchKeyBackup } from "./corosWatchKeyBackup";
 import type {
   CorosWatchfaceArchive,
+  CorosWatchfaceArchiveSizeFit,
   CorosWatchfaceConversionInput,
   CorosWatchfaceConversionResult,
   CorosWatchfaceArtwork,
@@ -2783,18 +2784,53 @@ export async function createCorosWatchfaceArchive(
   return toPublicArchive(selected);
 }
 
-/** Saves an already composed final watch-face archive without publishing it. */
+/**
+ * The last few archives as they leave CorosLink, so exporting a face and then
+ * sending it to the iPhone (or publishing it) compresses it only once.
+ */
+const outgoingArchives = new Map<string, { modifiedMs: number; bytes: Buffer; fit?: CorosWatchfaceArchiveSizeFit }>();
+
+/** An archive over 10 MB compressed toward 8 MB (see `fitWatchfaceArchiveSize`); smaller ones as they are. */
+async function outgoingArchive(archive: SelectedArchive): Promise<{ bytes: Buffer; fit?: CorosWatchfaceArchiveSizeFit }> {
+  const cached = outgoingArchives.get(archive.path);
+  if (cached?.modifiedMs === archive.modifiedMs) return cached;
+  const outgoing = await fitWatchfaceArchiveSize(await fs.promises.readFile(archive.path));
+  outgoingArchives.delete(archive.path);
+  outgoingArchives.set(archive.path, { modifiedMs: archive.modifiedMs, ...outgoing });
+  while (outgoingArchives.size > 2) outgoingArchives.delete(outgoingArchives.keys().next().value!);
+  return outgoing;
+}
+
+/**
+ * Saves an already composed final watch-face archive without publishing it.
+ * A face over 10 MB is compressed toward 8 MB on the way out, losslessly first
+ * and then only as far as it needs; `exact` keeps the archive as built, for
+ * compiling, which reads every pixel and has no use for a smaller file.
+ */
 export async function exportCorosWatchfaceArchive(
   archiveId: string,
-  destinationPath: string
-): Promise<void> {
+  destinationPath: string,
+  { exact = false }: { exact?: boolean } = {}
+): Promise<CorosWatchfaceArchiveSizeFit | undefined> {
   const archive = requireSelectedArchive(archiveId);
   const freshArchive = await inspectArchive(archive.path, archive.archiveId);
   if (freshArchive.modifiedMs !== archive.modifiedMs) {
     selectedArchives.set(freshArchive.archiveId, freshArchive);
     throw new Error("The generated watch-face archive changed before export.");
   }
+  if (!exact && freshArchive.sizeBytes > ARCHIVE_FIT_TRIGGER_BYTES) {
+    // Compression only ever helps: if it fails, the face still goes out as built.
+    const outgoing = await outgoingArchive(freshArchive).catch(caught => {
+      console.warn("Could not compress the watch face for export:", caught);
+      return undefined;
+    });
+    if (outgoing?.fit) {
+      await fs.promises.writeFile(destinationPath, outgoing.bytes);
+      return outgoing.fit;
+    }
+  }
   await fs.promises.copyFile(archive.path, destinationPath);
+  return undefined;
 }
 
 /**
@@ -3729,7 +3765,7 @@ export async function publishCorosWatchface(
     throw new Error("Background image ID must be a non-negative integer.");
   }
 
-  const archiveBytes = await fitCorosUploadLimit(await fs.promises.readFile(freshArchive.path));
+  const archiveBytes = await fitCorosUploadLimit(freshArchive);
   if (!/^\d+$/.test(freshArchive.sourceTemplateId)) {
     throw new Error("Invalid COROS source template ID.");
   }
@@ -3792,34 +3828,20 @@ export async function publishCorosWatchface(
 }
 
 /**
- * Brings an archive under COROS's upload limit without changing what the watch
- * shows: every PNG is re-encoded losslessly. Archives already small enough go
- * up untouched, and ones that still do not fit stop here with their size.
+ * Brings an archive under COROS's upload limit: like every export, a face over
+ * 10 MB is compressed toward 8 MB (`outgoingArchive`). Archives already small
+ * enough go up untouched, and ones that still do not fit stop here with their size.
  */
-async function fitCorosUploadLimit(archiveBytes: Buffer<ArrayBuffer>): Promise<Buffer<ArrayBuffer>> {
-  if (archiveBytes.length <= MAX_COROS_UPLOAD_BYTES) return archiveBytes;
-  const unzipper = require("unzipper") as UnzipperModule;
-  const entries = await Promise.all((await unzipper.Open.buffer(archiveBytes)).files
-    .filter(entry => entry.type === "File")
-    .map(async entry => ({ name: entry.path, data: await entry.buffer() })));
-  // Four at a time keeps the zlib thread pool busy without holding every
-  // decoded image in memory at once.
-  let next = 0;
-  await Promise.all(Array.from({ length: 4 }, async () => {
-    while (next < entries.length) {
-      const entry = entries[next++];
-      if (/\.png$/i.test(entry.name)) entry.data = await recompressPngLossless(entry.data);
-    }
-  }));
-  // createStoreZip concatenates fresh buffers, so this is never a SharedArrayBuffer view.
-  const compressed = createStoreZip(entries) as Buffer<ArrayBuffer>;
-  if (compressed.length > MAX_COROS_UPLOAD_BYTES) {
-    const megabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+async function fitCorosUploadLimit(archive: SelectedArchive): Promise<Buffer<ArrayBuffer>> {
+  const { bytes } = await outgoingArchive(archive);
+  if (bytes.length > MAX_COROS_UPLOAD_BYTES) {
+    const megabytes = (size: number) => (size / (1024 * 1024)).toFixed(1);
     throw new Error(
-      `This face is ${megabytes(compressed.length)} MB even after lossless compression, and COROS accepts custom faces up to ${megabytes(MAX_COROS_UPLOAD_BYTES)} MB. Remove some images or use smaller ones, then publish again.`
+      `This face is ${megabytes(bytes.length)} MB even after compression, and COROS accepts custom faces up to ${megabytes(MAX_COROS_UPLOAD_BYTES)} MB. Remove some images or use smaller ones, then publish again.`
     );
   }
-  return compressed;
+  // readFile and createStoreZip both return fresh buffers, never SharedArrayBuffer views.
+  return bytes as Buffer<ArrayBuffer>;
 }
 
 export async function createCorosWatchfaceShareLink(

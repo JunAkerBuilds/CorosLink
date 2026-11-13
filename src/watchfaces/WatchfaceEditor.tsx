@@ -562,6 +562,7 @@ import {
   type WatchfaceMissingFont
 } from "./watchfaceFontSnapshots";
 import { drawWeatherPreviewLayer, maskCanvasToCircle, normalizeEditorDesign } from "./watchfaceExportPipeline";
+import { formatBytes } from "./watchLink";
 
 /** A missing font's "Used by" entry, such as "Time (always-on)", in the app language. */
 function missingFontPlaceLabel(place: WatchfaceMissingFont["usedBy"][number]): string {
@@ -8410,7 +8411,14 @@ export function WatchfaceEditor({
           archiveId: archive.archiveId,
           name
         });
-        if (result.saved) onNotice(t("Exported final watch-face ZIP for “{{name}}”.", { name: name }));
+        const fit = result.sizeFit;
+        if (result.saved) onNotice(!fit
+          ? t("Exported final watch-face ZIP for “{{name}}”.", { name: name })
+          : fit.reducedImages === 0
+            ? t("Exported final watch-face ZIP for “{{name}}”, losslessly compressed from {{before}} to {{after}}.", { name, before: formatBytes(fit.originalBytes), after: formatBytes(fit.bytes) })
+            : fit.reducedImages === 1
+              ? t("Exported final watch-face ZIP for “{{name}}”, compressed from {{before}} to {{after}}; 1 image was reduced to 256 colors.", { name, before: formatBytes(fit.originalBytes), after: formatBytes(fit.bytes) })
+              : t("Exported final watch-face ZIP for “{{name}}”, compressed from {{before}} to {{after}}; {{count}} images were reduced to 256 colors.", { name, before: formatBytes(fit.originalBytes), after: formatBytes(fit.bytes), count: fit.reducedImages }));
       } else if (action === "publish") {
         onPublish(archive, name);
         onNotice(t("Watch face prepared for COROS."));

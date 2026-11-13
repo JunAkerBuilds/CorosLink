@@ -4,7 +4,7 @@ import zlib from "node:zlib";
 import { pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
-const { recompressPngLossless } = await import(
+const { encodeIndexedPng, recompressPngLossless } = await import(
   pathToFileURL(path.join(repoRoot, "electron", "pngRecompress.ts")).href
 );
 
@@ -128,5 +128,43 @@ const palettePng = Buffer.concat([
 const paletteOut = readChunks(await recompressPngLossless(palettePng));
 assert.deepEqual(paletteOut.map(c => c.type), ["IHDR", "PLTE", "IDAT", "IEND"]);
 assert.deepEqual(paletteOut[2].data, paletteData);
+
+// encodeIndexedPng: translucent entries first so tRNS lists only them; colour chunks of the
+// replaced image come along ahead of PLTE; indices decode back to the same RGBA.
+{
+  const entries = Uint8Array.from([
+    10, 20, 30, 255,
+    0, 0, 0, 0,
+    200, 100, 50, 128,
+    255, 255, 255, 255
+  ]);
+  const indices = new Uint8Array(width * height);
+  for (let i = 0; i < indices.length; i++) indices[i] = (i * 7 + (i >> 5)) % 4;
+  const indexed = await encodeIndexedPng(width, height, indices, entries, original);
+  const chunks = readChunks(indexed);
+  assert.deepEqual(chunks.map(c => c.type), ["IHDR", "iCCP", "PLTE", "tRNS", "IDAT", "IEND"]);
+  assert.deepEqual([...chunks[0].data.subarray(8, 13)], [8, 3, 0, 0, 0], "8-bit palette, not interlaced");
+  const plte = chunks[2].data, trns = chunks[3].data;
+  assert.equal(plte.length, 12);
+  assert.deepEqual([...trns], [0, 128], "only the two translucent entries, listed first");
+  const raw = zlib.inflateSync(chunks[4].data);
+  const rows = [];
+  for (let y = 0; y < height; y++) {
+    const filter = raw[y * (width + 1)];
+    const row = Buffer.alloc(width);
+    for (let x = 0; x < width; x++) {
+      const a = x ? row[x - 1] : 0, b = y ? rows[y - 1][x] : 0, c = x && y ? rows[y - 1][x - 1] : 0;
+      row[x] = (raw[y * (width + 1) + 1 + x] + [0, a, b, (a + b) >> 1, paeth(a, b, c)][filter]) & 0xff;
+    }
+    rows.push(row);
+  }
+  const decoded = Buffer.concat(rows);
+  for (let i = 0; i < indices.length; i++) {
+    const entry = decoded[i];
+    const rgba = [plte[entry * 3], plte[entry * 3 + 1], plte[entry * 3 + 2], entry < trns.length ? trns[entry] : 255];
+    assert.deepEqual(rgba, [...entries.subarray(indices[i] * 4, indices[i] * 4 + 4)], `pixel ${i}`);
+  }
+  await assert.rejects(encodeIndexedPng(2, 2, Uint8Array.from([0, 1, 2, 4]), entries.subarray(0, 12)), /Invalid indexed image/);
+}
 
 console.log("png recompress: ok");

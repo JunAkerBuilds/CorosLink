@@ -373,6 +373,18 @@ export interface CorosWatchfaceProjectExportResult {
   saved: boolean;
   /** Absolute path to the editable website ZIP, when saved. */
   filePath?: string;
+  /** Set when a final face over 10 MB was compressed on the way out. */
+  sizeFit?: CorosWatchfaceArchiveSizeFit;
+}
+
+/** How a final face over 10 MB was brought toward 8 MB when it was exported. */
+export interface CorosWatchfaceArchiveSizeFit {
+  originalBytes: number;
+  bytes: number;
+  /** PNGs re-encoded with every pixel unchanged. */
+  losslessImages: number;
+  /** PNGs reduced to a palette (or the watch's own colour levels) to get closer to 8 MB. */
+  reducedImages: number;
 }
 
 export interface CorosWatchfaceArchiveExportInput {

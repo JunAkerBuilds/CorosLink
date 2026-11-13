@@ -163,3 +163,56 @@ export async function recompressPngLossless(png: Buffer): Promise<Buffer> {
   const rewritten = Buffer.concat(parts);
   return rewritten.length < png.length ? rewritten : png;
 }
+
+/** Ancillary chunks that describe colour. They are carried onto a re-encoded image, ahead of PLTE as PNG requires. */
+const COLOR_CHUNKS = new Set(["gAMA", "cHRM", "sRGB", "iCCP"]);
+
+/**
+ * An 8-bit palette PNG (colour type 3): `indices` (one byte per pixel) into
+ * `palette` (RGBA per entry, 1–256 entries). Entries with transparency go
+ * first so tRNS lists only them. Colour chunks of `source`, the image this
+ * replaces, are kept.
+ */
+export async function encodeIndexedPng(width: number, height: number, indices: Uint8Array, palette: Uint8Array, source?: Buffer): Promise<Buffer> {
+  const entries = palette.length / 4;
+  if (!Number.isInteger(entries) || entries < 1 || entries > 256 || width < 1 || height < 1 || indices.length !== width * height) {
+    throw new Error("Invalid indexed image.");
+  }
+  const order = Array.from({ length: entries }, (_, entry) => entry)
+    .sort((a, b) => Number(palette[a * 4 + 3] === 255) - Number(palette[b * 4 + 3] === 255));
+  const remap = new Uint8Array(entries);
+  const plte = Buffer.alloc(entries * 3);
+  const alphas: number[] = [];
+  order.forEach((from, to) => {
+    remap[from] = to;
+    plte[to * 3] = palette[from * 4];
+    plte[to * 3 + 1] = palette[from * 4 + 1];
+    plte[to * 3 + 2] = palette[from * 4 + 2];
+    if (palette[from * 4 + 3] !== 255) alphas.push(palette[from * 4 + 3]);
+  });
+  const pixels = Buffer.alloc(indices.length);
+  for (let i = 0; i < indices.length; i++) {
+    if (indices[i] >= entries) throw new Error("Invalid indexed image.");
+    pixels[i] = remap[indices[i]];
+  }
+  let imageData: Buffer | undefined;
+  for (const filter of [0, -1]) {
+    const encoded = await deflate(filterImage(pixels, height, width, 1, filter), { level: 9, memLevel: 9 });
+    if (!imageData || encoded.length < imageData.length) imageData = encoded;
+  }
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 3;
+  const colour = (source ? readChunks(source) ?? [] : []).filter(chunk => COLOR_CHUNKS.has(chunk.type));
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    writeChunk("IHDR", header),
+    ...colour.map(chunk => writeChunk(chunk.type, chunk.data)),
+    writeChunk("PLTE", plte),
+    ...(alphas.length ? [writeChunk("tRNS", Buffer.from(alphas))] : []),
+    writeChunk("IDAT", imageData!),
+    writeChunk("IEND", Buffer.alloc(0))
+  ]);
+}

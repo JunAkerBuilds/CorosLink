@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Part names start with the part number** (`012 Dune.mp3` instead of `Dune 012.mp3`), because long names scroll on the watch and the number is what tells you where you are. Books you already converted keep their names. (#167)
 - **Parts are at least 3 minutes long.** The watch adds about 3 seconds of silence between tracks, so shorter parts wasted listening time. (#167)
 - **Clearer watch notes.** Audiobooks no longer claim the watch forgets your place inside a track: it remembers it until the watch restarts or is plugged in. The watch menu explains that the COROS app's USB approval can't arrive while CorosLink is connected over Bluetooth, and the guide suggests another port or dock when the watch charges but doesn't show up. (#167)
+- **Watch faces over 10 MB export at about 8 MB.** Export ZIP, export for every watch, Send to iPhone, AirDrop and Publish now shrink a face over 10 MB toward 8 MB. Every image is first compressed without changing a pixel. Then, only as far as needed, images are reduced to 256 colors, starting with ones the watch never draws: the 800 px master and the layout previews. The watch already shows images that way (except with the experimental full-color option), so the face looks the same; the face-picker thumbnail and memory-in-pixel backgrounds change only as a last resort. Studio says how much smaller the export got. Faces compiled or installed over Bluetooth still use every pixel as built.
 
 ### Fixed
 

@@ -194,10 +194,11 @@ export class WatchfaceAutomationService {
         const archiveId = requiredString(params.archiveId, "archiveId");
         const destinationPath = await requireExportPath(params.destinationPath, [".zip", ".dat"]);
         this.requireArchive(archiveId);
-        await writeExclusive(destinationPath, (temporaryPath) =>
-          exportCorosWatchfaceArchive(archiveId, temporaryPath)
-        );
-        return { saved: true, filePath: destinationPath, archiveId };
+        let sizeFit: Awaited<ReturnType<typeof exportCorosWatchfaceArchive>>;
+        await writeExclusive(destinationPath, async (temporaryPath) => {
+          sizeFit = await exportCorosWatchfaceArchive(archiveId, temporaryPath);
+        });
+        return { saved: true, filePath: destinationPath, archiveId, ...(sizeFit ? { sizeFit } : {}) };
       }
 
       case "publish": {

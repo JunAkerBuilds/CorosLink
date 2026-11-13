@@ -20,7 +20,8 @@ export const enum InsideType { Normal = 0, Background = 1, Thumbnail = 2 }
 /** COROS CompressStyle: 0 picks the smaller of RLE and raw, 1 forces RLE, 2 stores raw. */
 export const enum CompressStyle { Auto = 0, Force = 1, None = 2 }
 
-const slot = (index: number) => ((index & 15) << 4) | (index >> 4);
+/** Where palette entry `index` sits in a transposed LUT. */
+export const slot = (index: number) => ((index & 15) << 4) | (index >> 4);
 
 /** COROS `cbz_compress(2, …)`: PCX-style RLE. Runs of 2–63, and lone bytes ≥ 0xc0, become (0xc0 | n, value). */
 export function cbzCompress(input: Uint8Array): Buffer {
