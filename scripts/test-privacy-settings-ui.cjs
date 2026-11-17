@@ -86,7 +86,7 @@ async function main() {
         const ratio = await contrastOf(`.privacy-modes .is-active ${part}`);
         assert.ok(ratio >= 4.5, `${name}: chosen mode ${part} contrast ${ratio.toFixed(2)}`);
       }
-      assert.equal(await js(`${mode('Local-Only Mode')}.querySelector('small').textContent`), 'Nothing is uploaded to COROS.');
+      assert.equal(await js(`${mode('Local-Only Mode')}.querySelector('small').textContent`), 'Nothing is uploaded to COROS except watch faces you send.');
       // The heading matches the panels around it.
       assert.equal(await js(`document.querySelector('.privacy-settings > .settings-units-heading h2').textContent`), 'Privacy & local data');
       await shoot(`${name}-local`);

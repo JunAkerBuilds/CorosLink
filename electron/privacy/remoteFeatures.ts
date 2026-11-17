@@ -4,10 +4,11 @@ import { LOCAL_ONLY_ERROR_PREFIX } from "./dataModeTypes";
  * Every IPC channel the main process handles, classified for Local-Only Mode.
  *
  * - `local`: unaffected. Includes reading from COROS (activity lists,
- *   dashboards, MCP queries, maps, watch-face themes) and every other online
- *   service: Local-Only Mode stops data going *to* COROS; it is not offline.
+ *   dashboards, MCP queries, maps, watch-face themes), sending a watch face
+ *   (a design, not the athlete's data) and every other online service:
+ *   Local-Only Mode stops the athlete's data going *to* COROS; it is not offline.
  * - `upload`: sends the athlete's data to COROS (activities, workouts, plans,
- *   schedules, gear, watch faces); refused with a clear message.
+ *   schedules, gear); refused with a clear message.
  * - `routed`: the handler serves data held on this computer in Local-Only Mode.
  *
  * Classification is per channel prefix with explicit exceptions. A test fails
@@ -46,6 +47,8 @@ export const REMOTE_FEATURE_RULES: Readonly<Record<string, PrefixRule>> = {
   coros: { feature: "Adding activities to COROS", default: "upload" },
   corosBle: LOCAL("Watch over Bluetooth"),
   dataMode: LOCAL("Privacy"),
+  // Unpackaged builds only: reading COROS's weather and pushing it to the watch over Bluetooth.
+  dev: LOCAL("Developer tools"),
   diagnostics: LOCAL("Diagnostics"),
   downloads: LOCAL("Downloads"),
   fitIndex: LOCAL("FIT index"),
@@ -78,7 +81,8 @@ export const REMOTE_FEATURE_RULES: Readonly<Record<string, PrefixRule>> = {
   watch: LOCAL("Watch over USB"),
   watchfaceAi: LOCAL("Watch face AI"),
   watchfaceAutomation: LOCAL("Watch face automation"),
-  watchfaces: { feature: "Publishing watch faces to COROS", default: "local", channels: { publish: "upload", createShareLink: "upload" } },
+  // Sending a face (publish, createShareLink) stays on: networkPolicy.ts lets those two COROS endpoints through.
+  watchfaces: LOCAL("Watch faces"),
   window: LOCAL("Window"),
   workoutAutomation: LOCAL("Workout automation"),
   workoutEdits: { feature: "Saving workout edits to COROS", default: "local", channels: { confirm: "upload" } },

@@ -71,7 +71,7 @@ export const nativeChinese: Readonly<Record<string, string>> = {
   "Export activity-page backup": "导出活动页面备份",
   "CorosLink activity-page backup": "CorosLink活动页面备份",
   "Switch to Connected Mode and restart CorosLink?": "切换到联网模式并重启 CorosLink？",
-  "CorosLink will be able to send data to COROS again: workouts, plans, schedules, gear, watch faces and activity imports. Your local activities stay on this computer.": "CorosLink 将可以再次向 COROS 发送数据：训练、计划、日程、装备、表盘和活动导入。本地活动仍保留在本机。",
+  "CorosLink will be able to send data to COROS again: workouts, plans, schedules, gear and activity imports. Your local activities stay on this computer.": "CorosLink 将可以再次向 COROS 发送数据：训练、计划、日程、装备和活动导入。本地活动仍保留在本机。",
   "Switch and restart": "切换并重启",
   "Choose a folder of FIT files": "选择包含 FIT 文件的文件夹",
   "Choose FIT files": "选择 FIT 文件",

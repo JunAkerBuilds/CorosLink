@@ -154,8 +154,8 @@ export function PrivacySettings({ api }: { api: CorosLinkApi }) {
         {mode === "local" ? <HardDrive size={18} aria-hidden="true" /> : <Cloud size={18} aria-hidden="true" />}
         <span>
           <strong>{mode === "local" ? t("Local-Only Mode") : t("Connected Mode")}</strong>
-          <small>{mode === "local" ? t("Nothing is uploaded to COROS.")
-            : t("Workouts, plans, schedules, gear, watch faces and activity imports can be saved to your COROS account.")}</small>
+          <small>{mode === "local" ? t("Nothing is uploaded to COROS except watch faces you send.")
+            : t("Workouts, plans, schedules, gear and activity imports can be saved to your COROS account.")}</small>
         </span>
       </button>
     );

@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Send watch faces in Local-Only Mode.** Watch Faces and Studio can now send a face to COROS, and make its share link, while Local-Only Mode is on. A face is a design you choose to send, not activity or health data. Workouts, plans, schedules, gear and activity imports are still kept off COROS, and Settings → Privacy now says watch faces are the exception.
 - **Audiobook parts end at a pause.** Equal-length parts now end at a pause in the speech near each mark, not mid-word. Finding the pauses adds one quick pass before converting. (#167)
 - **Part names start with the part number** (`012 Dune.mp3` instead of `Dune 012.mp3`), because long names scroll on the watch and the number is what tells you where you are. Books you already converted keep their names. (#167)
 - **Parts are at least 3 minutes long.** The watch adds about 3 seconds of silence between tracks, so shorter parts wasted listening time. (#167)

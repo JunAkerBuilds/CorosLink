@@ -234,7 +234,7 @@ export function registerLocalOnlyMode(options: LocalOnlyMainOptions): LocalDataS
     const window = mainWindowOnly(event, "Connected Mode");
     const answer = await dialog.showMessageBox(window, confirmOptions({
       message: "Switch to Connected Mode and restart CorosLink?",
-      detail: "CorosLink will be able to send data to COROS again: workouts, plans, schedules, gear, watch faces and activity imports. Your local activities stay on this computer.",
+      detail: "CorosLink will be able to send data to COROS again: workouts, plans, schedules, gear and activity imports. Your local activities stay on this computer.",
       confirm: "Switch and restart",
       danger: true
     }));

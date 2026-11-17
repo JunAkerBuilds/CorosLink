@@ -71,7 +71,7 @@ export const nativePortuguese: Readonly<Record<string, string>> = {
   "Export activity-page backup": "Exportar cópia de segurança das páginas de actividade",
   "CorosLink activity-page backup": "Cópia de segurança das páginas de actividade do CorosLink",
   "Switch to Connected Mode and restart CorosLink?": "Mudar para o modo ligado e reiniciar o CorosLink?",
-  "CorosLink will be able to send data to COROS again: workouts, plans, schedules, gear, watch faces and activity imports. Your local activities stay on this computer.": "O CorosLink vai poder voltar a enviar dados para a COROS: treinos, planos, horários, equipamento, mostradores e importações de actividades. As actividades locais continuam neste computador.",
+  "CorosLink will be able to send data to COROS again: workouts, plans, schedules, gear and activity imports. Your local activities stay on this computer.": "O CorosLink vai poder voltar a enviar dados para a COROS: treinos, planos, horários, equipamento e importações de actividades. As actividades locais continuam neste computador.",
   "Switch and restart": "Mudar e reiniciar",
   "Choose a folder of FIT files": "Escolher uma pasta de ficheiros FIT",
   "Choose FIT files": "Escolher ficheiros FIT",

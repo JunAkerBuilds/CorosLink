@@ -7,8 +7,9 @@ import type { NetworkAttempt, NetworkAttemptChannel } from "./dataModeTypes";
  *
  * Local-Only Mode is not an offline mode. Reading from COROS (activity lists,
  * dashboards, MCP queries, maps, watch-face themes) and every other service
- * keep working. What is refused is anything that sends data *to* COROS:
- * activity uploads, workouts, plans, schedules, gear, watch-face publishing.
+ * keep working. What is refused is anything that sends the athlete's data *to*
+ * COROS: activity uploads, workouts, plans, schedules, gear. Sending a watch
+ * face is the one upload let through (`LOCAL_ONLY_PERMITTED_UPLOADS`).
  *
  * COROS's APIs use POST for reads too, so the HTTP method alone cannot tell
  * them apart. Requests are classified by endpoint: a read verb (`query`,
@@ -39,6 +40,17 @@ const KNOWN_READS = new Set([
   "/user/profile", "/cep/query",
   "/account/captcha", "/account/2fa/login/verify"
 ]);
+/**
+ * Uploads Local-Only Mode lets through: sending a watch face from Watch Faces
+ * or Studio (`corosWatchfaceService.ts`). The face is a design the athlete
+ * chose to send, and the share link only names it; neither carries activity,
+ * health or training data. Compared lower-cased against the end of the path,
+ * since the mobile API sits under `/coros` on every region's host.
+ */
+const LOCAL_ONLY_PERMITTED_UPLOADS: readonly string[] = [
+  "/watchfacetemplateusercustom/saveorupdatev2",
+  "/watchface/share/createlink"
+];
 /** COROS MCP tools that only read (all current ones are `query…`). */
 const MCP_READ_TOOL = /^(query|get|list|search)/i;
 
@@ -117,7 +129,8 @@ export interface CorosRequest {
   body?: unknown;
 }
 
-export type CorosRequestKind = "not-coros" | "read" | "upload";
+/** `permitted`: an upload Local-Only Mode lets through (`LOCAL_ONLY_PERMITTED_UPLOADS`). */
+export type CorosRequestKind = "not-coros" | "read" | "upload" | "permitted";
 
 /** Classifies a request without performing it. */
 export function classifyCorosRequest(request: CorosRequest): { kind: CorosRequestKind; destination: string } {
@@ -129,6 +142,8 @@ export function classifyCorosRequest(request: CorosRequest): { kind: CorosReques
   if (!isCorosHost(url.hostname)) return { kind: "not-coros", destination: "" };
 
   const segments = url.pathname.toLowerCase().split("/").filter(Boolean);
+  const path = `/${segments.join("/")}`;
+  if (!SAFE_METHODS.has(method) && LOCAL_ONLY_PERMITTED_UPLOADS.some(suffix => path.endsWith(suffix))) return { kind: "permitted", destination };
   if (segments.at(-1) === "mcp" && !SAFE_METHODS.has(method)) {
     const tools = mcpToolCalls(request.body);
     // Without a readable body the call cannot be shown to be a read.
@@ -138,7 +153,7 @@ export function classifyCorosRequest(request: CorosRequest): { kind: CorosReques
   }
   const last = segments.at(-1) ?? "";
   if (segments.includes("sts")) return { kind: "upload", destination }; // upload credentials
-  if (segments.includes(".well-known") || segments.includes("oauth") || AUTH_SEGMENT.test(last) || KNOWN_READS.has(`/${segments.join("/")}`)) {
+  if (segments.includes(".well-known") || segments.includes("oauth") || AUTH_SEGMENT.test(last) || KNOWN_READS.has(path)) {
     return { kind: "read", destination };
   }
   if (READ_SEGMENT.test(last)) return { kind: "read", destination };

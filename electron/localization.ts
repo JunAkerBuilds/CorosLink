@@ -51,7 +51,7 @@ const french: Record<string, string> = {
   "Audiobook": "Livre audio",
   "Export GPX": "Exporter le GPX", "Import GPX route": "Importer un itinéraire GPX",
   "Switch to Connected Mode and restart CorosLink?": "Passer en mode connecté et redémarrer CorosLink ?",
-  "CorosLink will be able to send data to COROS again: workouts, plans, schedules, gear, watch faces and activity imports. Your local activities stay on this computer.": "CorosLink pourra de nouveau envoyer des données à COROS : entraînements, plans, programmes, équipement, cadrans et imports d’activités. Vos activités locales restent sur cet ordinateur.",
+  "CorosLink will be able to send data to COROS again: workouts, plans, schedules, gear and activity imports. Your local activities stay on this computer.": "CorosLink pourra de nouveau envoyer des données à COROS : entraînements, plans, programmes, équipement et imports d’activités. Vos activités locales restent sur cet ordinateur.",
   "Switch and restart": "Basculer et redémarrer",
   "Choose a folder of FIT files": "Choisir un dossier de fichiers FIT",
   "Choose FIT files": "Choisir des fichiers FIT",

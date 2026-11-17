@@ -107,13 +107,28 @@ await test("anything that sends data to COROS is an upload", () => {
     "https://teamapi.coros.com/training/program/update", "https://teamapi.coros.com/training/program/delete",
     "https://teamapi.coros.com/training/schedule/update", "https://teamapi.coros.com/training/schedule/executeSubPlan",
     "https://teamapi.coros.com/training/plan/copy", "https://api.coros.com/user/gear/save",
-    "https://api.coros.com/watchface/share/createLink", "https://api.coros.com/watchFaceTemplateUserCustom/saveOrUpdateV2",
     "https://faq.coros.com/openapi/oss/sts", "https://teamapi.coros.com/something/unknown",
     "https://epo.coros.com/epoAction!uploadSomething.do", "https://epo.coros.com/cep/upload", "https://epo.coros.com/cep/query/update"
   ]) assert.equal(kind(url), "upload", url);
   assert.equal(kind("https://coros-s3.s3.us-west-2.amazonaws.com/fit/123.zip", "PUT"), "upload");
   assert.equal(kind("https://s3.amazonaws.com/eu-coros/fit/123.zip", "PUT"), "upload");
   assert.equal(kind("https://teamapi.coros.com/something/unknown", "GET"), "read", "unknown GETs read");
+});
+
+await test("sending a watch face is the one upload Local-Only Mode lets through", () => {
+  const sends = [
+    "https://api.coros.com/coros/watchFaceTemplateUserCustom/saveOrUpdateV2", "https://apieu.coros.com/coros/watchface/share/createLink",
+    "https://api.coros.com/watchface/share/createLink", "https://api.coros.com/watchFaceTemplateUserCustom/saveOrUpdateV2"
+  ];
+  for (const url of sends) assert.equal(kind(url), "permitted", url);
+  // Neighbouring watch-face writes and look-alike paths are still uploads.
+  for (const url of ["https://api.coros.com/coros/watchFaceTemplateUserCustom/delete", "https://api.coros.com/coros/xwatchface/share/createLink",
+    "https://api.coros.com/coros/watchface/share/createLink/extra"]) assert.equal(kind(url), "upload", url);
+  assert.equal(kind("https://coros-s3.s3.us-west-2.amazonaws.com/watchface/share/createLink", "PUT"), "upload", "COROS buckets are never exempt");
+  const policy = new NetworkPolicy({ enforcing: true });
+  for (const url of sends) assert.equal(policy.allowRequest({ url, method: "POST" }, "fetch").allowed, true, url);
+  assert.equal(policy.allowRequest({ url: "https://api.coros.com/coros/user/gear/save", method: "POST" }, "fetch").allowed, false);
+  assert.equal(policy.blockedCount, 1, "only the gear save is counted as blocked");
 });
 
 await test("COROS MCP: query tools read, every other tool uploads", () => {
@@ -438,7 +453,7 @@ await test("only features that upload to COROS are refused, and only while enfor
   const on = { enforcing: true };
   assert.doesNotThrow(() => assertChannelAllowed("coros:addManualActivity", off));
   assert.throws(() => assertChannelAllowed("coros:addManualActivity", on), /Local-Only Mode: .* would send your data to COROS/);
-  for (const channel of ["coros:addManualActivity", "intervals:import", "gear:save", "watchfaces:publish", "workoutEdits:confirm", "chat:confirmCorosAction"]) {
+  for (const channel of ["coros:addManualActivity", "intervals:import", "gear:save", "workoutEdits:confirm", "chat:confirmCorosAction"]) {
     assert.throws(() => assertChannelAllowed(channel, on), /Local-Only Mode/, channel);
   }
   // The workout library and training calendar are served from this computer in Local-Only Mode.
@@ -448,7 +463,7 @@ await test("only features that upload to COROS are refused, and only while enfor
     assert.doesNotThrow(() => assertChannelAllowed(channel, on), channel);
   }
   for (const channel of ["trainingHub:getDashboard", "trainingHub:listActivities", "trainingHub:login", "chatMcp:connect", "mcp:connect",
-    "watchfaces:login", "watchfaces:listThemes", "maps:downloadCorosPackage", "fitIndex:startSync", "gear:query", "strava:connect",
+    "watchfaces:login", "watchfaces:listThemes", "watchfaces:publish", "watchfaces:createShareLink", "maps:downloadCorosPackage", "fitIndex:startSync", "gear:query", "strava:connect",
     "spotify:login", "app:checkForUpdates", "chat:send", "corosBle:connect", "intervals:listMissing"]) {
     assert.doesNotThrow(() => assertChannelAllowed(channel, on), channel);
   }
