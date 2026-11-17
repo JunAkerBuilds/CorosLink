@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react";
 import { ChevronDown, Loader2, Save } from "lucide-react";
 import { MAX_CUSTOM_COACH_INSTRUCTIONS } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import { useUnsavedWork } from "../unsavedWork";
 import {
   ChatSettingsSectionHeader,
   chatSettingsSectionDomId
@@ -35,20 +36,24 @@ export function CoachInstructionsSettings({
     setDraft(value);
   }, [value]);
 
-  const save = async () => {
-    if (!dirty || saving || disabled || !api) return;
+  /** Resolves true once the instructions are saved. */
+  const save = async (): Promise<boolean> => {
+    if (!dirty || saving || disabled || !api) return false;
     setSaving(true);
     setSaveError(false);
     try {
       const ok = await onSave(draft.trim());
       setSaved(ok);
       setSaveError(!ok);
+      return ok;
     } catch {
       setSaveError(true);
+      return false;
     } finally {
       setSaving(false);
     }
   };
+  useUnsavedWork(dirty ? { label: t("Coach instructions"), save } : null);
 
   const loadBaseInstructions = async () => {
     if (baseInstructions !== null || loadingBase) return;

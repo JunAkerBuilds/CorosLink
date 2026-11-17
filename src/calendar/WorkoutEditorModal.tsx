@@ -65,6 +65,7 @@ import "./workoutBuilder.css";
 import { stepZone } from "../training-library/sessionProfile";
 import { sportAccentStyle } from "../training-library/sportTheme";
 import { resolveExerciseName } from "../training/exerciseNames";
+import { useUnsavedWork } from "../unsavedWork";
 import { CLIMB_GRADES, CLIMB_SYSTEM_IDS, FTP_PRESETS, HEART_RATE_PRESETS, PACE_PRESETS, RUNNING_POWER_PRESETS, SWIM_STROKE_IDS, WORKOUT_SPORT_CAPABILITIES, validateWorkoutDraftShared, workoutIntensitiesForStep, workoutTargetsForStep } from "../../electron/workoutCapabilities";
 
 interface WorkoutEditorModalProps {
@@ -691,14 +692,15 @@ export function WorkoutEditorModal({
     });
   };
 
-  const save = async () => {
-    if (!document || !draft || !validation.valid) return;
+  /** Resolves true once the edits are saved (or applied to the plan, which then saves them). */
+  const save = async (): Promise<boolean> => {
+    if (!document || !draft || !validation.valid) return false;
     setSaving(true);
     try {
       if (planMode) {
         if (!planWorkout || !onSavedToPlan) throw new Error(t("The plan workout cannot be updated."));
         onSavedToPlan(editorDraftToPlanWorkoutInput(draft, planWorkout));
-        return;
+        return true;
       }
       if (!editRef || !onSaved) throw new Error(t("The workout editor is missing its save target."));
       const result = await api.saveWorkoutEdit(
@@ -708,12 +710,18 @@ export function WorkoutEditorModal({
         unitSystem
       );
       onSaved(result);
+      return true;
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
+      return false;
     } finally {
       setSaving(false);
     }
   };
+  useUnsavedWork(dirty && draft ? {
+    label: draft.name.trim() ? t("Workout “{{value1}}”", { value1: draft.name.trim() }) : t("Workout edits"),
+    save
+  } : null);
 
   return createPortal(
     <AnimatePresence>

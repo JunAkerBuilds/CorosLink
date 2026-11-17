@@ -2289,6 +2289,7 @@ export const watchfacesFrench: Record<string, string> = {
   "None of this face's chart pages draw this field.": "Aucune page du graphique de ce cadran n’affiche ce champ.",
   "Chart pages: {{rule}}. The watch hides this field on the other pages.": "Pages du graphique : {{rule}}. La montre masque ce champ sur les autres pages.",
   "The page on screen hides it.": "La page affichée le masque.",
+  "Watch face “{{value1}}”": "Cadran « {{value1}} »",
   "Red": "Rouge",
   "Orange": "Orange",
   "Amber": "Ambre",

@@ -104,6 +104,8 @@ import type { CoachPrefill } from "./chat/chatTypes";
 import { AppUpdateControls } from "./components/AppUpdateControls";
 import { DonateButton } from "./components/DonateButton";
 import { UpdateAvailablePrompt } from "./components/UpdateAvailablePrompt";
+import { RestartUnsavedPrompt } from "./components/RestartUnsavedPrompt";
+import { listUnsavedWork, releaseUnsavedWorkForRestart } from "./unsavedWork";
 import {
   AppSidebar,
   createInitialSidebarExpanded,
@@ -612,6 +614,7 @@ export default function App() {
     },
   );
   const installAcceptedVersionRef = useRef<string | null>(null);
+  const [restartUnsavedOpen, setRestartUnsavedOpen] = useState(false);
 
   useEffect(() => {
     if (!api) return;
@@ -1467,17 +1470,35 @@ export default function App() {
     }
   }
 
+  /** Restarts to install the downloaded update, asking first while anything is unsaved. */
   function handleInstallUpdate() {
+    // A manual install only opens the download page; CorosLink keeps running.
+    if (appUpdateSnapshot.installMethod !== "manual" && listUnsavedWork().length > 0) {
+      setRestartUnsavedOpen(true);
+      return;
+    }
+    installUpdate();
+  }
+
+  function installUpdate() {
+    setRestartUnsavedOpen(false);
+    if (!api) {
+      return;
+    }
+    // The user saved or chose to discard, so leave-page guards let the window close.
+    releaseUnsavedWorkForRestart(true);
     void api
-      ?.quitAndInstallUpdate()
+      .quitAndInstallUpdate()
       .then((result) => {
         if (result?.installMethod === "manual") {
+          releaseUnsavedWorkForRestart(false);
           setMessage(
             localizedText(() => t("Opened the GitHub download page. Install the new build over CorosLink in Applications.")),
           );
         }
       })
       .catch((caught) => {
+        releaseUnsavedWorkForRestart(false);
         setError(localizedText(() => toErrorMessage(caught)));
       });
   }
@@ -3230,6 +3251,12 @@ export default function App() {
           previewKey={devUpdatePreviewKey}
         />
       )}
+      {restartUnsavedOpen ? (
+        <RestartUnsavedPrompt
+          onRestart={installUpdate}
+          onCancel={() => setRestartUnsavedOpen(false)}
+        />
+      ) : null}
       <Toaster toasts={toasts} onDismiss={dismissToast} />
     </div>
   );

@@ -70,6 +70,7 @@ import { formatHappenDayLabel, getLocalHappenDayKey } from "../training/formatte
 import { dateFromKey } from "./dateUtils";
 import { ExerciseCombobox, type ExerciseComboboxSelection } from "./ExerciseCombobox";
 import { ExercisePreview } from "./ExercisePreview";
+import { useUnsavedWork } from "../unsavedWork";
 import "./workoutBuilder.css";
 import "./createWorkout.css";
 import { CLIMB_GRADES, CLIMB_SYSTEM_IDS, FTP_PRESETS, HEART_RATE_PRESETS, PACE_PRESETS, RUNNING_POWER_PRESETS, SWIM_STROKE_IDS, WORKOUT_SPORT_CAPABILITIES, WORKOUT_SPORTS, validateWorkoutIntensity, workoutIntensitiesForStep, workoutTargetsForStep } from "../../electron/workoutCapabilities";
@@ -1971,13 +1972,16 @@ export function AddWorkoutModal({
       ? swimDistanceUnit(unitSystem)
       : distanceUnit(unitSystem);
 
-  const run = async (action: () => Promise<void>, successMessage: string) => {
+  /** Resolves true once the action succeeded. */
+  const run = async (action: () => Promise<void>, successMessage: string): Promise<boolean> => {
     setSubmitting(true);
     try {
       await action();
       onScheduled(successMessage);
+      return true;
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
+      return false;
     } finally {
       setSubmitting(false);
     }
@@ -2094,6 +2098,12 @@ export function AddWorkoutModal({
   const builderBaseline = useRef<string | null>(null);
   if (builderBaseline.current === null) builderBaseline.current = builderSnapshot;
   const builderDirty = builderSnapshot !== builderBaseline.current;
+  // Restart-to-update can save a new library workout. On the calendar, saving
+  // would schedule it, so the prompt leaves that to the user.
+  useUnsavedWork(builderDirty ? {
+    label: builderName.trim() ? t("New workout “{{value1}}”", { value1: builderName.trim() }) : t("New workout"),
+    ...(libraryOnly && builderValid ? { save: submitBuilder } : {})
+  } : null);
   const libraryCreate = libraryOnly && tab === "builder";
   const builderChecks = useMemo(() => {
     const checks: Array<{ ok: boolean; text: string }> = [];

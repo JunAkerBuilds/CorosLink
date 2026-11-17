@@ -563,6 +563,7 @@ import {
 } from "./watchfaceFontSnapshots";
 import { drawWeatherPreviewLayer, maskCanvasToCircle, normalizeEditorDesign } from "./watchfaceExportPipeline";
 import { formatBytes } from "./watchLink";
+import { useUnsavedWork } from "../unsavedWork";
 
 /** A missing font's "Used by" entry, such as "Time (always-on)", in the app language. */
 function missingFontPlaceLabel(place: WatchfaceMissingFont["usedBy"][number]): string {
@@ -1313,6 +1314,19 @@ export function WatchfaceEditor({
   const canUndo = canUndoWatchfaceEditorHistory(history);
   const canRedo = canRedoWatchfaceEditorHistory(history);
   const spriteImportPending = pendingSpriteImportCount > 0;
+  // Restart-to-update saves this project first, or asks before discarding it.
+  // Edits made while it saves keep it unsaved.
+  useUnsavedWork(
+    isDirty || spriteImportPending
+      ? {
+          label: t("Watch face “{{value1}}”", {
+            value1: projectName.trim() || t("Custom watch face")
+          }),
+          save: async () =>
+            Boolean(await saveProject()) && lastSaveWasCurrentRef.current
+        }
+      : null
+  );
   automationModeRef.current = previewMode;
   automationResolutionRef.current = watchPreviewDirectory;
   automationSelectionRef.current = { selectedId, selectedIds };

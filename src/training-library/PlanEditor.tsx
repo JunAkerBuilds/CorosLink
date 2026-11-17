@@ -69,6 +69,7 @@ import type { UnitSystem } from "../units/units";
 import { formatDistanceValue } from "../units/units";
 import { readableVolume, resolveWorkoutSport, sessionProfile, type SessionProfile } from "./sessionProfile";
 import { sportTheme } from "./sportTheme";
+import { unsavedWorkReleasedForRestart, useUnsavedWork } from "../unsavedWork";
 import "./planEditor.css";
 
 interface PlanEditorProps {
@@ -326,7 +327,8 @@ export function PlanEditor({ api, initialPlan, neverSaved, workouts, calendarEna
 
   useEffect(() => {
     const protect = (event: BeforeUnloadEvent) => {
-      if (!dirty) return;
+      // Restarting to update already saved these edits or chose to discard them.
+      if (!dirty || unsavedWorkReleasedForRestart()) return;
       event.preventDefault();
       event.returnValue = "";
     };
@@ -488,19 +490,22 @@ export function PlanEditor({ api, initialPlan, neverSaved, workouts, calendarEna
   /* A COROS plan saves as a local copy, which is worth doing unedited too. */
   const canSave = !saving && !hasError && (dirty || isCoros || neverSaved);
 
-  const save = async () => {
-    if (!canSave) return;
+  /** Resolves true once the plan is saved. */
+  const save = async (): Promise<boolean> => {
+    if (!canSave) return false;
     setSaving(true);
     try {
-      if (!(await onSave(plan))) return;
+      if (!(await onSave(plan))) return false;
       setSavedJson(planJson);
       setToast(isCoros
         ? t("Saved “{{value1}}” as a local plan", { value1: plan.name })
         : t("Saved “{{value1}}”", { value1: plan.name }));
+      return true;
     } finally {
       setSaving(false);
     }
   };
+  useUnsavedWork(dirty ? { label: t("Training plan “{{value1}}”", { value1: plan.name }), save } : null);
 
   const drop = (event: DragEvent, weekIndex: number, dayIndex?: number) => {
     event.preventDefault();

@@ -8,6 +8,7 @@ import { extSwitchFieldsFor, switchFieldsFor, type ExtSwitchKey, type SwitchKey 
 import type { WatchModelId } from "../../electron/watchModels";
 import { NOT_AVAILABLE_ON_WATCH, watchSupports } from "../../electron/localSync/watchSyncModels";
 import { useWatchLink, useWatchRead } from "./useWatchLink";
+import { useUnsavedWork } from "../unsavedWork";
 import "./settingsPanel.css";
 import "./watchSystemSettings.css";
 
@@ -181,19 +182,23 @@ export function WatchSystemSettings({ api }: { api: CorosLinkApi }) {
     });
   };
 
-  const save = async () => {
+  /** Resolves true once the watch has the changes. */
+  const save = async (): Promise<boolean> => {
     setSaving(true);
     setMessage(null);
     try {
       setSettings(await api.updateWatchSettings(edits as Record<string, number>));
       setEdits({});
       setMessage({ text: t("Saved to your watch.") });
+      return true;
     } catch (error) {
       setMessage({ text: saveError(error, fields), error: true });
+      return false;
     } finally {
       setSaving(false);
     }
   };
+  useUnsavedWork(pending ? { label: t("Watch settings"), save } : null);
 
   const control = (field: Field) => {
     const value = shown(field.key);

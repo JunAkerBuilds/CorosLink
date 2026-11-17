@@ -2325,6 +2325,7 @@ export const watchfacesSpanish: Record<string, string> = {
   "None of this face's chart pages draw this field.": "Ninguna página de gráfico de esta esfera muestra este campo.",
   "Chart pages: {{rule}}. The watch hides this field on the other pages.": "Páginas del gráfico: {{rule}}. El reloj oculta este campo en las demás páginas.",
   "The page on screen hides it.": "La página en pantalla lo oculta.",
+  "Watch face “{{value1}}”": "Esfera «{{value1}}»",
   "Red": "Rojo",
   "Orange": "Naranja",
   "Amber": "Ámbar",

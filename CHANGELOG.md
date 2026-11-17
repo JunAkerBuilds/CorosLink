@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Restarting to update no longer loses unsaved work.** If a Studio watch face, training plan, workout, calendar event, watch setting or Coach instructions has unsaved changes, **Restart to update** first lists them and offers **Save and restart**, **Restart without saving** or **Cancel**. Save and restart saves each one and restarts only once everything is saved; if something can't be saved, CorosLink stays open and says which one. This also covers an update that installs by itself once its download finishes. Before, the app closed right away on every platform and those edits were lost.
 - **Official MIP faces keep their accent color in Studio.** Opening TWILIGHT, NOMAD or NIGHT CLIMBER for a MIP watch showed their accents in red, and the copy you sent started in red too. Studio now keeps the face's own theme color (yellow for TWILIGHT). Copies opened before this update stay red until you pick the color under **Watch theme color**, or open the face again.
 - **`.MP3` files play on the watch.** The watch never plays a file whose name ends in capital `.MP3`. CorosLink now always copies with a lowercase `.mp3`, and the On watch list flags any other `.MP3` file with a one-click rename. (#167)
 

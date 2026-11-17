@@ -1,0 +1,128 @@
+/* Restart-to-update with unsaved work. The shell is the update prompt's (styles.css). */
+
+.restart-unsaved-prompt {
+  width: min(600px, 100%);
+}
+
+.restart-unsaved-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--glass-bg) 72%, transparent);
+  color: var(--accent-strong);
+}
+
+.restart-unsaved-list {
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 20px 28px 0;
+  padding: 0;
+  list-style: none;
+  scrollbar-color: var(--glass-border) transparent;
+}
+
+.restart-unsaved-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--glass-bg) 72%, transparent);
+}
+
+.restart-unsaved-list li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.restart-unsaved-list li > small {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.restart-unsaved-error {
+  margin: 14px 28px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-sm);
+  background: var(--error-bg);
+  color: var(--error-text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.restart-unsaved-footer {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 22px;
+}
+
+/* Discarding stands apart on the left; long labels (German) wrap Cancel and Save onto their own row. */
+.restart-unsaved-footer .update-prompt-actions {
+  margin-left: auto;
+}
+
+.restart-unsaved-footer .secondary-button,
+.restart-unsaved-footer .primary-button {
+  min-height: 40px;
+}
+
+/* .secondary-button follows .danger-button in styles.css and would reset its colours. */
+.restart-unsaved-footer .danger-button {
+  border-color: var(--error-border);
+  color: var(--error-text);
+}
+
+.restart-unsaved-footer .danger-button:hover:not(:disabled) {
+  border-color: var(--error-text);
+  background: var(--error-bg);
+}
+
+.restart-unsaved-spin {
+  animation: restart-unsaved-spin 0.9s linear infinite;
+}
+
+@keyframes restart-unsaved-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .restart-unsaved-spin {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .restart-unsaved-list,
+  .restart-unsaved-error {
+    margin-left: 20px;
+    margin-right: 20px;
+  }
+
+  .restart-unsaved-footer {
+    flex-direction: column-reverse;
+  }
+
+  .restart-unsaved-list li {
+    flex-direction: column;
+    gap: 2px;
+  }
+}

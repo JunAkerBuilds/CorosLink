@@ -1208,4 +1208,11 @@ export const coreChinese: Readonly<Record<string, string>> = {
   "Split into parts. Find it in Audiobooks.": "已分段，可在“有声书”中找到。",
   "Split into short parts for the watch": "为手表切分成短分段",
   "Split {{value0}} into parts for the watch": "为手表将“{{value0}}”分段",
+  "Save your work before restarting?": "重启前保存您的工作吗？",
+  "CorosLink closes to install the update. These changes aren't saved yet:": "CorosLink 将关闭以安装更新。以下更改尚未保存：",
+  "Save this one yourself": "请手动保存",
+  "{{value1}} can't be saved from here. Save it yourself, then restart again.": "{{value1}}无法在此保存。请先手动保存，然后再重启。",
+  "{{value1}} couldn't be saved. CorosLink didn't restart.": "{{value1}}无法保存。CorosLink 未重启。",
+  "Restart without saving": "不保存并重启",
+  "Save and restart": "保存并重启",
 };

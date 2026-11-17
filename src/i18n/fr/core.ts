@@ -1076,4 +1076,11 @@ export const coreFrench: Record<string, string> = {
   "Split into parts. Find it in Audiobooks.": "Divisé en parties. Retrouvez-le dans Livres audio.",
   "Split into short parts for the watch": "Diviser en courtes parties pour la montre",
   "Split {{value0}} into parts for the watch": "Diviser {{value0}} en parties pour la montre",
+  "Save your work before restarting?": "Enregistrer votre travail avant de redémarrer ?",
+  "CorosLink closes to install the update. These changes aren't saved yet:": "CorosLink se ferme pour installer la mise à jour. Ces modifications ne sont pas encore enregistrées :",
+  "Save this one yourself": "À enregistrer manuellement",
+  "{{value1}} can't be saved from here. Save it yourself, then restart again.": "{{value1}} : impossible d’enregistrer d’ici. Enregistrez manuellement, puis redémarrez à nouveau.",
+  "{{value1}} couldn't be saved. CorosLink didn't restart.": "{{value1}} : enregistrement impossible. CorosLink n’a pas redémarré.",
+  "Restart without saving": "Redémarrer sans enregistrer",
+  "Save and restart": "Enregistrer et redémarrer",
 };

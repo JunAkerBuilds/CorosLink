@@ -2952,4 +2952,8 @@ export const trainingPortuguese: Record<string, string> = {
   "Sign in with your COROS account": "Inicie sessão com a sua conta COROS",
   "Use the same email and password as the COROS app on your phone. COROS may email you a 6-digit code to finish.": "Use o mesmo e-mail e a mesma palavra-passe da app COROS no telemóvel. A COROS pode enviar-lhe por e-mail um código de 6 dígitos para concluir.",
   "Only needed for training data. Music, podcasts and maps work without signing in.": "Só é necessário para os dados de treino. A música, os podcasts e os mapas funcionam sem iniciar sessão.",
+  "Training plan “{{value1}}”": "Plano de treino \"{{value1}}\"",
+  "Workout “{{value1}}”": "Treino \"{{value1}}\"",
+  "Workout edits": "Alterações ao treino",
+  "New workout “{{value1}}”": "Novo treino \"{{value1}}\"",
 };

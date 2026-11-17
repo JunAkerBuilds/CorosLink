@@ -9,6 +9,7 @@ import { HEART_RATE_ZONE_COLORS } from "../chat/charts/zoneChartConfig";
 import { NOT_AVAILABLE_ON_WATCH, watchSupports } from "../../electron/localSync/watchSyncModels";
 import { moveHeartRateZones } from "../../electron/watchProfileZones";
 import { useWatchLink, useWatchRead } from "./useWatchLink";
+import { useUnsavedWork } from "../unsavedWork";
 import "./settingsPanel.css";
 import "./watchSystemSettings.css";
 
@@ -98,22 +99,23 @@ export function WatchProfileSettings({ api }: { api: CorosLinkApi }) {
     return draft[key].trim() !== "" && Number.isInteger(value) && value >= LIMITS[key][0] && value <= LIMITS[key][1] ? value : undefined;
   };
 
-  const save = async () => {
+  /** Resolves true once the watch has the new profile. */
+  const save = async (): Promise<boolean> => {
     for (const [key, label] of [["maxHr", t("Max heart rate")], ["restingHr", t("Resting heart rate")], ["thresholdHr", t("Threshold heart rate")]] as const) {
       if (hr(key) === undefined) {
         setMessage({ text: t("{{value0}}: enter a whole number from {{value1}} to {{value2}} bpm.", { value0: label, value1: LIMITS[key][0], value2: LIMITS[key][1] }), error: true, field: key });
-        return;
+        return false;
       }
     }
     if (!(hr("restingHr")! < hr("thresholdHr")! && hr("thresholdHr")! < hr("maxHr")!)) {
       setMessage({ text: t("Resting, threshold and max heart rate must increase in that order."), error: true, field: "thresholdHr" });
-      return;
+      return false;
     }
     const pace = parsePace(draft.pace, imperial);
-    if (pace === undefined) { setMessage({ text: t("Enter the threshold pace as minutes:seconds, for example 4:45."), error: true, field: "pace" }); return; }
+    if (pace === undefined) { setMessage({ text: t("Enter the threshold pace as minutes:seconds, for example 4:45."), error: true, field: "pace" }); return false; }
     if (pace < PACE_LIMITS[0] || pace > PACE_LIMITS[1]) {
       setMessage({ text: t("Enter a threshold pace from {{value0}} to {{value1}}.", { value0: formatPace(PACE_LIMITS[0], imperial), value1: formatPace(PACE_LIMITS[1], imperial) }), error: true, field: "pace" });
-      return;
+      return false;
     }
     setBusy(true);
     setMessage(null);
@@ -124,12 +126,15 @@ export function WatchProfileSettings({ api }: { api: CorosLinkApi }) {
       setProfile(next);
       setDraft(fromProfile(next));
       setMessage({ text: t("Saved to your watch. Zones were updated to match.") });
+      return true;
     } catch (error) {
       setMessage({ text: t(ipcErrorText(error)), error: true });
+      return false;
     } finally {
       setBusy(false);
     }
   };
+  useUnsavedWork(dirty ? { label: t("Training profile"), save } : null);
 
   // The zones for the chosen basis; while the thresholds are being edited, where the watch will move them.
   const zoneSet = draft.hrZoneType === 1 ? "maxHrZones" : draft.hrZoneType === 2 ? "reserveHrZones" : "thresholdHrZones";

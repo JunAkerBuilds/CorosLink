@@ -2326,6 +2326,7 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "None of this face's chart pages draw this field.": "此表盘没有任何图表页面显示该字段。",
   "Chart pages: {{rule}}. The watch hides this field on the other pages.": "图表页面：{{rule}}。手表会在其他页面隐藏此字段。",
   "The page on screen hides it.": "当前显示的页面隐藏了它。",
+  "Watch face “{{value1}}”": "表盘“{{value1}}”",
   "Red": "红色",
   "Orange": "橙色",
   "Amber": "琥珀色",

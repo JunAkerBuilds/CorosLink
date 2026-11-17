@@ -1204,4 +1204,11 @@ export const coreSpanish: Record<string, string> = {
   "Split into parts. Find it in Audiobooks.": "Dividido en partes. Lo encontrarás en Audiolibros.",
   "Split into short parts for the watch": "Dividir en partes cortas para el reloj",
   "Split {{value0}} into parts for the watch": "Dividir {{value0}} en partes para el reloj",
+  "Save your work before restarting?": "¿Guardar tu trabajo antes de reiniciar?",
+  "CorosLink closes to install the update. These changes aren't saved yet:": "CorosLink se cerrará para instalar la actualización. Estos cambios aún no se han guardado:",
+  "Save this one yourself": "Guárdalo manualmente",
+  "{{value1}} can't be saved from here. Save it yourself, then restart again.": "{{value1}}: no se puede guardar desde aquí. Guarda manualmente y vuelve a reiniciar.",
+  "{{value1}} couldn't be saved. CorosLink didn't restart.": "{{value1}}: no se pudo guardar. CorosLink no se reinició.",
+  "Restart without saving": "Reiniciar sin guardar",
+  "Save and restart": "Guardar y reiniciar",
 };

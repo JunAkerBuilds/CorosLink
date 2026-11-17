@@ -2325,6 +2325,7 @@ export const watchfacesGerman: Record<string, string> = {
   "None of this face's chart pages draw this field.": "Keine Diagrammseite dieses Zifferblatts zeigt dieses Feld.",
   "Chart pages: {{rule}}. The watch hides this field on the other pages.": "Diagrammseiten: {{rule}}. Auf den anderen Seiten blendet die Uhr dieses Feld aus.",
   "The page on screen hides it.": "Die angezeigte Seite blendet es aus.",
+  "Watch face “{{value1}}”": "Zifferblatt „{{value1}}“",
   "Red": "Rot",
   "Orange": "Orange",
   "Amber": "Bernstein",

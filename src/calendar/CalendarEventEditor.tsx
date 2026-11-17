@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowRight, CalendarClock, ChevronDown, Loader2 } from "lucide-react";
 import type { CalendarEventTiming, CalendarWorkoutEvent, CalendarWorkoutEventRef } from "../../electron/calendarSyncTypes";
 import type { CorosLinkApi } from "../coroslink-api";
+import { useUnsavedWork } from "../unsavedWork";
 import "./calendarEventEditor.css";
 
 const DURATION_PRESETS = [30, 45, 60, 90, 120];
@@ -136,15 +137,20 @@ export function CalendarEventEditor({ api, eventRef, disabled, onSaved }: {
     edit({ ...timing, startTime, endTime: fromMinutes(toMinutes(startTime) + durationMinutes(timing)) });
   }
 
-  async function save(event: FormEvent) {
+  function save(event: FormEvent) {
     event.preventDefault();
-    if (!timing || saving || disabled || (!dirty && !error)) return;
+    void persist();
+  }
+
+  /** Resolves true once the timing is saved in CorosLink. */
+  async function persist(): Promise<boolean> {
+    if (!timing || saving || disabled || (!dirty && !error)) return false;
     setSaving(true);
     setError(null);
     setMessage(null);
     try {
       const result = await api.updateCalendarWorkoutEvent({ ref: eventRef, timing });
-      if (!mounted.current) return;
+      if (!mounted.current) return true;
       setTiming(result.event.timing);
       setSaved(result.event.timing);
       onSaved(result.event);
@@ -152,12 +158,15 @@ export function CalendarEventEditor({ api, eventRef, disabled, onSaved }: {
         : result.errors.length ? "Saved in CorosLink. Calendar sync needs another try."
         : "Saved in CorosLink. Connect a calendar in Settings to sync it.");
       if (result.errors.length) setError(result.errors.join(" "));
+      return true;
     } catch (cause) {
       if (mounted.current) setError(errorText(cause));
+      return false;
     } finally {
       if (mounted.current) setSaving(false);
     }
   }
+  useUnsavedWork(dirty ? { label: t("Calendar event"), save: persist } : null);
 
   return <form className="calendar-workout-event" onSubmit={save} aria-label={t("Calendar event")}>
     <button
