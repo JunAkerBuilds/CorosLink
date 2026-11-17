@@ -1006,7 +1006,7 @@ export const toolsPortuguese: Record<string, string> = {
   "Read COROS’s full sync troubleshooting guide": "Ler o guia completo de resolução de problemas de sincronização da COROS",
   "Connect COROS first": "Ligue primeiro a COROS",
   "Data imports and backups use your Training Hub session to read and write activity files.": "As importações e cópias de segurança usam a sua sessão do Training Hub para ler e escrever ficheiros de actividade.",
-  "Open Training Hub": "Abrir Training Hub",
+  "Open Training Hub": "Abrir o Centro de treino",
   "All time": "Desde sempre",
   "30 days": "30 dias",
   "90 days": "90 dias",
