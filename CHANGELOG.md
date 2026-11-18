@@ -7,15 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Security
+## [0.1.79] - 2026-11-18
 
-- **Electron 45.** CorosLink moves from Electron 42, which no longer gets security fixes, to Electron 45.3.4.
+### Added
+
+- **Animated watch faces in Studio.** Official faces with a moving figure, such as NANJING MARATHON's running duck, keep it when you open them in Studio; before, it disappeared. The new **Animation** layer (in **Add**) plays a sequence of frames on your face: drag it into place, set how long each frame shows, and replace or delete frames. It plays on PACE 4 and PACE Pro.
+- **Animations on memory-in-pixel watches.** PACE 3, NOMAD, APEX 4, APEX 2 and APEX 2 Pro play them too, in the watch's own colors. These watches hold at most 64 KB of animation, so Studio first trims the empty margin around the frames and, if that isn't enough, leaves out evenly spaced frames while keeping the loop the same length. VERTIX 2, VERTIX 2S, VERTIX, PACE 2 and APEX Pro don't play animations.
+- **See what your watch will play.** Studio's preview plays the animation as the target watch will: its colors, the frames it keeps, and nothing on a watch without animation. Frames the watch leaves out are dimmed in the frame strip, and a note under the preview says when it plays fewer frames or none.
+- **Watchmaker makes animations.** Ask Watchmaker to add an animation to a face, or to change the frames, timing or position of one it already has.
 
 ### Changed
 
 - **macOS 13 or later.** Electron 45 doesn't run on macOS 12. Macs on macOS 12 stay on the current version instead of auto-updating to one they can't open.
 - **Smaller install.** The database library now ships only the files your computer needs, about 8 MB less on disk.
-
 - **Smaller face files.** Images that are pixel-for-pixel the same are now stored once in the file sent to the watch. Studio gives each time digit its own copy of the 0–9 set, so a face like Nixie Circuit went from 573 KB to 438 KB with no change to how it looks.
 - **Smaller face projects.** Studio writes a separate folder for every time digit, weekday language and always-on copy, even when the pictures are identical. Exported projects now keep one copy and point every use at it. Nixie Circuit's project went from 866 to 716 files (7.98 to 5.86 MB), with the same file sent to the watch.
 
@@ -24,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **One picture used two ways on a face.** A PNG used both as the background and as an icon, or as a memory-in-pixel always-on background over a different background color, reused the first version the compiler made, so it could show at the wrong size or with the wrong edge color. Each use now gets its own, and copies of the same picture are recognized before they are converted, so faces also compile faster.
 - **Temperature alignment with °C turned off.** A hidden degree sign was still sent as an invisible full-width image, and the watch counted it when aligning the reading, so a right-aligned temperature sat about a digit to the left of where Studio showed it. Hidden degree and minus signs now take no space. Minimum and maximum temperature get the same fix.
 - **Minus sign on negative elevation.** A negative sign added in Studio was exported as a bare bar, and the watch drew it at the top of the elevation number instead of in line with it. It is now exported at the height of the elevation digits with the bar in the middle, like COROS's own minus images.
+
+### Security
+
+- **Electron 45.** CorosLink moves from Electron 42, which no longer gets security fixes, to Electron 45.3.4.
 
 ## [0.1.78] - 2026-11-16
 
