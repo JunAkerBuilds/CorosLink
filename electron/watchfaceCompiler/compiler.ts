@@ -156,6 +156,12 @@ class BlockStream {
 
   warn(message: string): void { this.warnings.add(message); }
 
+  /** Whether these frames pass what one memory-in-pixel block can index (never on AMOLED). */
+  framesOverflow(names: string[]): boolean {
+    if (this.target.display !== "mip") return false;
+    return mipBlockOverflows(encodeMipFramesBlock(names.map(name => this.image(name) ?? { width: 0, height: 0, data: new Uint8Array() }), this.smoothEdges));
+  }
+
   frames(directory: string, repeat = 1): number {
     const names = this.frameNames(directory);
     if (!names.length) { this.missing(directory.replace(/\/+$/, "")); return 0; }
@@ -306,6 +312,12 @@ function buildLayout(config: Map<string, string>, mode: "normal" | "aod", stream
 export const ANIMATION_KEYS = { position: "cl_animation_pos", directory: "cl_animation_dir", delays: "cl_animation_delays_ms" } as const;
 /** Frames the firmware's 0x94-byte record can time: (0x94 − 0x3c) / 2 delay slots. */
 export const MAX_ANIMATION_FRAMES = 44;
+/**
+ * Memory-in-pixel watches whose 3.2108.0 renderer reads the record (run in emulation with MIP-encoded
+ * frames: PACE 3, NOMAD, APEX 4 in both sizes, APEX 2, APEX 2 Pro). VERTIX 2/2S, VERTIX and PACE 2
+ * are unchecked, and APEX Pro's firmware has no animation branch.
+ */
+export const MIP_ANIMATION_MODELS: ReadonlySet<string> = new Set(["pace-3", "nomad", "apex-4", "apex-2", "apex-2-pro"]);
 const ANIMATION_RECORD = 0x94, ANIMATION_DELAYS = 0x3c, ANIMATION_POINTERS = 0x28;
 
 /** `100,100,70` → delays in milliseconds; a single value applies to every frame. */
@@ -320,8 +332,8 @@ export function parseAnimationDelays(value: string, frames: number): number[] {
 }
 
 /**
- * The native animation record at header 0x312, read by PACE 4 (W336) and PACE Pro (W332)
- * 3.2108.0 at render time: five (i32 x, i32 y) slot positions, five u32 frame-list pointers
+ * The native animation record at header 0x312, read by the AMOLED watches and the memory-in-pixel
+ * ones in `MIP_ANIMATION_MODELS` (3.2108.0) at render time: five (i32 x, i32 y) slot positions, five u32 frame-list pointers
  * at +0x28, then u16 per-frame delays in ms at +0x3c (delay[0] = 0 disables it). The firmware
  * draws slot frames as `counter % frameCount` after the background and re-arms a timer with
  * delay[counter]. Studio writes one slot; the AOD layout never animates.
@@ -329,7 +341,7 @@ export function parseAnimationDelays(value: string, frames: number): number[] {
 function writeAnimation(config: Map<string, string>, header: Buffer, stream: BlockStream, path: (v: string) => string): void {
   const directory = config.get(ANIMATION_KEYS.directory);
   if (!directory) return;
-  if (stream.target.display === "mip") {
+  if (stream.target.display === "mip" && !MIP_ANIMATION_MODELS.has(stream.target.model)) {
     stream.warn(`Animations are not supported on ${stream.target.label} yet; the face was built without it.`);
     return;
   }
@@ -346,6 +358,11 @@ function writeAnimation(config: Map<string, string>, header: Buffer, stream: Blo
     throw new WatchfaceCompileError(`Every animation frame must be ${width} × ${height}, like the first one.`);
   }
   const delays = parseAnimationDelays(config.get(ANIMATION_KEYS.delays) ?? "100", names.length);
+  // A memory-in-pixel frame list holds 64 KB at most; past that the watch would draw garbage.
+  if (stream.framesOverflow(names)) {
+    stream.warn(`The animation is too large for ${stream.target.label} (its frames pass 64 KB together), so the face was built without it. Use fewer or smaller frames.`);
+    return;
+  }
   // A Studio-owned record with signed i32 slots, so unlike COROS's own keys a minus sign is kept.
   const [x = 0, y = 0] = (config.get(ANIMATION_KEYS.position)?.match(/-?\d+/g) ?? []).map(Number);
   const record = Buffer.alloc(ANIMATION_RECORD);

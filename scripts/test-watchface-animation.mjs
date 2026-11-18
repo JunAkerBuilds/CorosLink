@@ -16,7 +16,6 @@ const { getWatchfaceTarget, watchfaceBinTarget } = require('../dist-electron/wat
 
 const PACE_4 = watchfaceBinTarget(getWatchfaceTarget('pace-4'));
 const PACE_PRO = watchfaceBinTarget(getWatchfaceTarget('pace-pro'));
-const MIP = watchfaceBinTarget(getWatchfaceTarget('apex-4') ?? getWatchfaceTarget('pace-3'));
 
 /** An RGBA frame whose pixels encode its index, so order survives the round trip. */
 const frame = (index, width = 24, height = 18) => {
@@ -140,12 +139,32 @@ assert.deepEqual([signed.readInt32LE(signed.readUInt32LE(0x312)), signed.readInt
 const plain = compile({ frames: 0 }).bin;
 assert.equal(plain.readUInt32LE(0x312), 0, 'a static face keeps 0x312 zero');
 assert.equal(decode(plain).layout.modes[0].animation, undefined);
-if (MIP) {
-  const mip = compileWatchface(archive(MIP), { faceId: 1, target: MIP });
-  assert.equal(mip.bin.readUInt32LE(0x312), 0, `${MIP.label}: no record`);
-  assert.ok(mip.warnings.some(w => /not supported on/.test(w)), `${MIP.label}: says the animation was left out`);
+// Memory-in-pixel: the six models whose firmware reads the record get it with MIP-encoded frames.
+for (const id of ['pace-3', 'nomad', 'apex-4', 'apex-2', 'apex-2-pro']) {
+  const target = watchfaceBinTarget(getWatchfaceTarget(id));
+  const { bin, warnings } = compileWatchface(archive(target, { aod: true }), { faceId: 1, target });
+  assert.deepEqual(warnings, [], `${target.label}: no warnings`);
+  assertIntegrity(bin, target.label);
+  const record = bin.readUInt32LE(0x312), list = bin.readUInt32LE(record + 0x28);
+  assert.deepEqual([bin.readInt32LE(record), bin.readInt32LE(record + 4), bin.readUInt16LE(record + 0x3c)], [0, 31, 100]);
+  assert.equal(list, record + 0x94, `${target.label}: the frame list follows its record`);
+  assert.deepEqual([bin.readUInt16LE(list), bin.readUInt16LE(list + 2), bin[list + 5], bin[list + 6]], [24, 18, 0x08, 10], `${target.label}: ten memory-in-pixel frames`);
+  assert.equal(bin.readUInt32LE(bin.readUInt32LE(0x322) + 0x312), 0, `${target.label}: AOD never animates`);
 }
-console.log('Animation limits: 1/30/44 frames, >44 rejected, delays per frame, mixed sizes, missing frames, signed positions, MIP skipped.');
+for (const id of ['vertix-2', 'pace-2', 'apex-pro', 'vertix']) {
+  const target = watchfaceBinTarget(getWatchfaceTarget(id));
+  const mip = compileWatchface(archive(target), { faceId: 1, target });
+  assert.equal(mip.bin.readUInt32LE(0x312), 0, `${target.label}: no record`);
+  assert.ok(mip.warnings.some(w => /not supported on/.test(w)), `${target.label}: says the animation was left out`);
+}
+{
+  // Frames past 64 KB together cannot be indexed by a memory-in-pixel block: left out, with a reason.
+  const target = watchfaceBinTarget(getWatchfaceTarget('apex-4'));
+  const big = compileWatchface(archive(target, { sizes: Array(10).fill([200, 200]) }), { faceId: 1, target });
+  assert.equal(big.bin.readUInt32LE(0x312), 0);
+  assert.ok(big.warnings.some(w => /too large for APEX 4/.test(w)));
+}
+console.log('Animation limits: 1/30/44 frames, >44 rejected, delays per frame, mixed sizes, missing frames, signed positions, MIP on six models, skipped elsewhere or past 64 KB.');
 
 // --- Malformed records never break the rest of the face -----------------------
 {

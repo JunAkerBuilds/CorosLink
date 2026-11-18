@@ -65,7 +65,7 @@ export function watchfaceAutomationAssetContracts(
     delaysMs: animation?.delays ?? [],
     delayRangeMs: { minimum: MIN_ANIMATION_DELAY, maximum: MAX_ANIMATION_DELAY, default: DEFAULT_ANIMATION_DELAY },
     referenceFrame: resolution ? { directory: resolution.directory, width: resolution.width, height: resolution.height } : null,
-    targets: "PACE 4 and PACE Pro (AMOLED). Other AMOLED watches likely share the renderer but are unverified; MIP watches drop it at compile with a warning.",
+    targets: "AMOLED watches (PACE Pro, PACE 4, PACE 4 Pro), and the MIP watches PACE 3, NOMAD, APEX 4, APEX 2 and APEX 2 Pro, where all frames together must stay under 64 KB encoded (about one byte per pixel before compression) or the animation is dropped at compile with a warning. VERTIX 2/2S, VERTIX, PACE 2 and APEX Pro always drop it.",
     behavior: "The watch plays the frames itself, looping, each held for its delay, over the flattened background and under progress arcs, time, date and data. Only the Current (lit) screen animates; AOD never does. One animation per face.",
     create: "Set /design/animation to {enabled:true, x, y, width, height, frames:[{assetId}…], delays:[ms…]} in one apply_commands batch (mode current). x/y is the top-left in capabilities.placement pixels; width/height must equal every frame's PNG size in those pixels.",
     edit: "Replace frames by setting /design/animation/frames (and width/height if the size changes); retime with /design/animation/delays (one per frame). Move with move_layer/place_layers on layer animation; hide with set_visibility; remove with op unset on /design/animation.",

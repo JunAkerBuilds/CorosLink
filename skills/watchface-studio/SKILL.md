@@ -315,9 +315,11 @@ the live time, data and analog hands.
   one whole-millisecond value per frame (1–65535). At most **44** frames.
 - **Where it shows:** Current only, drawn over the flattened background and
   under progress arcs, time, date and data. Always-on never animates; don't
-  put it in `modeDesigns.aod`. PACE 4 and PACE Pro play it; MIP watches
-  (PACE 3, APEX 4, NOMAD…) drop it at compile with a warning, so say so when
-  the target is MIP.
+  put it in `modeDesigns.aod`. AMOLED watches play it. Of the MIP watches, PACE 3,
+  NOMAD, APEX 4, APEX 2 and APEX 2 Pro play it too, but all frames together must
+  stay under 64 KB encoded (about one byte per pixel before compression), so keep
+  MIP sprites small and few; larger ones are dropped at compile with a warning.
+  VERTIX 2/2S, VERTIX, PACE 2 and APEX Pro always drop it, so say so for those.
 - **Existing faces:** official faces opened in Studio keep theirs (NANJING
   MARATHON's running duck: 10 frames of 376 × 340 at (0,31), 100 ms each).
   Read its contract in `capabilities.assetContracts` (`layerId: animation`)

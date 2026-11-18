@@ -10,8 +10,8 @@ import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, parseConfigPos, pickPreview
 import { DEFAULT_ANIMATION_DELAY, MAX_ANIMATION_DELAY, MAX_ANIMATION_FRAMES, MIN_ANIMATION_DELAY } from "./watchfaceAnimationLimits";
 
 /**
- * Native sprite animation (compiled header 0x312). PACE 4 (W336) and PACE Pro
- * (W332) firmware draw the frames over the background and advance on their own
+ * Native sprite animation (compiled header 0x312). The AMOLED watches' firmware, and
+ * PACE 3, NOMAD, APEX 4, APEX 2 and APEX 2 Pro (MIP frames, 64 KB together), draw the frames over the background and advance on their own
  * timer, delay[i] ms per frame. COROS's DIY compiler has no key for it, so the
  * archive carries Studio-owned keys that CorosLink's compiler writes back.
  */
