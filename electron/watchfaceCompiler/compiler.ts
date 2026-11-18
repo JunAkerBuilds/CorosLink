@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { decodePng, type RgbaImage } from "./png";
-import { encodeFramesBlock, encodeImageBlock, encodeMipFramesBlock, encodeMipImageBlock, InsideType, mipBlockOverflows } from "./bitmap";
+import { encodeFramesBlock, encodeImageBlock, encodeMipFramesBlock, encodeMipImageBlock, fitMipAnimation, InsideType, mipBlockOverflows } from "./bitmap";
 import { configPath, parseConfig, parseNumber, parsePos, parseRect, rgb222 } from "./config";
 import { ALIASES, COLORS as COROS_COLORS, FIELDS as COROS_FIELDS, VERSIONS as COROS_VERSIONS, WRITE_ORDER as COROS_WRITE_ORDER } from "./fields";
 import { STUDIO_COLORS, STUDIO_FIELDS, STUDIO_WRITE_AFTER } from "./studioFields";
@@ -156,11 +156,11 @@ class BlockStream {
 
   warn(message: string): void { this.warnings.add(message); }
 
-  /** Whether these frames pass what one memory-in-pixel block can index (never on AMOLED). */
-  framesOverflow(names: string[]): boolean {
-    if (this.target.display !== "mip") return false;
-    return mipBlockOverflows(encodeMipFramesBlock(names.map(name => this.image(name) ?? { width: 0, height: 0, data: new Uint8Array() }), this.smoothEdges));
-  }
+  /** A memory-in-pixel animation fitted to one block (see `fitMipAnimation`); undefined when it cannot fit. */
+  fitAnimation(images: RgbaImage[], delays: number[]) { return fitMipAnimation(images, delays, this.smoothEdges); }
+
+  /** A ready frame list, stored once like any image block. */
+  appendFrames(block: Buffer): number { return this.appendImage(block); }
 
   frames(directory: string, repeat = 1): number {
     const names = this.frameNames(directory);
@@ -357,19 +357,27 @@ function writeAnimation(config: Map<string, string>, header: Buffer, stream: Blo
   if (images.some(image => image!.width !== width || image!.height !== height)) {
     throw new WatchfaceCompileError(`Every animation frame must be ${width} × ${height}, like the first one.`);
   }
-  const delays = parseAnimationDelays(config.get(ANIMATION_KEYS.delays) ?? "100", names.length);
-  // A memory-in-pixel frame list holds 64 KB at most; past that the watch would draw garbage.
-  if (stream.framesOverflow(names)) {
-    stream.warn(`The animation is too large for ${stream.target.label} (its frames pass 64 KB together), so the face was built without it. Use fewer or smaller frames.`);
-    return;
-  }
+  let delays = parseAnimationDelays(config.get(ANIMATION_KEYS.delays) ?? "100", names.length);
   // A Studio-owned record with signed i32 slots, so unlike COROS's own keys a minus sign is kept.
-  const [x = 0, y = 0] = (config.get(ANIMATION_KEYS.position)?.match(/-?\d+/g) ?? []).map(Number);
+  let [x = 0, y = 0] = (config.get(ANIMATION_KEYS.position)?.match(/-?\d+/g) ?? []).map(Number);
+  // A memory-in-pixel frame list holds 64 KB at most: its empty margin is cut off, then frames are left out.
+  let fitted: Buffer | undefined;
+  if (stream.target.display === "mip") {
+    const fit = stream.fitAnimation(images as RgbaImage[], delays);
+    if (!fit) {
+      stream.warn(`The animation is too large for ${stream.target.label} (one frame passes 64 KB), so the face was built without it. Use smaller frames.`);
+      return;
+    }
+    if (fit.delays.length < names.length) {
+      stream.warn(`The animation is too large for ${stream.target.label} with all ${names.length} frames, so it plays ${fit.delays.length} of them.`);
+    }
+    fitted = fit.block; delays = fit.delays; x += fit.x; y += fit.y;
+  }
   const record = Buffer.alloc(ANIMATION_RECORD);
   record.writeInt32LE(x, 0); record.writeInt32LE(y, 4);
   delays.forEach((delay, i) => record.writeUInt16LE(delay, ANIMATION_DELAYS + i * 2));
   const at = stream.append(record);
-  record.writeUInt32LE(stream.frames(folder), ANIMATION_POINTERS);
+  record.writeUInt32LE(fitted ? stream.appendFrames(fitted) : stream.frames(folder), ANIMATION_POINTERS);
   header.writeUInt32LE(at, 0x312);
 }
 

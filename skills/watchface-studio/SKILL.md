@@ -318,7 +318,8 @@ the live time, data and analog hands.
   put it in `modeDesigns.aod`. AMOLED watches play it. Of the MIP watches, PACE 3,
   NOMAD, APEX 4, APEX 2 and APEX 2 Pro play it too, but all frames together must
   stay under 64 KB encoded (about one byte per pixel before compression), so keep
-  MIP sprites small and few; larger ones are dropped at compile with a warning.
+  MIP sprites small and few. The compiler cuts the frames' shared empty margin, then
+  leaves frames out evenly to fit (a warning says how many play; the loop keeps its length).
   VERTIX 2/2S, VERTIX, PACE 2 and APEX Pro always drop it, so say so for those.
 - **Existing faces:** official faces opened in Studio keep theirs (NANJING
   MARATHON's running duck: 10 frames of 376 × 340 at (0,31), 100 ms each).

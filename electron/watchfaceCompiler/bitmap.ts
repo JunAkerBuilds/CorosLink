@@ -767,6 +767,43 @@ export function encodeMipFramesBlock(images: RgbaImage[], smoothEdges = false): 
   return mipBlock(images.map(image => to2222(image, smoothEdges)), images[0]!.width, images[0]!.height);
 }
 
+/**
+ * An animation's frames as one memory-in-pixel block that fits its 64 KB of u16 offsets. The margin
+ * no frame draws in is cut off (`x`, `y` say how far the picture moved, so its position follows),
+ * which changes nothing on screen. If that is not enough, evenly spaced frames are left out, the
+ * most that fit being kept, and each kept frame stays up for the frames after it, so the loop takes
+ * as long as before. Undefined when a single frame is already too large.
+ */
+export function fitMipAnimation(images: RgbaImage[], delays: number[], smoothEdges = false): { block: Buffer; delays: number[]; x: number; y: number } | undefined {
+  const width = images[0]!.width, height = images[0]!.height;
+  const encoded = images.map(image => to2222(image, smoothEdges));
+  let x0 = width, y0 = height, x1 = -1, y1 = -1;
+  for (const frame of encoded) {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (frame[y * width + x] === 0xff) continue;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+  }
+  // Nothing visible in any frame: one transparent pixel.
+  if (x1 < 0) { x0 = 0; y0 = 0; x1 = 0; y1 = 0; }
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  const cropped = encoded.map(frame => {
+    const out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) out.set(frame.subarray((y0 + y) * width + x0, (y0 + y) * width + x0 + w), y * w);
+    return out;
+  });
+  for (let keep = cropped.length; keep >= 1; keep--) {
+    const starts = Array.from({ length: keep }, (_, i) => Math.floor(i * cropped.length / keep));
+    const block = mipBlock(starts.map(start => cropped[start]!), w, h);
+    if (mipBlockOverflows(block)) continue;
+    const kept = starts.map((start, i) => Math.min(0xffff, delays.slice(start, starts[i + 1] ?? delays.length).reduce((sum, delay) => sum + delay, 0)));
+    return { block, delays: kept, x: x0, y: y0 };
+  }
+  return undefined;
+}
+
 /** Frame data past 64 KB, whose u16 ends COROS truncates, so the watch would misread the block. */
 export function mipBlockOverflows(block: Buffer): boolean {
   return block.length - 10 - (block[6]! + 1) * 2 > 0xffff;

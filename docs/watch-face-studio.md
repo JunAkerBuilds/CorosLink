@@ -428,8 +428,9 @@ every frame with its own delay in milliseconds, a **Set all** field, a play /
 pause button, and **Replace frames…** for a folder of numbered PNGs. A face
 without one gets **Add → Device → Animation**. Up to 44 frames, all the same
 size. The always-on screen never animates. PACE Pro, PACE 4 and PACE 4 Pro play it, and so do PACE 3, NOMAD, APEX 4, APEX 2 and APEX 2 Pro,
-where all the frames together must stay under 64 KB on the watch (small sprites,
-few frames). Other watches leave it out when the face is built. Watchmaker can create and edit
+where all the frames together must stay under 64 KB on the watch: the empty margin
+round the frames is cut off for you, and if that is not enough, frames are left out
+evenly (the build says how many play) and the loop keeps its length. Other watches leave it out when the face is built. Watchmaker can create and edit
 animations too. On-watch timing (how long it plays after a wrist raise) is not
 yet confirmed.
 

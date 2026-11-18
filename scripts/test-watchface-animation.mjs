@@ -9,7 +9,8 @@ import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { compileWatchface, WatchfaceCompileError, MAX_ANIMATION_FRAMES } = require('../dist-electron/watchfaceCompiler/compiler.js');
-const { encodePng } = require('../dist-electron/watchfaceCompiler/png.js');
+const { encodePng, decodePng } = require('../dist-electron/watchfaceCompiler/png.js');
+const { mipBlockOverflows } = require('../dist-electron/watchfaceCompiler/bitmap.js');
 const { findCorosBitmapBlocks, decodeCorosBitmapFrame, decodeCorosLayout, readLayoutHeaders } = require('../dist-electron/corosBinLayout.js');
 const { recoverCompiledCorosWatchface } = require('../dist-electron/corosCompiledWatchface.js');
 const { getWatchfaceTarget, watchfaceBinTarget } = require('../dist-electron/watchfaceTargets.js');
@@ -158,13 +159,32 @@ for (const id of ['vertix-2', 'pace-2', 'apex-pro', 'vertix']) {
   assert.ok(mip.warnings.some(w => /not supported on/.test(w)), `${target.label}: says the animation was left out`);
 }
 {
-  // Frames past 64 KB together cannot be indexed by a memory-in-pixel block: left out, with a reason.
+  // Memory-in-pixel fitting: the margin no frame draws in is cut off and the position follows...
   const target = watchfaceBinTarget(getWatchfaceTarget('apex-4'));
-  const big = compileWatchface(archive(target, { sizes: Array(10).fill([200, 200]) }), { faceId: 1, target });
-  assert.equal(big.bin.readUInt32LE(0x312), 0);
-  assert.ok(big.warnings.some(w => /too large for APEX 4/.test(w)));
+  const padded = archive(target, { pos: '{10,20}', sizes: Array(10).fill([40, 30]) });
+  for (const [name, data] of padded) {
+    if (!/cl_animation_10\/\d+\.png$/.test(name)) continue;
+    const image = decodePng(data);
+    for (let p = 0; p < 40 * 30; p++) { const x = p % 40, y = (p - x) / 40; if (x < 5 || y < 5 || x >= 35 || y >= 25) image.data[p * 4 + 3] = 0; }
+    padded.set(name, encodePng(image));
+  }
+  const trimmed = compileWatchface(padded, { faceId: 1, target });
+  assert.deepEqual(trimmed.warnings, []);
+  let record = trimmed.bin.readUInt32LE(0x312), list = trimmed.bin.readUInt32LE(record + 0x28);
+  assert.deepEqual([trimmed.bin.readInt32LE(record), trimmed.bin.readInt32LE(record + 4)], [15, 25], 'the position moves with the trimmed margin');
+  assert.deepEqual([trimmed.bin.readUInt16LE(list), trimmed.bin.readUInt16LE(list + 2), trimmed.bin[list + 6]], [30, 20, 10]);
+  const amoled = compileWatchface(new Map([...padded].map(([k, v]) => [k.replace(target.layout, PACE_PRO.layout), v])), { faceId: 1, target: PACE_PRO }).bin;
+  record = amoled.readUInt32LE(0x312);
+  assert.deepEqual([amoled.readInt32LE(record), amoled.readInt32LE(record + 4), amoled.readUInt16LE(amoled.readUInt32LE(record + 0x28))], [10, 20, 40], 'AMOLED frames are stored as they are');
+  // ...and frames past 64 KB together are thinned evenly, each kept frame staying up for the ones after it.
+  const big = compileWatchface(archive(target, { sizes: Array(10).fill([200, 200]), delays: '10,11,12,13,14,15,16,17,18,19' }), { faceId: 1, target });
+  assert.deepEqual(big.warnings, ['The animation is too large for APEX 4 with all 10 frames, so it plays 2 of them.']);
+  record = big.bin.readUInt32LE(0x312); list = big.bin.readUInt32LE(record + 0x28);
+  assert.equal(big.bin[list + 6], 2);
+  assert.deepEqual([0, 1, 2].map(i => big.bin.readUInt16LE(record + 0x3c + i * 2)), [60, 85, 0], 'the loop takes as long as before');
+  assert.ok(!mipBlockOverflows(big.bin.subarray(list, list + 10 + 3 * 2 + big.bin.readUInt16LE(list + 10 + 2 * 2))));
 }
-console.log('Animation limits: 1/30/44 frames, >44 rejected, delays per frame, mixed sizes, missing frames, signed positions, MIP on six models, skipped elsewhere or past 64 KB.');
+console.log('Animation limits: 1/30/44 frames, >44 rejected, delays per frame, mixed sizes, missing frames, signed positions, MIP on six models (margin trimmed, frames thinned past 64 KB), skipped elsewhere.');
 
 // --- Malformed records never break the rest of the face -----------------------
 {
