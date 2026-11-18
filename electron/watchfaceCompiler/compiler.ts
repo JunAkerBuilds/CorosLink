@@ -5,6 +5,8 @@ import { configPath, parseConfig, parseNumber, parsePos, parseRect, rgb222 } fro
 import { ALIASES, COLORS as COROS_COLORS, FIELDS as COROS_FIELDS, VERSIONS as COROS_VERSIONS, WRITE_ORDER as COROS_WRITE_ORDER } from "./fields";
 import { STUDIO_COLORS, STUDIO_FIELDS, STUDIO_WRITE_AFTER } from "./studioFields";
 import { scaleImage } from "./scale";
+import { MIP_ANIMATION_MODELS, watchPlaysAnimation } from "./animationFit";
+export { MIP_ANIMATION_MODELS };
 import { getWatchfaceTarget, watchfaceBinTarget, type WatchfaceBinTarget } from "../watchfaceTargets";
 
 /**
@@ -312,12 +314,6 @@ function buildLayout(config: Map<string, string>, mode: "normal" | "aod", stream
 export const ANIMATION_KEYS = { position: "cl_animation_pos", directory: "cl_animation_dir", delays: "cl_animation_delays_ms" } as const;
 /** Frames the firmware's 0x94-byte record can time: (0x94 − 0x3c) / 2 delay slots. */
 export const MAX_ANIMATION_FRAMES = 44;
-/**
- * Memory-in-pixel watches whose 3.2108.0 renderer reads the record (run in emulation with MIP-encoded
- * frames: PACE 3, NOMAD, APEX 4 in both sizes, APEX 2, APEX 2 Pro). VERTIX 2/2S, VERTIX and PACE 2
- * are unchecked, and APEX Pro's firmware has no animation branch.
- */
-export const MIP_ANIMATION_MODELS: ReadonlySet<string> = new Set(["pace-3", "nomad", "apex-4", "apex-2", "apex-2-pro"]);
 const ANIMATION_RECORD = 0x94, ANIMATION_DELAYS = 0x3c, ANIMATION_POINTERS = 0x28;
 
 /** `100,100,70` → delays in milliseconds; a single value applies to every frame. */
@@ -341,7 +337,7 @@ export function parseAnimationDelays(value: string, frames: number): number[] {
 function writeAnimation(config: Map<string, string>, header: Buffer, stream: BlockStream, path: (v: string) => string): void {
   const directory = config.get(ANIMATION_KEYS.directory);
   if (!directory) return;
-  if (stream.target.display === "mip" && !MIP_ANIMATION_MODELS.has(stream.target.model)) {
+  if (!watchPlaysAnimation(stream.target)) {
     stream.warn(`Animations are not supported on ${stream.target.label} yet; the face was built without it.`);
     return;
   }

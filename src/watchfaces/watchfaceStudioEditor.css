@@ -2618,6 +2618,15 @@ body.wf-is-resizing-layers {
   margin-top: 2px;
 }
 
+/* A frame the target watch never shows (left out to fit, or no animation there). */
+.watchface-shell .wf-animation-frames > li.is-left-out .wf-animation-frame-thumb > img {
+  opacity: 0.3;
+}
+
+.watchface-shell .wf-animation-frames > li.is-left-out .wf-animation-frame-thumb > span {
+  text-decoration: line-through;
+}
+
 /* One row per frame: thumbnail on the face backing, then its delay. */
 .watchface-shell .wf-animation-frames {
   display: grid;

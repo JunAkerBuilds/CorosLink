@@ -11,8 +11,9 @@ import { loadWatchfaceGoogleFont, loadWatchfaceGoogleFontsFor, parseWatchfaceGoo
 import { renameWatchfaceFontFamily } from "./watchfaceFontRename";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
 import { recoverChartGroup, recoverChartPageCompanions, recoverGraphlessChart, recoveredChartReadouts, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
+import { animationOutcomeNeedsNotice, quickAnimationOutcome, watchAnimationOutcome, type WatchAnimationOutcome } from "./watchfaceAnimationOutcome";
 import { animationFrameAt, animationNextChange, animationProblem, clampAnimationDelay, DEFAULT_ANIMATION_DELAY, importAnimationFrames, MAX_ANIMATION_FRAMES, normalizeAnimationDelays, readTemplateAnimation } from "./watchfaceAnimation";
-import { WATCHFACE_TARGETS } from "../../electron/watchfaceTargets";
+import { WATCHFACE_TARGETS, getWatchfaceTarget } from "../../electron/watchfaceTargets";
 import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
 import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
 import { WATCHFACE_SIMULATION_CAPABILITIES, activeSimulationScenario, createWatchfaceSimulation, parseWatchfacePreviewScenario, patchWatchfaceSimulation, simulationStudioOptions, type WatchfacePreviewScenario } from "./watchfaceSimulation";
@@ -995,6 +996,8 @@ export function WatchfaceEditor({
     typeof window === "undefined" || !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
   /** Frame shown while playback is paused (picked in the inspector's frame strip). */
   const [animationStillFrame, setAnimationStillFrame] = useState(0);
+  /** What the target watch plays of the animation; null until it is worked out. */
+  const [animationOutcome, setAnimationOutcome] = useState<WatchAnimationOutcome | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewStackRef = useRef<HTMLDivElement>(null);
   const componentDragBoundsRef = useRef<SVGRectElement>(null);
@@ -2936,39 +2939,91 @@ export function WatchfaceEditor({
   // from elapsed time over the cumulative delays, so late ticks never drift.
   // Playback is preview-only state, outside the design and undo history.
   const playedAnimation = previewMode === "current" && design.animation?.enabled ? design.animation : undefined;
+  // What the target watch makes of it: nothing (no animation in its firmware), or on memory-in-pixel
+  // its 64 colors with the frames that fit. Worked out with the compiler's own rules.
+  const animationTarget = useMemo(() => getWatchfaceTarget(targetWatchModel ?? targetFirmwareType), [targetWatchModel, targetFirmwareType]);
+  const outcomeAnimation = design.animation?.enabled && design.animation.frames.length ? design.animation : undefined;
+  const outcomeFrames = outcomeAnimation?.frames, outcomeDelays = outcomeAnimation?.delays;
+  useEffect(() => {
+    if (!outcomeFrames || !outcomeDelays) { setAnimationOutcome(null); return; }
+    const quick = quickAnimationOutcome(animationTarget);
+    if (quick) { setAnimationOutcome(quick); return; }
+    let cancelled = false;
+    // Measuring reads every frame's pixels, so it waits for edits (delays, a drag of new frames) to settle.
+    const timer = window.setTimeout(() => {
+      void watchAnimationOutcome({ enabled: true, x: 0, y: 0, width: 0, height: 0, frames: outcomeFrames, delays: outcomeDelays }, animationTarget, watchCoordinateScale)
+        .then((outcome) => { if (!cancelled) setAnimationOutcome(outcome); })
+        .catch(() => { if (!cancelled) setAnimationOutcome(null); });
+    }, 150);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [outcomeFrames, outcomeDelays, animationTarget, watchCoordinateScale]);
+  const animationSelected = selectedId === "animation";
   useEffect(() => {
     const canvas = animationCanvasRef.current;
     const context = canvas?.getContext("2d", { colorSpace: "display-p3" });
     if (!canvas || !context) return;
     context.clearRect(0, 0, canvas.width, canvas.height);
     if (!playedAnimation?.frames.length) return;
-    let cancelled = false, timer = 0, shown = -1;
+    let cancelled = false, timer = 0, shown = "";
     const images: (HTMLImageElement | null)[] = playedAnimation.frames.map(() => null);
     const scale = canvas.width / previewWidth;
-    const draw = (index: number) => {
+    const outcome = animationOutcome;
+    const absent = outcome?.kind === "unsupported" || outcome?.kind === "tooLarge";
+    const fitted = outcome?.kind === "fitted" ? outcome : null;
+    // The watch's own pixels for the frames it plays, on small canvases the preview scales up.
+    const watchFrames = fitted?.frames.map((frame) => {
+      const sprite = document.createElement("canvas");
+      sprite.width = frame.width; sprite.height = frame.height;
+      sprite.getContext("2d")?.putImageData(frame, 0, 0);
+      return sprite;
+    });
+    /** A design frame as drawn; faint when the watch never shows it (it stays editable while selected). */
+    const drawDesignFrame = (index: number, alpha: number) => {
       const image = images[index];
       if (!image) return false;
       context.clearRect(0, 0, canvas.width, canvas.height);
+      context.globalAlpha = alpha;
       context.drawImage(image, playedAnimation.x * scale, playedAnimation.y * scale, image.naturalWidth * scale, image.naturalHeight * scale);
+      context.globalAlpha = 1;
+      if (alpha === 1) applyWatchThemeToCanvas(canvas, watchTheme);
+      return true;
+    };
+    /** Kept frame `slot` as the watch draws it: its colors, at the position the build writes. */
+    const drawWatchFrame = (slot: number) => {
+      const sprite = watchFrames?.[slot];
+      if (!fitted || !sprite) return false;
+      const toCanvas = scale / fitted.scale;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(sprite, (Math.round(playedAnimation.x * fitted.scale) + fitted.x) * toCanvas,
+        (Math.round(playedAnimation.y * fitted.scale) + fitted.y) * toCanvas, sprite.width * toCanvas, sprite.height * toCanvas);
       applyWatchThemeToCanvas(canvas, watchTheme);
       return true;
     };
     void Promise.all(playedAnimation.frames.map((url, index) => loadStudioImage(url).then((image) => { images[index] = image; }))).then(() => {
       if (cancelled) return;
+      // A watch that plays none of it shows none; the selected layer keeps a faint frame to place.
+      if (absent) { if (animationSelected) drawDesignFrame(Math.min(animationStillFrame, images.length - 1), 0.35); return; }
       // One timer per frame boundary, not a 60 Hz loop: the frame is still
       // derived from elapsed time, so a late timer never makes playback drift.
       const start = performance.now();
+      const delays = fitted ? fitted.delays : playedAnimation.delays;
       const tick = () => {
         if (cancelled) return;
         const elapsed = performance.now() - start;
-        const index = animationPlaying ? animationFrameAt(playedAnimation.delays, elapsed) : animationStillFrame;
-        if (index !== shown && draw(index)) shown = index;
-        if (animationPlaying) timer = window.setTimeout(tick, animationNextChange(playedAnimation.delays, elapsed));
+        if (animationPlaying) {
+          const index = animationFrameAt(delays, elapsed);
+          if (`p${index}` !== shown && (fitted ? drawWatchFrame(index) : drawDesignFrame(index, 1))) shown = `p${index}`;
+          timer = window.setTimeout(tick, animationNextChange(delays, elapsed));
+          return;
+        }
+        // Paused on a chosen frame: the watch's version of it, or faint when the watch leaves it out.
+        const slot = fitted ? fitted.kept.indexOf(animationStillFrame) : -1;
+        if (fitted ? (slot >= 0 ? drawWatchFrame(slot) : drawDesignFrame(animationStillFrame, 0.35)) : drawDesignFrame(animationStillFrame, 1)) shown = `s${animationStillFrame}`;
       };
       tick();
     });
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [playedAnimation, previewWidth, canvasBackingRevision, watchTheme, animationPlaying, animationStillFrame]);
+  }, [playedAnimation, previewWidth, canvasBackingRevision, watchTheme, animationPlaying, animationStillFrame, animationOutcome, animationSelected]);
   const selectedElementId = selectedId.startsWith("bgel:")
     ? selectedId.slice("bgel:".length)
     : null;
@@ -11596,6 +11651,14 @@ export function WatchfaceEditor({
                 </button>
               </span>
             ) : null}
+            {design.animation?.enabled && previewMode === "current" && animationOutcomeNeedsNotice(animationOutcome) ? (
+              <span>
+                <button type="button" className="wf-font-notice-reopen" onClick={() => selectEditorItem("animation")}>
+                  <TriangleAlert size={12} aria-hidden="true" />
+                  {animationOutcomeLabel(animationOutcome, true)}
+                </button>
+              </span>
+            ) : null}
             {simpleMode ? null : <span>{starterArchive.fileName}</span>}
             </div>
             {/* Per-watch layout sizes are Advanced; Simple edits the size Studio opened. */}
@@ -16120,6 +16183,28 @@ export function WatchfaceEditor({
     } finally { finishSpriteImport(importId); }
   }
 
+  /** What the target watch plays of the animation, in words; `short` for the status strip. */
+  function animationOutcomeLabel(outcome: WatchAnimationOutcome | null, short = false): string {
+    const watch = t(animationTarget?.label ?? "this watch");
+    if (!outcome) return t("Checking what {{watch}} plays…", { watch });
+    if (outcome.kind === "unsupported") {
+      return short ? t("No animation on {{watch}}", { watch })
+        : t("{{watch}} does not play animations, so the face is built without this one. It is kept in the project for watches that do.", { watch });
+    }
+    if (outcome.kind === "tooLarge") {
+      return short ? t("Animation too large for {{watch}}", { watch })
+        : t("One frame alone is too large for {{watch}}, so the face is built without the animation. Use smaller frames.", { watch });
+    }
+    if (outcome.kind === "fitted") {
+      if (outcome.kept.length < outcome.total) {
+        return short ? t("Animation: {{kept}} of {{total}} frames on {{watch}}", { kept: outcome.kept.length, total: outcome.total, watch })
+          : t("Too large for {{watch}} with all {{total}} frames, so it plays {{kept}} of them, each held longer so the loop takes as long. Smaller frames keep more. The preview shows what the watch plays.", { kept: outcome.kept.length, total: outcome.total, watch });
+      }
+      return t("Plays on {{watch}} with all {{total}} frames, in the watch's 64 colors, as the preview shows ({{percent}}% of its animation memory).", { watch, total: outcome.total, percent: Math.max(1, Math.round(outcome.bytes / 65535 * 100)) });
+    }
+    return t("Plays on {{watch}} while the face is lit. Always-on shows no animation.", { watch });
+  }
+
   function renderAnimationInspector() {
     const animation = design.animation;
     if (!animation) return null;
@@ -16134,6 +16219,8 @@ export function WatchfaceEditor({
     const uniform = animation.delays.every((delay) => delay === animation.delays[0]);
     const cycle = animation.delays.reduce((sum, delay) => sum + delay, 0);
     const problem = animationProblem(animation);
+    const outcome = animation.enabled ? animationOutcome : null;
+    const frameLeftOut = (index: number) => outcome?.kind === "fitted" ? !outcome.kept.includes(index) : outcome?.kind === "unsupported" || outcome?.kind === "tooLarge";
     return (
       <>
         {renderPositionPanel("animation", t("Watch screen position"), <>
@@ -16191,7 +16278,9 @@ export function WatchfaceEditor({
               />
             </label>
             {problem ? <p className="wf-animation-problem" role="status"><TriangleAlert size={12} aria-hidden="true" />{problem}</p> : null}
-            <p className="watchface-studio-summary">{t("Plays on PACE 4 and PACE Pro while the face is lit. Always-on shows no animation.")}</p>
+            {animation.enabled && animationOutcomeNeedsNotice(animationOutcome)
+              ? <p className="wf-animation-problem" role="status"><TriangleAlert size={12} aria-hidden="true" />{animationOutcomeLabel(animationOutcome)}</p>
+              : <p className="watchface-studio-summary">{animation.enabled ? animationOutcomeLabel(animationOutcome) : t("Hidden: the face is built without the animation.")}</p>}
           </div>
         )}
         {renderPropertySection(
@@ -16200,11 +16289,11 @@ export function WatchfaceEditor({
           <div className="wf-property-stack">
             <ol className="wf-animation-frames" aria-label={t("Animation frames")}>
               {animation.frames.map((url, index) => (
-                <li key={index} className={!animationPlaying && animationStillFrame === index ? "is-shown" : undefined}>
+                <li key={index} className={[!animationPlaying && animationStillFrame === index ? "is-shown" : "", frameLeftOut(index) ? "is-left-out" : ""].filter(Boolean).join(" ") || undefined}>
                   <button
                     type="button"
                     className="wf-animation-frame-thumb"
-                    title={t("Show frame {{index}}", { index: index + 1 })}
+                    title={frameLeftOut(index) ? t("Frame {{index}} is left out on {{watch}}", { index: index + 1, watch: t(animationTarget?.label ?? "this watch") }) : t("Show frame {{index}}", { index: index + 1 })}
                     aria-label={t("Show frame {{index}}", { index: index + 1 })}
                     onClick={() => { setAnimationPlaying(false); setAnimationStillFrame(index); }}
                   >

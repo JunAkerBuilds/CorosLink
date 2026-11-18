@@ -1,5 +1,6 @@
 import { mipRingCover } from "./mipRing";
 import type { RgbaImage } from "./png";
+import { cbzCompressBytes, mipLevel as level, planMipAnimation } from "./animationFit";
 
 /**
  * COROS 416px bitmap blocks, as WFBin8888Exporter writes them:
@@ -25,17 +26,8 @@ export const slot = (index: number) => ((index & 15) << 4) | (index >> 4);
 
 /** COROS `cbz_compress(2, …)`: PCX-style RLE. Runs of 2–63, and lone bytes ≥ 0xc0, become (0xc0 | n, value). */
 export function cbzCompress(input: Uint8Array): Buffer {
-  const output = Buffer.allocUnsafe(input.length * 2);
-  let length = 0;
-  for (let i = 0; i < input.length;) {
-    const value = input[i]!;
-    let run = 1;
-    while (run < 63 && i + run < input.length && input[i + run] === value) run++;
-    if (run > 1 || value >= 0xc0) { output[length++] = 0xc0 | run; output[length++] = value; }
-    else output[length++] = value;
-    i += run;
-  }
-  return output.subarray(0, length);
+  const output = cbzCompressBytes(input);
+  return Buffer.from(output.buffer, output.byteOffset, output.length);
 }
 
 /** Exact palette in first-appearance order (`Bitmap::ToLut256Buffer`); null past 256 colors. */
@@ -484,7 +476,6 @@ export function encodeFramesBlock(images: RgbaImage[], fullColor = false): Buffe
 export const MIP_EXPORTER_FLAG = 0x08;
 
 /** A channel's 2-bit level, as COROS rounds it: 0–42, 43–127, 128–212, 213–255. */
-const level = (value: number) => value < 43 ? 0 : value < 128 ? 1 : value < 213 ? 2 : 3;
 
 /**
  * `Bitmap::To2222Buffer` for sprites, fonts and icons. Alpha below 64 is fully transparent; color is
@@ -768,40 +759,14 @@ export function encodeMipFramesBlock(images: RgbaImage[], smoothEdges = false): 
 }
 
 /**
- * An animation's frames as one memory-in-pixel block that fits its 64 KB of u16 offsets. The margin
- * no frame draws in is cut off (`x`, `y` say how far the picture moved, so its position follows),
- * which changes nothing on screen. If that is not enough, evenly spaced frames are left out, the
- * most that fit being kept, and each kept frame stays up for the frames after it, so the loop takes
- * as long as before. Undefined when a single frame is already too large.
+ * An animation's frames as one memory-in-pixel block that fits its 64 KB of u16 offsets, fitted by
+ * `planMipAnimation` (margin cut off, then frames left out). `x`, `y` say how far the picture moved,
+ * so its position follows. Undefined when a single frame is already too large.
  */
 export function fitMipAnimation(images: RgbaImage[], delays: number[], smoothEdges = false): { block: Buffer; delays: number[]; x: number; y: number } | undefined {
   const width = images[0]!.width, height = images[0]!.height;
-  const encoded = images.map(image => to2222(image, smoothEdges));
-  let x0 = width, y0 = height, x1 = -1, y1 = -1;
-  for (const frame of encoded) {
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (frame[y * width + x] === 0xff) continue;
-        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
-      }
-    }
-  }
-  // Nothing visible in any frame: one transparent pixel.
-  if (x1 < 0) { x0 = 0; y0 = 0; x1 = 0; y1 = 0; }
-  const w = x1 - x0 + 1, h = y1 - y0 + 1;
-  const cropped = encoded.map(frame => {
-    const out = new Uint8Array(w * h);
-    for (let y = 0; y < h; y++) out.set(frame.subarray((y0 + y) * width + x0, (y0 + y) * width + x0 + w), y * w);
-    return out;
-  });
-  for (let keep = cropped.length; keep >= 1; keep--) {
-    const starts = Array.from({ length: keep }, (_, i) => Math.floor(i * cropped.length / keep));
-    const block = mipBlock(starts.map(start => cropped[start]!), w, h);
-    if (mipBlockOverflows(block)) continue;
-    const kept = starts.map((start, i) => Math.min(0xffff, delays.slice(start, starts[i + 1] ?? delays.length).reduce((sum, delay) => sum + delay, 0)));
-    return { block, delays: kept, x: x0, y: y0 };
-  }
-  return undefined;
+  const plan = planMipAnimation(images.map(image => to2222(image, smoothEdges)), width, height, delays);
+  return plan && { block: mipBlock(plan.frames, plan.width, plan.height), delays: plan.delays, x: plan.x, y: plan.y };
 }
 
 /** Frame data past 64 KB, whose u16 ends COROS truncates, so the watch would misread the block. */

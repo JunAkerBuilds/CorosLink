@@ -184,6 +184,27 @@ for (const id of ['vertix-2', 'pace-2', 'apex-pro', 'vertix']) {
   assert.deepEqual([0, 1, 2].map(i => big.bin.readUInt16LE(record + 0x3c + i * 2)), [60, 85, 0], 'the loop takes as long as before');
   assert.ok(!mipBlockOverflows(big.bin.subarray(list, list + 10 + 3 * 2 + big.bin.readUInt16LE(list + 10 + 2 * 2))));
 }
+{
+  // The shared plan Studio's preview plays from: same frames and delays as the build, and the
+  // watch's colors round-trip (four levels a channel, 0xff transparent).
+  const { planMipAnimation, mip2222, mip2222ToRgba, watchPlaysAnimation, cbzCompressBytes } = require('../dist-electron/watchfaceCompiler/animationFit.js');
+  const { cbzCompress } = require('../dist-electron/watchfaceCompiler/bitmap.js');
+  assert.deepEqual([['amoled', 'pace-4'], ['mip', 'apex-4'], ['mip', 'vertix-2'], ['mip', 'apex-pro']].map(([display, model]) => watchPlaysAnimation({ display, model })), [true, true, false, false]);
+  const rgba = new Uint8Array([255, 0, 130, 255, 10, 200, 50, 100, 9, 9, 9, 20, 255, 255, 255, 255]);
+  const bytes = mip2222(rgba, 2, 2);
+  assert.deepEqual([...bytes], [0x32, 0x89, 0xff, 0x3f]);
+  assert.deepEqual([...mip2222ToRgba(bytes)], [255, 0, 170, 255, 0, 170, 85, 85, 0, 0, 0, 0, 255, 255, 255, 255]);
+  const noisy = Uint8Array.from({ length: 5000 }, (_, i) => (i * 131) % 251);
+  assert.deepEqual([...cbzCompressBytes(noisy)], [...cbzCompress(noisy)]);
+  const frames = Array.from({ length: 6 }, (_, f) => { const frame = new Uint8Array(40 * 30).fill(0xff); for (let y = 10; y < 20; y++) for (let x = 5; x < 25; x++) frame[y * 40 + x] = (f + x * y) & 0x3f; return frame; });
+  const plan = planMipAnimation(frames, 40, 30, [10, 20, 30, 40, 50, 60]);
+  assert.deepEqual([plan.x, plan.y, plan.width, plan.height, plan.kept, plan.delays], [5, 10, 20, 10, [0, 1, 2, 3, 4, 5], [10, 20, 30, 40, 50, 60]]);
+  const heavy = Array.from({ length: 6 }, (_, f) => Uint8Array.from({ length: 160 * 160 }, (_, i) => (i * 7 + f * 13 + ((i * i) >> 3)) & 0x3f));
+  const thinned = planMipAnimation(heavy, 160, 160, [10, 20, 30, 40, 50, 60]);
+  assert.ok(thinned.kept.length < 6 && thinned.kept[0] === 0 && thinned.bytes <= 0xffff);
+  assert.equal(thinned.delays.reduce((a, b) => a + b, 0), 210, 'the loop takes as long');
+  assert.equal(planMipAnimation([Uint8Array.from({ length: 300 * 300 }, (_, i) => (i * 7 + ((i * i) >> 3)) & 0x3f)], 300, 300, [100]), undefined, 'one frame past 64 KB cannot play');
+}
 console.log('Animation limits: 1/30/44 frames, >44 rejected, delays per frame, mixed sizes, missing frames, signed positions, MIP on six models (margin trimmed, frames thinned past 64 KB), skipped elsewhere.');
 
 // --- Malformed records never break the rest of the face -----------------------

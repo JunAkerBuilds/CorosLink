@@ -1,5 +1,6 @@
 import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale, formatDate } from "../i18n/watchfaces";
 import { WATCHFACE_TARGETS, getWatchfaceTarget } from "../../electron/watchfaceTargets";
+import { quickAnimationOutcome } from "./watchfaceAnimationOutcome";
 import { drawNativeDataPreview } from "./nativeData";
 import {
   type CSSProperties,
@@ -844,6 +845,15 @@ export function WatchfacesView({
     }
     conversionBusyRef.current = true;
     setConversionBusy(true);
+    // What the destination makes of the face's animation, said with the result: none at all, or
+    // (memory-in-pixel) its own colors and perhaps fewer frames, which the editor then measures.
+    const animated = Boolean(design.animation?.enabled && design.animation.frames.length);
+    const animationNote = () => !animated ? ""
+      : quickAnimationOutcome(target)?.kind === "unsupported"
+        ? t("{{watch}} does not play animations, so this face is built without its animation there.", { watch: t(target.label) })
+        : target.display === "mip"
+          ? t("{{watch}} plays the animation in its own 64 colors and may leave frames out to fit; the status under the preview says how many play.", { watch: t(target.label) })
+          : "";
     try {
       if (bakeForWatch) {
         // Recovered official faces, and faces with no 800px master, are rebuilt from their
@@ -855,7 +865,7 @@ export function WatchfacesView({
         api.setWatchfaceAutomationReady("editor", false);
         openStudio(baked, bakedName, undefined, undefined, true,
           { firmwareType: target.firmwareType, watchModel: target.model }, carriedWatchfacePreferences(design));
-        setNotice(localizedText(() => t("Converted to {{value1}}. Your edits are baked into this new starter; keep editing and save it as a project.", { value1: t(target.label) })));
+        setNotice(localizedText(() => [t("Converted to {{value1}}. Your edits are baked into this new starter; keep editing and save it as a project.", { value1: t(target.label) }), animationNote()].filter(Boolean).join(" ")));
         return { opened: true, name: bakedName, targetFirmwareType: target.firmwareType,
           omittedRawConfigEditCount: 0, appliedRawConfigEditCount: 0 };
       }
@@ -872,10 +882,10 @@ export function WatchfacesView({
       api.setWatchfaceAutomationReady("editor", false);
       openStudio(converted.archive, convertedName, undefined, prepared.design, true,
         { firmwareType: target.firmwareType, watchModel: target.model });
-      setNotice(localizedText(() => t("Converted to {{value1}}. {{value2}}", { value1: t(target.label), value2: target.display === "mip"
+      setNotice(localizedText(() => [t("Converted to {{value1}}. {{value2}}", { value1: t(target.label), value2: target.display === "mip"
         ? t("Current stays visible on MIP; your separate AOD design is retained for AMOLED.")
         : converted.generatedAod ? t("An editable Always-on layout was created from Current. Review it before sending.")
-        : t("Current and Always-on layouts are preserved.") })));
+        : t("Current and Always-on layouts are preserved.") }), animationNote()].filter(Boolean).join(" ")));
       return { opened: true, name: convertedName, targetFirmwareType: target.firmwareType,
         omittedRawConfigEditCount: 0, appliedRawConfigEditCount: converted.appliedRawConfigEditCount };
     } finally {
