@@ -1303,7 +1303,7 @@ async function main() {
   // The expanded allowance still has a hard boundary. A failed export must
   // leave neither an invalid output nor a poisoned source for the next retry.
   const limitEntries = [...fixtureEntries];
-  while (limitEntries.length < 5_000) {
+  while (limitEntries.length < 15_000) {
     limitEntries.push({ name: `original/${limitEntries.length}.png`, data: tinyPng });
   }
   const limitSource = path.join(tempRoot, "limit-source.dat");
@@ -1323,7 +1323,7 @@ async function main() {
       path: "watchface_800x800/config.txt",
       values: { time_hour_high_font: "studio\\new_font" }
     }]
-  }), /watch-face archive contains too many files \(5001; maximum 5000\)/);
+  }), /watch-face archive contains too many files \(15001; maximum 15000\)/);
   assert.deepEqual((await fs.readdir(outputDirectory)).sort(), beforeRejectedBuild,
     "rejected builds must not leave generated archives on disk");
   assert.deepEqual(await fs.readFile(limitSource), limitSourceBytes,
@@ -1333,8 +1333,8 @@ async function main() {
   });
   const recoveredOutput = path.join(tempRoot, "recovered.dat");
   await watchfaces.exportCorosWatchfaceArchive(recovered.archiveId, recoveredOutput);
-  assert.equal((await unzipper.Open.file(recoveredOutput)).files.length, 5_000,
-    "faces above the former 1000-file limit should export successfully on retry");
+  assert.equal((await unzipper.Open.file(recoveredOutput)).files.length, 15_000,
+    "faces above the former 5000-file limit should export successfully on retry");
 
   console.log("COROS watchface creator archive test passed");
 }

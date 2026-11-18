@@ -994,20 +994,20 @@ try {
     { name: "info.json", data: Buffer.from('{"o_template_id":250601,"o_diy_version":1}') },
     { name: "watchface_customize.png", data: Buffer.from("PNG") }
   ];
-  for (let index = 0; index < 4_999; index += 1) {
+  for (let index = 0; index < 14_999; index += 1) {
     rawEntries.push({ name: `assets/${index}.png`, data: Buffer.from("PNG") });
   }
-  for (const count of [101, 1_001, 5_000]) {
+  for (const count of [101, 1_001, 5_001, 15_000]) {
     const rawPath = path.join(tempDirectory, `raw-${count}.dat`);
     await fs.writeFile(rawPath, createStoreZip(rawEntries.slice(0, count)));
     assert.equal(await readCorosWatchfaceProjectPackage(rawPath), null);
     assert.equal((await selectCorosWatchfaceArchive(rawPath)).sourceTemplateId, "250601");
   }
-  const excessivePath = path.join(tempDirectory, "raw-5001.dat");
+  const excessivePath = path.join(tempDirectory, "raw-15001.dat");
   await fs.writeFile(excessivePath, createStoreZip(rawEntries));
   await assert.rejects(
     selectCorosWatchfaceArchive(excessivePath),
-    /watch-face archive contains too many files \(5001; maximum 5000\)/
+    /watch-face archive contains too many files \(15001; maximum 15000\)/
   );
   const unsafePath = path.join(tempDirectory, "unsafe.dat");
   await fs.writeFile(unsafePath, createStoreZip([

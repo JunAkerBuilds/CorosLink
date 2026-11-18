@@ -77,7 +77,7 @@ export async function prepareLocalWatchfaceZip(filename: string, preferred?: Wat
   const stat = await fs.promises.stat(filename);
   if (!stat.isFile() || stat.size > MAX_ARCHIVE) throw new Error("Choose a final watch face DAT/ZIP smaller than 64 MB.");
   const directory = await loadUnzipper().Open.file(filename);
-  if (directory.files.length > 8192) throw new Error("The watch face archive has too many files.");
+  if (directory.files.length > 15_000) throw new Error("The watch face archive has too many files.");
   let expanded = 0;
   for (const entry of directory.files) {
     const name = entry.path;

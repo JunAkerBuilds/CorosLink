@@ -156,7 +156,7 @@ const MAX_PROJECT_PACKAGE_FILES = 100;
 const MAX_ARCHIVE_EXPANDED_BYTES = 200 * 1024 * 1024;
 // Styled faces retain the template assets alongside separate Current/AOD
 // sprite sets at each resolution. Bound their count independently of bytes.
-const MAX_ARCHIVE_FILES = 5_000;
+const MAX_ARCHIVE_FILES = 15_000;
 const MAX_ARCHIVE_ENTRY_BYTES = 5 * 1024 * 1024;
 const CREATOR_CANVAS_SIZE = 800;
 // Current + AOD data layers, fonts and weather sprites across four resolutions.
