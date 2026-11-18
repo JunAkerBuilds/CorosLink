@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { decodePng, type RgbaImage } from "./png";
 import { encodeFramesBlock, encodeImageBlock, encodeMipFramesBlock, encodeMipImageBlock, InsideType, mipBlockOverflows } from "./bitmap";
 import { configPath, parseConfig, parseNumber, parsePos, parseRect, rgb222 } from "./config";
@@ -51,6 +52,7 @@ class BlockStream {
   private readonly parts: Buffer[] = [];
   private readonly positions = new Map<string, number>();
   private readonly decoded = new Map<string, RgbaImage | null>();
+  private readonly blocks = new Map<string, number>();
   offset: number;
   constructor(start: number, private readonly files: ArchiveFiles, private readonly warnings: Set<string>, readonly target: WatchfaceBinTarget,
     private readonly fullColor = false, private readonly smoothEdges = false) { this.offset = start; }
@@ -61,6 +63,20 @@ class BlockStream {
     const at = this.offset;
     this.parts.push(bytes);
     this.offset += bytes.length;
+    return at;
+  }
+
+  /**
+   * An encoded image block, stored once however many fields use it. Blocks hold no
+   * offsets of their own, so identical ones (four time digits drawn from copies of the
+   * same 0-9 set, say) can share one position, as faces sharing a folder already do.
+   */
+  private appendImage(bytes: Buffer): number {
+    const key = createHash("sha256").update(bytes).digest("hex");
+    const known = this.blocks.get(key);
+    if (known !== undefined) return known;
+    const at = this.append(bytes);
+    this.blocks.set(key, at);
     return at;
   }
 
@@ -102,7 +118,7 @@ class BlockStream {
     if (!image) this.missing(path);
     const encode = this.target.display === "mip" ? (image: RgbaImage, inside: InsideType) => encodeMipImageBlock(image, inside, background, this.smoothEdges)
       : (image: RgbaImage, inside: InsideType) => encodeImageBlock(image, inside, this.fullColor);
-    const at = image ? this.append(this.checked(encode(transform ? transform(image) : image, inside), path)) : 0;
+    const at = image ? this.appendImage(this.checked(encode(transform ? transform(image) : image, inside), path)) : 0;
     this.positions.set(path, at);
     return at;
   }
@@ -124,7 +140,7 @@ class BlockStream {
     const images = Array.from({ length: repeat }, () => names.map(name => this.image(name))).flat();
     if (!images[0]) { this.missing(names[0]!); this.positions.set(names[0]!, 0); return 0; }
     const encode = this.target.display === "mip" ? (images: RgbaImage[]) => encodeMipFramesBlock(images, this.smoothEdges) : (images: RgbaImage[]) => encodeFramesBlock(images, this.fullColor);
-    const at = this.append(this.checked(encode(images.map(image => image ?? { width: 0, height: 0, data: new Uint8Array() })), directory));
+    const at = this.appendImage(this.checked(encode(images.map(image => image ?? { width: 0, height: 0, data: new Uint8Array() })), directory));
     this.positions.set(names[0]!, at);
     return at;
   }

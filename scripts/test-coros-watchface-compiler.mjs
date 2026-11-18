@@ -124,6 +124,11 @@ try {
  assert.deepEqual(blockAt(FIELDS.time_hour_high_font[1]),[12,18,10],'digit fonts are one 10-frame block');
  assert.equal(bin.readUInt32LE(FIELDS.step_font[1]),bin.readUInt32LE(FIELDS.time_hour_high_font[1]),'a shared font folder is stored once');
  assert.deepEqual([bin.readInt16LE(FIELDS.step_rect[1]),bin.readInt16LE(FIELDS.step_rect[1]+6),bin[FIELDS.step_rect[1]+8]],[10,40,0x14]);
+ // Studio gives each time digit its own copy of the same 0-9 set; identical images are stored once.
+ const copied=compileWatchface(new Map([...built.map(e=>[e.name,e.name==='watchface_416x416/config.txt'?Buffer.from(e.data.toString().replace('[step_font]=digits','[step_font]=digits_copy')):e.data]),
+  ...Object.entries(glyphs).map(([name,data])=>[name.replace('/digits/','/digits_copy/'),data])]),{faceId:1}).bin;
+ assert.equal(copied.readUInt32LE(FIELDS.step_font[1]),copied.readUInt32LE(FIELDS.time_hour_high_font[1]),'identical digit folders share one block');
+ assert.equal(copied.length,compileWatchface(new Map(built.map(e=>[e.name,e.data])),{faceId:1}).bin.length,'a copied folder adds no bytes');
  assert.deepEqual(blockAt(FIELDS.bluetooth_icon[1]),[10,10,1]);
  assert.deepEqual([bin.readInt32LE(FIELDS.bluetooth_icon_pos[1]),bin.readInt32LE(FIELDS.bluetooth_icon_pos[1]+4)],[5,6],'COROS drops minus signs in positions');
  assert.ok(compiled.warnings.includes('bluetooth_icon_pos is {-5,6}, but COROS drops minus signs, so it lands at {5,6}.'),compiled.warnings.join('\n'));

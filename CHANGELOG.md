@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Smaller face files.** Images that are pixel-for-pixel the same are now stored once in the file sent to the watch. Studio gives each time digit its own copy of the 0–9 set, so a face like Nixie Circuit went from 573 KB to 438 KB with no change to how it looks.
+
 ### Fixed
 
 - **Temperature alignment with °C turned off.** A hidden degree sign was still sent as an invisible full-width image, and the watch counted it when aligning the reading, so a right-aligned temperature sat about a digit to the left of where Studio showed it. Hidden degree and minus signs now take no space. Minimum and maximum temperature get the same fix.
