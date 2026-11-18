@@ -204,7 +204,7 @@
     "icons:generate": "node scripts/generate-icons.mjs",
     "dmg:background": "python3 scripts/generate-dmg-background.py",
     "rebuild": "electron-builder install-app-deps",
-    "dist": "npm run binaries:prepare && npm run build && electron-builder --publish never",
+    "dist": "npm run binaries:prepare && npm run build && electron-builder --publish never && node scripts/stamp-mac-update-minimum.mjs --if-present",
     "dist:mac": "npm run binaries:prepare:mac && npm run build && electron-builder --mac --arm64 --x64 --publish never && node scripts/stamp-mac-update-minimum.mjs",
     "dist:win": "npm run binaries:prepare:win && npm run build && electron-builder --win nsis --x64 --publish never",
     "dist:linux": "npm run binaries:prepare:linux && npm run build && electron-builder --linux AppImage deb --x64 --publish never",
@@ -244,7 +244,8 @@
       "dist/**/*",
       "dist-electron/**/*",
       "package.json",
-      "!**/node_modules/@anthropic-ai/claude-agent-sdk-*/**"
+      "!**/node_modules/@anthropic-ai/claude-agent-sdk-*/**",
+      "!node_modules/better-sqlite3/{deps,src}/**"
     ],
     "extraResources": [
       {
@@ -354,6 +355,9 @@
           "from": "build/de.lproj",
           "to": "de.lproj"
         }
+      ],
+      "files": [
+        "!node_modules/better-sqlite3/prebuilds/{linux,linuxmusl,win32}-*.node"
       ]
     },
     "nsis": {
@@ -365,7 +369,8 @@
       "icon": "build/icon.png",
       "artifactName": "${productName}-Setup-${version}.${ext}",
       "files": [
-        "!**/claude.exe"
+        "!**/claude.exe",
+        "!node_modules/better-sqlite3/prebuilds/{darwin,linux,linuxmusl}-*.node"
       ]
     },
     "linux": {
@@ -378,7 +383,10 @@
       "artifactName": "${productName}-${version}.${ext}",
       "maintainer": "CorosLink <JunAkerBuilds@users.noreply.github.com>",
       "synopsis": "Unofficial COROS companion: training analytics, watch faces and watch sync",
-      "syncDesktopName": true
+      "syncDesktopName": true,
+      "files": [
+        "!node_modules/better-sqlite3/prebuilds/{darwin,win32,linuxmusl}-*.node"
+      ]
     }
   },
   "dependencies": {

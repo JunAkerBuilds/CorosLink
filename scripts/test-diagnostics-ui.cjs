@@ -35,8 +35,9 @@ async function main() {
   const originalFetch = globalThis.fetch;
   const originalClipboardWrite = clipboard.writeText;
   // Electron 44+: the clipboard is async and W3C-shaped. Items from read() can't be written back,
-  // so copy each format into a new ClipboardItem for the restore below.
-  const oldClipboard = await Promise.all((await clipboard.read().catch(() => [])).map(async (item) =>
+  // so copy each format into a new ClipboardItem for the restore below. If the clipboard can't be
+  // saved, stop here rather than overwrite what the person running the test had copied.
+  const oldClipboard = await Promise.all((await clipboard.read()).map(async (item) =>
     new ClipboardItem(Object.fromEntries(await Promise.all(item.types.map(async (type) => [type, await item.getType(type)]))))));
   let clipboardChanged = false;
   const watchdog = setTimeout(() => app.exit(1), 90_000);
@@ -125,7 +126,15 @@ async function main() {
     clearTimeout(watchdog);
     globalThis.fetch = originalFetch;
     clipboard.writeText = originalClipboardWrite;
-    if (clipboardChanged) await (oldClipboard.length ? clipboard.write(oldClipboard) : clipboard.clear()).catch((error) => console.warn(`Clipboard not restored: ${error.message}`));
+    if (clipboardChanged) {
+      // clear() is synchronous; write() returns a promise. Either can fail without skipping the cleanup below.
+      try {
+        if (oldClipboard.length) await clipboard.write(oldClipboard);
+        else clipboard.clear();
+      } catch (error) {
+        console.warn(`Clipboard not restored: ${error.message}`);
+      }
+    }
     window?.destroy();
     await vite?.close();
     await fs.rm(temporaryRoot, { recursive: true, force: true });

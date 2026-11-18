@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { darwinVersionForMacOS, electronMinimumMacOS } from "./stamp-mac-update-minimum.mjs";
+import { builtAppsMinimumMacOS, darwinVersionForMacOS } from "./stamp-mac-update-minimum.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultReleaseDir = path.join(repoRoot, "release");
@@ -170,6 +170,37 @@ function verifyLinuxMetadataReferences(metadataFile, contents, files, errors) {
   }
 }
 
+/**
+ * The Mac updater downloads the ZIP for its own architecture from files[], and
+ * skips the update when minimumSystemVersion is above the running Darwin
+ * release (see stamp-mac-update-minimum.mjs). A duplicated key makes the
+ * updater's YAML parser reject the whole feed.
+ */
+function verifyMacMetadata(metadataFile, contents, files, expectedVersion, errors, expectedMinimum) {
+  const listed = readFileUrls(contents);
+  for (const arch of ["arm64", "x64"]) {
+    const zip = listed.find((url) => url.endsWith(`-${arch}.zip`));
+    if (!zip) errors.push(`${metadataFile} lists no ${arch} ZIP, the file the ${arch} updater downloads`);
+    else if (!files.includes(zip)) errors.push(`${metadataFile} references missing ${zip}`);
+    else if (!zip.includes(expectedVersion)) errors.push(`${metadataFile} lists ${zip}, not a ${expectedVersion} build`);
+  }
+  const minimums = [...contents.matchAll(/^minimumSystemVersion:\s*(.+)$/gm)].map((match) => cleanYamlScalar(match[1]));
+  if (minimums.length > 1) {
+    errors.push(`${metadataFile} has ${minimums.length} minimumSystemVersion lines; the updater can't parse duplicate keys`);
+    return;
+  }
+  let expected;
+  try {
+    expected = expectedMinimum();
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+    return;
+  }
+  if (minimums[0] !== expected) {
+    errors.push(`${metadataFile} minimumSystemVersion ${minimums[0] ?? "missing"} does not match the built apps' ${expected}`);
+  }
+}
+
 function readMetadata(metadataPath) {
   const contents = fs.readFileSync(metadataPath, "utf8");
   const match = readYamlField(contents, "version");
@@ -220,17 +251,9 @@ export function verifyPlatform(platform, options = {}) {
       );
     }
 
-    // Without it, auto-update installs a build an older Mac can't open
-    // (see stamp-mac-update-minimum.mjs).
     if (platform === "macos") {
-      const expectedMinimum = options.expectedMacMinimum ??
-        darwinVersionForMacOS(electronMinimumMacOS());
-      const minimum = readYamlField(metadata.contents, "minimumSystemVersion");
-      if (minimum !== expectedMinimum) {
-        errors.push(
-          `${check.metadataFile} minimumSystemVersion ${minimum ?? "missing"} does not match Electron's ${expectedMinimum}`
-        );
-      }
+      verifyMacMetadata(check.metadataFile, metadata.contents, files, expectedVersion, errors,
+        () => options.expectedMacMinimum ?? darwinVersionForMacOS(builtAppsMinimumMacOS(releaseDir)));
     }
 
     if (platform === "windows") {

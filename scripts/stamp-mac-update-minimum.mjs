@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -10,45 +11,84 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  * latest-mac.yml. electron-updater skips an update whose minimumSystemVersion
  * is above os.release(), which on a Mac is the Darwin kernel version, not the
  * macOS version (macOS 13 is Darwin 22). So the yml gets the Darwin number.
+ *
+ * The minimum is read from the apps electron-builder just built: Electron 45
+ * no longer downloads node_modules/electron/dist at install, so a clean CI
+ * runner has no other copy of Electron's Info.plist. Run this after every
+ * macOS build that writes latest-mac.yml (electron-builder's
+ * afterAllArtifactBuild hook runs before the yml exists).
  */
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const electronInfoPlist = path.join(
-  repoRoot,
-  "node_modules/electron/dist/Electron.app/Contents/Info.plist"
-);
+const defaultReleaseDir = path.join(repoRoot, "release");
 
-/** Darwin kernel version for a macOS version: macOS 11+ is Darwin major + 9. */
+/**
+ * Darwin release of each macOS version Electron has used as its floor. Apple
+ * jumped from macOS 15 to 26 while Darwin went from 24 to 25, and a point
+ * release like 13.3 is Darwin 22.4, so an unknown floor fails instead of
+ * being guessed.
+ */
+const DARWIN_FOR_MACOS = {
+  "11.0": "20.0.0",
+  "12.0": "21.0.0",
+  "13.0": "22.0.0",
+  "14.0": "23.0.0",
+  "15.0": "24.0.0",
+  "26.0": "25.0.0"
+};
+
 export function darwinVersionForMacOS(macosVersion) {
-  const major = Number.parseInt(String(macosVersion).split(".")[0] ?? "", 10);
-  if (!Number.isInteger(major) || major < 11) {
-    throw new Error(`Unsupported minimum macOS version: ${macosVersion}`);
+  const parts = String(macosVersion).trim().split(".");
+  const key = `${parts[0]}.${parts[1] ?? "0"}`;
+  const darwin = parts.length <= 3 && (parts[2] ?? "0") === "0" ? DARWIN_FOR_MACOS[key] : undefined;
+  if (!darwin) {
+    throw new Error(`No Darwin version known for minimum macOS ${macosVersion}; add it to DARWIN_FOR_MACOS.`);
   }
-  return `${major + 9}.0.0`;
+  return darwin;
 }
 
-/** The minimum macOS the installed Electron runs on, from its own Info.plist. */
-export function electronMinimumMacOS(infoPlist = electronInfoPlist) {
-  const xml = fs.existsSync(infoPlist) ? fs.readFileSync(infoPlist, "utf8") : "";
+/** LSMinimumSystemVersion from an Info.plist, XML or binary. */
+export function plistMinimumMacOS(infoPlist) {
+  let xml = fs.readFileSync(infoPlist, "utf8");
+  if (!xml.startsWith("<?xml") && process.platform === "darwin") {
+    xml = execFileSync("plutil", ["-convert", "xml1", "-o", "-", infoPlist], { encoding: "utf8" });
+  }
   const match = xml.match(/<key>LSMinimumSystemVersion<\/key>\s*<string>([^<]+)<\/string>/);
   if (!match) throw new Error(`No LSMinimumSystemVersion in ${infoPlist}`);
   return match[1].trim();
 }
 
-/** Sets minimumSystemVersion in latest-mac.yml, replacing any earlier value. */
+/** The minimum macOS shared by every app in release/mac* (one per architecture). */
+export function builtAppsMinimumMacOS(releaseDir = defaultReleaseDir) {
+  const plists = fs.existsSync(releaseDir)
+    ? fs.readdirSync(releaseDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && /^mac(-|$)/.test(entry.name))
+      .flatMap((entry) => fs.readdirSync(path.join(releaseDir, entry.name))
+        .filter((name) => name.endsWith(".app"))
+        .map((name) => path.join(releaseDir, entry.name, name, "Contents", "Info.plist")))
+      .filter((plist) => fs.existsSync(plist))
+    : [];
+  if (plists.length === 0) throw new Error(`No built macOS app in ${releaseDir}/mac*`);
+  const minimums = new Set(plists.map(plistMinimumMacOS));
+  if (minimums.size !== 1) {
+    throw new Error(`The built macOS apps disagree on their minimum macOS: ${[...minimums].join(", ")}`);
+  }
+  return [...minimums][0];
+}
+
+/** Sets minimumSystemVersion in latest-mac.yml, replacing every earlier value. */
 export function stampMacUpdateMinimum(metadataPath, darwinVersion) {
   const contents = fs.readFileSync(metadataPath, "utf8");
-  const line = `minimumSystemVersion: ${darwinVersion}`;
-  const next = /^minimumSystemVersion:.*$/m.test(contents)
-    ? contents.replace(/^minimumSystemVersion:.*$/m, line)
-    : `${contents.replace(/\n*$/, "\n")}${line}\n`;
-  fs.writeFileSync(metadataPath, next);
+  const withoutOld = contents.replace(/^minimumSystemVersion:.*\n?/gm, "");
+  fs.writeFileSync(metadataPath, `${withoutOld.replace(/\n*$/, "\n")}minimumSystemVersion: ${darwinVersion}\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const metadataPath = path.join(repoRoot, "release", "latest-mac.yml");
-    const macos = electronMinimumMacOS();
+    const metadataPath = path.join(defaultReleaseDir, "latest-mac.yml");
+    // `npm run dist` builds whatever platform it runs on; only a Mac build has a feed to stamp.
+    if (process.argv.includes("--if-present") && !fs.existsSync(metadataPath)) process.exit(0);
+    const macos = builtAppsMinimumMacOS();
     const darwin = darwinVersionForMacOS(macos);
     stampMacUpdateMinimum(metadataPath, darwin);
     console.log(`latest-mac.yml: minimumSystemVersion ${darwin} (macOS ${macos}).`);

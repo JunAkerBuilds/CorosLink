@@ -42,6 +42,7 @@ jobs:
             -c.mac.identity=- \
             -c.mac.notarize=false \
             -c.mac.hardenedRuntime=false
+          node scripts/stamp-mac-update-minimum.mjs
 
       - name: Verify macOS update artifacts
         run: node scripts/verify-release-artifacts.mjs macos

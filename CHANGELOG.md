@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **macOS 13 or later.** Electron 45 doesn't run on macOS 12. Macs on macOS 12 stay on the current version instead of auto-updating to one they can't open.
+- **Smaller install.** The database library now ships only the files your computer needs, about 8 MB less on disk.
 
 - **Smaller face files.** Images that are pixel-for-pixel the same are now stored once in the file sent to the watch. Studio gives each time digit its own copy of the 0–9 set, so a face like Nixie Circuit went from 573 KB to 438 KB with no change to how it looks.
 - **Smaller face projects.** Studio writes a separate folder for every time digit, weekday language and always-on copy, even when the pictures are identical. Exported projects now keep one copy and point every use at it. Nixie Circuit's project went from 866 to 716 files (7.98 to 5.86 MB), with the same file sent to the watch.
