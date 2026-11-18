@@ -340,13 +340,13 @@ const thief = await createDeviceKey();
 {
   const settings = createSettings();
   const box = createFakeSecretBox();
-  const identity = loadOrCreateRemoteIdentity(settings, box);
+  const identity = await loadOrCreateRemoteIdentity(settings, box);
   assert.match(identity.environmentId, /^[A-Za-z0-9_-]{22}$/);
   assert.equal(Buffer.from(identity.environmentId, "base64url").length, 16);
   assert.equal(identity.kid, await jose.calculateJwkThumbprint(identity.publicJwk, "sha256"));
   assert.ok(!settings.values.get("remote.identity").includes(identity.privateJwk.d), "the private key is kept encrypted");
   // Made once: later loads return the same identity.
-  const again = loadOrCreateRemoteIdentity(settings, box);
+  const again = await loadOrCreateRemoteIdentity(settings, box);
   assert.deepEqual(again, identity);
   // The key signs and verifies.
   const signed = await new jose.CompactSign(new TextEncoder().encode("hello"))
@@ -356,13 +356,13 @@ const thief = await createDeviceKey();
 
   // No safe storage (Linux basic_text): refuse, and store nothing.
   const refusing = createSettings();
-  assert.throws(() => loadOrCreateRemoteIdentity(refusing, createFakeSecretBox({ available: false })), /Secure credential storage/);
+  await assert.rejects(() => loadOrCreateRemoteIdentity(refusing, createFakeSecretBox({ available: false })), /Secure credential storage/);
   assert.equal(refusing.values.size, 0);
   // A key that won't decrypt is reported, not replaced.
   const broken = createSettings();
-  loadOrCreateRemoteIdentity(broken, box);
-  assert.throws(
-    () => loadOrCreateRemoteIdentity(broken, { ...box, decrypt: () => { throw new Error("locked"); } }),
+  await loadOrCreateRemoteIdentity(broken, box);
+  await assert.rejects(
+    () => loadOrCreateRemoteIdentity(broken, { ...box, decrypt: async () => { throw new Error("locked"); } }),
     /unlock/
   );
 

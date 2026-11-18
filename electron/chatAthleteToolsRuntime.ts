@@ -111,7 +111,7 @@ async function executeReview(action: CoachReviewAction, payload: unknown, previe
   }
   if (action === "saveHevyRoutine") return executeHevyRoutine(payload as HevyRoutineReviewPayload, preview);
   if (action === "createHevyExercise") {
-    if (!getHevyStatus().connected) throw new CoachReviewNotSentError("Connect Hevy in Strength, then click Save to Hevy again.");
+    if (!(await getHevyStatus()).connected) throw new CoachReviewNotSentError("Connect Hevy in Strength, then click Save to Hevy again.");
     const { exercise } = payload as HevyExerciseReviewPayload;
     await createHevyCustomExercise(exercise);
     return { results: preview.items.map(() => ({ ok: true })), message: `${String(exercise.title)} is in your Hevy exercises.` };
@@ -121,7 +121,7 @@ async function executeReview(action: CoachReviewAction, payload: unknown, previe
 }
 
 async function executeHevyRoutine(payload: HevyRoutineReviewPayload, preview: CoachReviewPreview): Promise<CoachReviewOutcome> {
-  if (!getHevyStatus().connected) throw new CoachReviewNotSentError("Connect Hevy in Strength, then click Save to Hevy again.");
+  if (!(await getHevyStatus()).connected) throw new CoachReviewNotSentError("Connect Hevy in Strength, then click Save to Hevy again.");
   const routine = { ...payload.routine };
   if (payload.mode === "update" && payload.routineId) {
     const current = await getHevyRoutine(payload.routineId);

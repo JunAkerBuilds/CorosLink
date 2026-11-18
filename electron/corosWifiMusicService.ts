@@ -18,14 +18,14 @@ interface Pending { version: 1; profile: Profile; taskId: string; taskStarted: b
 interface AudioLabel { id: string; destination: "podcasts" | "netease"; name: string }
 interface AudioLabels extends CorosWifiMusicIdentity { version: 1; labels: AudioLabel[]; playlists?: CorosNeteasePlaylistLabel[] }
 export interface WifiMusicBridge {
-  identity(): CorosWifiMusicIdentity;
+  identity(): CorosWifiMusicIdentity | Promise<CorosWifiMusicIdentity>;
   supported(): boolean;
   exchange(opcode: number, payload: Buffer): Promise<Buffer>;
   reconnect(identity: CorosWifiMusicIdentity): Promise<void>;
   getSetting(key: string): string | undefined;
   setSetting(key: string, value: string): void;
-  encrypt(value: string): string;
-  decrypt(value: string): string;
+  encrypt(value: string): string | Promise<string>;
+  decrypt(value: string): string | Promise<string>;
   temporaryDirectory(): string;
 }
 
@@ -49,12 +49,16 @@ export class CorosWifiMusicService {
     batchFiles?: number;
   } = {}) {}
 
-  private read<T>(key: string): T | undefined {
+  private async read<T>(key: string): Promise<T | undefined> {
     const saved = this.bridge.getSetting(key);
     if (!saved) return undefined;
-    return JSON.parse(this.bridge.decrypt(saved)) as T;
+    return JSON.parse(await this.bridge.decrypt(saved)) as T;
   }
-  private write(key: string, value: unknown): void { this.bridge.setSetting(key, value === undefined ? "" : this.bridge.encrypt(JSON.stringify(value))); }
+  private async write(key: string, value: unknown): Promise<void> {
+    this.bridge.setSetting(key, value === undefined ? "" : await this.bridge.encrypt(JSON.stringify(value)));
+  }
+  /** The current phase, without reading the saved backup. */
+  phase(): CorosWifiMusicStatus["phase"] { return this.progress.phase; }
   hasPendingRestore(): boolean { return Boolean(this.bridge.getSetting(PENDING_KEY)); }
   private validateProfile(profile: Profile, identity: CorosWifiMusicIdentity): Buffer {
     syncSafe(identity);
@@ -64,13 +68,13 @@ export class CorosWifiMusicService {
     if (createHash("sha256").update(payload).digest("hex") !== profile.sha256) throw new Error("The settings backup failed its integrity check.");
     validateNormalDownloadSettings(payload); return payload;
   }
-  status(): CorosWifiMusicStatus {
+  async status(): Promise<CorosWifiMusicStatus> {
     let ready = false, backupSavedAt: number | undefined, deviceName: string | undefined;
     const supported = this.bridge.supported(), restorePending = this.hasPendingRestore();
     if (supported) {
       try {
-        const identity = this.bridge.identity(); deviceName = identity.deviceName;
-        const profile = this.read<Profile>(profileKey(identity));
+        const identity = await this.bridge.identity(); deviceName = identity.deviceName;
+        const profile = await this.read<Profile>(profileKey(identity));
         if (profile) { this.validateProfile(profile, identity); backupSavedAt = profile.savedAt; ready = !restorePending; }
       } catch { /* Disconnection or a different account never exposes/uses the saved payload. */ }
     }
@@ -78,13 +82,13 @@ export class CorosWifiMusicService {
       backupSavedAt, restorePending, phase: restorePending && !["preparing", "downloading", "restoring"].includes(this.progress.phase) ? "restore-required" : this.progress.phase };
   }
   choosing(): void { this.progress = { ...this.progress, phase: "choosing", error: undefined }; }
-  selectionCancelled(): CorosWifiMusicStatus { this.progress = { ...this.progress, phase: "idle" }; return this.status(); }
+  selectionCancelled(): Promise<CorosWifiMusicStatus> { this.progress = { ...this.progress, phase: "idle" }; return this.status(); }
   cancel(): void { this.cancelled = true; this.preparing?.abort(); }
 
-  labelWirelessAudio(tracks: CorosWirelessAudioTrack[]): CorosWirelessAudioTrack[] {
+  async labelWirelessAudio(tracks: CorosWirelessAudioTrack[]): Promise<CorosWirelessAudioTrack[]> {
     try {
-      const identity = this.bridge.identity();
-      const saved = this.read<AudioLabels>(profileKey(identity) + ".audioLabels");
+      const identity = await this.bridge.identity();
+      const saved = await this.read<AudioLabels>(profileKey(identity) + ".audioLabels");
       if (!saved || saved.version !== 1 || !sameWatch(saved, identity) || !Array.isArray(saved.labels) || saved.labels.length > 500) return tracks;
       const labels = saved.labels;
       return tracks.map(track => {
@@ -96,10 +100,10 @@ export class CorosWifiMusicService {
   }
 
   /** NetEase playlists CorosLink created on the connected watch, newest last. Names are local; the watch keeps only IDs. */
-  neteasePlaylists(): CorosNeteasePlaylistLabel[] {
+  async neteasePlaylists(): Promise<CorosNeteasePlaylistLabel[]> {
     try {
-      const identity = this.bridge.identity();
-      const saved = this.read<AudioLabels>(profileKey(identity) + ".audioLabels");
+      const identity = await this.bridge.identity();
+      const saved = await this.read<AudioLabels>(profileKey(identity) + ".audioLabels");
       if (!saved || saved.version !== 1 || !sameWatch(saved, identity) || !Array.isArray(saved.playlists)) return [];
       return saved.playlists.filter(row => typeof row?.id === "string" && /^[A-F0-9]{8}$/.test(row.id) && typeof row.name === "string" &&
         row.name.length > 0 && row.name.length <= 64 && !/[\x00-\x1f\x7f]/.test(row.name))
@@ -108,30 +112,30 @@ export class CorosWifiMusicService {
   }
 
   /** Name (or rename) a playlist on the connected watch. Local only: the watch never stores playlist names. */
-  renameNeteasePlaylist(idValue: unknown, nameValue: unknown): CorosNeteasePlaylistLabel[] {
+  async renameNeteasePlaylist(idValue: unknown, nameValue: unknown): Promise<CorosNeteasePlaylistLabel[]> {
     const id = validateNeteasePlaylistId(idValue), name = validateNeteasePlaylistName(nameValue);
-    const identity = this.bridge.identity(), key = profileKey(identity) + ".audioLabels";
+    const identity = await this.bridge.identity(), key = profileKey(identity) + ".audioLabels";
     let previous: AudioLabels | undefined;
-    try { previous = this.read<AudioLabels>(key); } catch { previous = undefined; }
+    try { previous = await this.read<AudioLabels>(key); } catch { previous = undefined; }
     const current = previous?.version === 1 && sameWatch(previous, identity) ? previous : undefined;
     const playlists = Array.isArray(current?.playlists) ? current.playlists : [];
     const next = playlists.some(row => row?.id === id) ? playlists.map(row => row?.id === id ? { ...row, name } : row) : [...playlists, { id, name }];
-    this.write(key, { ...identity, version: 1, labels: Array.isArray(current?.labels) ? current.labels : [], playlists: next.slice(-50) });
+    await this.write(key, { ...identity, version: 1, labels: Array.isArray(current?.labels) ? current.labels : [], playlists: next.slice(-50) });
     return this.neteasePlaylists();
   }
 
-  private rememberAudio(identity: CorosWifiMusicIdentity, files: WifiMusicFile[], destination: AudioLabel["destination"], playlist?: CorosNeteasePlaylistLabel): void {
+  private async rememberAudio(identity: CorosWifiMusicIdentity, files: WifiMusicFile[], destination: AudioLabel["destination"], playlist?: CorosNeteasePlaylistLabel): Promise<void> {
     // Labels never establish presence: only a fresh watch inventory does that.
     // A label-cache failure must not invalidate an already completed download.
     try {
       const key = profileKey(identity) + ".audioLabels";
-      const previous = this.read<AudioLabels>(key);
+      const previous = await this.read<AudioLabels>(key);
       const added = files.map(file => ({ id: file.id, destination, name: file.name }));
       const labels = previous?.version === 1 && sameWatch(previous, identity) && Array.isArray(previous.labels)
         ? previous.labels.filter(row => !added.some(a => a.id === row?.id && a.destination === row.destination)) : [];
       const playlists = (previous?.version === 1 && sameWatch(previous, identity) && Array.isArray(previous.playlists) ? previous.playlists : [])
         .filter(row => row?.id !== playlist?.id);
-      this.write(key, { ...identity, version: 1, labels: [...labels, ...added].slice(-500),
+      await this.write(key, { ...identity, version: 1, labels: [...labels, ...added].slice(-500),
         playlists: playlist ? [...playlists, playlist].slice(-50) : playlists });
     } catch { /* Display IDs when the optional local label cache is unavailable. */ }
   }
@@ -139,12 +143,12 @@ export class CorosWifiMusicService {
   /** Called with a path selected by the main-process native dialog, never a renderer path. */
   async importBackup(filename: string): Promise<CorosWifiMusicStatus> {
     if (this.hasPendingRestore()) throw new Error("Restore the watch settings before replacing their backup.");
-    const identity = this.bridge.identity(); syncSafe(identity);
+    const identity = await this.bridge.identity(); syncSafe(identity);
     const info = await fsp.stat(filename);
     if (!info.isFile() || info.size > 16_384) throw new Error("This is not a CorosLink Wi-Fi settings backup.");
     const bytes = await fsp.readFile(filename);
     if (bytes.length > 16_384) throw new Error("This is not a CorosLink Wi-Fi settings backup.");
-    const decoded = JSON.parse(this.bridge.decrypt(bytes.toString("base64"))) as Partial<Profile> & { source?: string };
+    const decoded = JSON.parse(await this.bridge.decrypt(bytes.toString("base64"))) as Partial<Profile> & { source?: string };
     if (decoded.deviceName !== identity.deviceName || (decoded.accountUserId && decoded.accountUserId !== identity.accountUserId)) {
       throw new Error("Choose a settings backup for this watch and COROS account.");
     }
@@ -153,15 +157,15 @@ export class CorosWifiMusicService {
       throw new Error("Choose a settings backup with a valid capture date.");
     }
     const profile = { ...identity, version: 1 as const, payload: decoded.payload ?? "", sha256: decoded.sha256 ?? "", savedAt };
-    this.validateProfile(profile, identity); this.write(profileKey(identity), profile);
+    this.validateProfile(profile, identity); await this.write(profileKey(identity), profile);
     this.progress = { ...this.progress, phase: "idle", error: undefined }; return this.status();
   }
 
-  private assertIdentity(identity: CorosWifiMusicIdentity): void {
-    if (!sameWatch(identity, this.bridge.identity())) throw new Error("The connected watch or COROS account changed during audio sync.");
+  private async assertIdentity(identity: CorosWifiMusicIdentity): Promise<void> {
+    if (!sameWatch(identity, await this.bridge.identity())) throw new Error("The connected watch or COROS account changed during audio sync.");
   }
   private async command(identity: CorosWifiMusicIdentity, opcode: number, payload: Buffer): Promise<Buffer> {
-    this.assertIdentity(identity); return this.bridge.exchange(opcode, payload);
+    await this.assertIdentity(identity); return this.bridge.exchange(opcode, payload);
   }
   private async acknowledged(identity: CorosWifiMusicIdentity, opcode: number, payload: Buffer): Promise<void> {
     const reply = await this.command(identity, opcode, payload);
@@ -202,7 +206,7 @@ export class CorosWifiMusicService {
   }
 
   private async restoreSettings(removeStagingFiles: boolean): Promise<CorosWifiMusicStatus> {
-    const pending = this.read<Pending>(PENDING_KEY);
+    const pending = await this.read<Pending>(PENDING_KEY);
     if (!pending) return this.status();
     if (pending.version !== 1) throw new Error("The saved settings restoration needs attention.");
     const identity = pending.profile;
@@ -212,7 +216,7 @@ export class CorosWifiMusicService {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         if (attempt > 0) await this.bridge.reconnect(identity);
-        this.assertIdentity(identity);
+        await this.assertIdentity(identity);
         if (pending.taskStarted && !pending.complete) {
           const task = decodePodcastTask(await this.command(identity, 0xb6, Buffer.from([11, 255])), pending.taskId, pending.totalBytes);
           // Remove an unfinished task so failed or cancelled sends don't pile up in the watch's queue.
@@ -223,7 +227,7 @@ export class CorosWifiMusicService {
           }
         }
         await this.acknowledged(identity, 0xb2, payload);
-        this.write(PENDING_KEY, undefined);
+        await this.write(PENDING_KEY, undefined);
         if (removeStagingFiles) await this.cleanup(pending.directory);
         this.progress = { ...this.progress, restorePending: false, phase: this.progress.error ? "failed" : "idle" };
         return this.status();
@@ -295,9 +299,9 @@ export class CorosWifiMusicService {
 
   async send(filenames: string[], input?: CorosWifiMusicOptions): Promise<CorosWifiMusicStatus> {
     const options = validateWifiMusicOptions(input);
-    const identity = this.bridge.identity();
+    const identity = await this.bridge.identity();
     if (this.hasPendingRestore()) throw new Error("Reconnect the watch to restore its settings before sending more audio.");
-    const profile = this.read<Profile>(profileKey(identity));
+    const profile = await this.read<Profile>(profileKey(identity));
     if (!profile) throw new Error("Import a settings backup once to prepare Wi-Fi sync.");
     const normal = this.validateProfile(profile, identity);
     this.cancelled = false;
@@ -365,10 +369,10 @@ export class CorosWifiMusicService {
             if (this.cancelled) throw new Error("Audio sync cancelled.");
           }
           pending = { version: 1, profile, taskId, totalBytes: batchBytes, directory, taskStarted: false, complete: false };
-          this.write(PENDING_KEY, pending); // Persist BEFORE any watch settings can change.
+          await this.write(PENDING_KEY, pending); // Persist BEFORE any watch settings can change.
           await this.acknowledged(identity, 0xb2, encodeLocalDownloadSettings(normal, server.prefix, options.destination, lookup));
           if (this.cancelled) throw new Error("Audio sync cancelled.");
-          pending.taskStarted = true; this.write(PENDING_KEY, pending); // A lost start ACK must still pause/recover this task.
+          pending.taskStarted = true; await this.write(PENDING_KEY, pending); // A lost start ACK must still pause/recover this task.
           await this.acknowledged(identity, 0xb6, encodePodcastStart(taskId, options.destination));
           this.progress = { ...this.progress, phase: "downloading", restorePending: true };
           const deadline = Date.now() + Math.min(30 * 60_000, Math.max(120_000, batchBytes / 65_536 * 1000 + 90_000));
@@ -382,8 +386,8 @@ export class CorosWifiMusicService {
               this.progress = { ...this.progress, downloadedBytes: completedBytes + Math.min(batchBytes, task.downloadedBytes), completedFiles: offset + count };
               if (task.errorCode) throw new Error(`The watch could not download the audio (code 0x${task.errorCode.toString(16).toUpperCase()}). Check the connection and try again.`);
               if (task.complete) {
-                pending.complete = true; this.write(PENDING_KEY, pending);
-                this.rememberAudio(identity, batch, options.destination,
+                pending.complete = true; await this.write(PENDING_KEY, pending);
+                await this.rememberAudio(identity, batch, options.destination,
                   options.destination === "netease" && playlistId ? { id: playlistId, name: options.playlistName ?? "CorosLink", updatedAt: Date.now() } : undefined); break;
               }
             }

@@ -56,7 +56,7 @@ import {
   stravaActivityUrl,
   stravaSportType
 } from "./stravaModel";
-import { fetchStravaActivityPage, getStravaStatus } from "./stravaService";
+import { fetchStravaActivityPage, peekStravaConnection } from "./stravaService";
 import type { TrainingHubActivity } from "./types";
 
 type JsonRecord = Record<string, unknown>;
@@ -171,8 +171,7 @@ function isStravaRace(activity: JsonRecord): boolean {
  * after a disconnect, another athlete's after a switch.
  */
 function reconcileStravaAccess(): { connected: boolean; athleteId?: string } {
-  const status = getStravaStatus();
-  const athleteId = status.connected ? status.athleteId : undefined;
+  const { athleteId } = peekStravaConnection();
   clearStravaRaceActivities(athleteId);
   if (getSetting(SETTINGS.stravaAthlete) !== athleteId) {
     deleteSettings(STRAVA_SETTINGS);

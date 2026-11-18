@@ -277,7 +277,7 @@ const connectorLog = () =>
 // ----- The desktop side -----
 const settings = createSettings();
 const secrets = createFakeSecretBox();
-const identity = loadOrCreateRemoteIdentity(settings, secrets);
+const identity = await loadOrCreateRemoteIdentity(settings, secrets);
 const db = createRemoteDatabase();
 const auth = new RemoteAuth({ database: () => db });
 const { hub, stream } = createHub();

@@ -7,9 +7,9 @@ import { sanitizeComputerName } from "./contract";
  * Who this computer is to remote clients: an environment ID (16 random bytes,
  * base64url) and a P-256 key that signs relay calls and mint answers. Both are
  * made once and kept in app_settings, the private key encrypted with
- * safeStorage. Everything here is synchronous, so the check-then-create in
- * loadOrCreateRemoteIdentity can't interleave with another caller in this
- * (single-instance) process.
+ * safeStorage. safeStorage encrypts asynchronously, so callers serialize
+ * loadOrCreateRemoteIdentity (RemoteAccess starts once at a time); the check
+ * that nothing was saved is repeated just before saving.
  */
 
 export interface RemoteSettingsStore {
@@ -19,10 +19,10 @@ export interface RemoteSettingsStore {
 
 /** safeStorage in the app; a fake in tests. */
 export interface RemoteSecretBox {
-  /** Throws a plain-language error when secrets can't be kept safely. */
-  ensureAvailable(): void;
-  encrypt(plain: string): Buffer;
-  decrypt(encrypted: Buffer): string;
+  /** Rejects with a plain-language error when secrets can't be kept safely. */
+  ensureAvailable(): Promise<void>;
+  encrypt(plain: string): Promise<Buffer>;
+  decrypt(encrypted: Buffer): Promise<string>;
 }
 
 export interface RemotePublicJwk {
@@ -69,7 +69,7 @@ function isPublicJwk(value: unknown): value is RemotePublicJwk {
   );
 }
 
-function createIdentity(secrets: RemoteSecretBox): { stored: StoredIdentity; identity: RemoteIdentity } {
+async function createIdentity(secrets: RemoteSecretBox): Promise<{ stored: StoredIdentity; identity: RemoteIdentity }> {
   const { privateKey } = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
   const jwk = privateKey.export({ format: "jwk" }) as { kty: "EC"; crv: "P-256"; x: string; y: string; d: string };
   const publicJwk: RemotePublicJwk = { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y };
@@ -80,7 +80,7 @@ function createIdentity(secrets: RemoteSecretBox): { stored: StoredIdentity; ide
       version: 1,
       environmentId,
       publicJwk,
-      privateKey: secrets.encrypt(JSON.stringify(privateJwk)).toString("base64")
+      privateKey: (await secrets.encrypt(JSON.stringify(privateJwk))).toString("base64")
     },
     identity: { environmentId, publicJwk, kid: jwkThumbprint(publicJwk), privateJwk }
   };
@@ -90,8 +90,8 @@ function createIdentity(secrets: RemoteSecretBox): { stored: StoredIdentity; ide
  * The saved identity, or a new one saved before it's returned. Refuses (throws)
  * when safeStorage can't protect the key, rather than keeping it in plain text.
  */
-export function loadOrCreateRemoteIdentity(settings: RemoteSettingsStore, secrets: RemoteSecretBox): RemoteIdentity {
-  secrets.ensureAvailable();
+export async function loadOrCreateRemoteIdentity(settings: RemoteSettingsStore, secrets: RemoteSecretBox): Promise<RemoteIdentity> {
+  await secrets.ensureAvailable();
   const saved = settings.get(IDENTITY_KEY);
   if (saved) {
     let stored: StoredIdentity;
@@ -105,7 +105,7 @@ export function loadOrCreateRemoteIdentity(settings: RemoteSettingsStore, secret
     }
     let privateJwk: RemoteIdentity["privateJwk"];
     try {
-      privateJwk = JSON.parse(secrets.decrypt(Buffer.from(stored.privateKey, "base64")));
+      privateJwk = JSON.parse(await secrets.decrypt(Buffer.from(stored.privateKey, "base64")));
     } catch {
       throw new Error("Couldn't unlock CorosLink's remote access key. Check your system keychain and restart CorosLink.");
     }
@@ -119,7 +119,9 @@ export function loadOrCreateRemoteIdentity(settings: RemoteSettingsStore, secret
       privateJwk
     };
   }
-  const { stored, identity } = createIdentity(secrets);
+  const { stored, identity } = await createIdentity(secrets);
+  // Another caller saved one while this encrypted: that one is the identity.
+  if (settings.get(IDENTITY_KEY)) return loadOrCreateRemoteIdentity(settings, secrets);
   settings.set(IDENTITY_KEY, JSON.stringify(stored));
   return identity;
 }

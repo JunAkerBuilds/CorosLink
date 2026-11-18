@@ -13,20 +13,27 @@ export interface StoredCorosCredentials {
   pwdHash: string;
 }
 
+/**
+ * The last credentials decrypted or saved, with the ciphertext they came from.
+ * Status reads are synchronous, while safeStorage decrypts asynchronously, so
+ * they answer from here; a changed or cleared setting invalidates it.
+ */
+let cached: { encoded: string; credentials: StoredCorosCredentials } | null = null;
+
 export function hashCorosPassword(password: string): string {
   return crypto.createHash("md5").update(password, "utf8").digest("hex");
 }
 
-export function storeCorosCredentials(
+export async function storeCorosCredentials(
   account: string,
   pwdHash: string
-): boolean {
+): Promise<boolean> {
   const credentials = normalizeCredentials({ account, pwdHash });
   if (!credentials) {
     throw new Error("Cannot save invalid COROS credentials.");
   }
 
-  if (!safeStorage.isEncryptionAvailable()) {
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) {
     console.warn(
       "[corosCredentials] Cannot remember COROS credentials because OS secure storage is unavailable."
     );
@@ -34,11 +41,12 @@ export function storeCorosCredentials(
   }
 
   try {
-    const encrypted = safeStorage
-      .encryptString(JSON.stringify(credentials))
-      .toString("base64");
+    const encrypted = (
+      await safeStorage.encryptStringAsync(JSON.stringify(credentials))
+    ).toString("base64");
     setSetting(SETTINGS.credentials, encrypted);
     deleteSettings([SETTINGS.legacyTrainingHubCredentials]);
+    cached = { encoded: encrypted, credentials };
     return true;
   } catch (error) {
     console.warn(
@@ -51,12 +59,12 @@ export function storeCorosCredentials(
   }
 }
 
-export function getStoredCorosCredentials(): StoredCorosCredentials | null {
-  if (!safeStorage.isEncryptionAvailable()) {
+export async function getStoredCorosCredentials(): Promise<StoredCorosCredentials | null> {
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) {
     return null;
   }
 
-  const current = readCredentialsSetting(SETTINGS.credentials);
+  const current = await readCredentialsSetting(SETTINGS.credentials);
   if (current) {
     return current;
   }
@@ -64,29 +72,60 @@ export function getStoredCorosCredentials(): StoredCorosCredentials | null {
   // Migrate credentials saved by older builds under the Training Hub-specific
   // key. Both COROS APIs use the same password digest, so one encrypted account
   // can safely create their two independent sessions.
-  const legacy = readCredentialsSetting(SETTINGS.legacyTrainingHubCredentials);
+  const legacy = await readCredentialsSetting(SETTINGS.legacyTrainingHubCredentials);
   if (legacy) {
-    storeCorosCredentials(legacy.account, legacy.pwdHash);
+    await storeCorosCredentials(legacy.account, legacy.pwdHash);
   }
   return legacy;
 }
 
+/**
+ * The saved COROS login without decrypting it: what the last decrypt or save
+ * found, while the setting still holds that ciphertext. Call
+ * loadStoredCorosCredentials() at startup so this is filled before use.
+ */
+export function peekStoredCorosCredentials(): StoredCorosCredentials | null {
+  if (!cached) return null;
+  return getSetting(SETTINGS.credentials) === cached.encoded ? cached.credentials : null;
+}
+
+/** Decrypts the saved login (if any) so peekStoredCorosCredentials() can answer. */
+export async function loadStoredCorosCredentials(): Promise<void> {
+  await getStoredCorosCredentials();
+}
+
 export function clearStoredCorosCredentials(): void {
+  cached = null;
   deleteSettings([
     SETTINGS.credentials,
     SETTINGS.legacyTrainingHubCredentials
   ]);
 }
 
-function readCredentialsSetting(key: string): StoredCorosCredentials | null {
+async function readCredentialsSetting(key: string): Promise<StoredCorosCredentials | null> {
   const encoded = getSetting(key);
   if (!encoded) {
     return null;
   }
+  if (cached?.encoded === encoded) {
+    return cached.credentials;
+  }
 
   try {
-    const decrypted = safeStorage.decryptString(Buffer.from(encoded, "base64"));
-    return normalizeCredentials(JSON.parse(decrypted));
+    const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(
+      Buffer.from(encoded, "base64")
+    );
+    const credentials = normalizeCredentials(JSON.parse(result));
+    // The OS key rotated: rewrite under the current key (the legacy key is
+    // migrated to the current one by the caller anyway).
+    if (credentials && key === SETTINGS.credentials) {
+      if (shouldReEncrypt) {
+        await storeCorosCredentials(credentials.account, credentials.pwdHash);
+      } else {
+        cached = { encoded, credentials };
+      }
+    }
+    return credentials;
   } catch (error) {
     recordDiagnosticError("corosAccount:readSavedLogin", error);
     return null;

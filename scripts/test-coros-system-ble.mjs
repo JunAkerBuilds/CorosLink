@@ -85,7 +85,9 @@ assert.equal(describeBindReply(finalReply(5,4)),'status 5 (0x35), flags 0x00: no
 
 for(const platform of ['darwin','win32','linux']) {
   const settings=new Map([['coros.ble.accountAuth',Buffer.from('encrypted:'+JSON.stringify(credential)).toString('base64')]]);
-  const workers=[],writes=[],credentialReads=[],diagnostics=[],notices=[];const exports={};let noKeyReply=false,watchKeyCrc=0,rejectSignature=false,weatherHeaderTimeout=false,connectModel='COROS W332';
+  const workers=[],writes=[],credentialReads=[],diagnostics=[],notices=[];
+  // connect() starts its helper once the saved account key has decrypted (asynchronously).
+  const startedWorker=async count=>{for(let tick=0;tick<50&&workers.length===count;tick++)await new Promise(resolve=>setImmediate(resolve));return workers.at(-1);};const exports={};let noKeyReply=false,watchKeyCrc=0,rejectSignature=false,weatherHeaderTimeout=false,connectModel='COROS W332';
   // Devices advertising the watch's name, by Bluetooth identity, and their serial numbers; `ignorePin` is a helper
   // that connects by name regardless.
   let nearby=['os-id'],ignorePin=false;const serials={};
@@ -95,8 +97,8 @@ for(const platform of ['darwin','win32','linux']) {
   vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,Buffer,Error,setTimeout,clearTimeout,AbortController,Date:ShiftedDate,
     process:{platform,arch:'x64',env:{BUMBLE_SNOOPER:'unsafe',BUMBLE_LOGLEVEL:'DEBUG'},resourcesPath:'/resources'},
     require(id){
-      if(id==='electron')return {app:{isPackaged:false,getAppPath:()=>'/project'},safeStorage:{isEncryptionAvailable:()=>true,
-        encryptString:t=>Buffer.from('encrypted:'+t),decryptString:b=>b.toString().slice(10)}};
+      if(id==='electron')return {app:{isPackaged:false,getAppPath:()=>'/project'},safeStorage:{isAsyncEncryptionAvailable:async()=>true,
+        encryptStringAsync:async t=>Buffer.from('encrypted:'+t),decryptStringAsync:async b=>({result:b.toString().slice(10),shouldReEncrypt:false})}};
       if(id==='./diagnosticsService')return {recordDiagnosticError:(source,error)=>diagnostics.push({source,message:error.message}),
         recordDiagnosticNotice:(source,message,level)=>notices.push({source,message,level})};
       if(id==='./database')return {getSetting:k=>{
@@ -291,6 +293,7 @@ for(const platform of ['darwin','win32','linux']) {
       before=writes.length;
       const count=workers.length;
       const next=service.connect(false,{backend:'system'});
+      await startedWorker(count);
       assert.equal(workers.length,count+1,'a new helper for the new connection');
       workers.at(-1).switchWord=word>>>0;
       await next;
@@ -303,15 +306,17 @@ for(const platform of ['darwin','win32','linux']) {
     const computer=new Intl.DateTimeFormat(undefined,{hour:'numeric'}).resolvedOptions().hour12===true?1:0;
     service.setProfileSink(()=>{throw new Error("The watch's profile has an unexpected field.");});
     before=writes.length;
+    let count=workers.length;
     let next=service.connect(false,{backend:'system'});
-    workers.at(-1).switchWord=(computer?0x0e2d2085&~(1<<13):0x0e2d2085|1<<13)>>>0;
+    (await startedWorker(count)).switchWord=(computer?0x0e2d2085&~(1<<13):0x0e2d2085|1<<13)>>>0;
     await next;
     assert.equal(clockFormat(),computer?0:1,'a profile that fails to decode keeps the watch\'s format, not the computer\'s');
     assert.ok(diagnostics.some(entry=>entry.source==='corosBle:readProfile'));
     await service.disconnect();
     before=writes.length;const noticed=notices.length;
+    count=workers.length;
     next=service.connect(false,{backend:'system'});
-    workers.at(-1).omitSwitches=true;
+    (await startedWorker(count)).omitSwitches=true;
     assert.equal((await next).systemBind,'authenticated');
     assert.equal(writes.slice(before).some(x=>x.opcode===0x8c),false,'format unknown: the clock waits for a connection that reads it');
     assert.ok(writes.slice(before).filter(x=>x.opcode===0xa7).length>=2,'the switches are asked for again before giving up');
@@ -506,9 +511,10 @@ for(const platform of ['darwin','win32','linux']) {
     service.setConnectedPush(async()=>{asked+=1;return forecast;});
     const computer=new Intl.DateTimeFormat(undefined,{hour:'numeric'}).resolvedOptions().hour12===true?1:0;
     const before=writes.length;
+    const count=workers.length;
     const next=service.connect(false,{backend:'system'});
     // The watch's bit 13 says the opposite of this computer: the watch's own format is kept.
-    workers.at(-1).switchWord=(computer?0x0e2d2085&~(1<<13):0x0e2d2085|1<<13)>>>0;
+    (await startedWorker(count)).switchWord=(computer?0x0e2d2085&~(1<<13):0x0e2d2085|1<<13)>>>0;
     const linked=await next;
     assert.equal(linked.watchModel,id);
     assert.equal(asked,1,`${id}: forecast fetched`);

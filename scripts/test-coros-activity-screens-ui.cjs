@@ -36,7 +36,7 @@ async function main() {
   vm.runInNewContext(await fs.readFile(filename, "utf8"), {
     exports, Buffer, process, clearTimeout, setTimeout,
     require(id) {
-      if (id === "electron") return { app: { get isPackaged() { return packaged; }, getAppPath: () => process.cwd(), getPath: () => path.join(temporary, "user-data") }, safeStorage: { isEncryptionAvailable: () => true } };
+      if (id === "electron") return { app: { get isPackaged() { return packaged; }, getAppPath: () => process.cwd(), getPath: () => path.join(temporary, "user-data") }, safeStorage: { isAsyncEncryptionAvailable: async () => true } };
       if (id === "./database") return { getSetting: () => undefined, setSetting: () => {} };
       return nativeRequire(id);
     }

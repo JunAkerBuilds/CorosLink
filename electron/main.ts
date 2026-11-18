@@ -18,11 +18,12 @@ import { listWorkoutJournal, onWorkoutJournalChanged, rescheduleWorkoutWithNotes
 import type { WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import { onCoachActivityRenamed } from "./chatActivityTools";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell, ShareMenu } from "electron";
-import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow, recordDiagnosticNotice, registerDiagnosticStatus } from "./diagnosticsService";
+import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow, recordDiagnosticError, recordDiagnosticNotice, registerDiagnosticStatus } from "./diagnosticsService";
 import { corosAccountDiagnostics } from "./corosAccountDiagnostics";
-import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
+import { googleCalendar, loadGoogleCalendarCredentials, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
 import type { GoogleCalendarConfigInput } from "./googleCalendarTypes";
-import { appleCalendar, startAppleCalendarSync, stopAppleCalendarSync } from "./appleCalendarService";
+import { appleCalendar, loadAppleCalendarCredentials, startAppleCalendarSync, stopAppleCalendarSync } from "./appleCalendarService";
+import { loadStoredCorosCredentials } from "./corosCredentialStore";
 import type { AppleCalendarCredentials, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { OpenDialogOptions } from "electron";
 import fs from "node:fs";
@@ -245,6 +246,7 @@ import {
   probeCorosWeather,
   fetchCorosWeatherStruct,
   getCorosWatchfaceStatus,
+  loadCorosWatchfaceSession,
   importCorosWatchfaceShareLink,
   listCorosPairedDevices,
   listCorosWatchfaceThemes,
@@ -1087,7 +1089,7 @@ if (!hasSingleInstanceLock) {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   initializeDiagnostics(() => mainWindow);
   registerDiagnosticStatus(corosAccountDiagnostics);
@@ -1137,6 +1139,14 @@ app.whenReady().then(() => {
     }
   });
   initializeDatabase(app.getPath("userData"));
+  // safeStorage decrypts asynchronously: what synchronous status reads need
+  // (COROS logins, calendar credentials) is decrypted before anything reads it.
+  await Promise.all([
+    loadStoredCorosCredentials(),
+    loadCorosWatchfaceSession(),
+    loadGoogleCalendarCredentials(),
+    loadAppleCalendarCredentials()
+  ].map((load) => load.catch((error) => recordDiagnosticError("startup:secureStorage", error))));
   // Local-Only Mode is known before anything below can upload to COROS.
   localData = registerLocalOnlyMode({ getWindow: () => mainWindow });
   setCoachLocalSyncReader(() => localData?.lastSyncs());
@@ -1151,8 +1161,8 @@ app.whenReady().then(() => {
     defaultProvider: () => getChatSettings().provider,
     chatSettings: getChatSettings,
     // A model picked on the phone shows in the Coach window at once.
-    saveChatSettings: (settings) => {
-      const saved = saveChatSettings(settings);
+    saveChatSettings: async (settings) => {
+      const saved = await saveChatSettings(settings);
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("chat:settingsChanged", saved);
       return saved;
     },
@@ -2540,7 +2550,7 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("mcp:statuses", () => getMcpStatuses());
   ipcMain.handle("mcp:setBearer", async (_event, id: string, token: string) => {
-    setMcpBearer(id, token);
+    await setMcpBearer(id, token);
     await disconnectMcpServer(id, { clearAuthorization: false });
   });
 

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { app, dialog, type BrowserWindow } from "electron";
 import { corosNativeBle } from "../corosNativeBleService";
-import { forgetCorosWatchKey, getCorosWatchfaceStatus, logoutCorosWatchfaces } from "../corosWatchfaceService";
+import { forgetCorosWatchKey, hasSavedCorosWatchKey, logoutCorosWatchfaces } from "../corosWatchfaceService";
 import { deleteSettings, getSetting, requireDatabase, setSetting } from "../database";
 import { requireMainWindowSender } from "../mainWindowGuard";
 import { diagnosticIpcMain as ipcMain } from "../diagnosticsService";
@@ -70,7 +70,7 @@ function registerCredentialActions(): void {
   dataMode.setCredentialActions({
     forgetCloudSession: async () => {
       logoutTrainingHub();
-      logoutCorosWatchfaces();
+      void logoutCorosWatchfaces();
       // The built-in COROS server, and any COROS endpoint the athlete added by hand.
       const corosIds = new Set([COROS_MCP_SERVER_ID]);
       for (const server of listMcpServers()) if (isCorosMcpUrl(server.url)) corosIds.add(server.id);
@@ -78,7 +78,7 @@ function registerCredentialActions(): void {
         disconnectMcpServer(id, { clearAuthorization: true }).catch(() => undefined)
       ));
     },
-    forgetWatchKey: () => { forgetCorosWatchKey(); }
+    forgetWatchKey: () => { void forgetCorosWatchKey(); }
   });
 }
 
@@ -127,7 +127,7 @@ export function registerLocalOnlyMode(options: LocalOnlyMainOptions): LocalDataS
       readPedometer: payload => corosNativeBle.readPedometer(payload),
       // Used from inside the sync, to reset a block request that failed partway: it doesn't wait for the sync.
       disconnect: () => corosNativeBle.resetLinkInSync(),
-      watchKeySaved: () => getCorosWatchfaceStatus().watchAuthenticationAvailable === true,
+      watchKeySaved: () => hasSavedCorosWatchKey(),
       listTrainingPlans: () => corosNativeBle.listTrainingPlansInSync(),
       sendTrainingPlan: (file, replace) => corosNativeBle.sendTrainingPlanInSync(file, replace),
       // What the watch takes (settings type 13) decides the file; formats not checked for the model are never sent (satelliteSync.ts).
@@ -175,7 +175,7 @@ export function registerLocalOnlyMode(options: LocalOnlyMainOptions): LocalDataS
   const autoSync = new WatchAutoSync({
     active: () => networkPolicy.enforcing,
     idle: () => corosNativeBle.idleForBackgroundSync(),
-    ready: () => corosNativeBle.hasRememberedWatch() && getCorosWatchfaceStatus().watchAuthenticationAvailable === true,
+    ready: () => corosNativeBle.hasRememberedWatch() && hasSavedCorosWatchKey(),
     // Only the watch whose Bluetooth identity a connection from the watch menu remembered.
     trusted: () => corosNativeBle.watchIdentityForBackgroundSync(),
     connected: () => corosNativeBle.isConnected(),

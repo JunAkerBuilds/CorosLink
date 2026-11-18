@@ -1125,10 +1125,21 @@ export async function installCorosMapAreas(tiles: unknown, label: string,
   }
 }
 
-export function getRouteBuilderConfig(): RouteBuilderConfig {
+export async function getRouteBuilderConfig(): Promise<RouteBuilderConfig> {
   const backend = getSetting(ROUTE_BACKEND_SETTING) === "ors" ? "ors" : "keyless";
   const encrypted = getSetting(CARTO_API_KEY_SETTING);
-  const cartoApiKey = encrypted ? safeStorage.decryptString(Buffer.from(encrypted, "base64")) : "";
+  let cartoApiKey = "";
+  if (encrypted) {
+    const decrypted = await safeStorage.decryptStringAsync(Buffer.from(encrypted, "base64"));
+    cartoApiKey = decrypted.result;
+    // A rotated OS key: save under the new one, unless the key changed meanwhile.
+    if (decrypted.shouldReEncrypt) {
+      const reEncrypted = await safeStorage.encryptStringAsync(cartoApiKey).catch(() => undefined);
+      if (reEncrypted && getSetting(CARTO_API_KEY_SETTING) === encrypted) {
+        setSetting(CARTO_API_KEY_SETTING, reEncrypted.toString("base64"));
+      }
+    }
+  }
   return {
     cartoApiKey,
     openRouteServiceApiKey: getSetting(ORS_API_KEY_SETTING) ?? "",
@@ -1136,14 +1147,14 @@ export function getRouteBuilderConfig(): RouteBuilderConfig {
   };
 }
 
-export function saveRouteBuilderConfig(
+export async function saveRouteBuilderConfig(
   config: RouteBuilderConfig
-): RouteBuilderConfig {
+): Promise<RouteBuilderConfig> {
   // Omitted fields preserve the key when saving routing settings from older screens.
   if (config.cartoApiKey !== undefined) {
     const key = config.cartoApiKey.trim();
-    if (key && !safeStorage.isEncryptionAvailable()) throw new Error("Secure credential storage is unavailable. Could not save the CARTO key.");
-    setSetting(CARTO_API_KEY_SETTING, key ? safeStorage.encryptString(key).toString("base64") : "");
+    if (key && !(await safeStorage.isAsyncEncryptionAvailable())) throw new Error("Secure credential storage is unavailable. Could not save the CARTO key.");
+    setSetting(CARTO_API_KEY_SETTING, key ? (await safeStorage.encryptStringAsync(key)).toString("base64") : "");
   }
   setSetting(ORS_API_KEY_SETTING, config.openRouteServiceApiKey.trim());
   setSetting(ROUTE_BACKEND_SETTING, config.backend === "ors" ? "ors" : "keyless");

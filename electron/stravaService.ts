@@ -53,9 +53,9 @@ const SETTINGS = {
 const SYNC_SETTINGS = [SETTINGS.coverageSince, SETTINGS.listedAt, SETTINGS.lastSyncedAt];
 
 interface CredentialStorage {
-  isEncryptionAvailable(): boolean;
-  encryptString(value: string): Buffer;
-  decryptString(value: Buffer): string;
+  isAsyncEncryptionAvailable(): Promise<boolean>;
+  encryptStringAsync(value: string): Promise<Buffer>;
+  decryptStringAsync(value: Buffer): Promise<{ result: string; shouldReEncrypt: boolean }>;
 }
 
 let credentialStorage: CredentialStorage = safeStorage;
@@ -121,22 +121,32 @@ function record(value: unknown): JsonRecord | undefined {
     : undefined;
 }
 
-function requireEncryption(): void {
-  if (!credentialStorage.isEncryptionAvailable()) {
+async function requireEncryption(): Promise<void> {
+  if (!(await credentialStorage.isAsyncEncryptionAvailable())) {
     throw new Error(
       "Secure credential storage is unavailable. CorosLink did not save the Strava credentials."
     );
   }
 }
 
-function readSecureState(): SecureState {
+/** The last state decrypted or saved, with its ciphertext: status reads skip the keychain. */
+let decryptedState: { encrypted: string; state: SecureState } | undefined;
+
+async function readSecureState(): Promise<SecureState> {
   const encrypted = getSetting(SETTINGS.secureState);
-  if (!encrypted || !credentialStorage.isEncryptionAvailable()) return {};
+  if (!encrypted || !(await credentialStorage.isAsyncEncryptionAvailable())) return {};
+  if (decryptedState?.encrypted === encrypted) return decryptedState.state;
   try {
-    const parsed = record(
-      JSON.parse(credentialStorage.decryptString(Buffer.from(encrypted, "base64")))
+    const { result, shouldReEncrypt } = await credentialStorage.decryptStringAsync(
+      Buffer.from(encrypted, "base64")
     );
-    return (parsed ?? {}) as SecureState;
+    const state = (record(JSON.parse(result)) ?? {}) as SecureState;
+    if (getSetting(SETTINGS.secureState) === encrypted) {
+      decryptedState = { encrypted, state };
+      // A rotated OS key: save under the new one.
+      if (shouldReEncrypt) await updateSecureState(current => current).catch(() => undefined);
+    }
+    return state;
   } catch {
     // Undecryptable state (keychain changed) reads as disconnected, never as
     // ciphertext sent to Strava.
@@ -144,12 +154,44 @@ function readSecureState(): SecureState {
   }
 }
 
-function writeSecureState(state: SecureState): void {
-  requireEncryption();
-  setSetting(
-    SETTINGS.secureState,
-    credentialStorage.encryptString(JSON.stringify(state)).toString("base64")
-  );
+let secureStateUpdates: Promise<unknown> = Promise.resolve();
+
+/**
+ * Read-modify-write of the encrypted state, one at a time, so a token refresh
+ * and a config save never overwrite each other. `undefined` deletes it.
+ */
+function updateSecureState(
+  change: (current: SecureState) => SecureState | undefined
+): Promise<void> {
+  const update = secureStateUpdates.then(async () => {
+    const next = change(await readSecureStateUnlocked());
+    if (!next) {
+      decryptedState = undefined;
+      deleteSettings([SETTINGS.secureState]);
+      return;
+    }
+    await requireEncryption();
+    const encrypted = (
+      await credentialStorage.encryptStringAsync(JSON.stringify(next))
+    ).toString("base64");
+    setSetting(SETTINGS.secureState, encrypted);
+    decryptedState = { encrypted, state: next };
+  });
+  secureStateUpdates = update.catch(() => undefined);
+  return update;
+}
+
+/** readSecureState without its re-encrypt step, for use inside updateSecureState. */
+async function readSecureStateUnlocked(): Promise<SecureState> {
+  const encrypted = getSetting(SETTINGS.secureState);
+  if (!encrypted || !(await credentialStorage.isAsyncEncryptionAvailable())) return {};
+  if (decryptedState?.encrypted === encrypted) return decryptedState.state;
+  try {
+    const { result } = await credentialStorage.decryptStringAsync(Buffer.from(encrypted, "base64"));
+    return (record(JSON.parse(result)) ?? {}) as SecureState;
+  } catch {
+    return {};
+  }
 }
 
 function readIdentity(): StravaIdentity | undefined {
@@ -168,7 +210,7 @@ function readIdentity(): StravaIdentity | undefined {
   }
 }
 
-function clientConfig(state = readSecureState()): StravaClientConfig | undefined {
+function clientConfig(state: SecureState): StravaClientConfig | undefined {
   const clientId = getSetting(SETTINGS.clientId);
   return clientId && state.clientSecret
     ? { clientId, clientSecret: state.clientSecret }
@@ -176,10 +218,8 @@ function clientConfig(state = readSecureState()): StravaClientConfig | undefined
 }
 
 /** Drop the athlete's grant and cached sessions; the API application stays saved. */
-function forgetConnection(): void {
-  const { clientSecret } = readSecureState();
-  if (clientSecret) writeSecureState({ clientSecret });
-  else deleteSettings([SETTINGS.secureState]);
+async function forgetConnection(): Promise<void> {
+  await updateSecureState(({ clientSecret }) => clientSecret ? { clientSecret } : undefined);
   clearStravaCache();
   deleteSettings([SETTINGS.athlete, ...SYNC_SETTINGS]);
 }
@@ -191,8 +231,18 @@ function windowStartEpochSeconds(days: number): number {
   return Math.floor(start.getTime() / 1000);
 }
 
-export function getStravaStatus(): StravaStatus {
-  const state = readSecureState();
+/**
+ * The connected athlete as far as can be told without decrypting the tokens,
+ * for synchronous callers; getStravaStatus also checks they decrypt.
+ */
+export function peekStravaConnection(): { connected: boolean; athleteId?: string } {
+  const identity = readIdentity();
+  const connected = Boolean(identity && getSetting(SETTINGS.secureState));
+  return { connected, athleteId: connected ? identity?.id : undefined };
+}
+
+export async function getStravaStatus(): Promise<StravaStatus> {
+  const state = await readSecureState();
   const identity = readIdentity();
   const clientId = getSetting(SETTINGS.clientId);
   return {
@@ -208,29 +258,28 @@ export function getStravaStatus(): StravaStatus {
   };
 }
 
-export function saveStravaConfig(input: StravaConfigInput): StravaStatus {
+export async function saveStravaConfig(input: StravaConfigInput): Promise<StravaStatus> {
   const clientId = input.clientId.trim();
   if (!/^\d+$/.test(clientId)) {
     throw new Error("Enter the numeric Client ID from strava.com/settings/api.");
   }
-  requireEncryption();
-  const state = readSecureState();
+  await requireEncryption();
+  const state = await readSecureState();
   const clientSecret = input.clientSecret?.trim() || state.clientSecret;
   if (!clientSecret) throw new Error("Enter the Client Secret from strava.com/settings/api.");
   // Tokens belong to the application that issued them.
   if (getSetting(SETTINGS.clientId) !== clientId && state.refreshToken) {
-    forgetConnection();
+    await forgetConnection();
   }
   setSetting(SETTINGS.clientId, clientId);
-  const current = readSecureState();
-  writeSecureState({ ...current, clientSecret });
+  await updateSecureState(current => ({ ...current, clientSecret }));
   return getStravaStatus();
 }
 
 export async function connectStrava(): Promise<StravaStatus> {
-  const config = clientConfig();
+  const config = clientConfig(await readSecureState());
   if (!config) throw new Error("Save your Strava Client ID and Client Secret first.");
-  requireEncryption();
+  await requireEncryption();
   connectController?.abort();
   const controller = new AbortController();
   connectController = controller;
@@ -242,13 +291,13 @@ export async function connectStrava(): Promise<StravaStatus> {
       clearStravaCache();
       deleteSettings(SYNC_SETTINGS);
     }
-    writeSecureState({
+    await updateSecureState(() => ({
       clientSecret: config.clientSecret,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       expiresAt: tokens.expiresAt,
       scopes: tokens.scopes
-    });
+    }));
     setSetting(SETTINGS.athlete, JSON.stringify(tokens.athlete));
     return getStravaStatus();
   } finally {
@@ -263,7 +312,7 @@ export function cancelStravaConnect(): void {
 
 export async function disconnectStrava(): Promise<void> {
   cancelStravaConnect();
-  const state = readSecureState();
+  const state = await readSecureState();
   const config = clientConfig(state);
   const token = state.refreshToken ?? state.accessToken;
   if (config && token) {
@@ -281,11 +330,11 @@ export async function disconnectStrava(): Promise<void> {
       signal: AbortSignal.timeout(15_000)
     }).catch(() => undefined);
   }
-  forgetConnection();
+  await forgetConnection();
 }
 
 async function accessToken(forceRefresh = false): Promise<string> {
-  const state = readSecureState();
+  const state = await readSecureState();
   if (!state.refreshToken) throw new Error("Connect Strava before syncing gym sessions.");
   if (
     !forceRefresh &&
@@ -304,15 +353,15 @@ async function accessToken(forceRefresh = false): Promise<string> {
         grant_type: "refresh_token",
         refresh_token: state.refreshToken!
       });
-      writeSecureState({
-        ...readSecureState(),
+      await updateSecureState(current => ({
+        ...current,
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt
-      });
+      }));
       return tokens.accessToken;
     } catch (error) {
-      if (error instanceof StravaAuthorizationError) forgetConnection();
+      if (error instanceof StravaAuthorizationError) await forgetConnection();
       throw error;
     }
   })().finally(() => {
@@ -450,7 +499,7 @@ export async function syncStravaStrengthHistory(
   days = 90,
   force = false
 ): Promise<StravaSyncResult> {
-  if (!getStravaStatus().connected) {
+  if (!(await getStravaStatus()).connected) {
     throw new Error("Connect Strava before syncing gym sessions.");
   }
   const since = windowStartEpochSeconds(days);

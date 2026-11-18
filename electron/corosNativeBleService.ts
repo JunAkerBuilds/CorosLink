@@ -162,19 +162,19 @@ export class CorosNativeBleService {
     exchange: (opcode, payload) => this.controlCommand(opcode, payload),
     reconnect: async identity => {
       if (this.state.connected && this.state.deviceName !== identity.deviceName) throw new Error("Reconnect the original watch to restore its settings.");
-      const credential = this.loadAuth(identity.deviceName);
+      const credential = await this.loadAuth(identity.deviceName);
       if (credential?.accountUserId !== identity.accountUserId) throw new Error("Sign in with the original watch's COROS account to restore its settings.");
       if (this.state.connected && this.state.systemBind !== "authenticated") await this.stop();
       await this.connectOnce(false, { backend: "system", device: { deviceName: identity.deviceName, deviceId: "" } });
     },
     getSetting, setSetting,
-    encrypt: value => {
-      if (!safeStorage.isEncryptionAvailable()) throw new Error("Secure storage is required for Wi-Fi audio sync.");
-      return safeStorage.encryptString(value).toString("base64");
+    encrypt: async value => {
+      if (!(await safeStorage.isAsyncEncryptionAvailable())) throw new Error("Secure storage is required for Wi-Fi audio sync.");
+      return (await safeStorage.encryptStringAsync(value)).toString("base64");
     },
-    decrypt: value => {
-      if (!safeStorage.isEncryptionAvailable()) throw new Error("Secure storage is required to restore watch settings.");
-      return safeStorage.decryptString(Buffer.from(value, "base64"));
+    decrypt: async value => {
+      if (!(await safeStorage.isAsyncEncryptionAvailable())) throw new Error("Secure storage is required to restore watch settings.");
+      return (await safeStorage.decryptStringAsync(Buffer.from(value, "base64"))).result;
     },
     temporaryDirectory: () => app.getPath("temp"),
   });
@@ -276,19 +276,31 @@ export class CorosNativeBleService {
       Boolean(getSetting(BOND_SETTING) || fs.existsSync(files.importFile));
   }
 
-  private loadBond(): unknown {
-    if (!safeStorage.isEncryptionAvailable()) {
+  /**
+   * Saves a bond the helper reports, encrypted. Saves run one after another so
+   * the newest bond is the one kept.
+   */
+  private bondSaves: Promise<void> = Promise.resolve();
+  private saveBond(bond: unknown): void {
+    const plaintext = JSON.stringify(bond);
+    this.bondSaves = this.bondSaves
+      .then(async () => setSetting(BOND_SETTING, (await safeStorage.encryptStringAsync(plaintext)).toString("base64")))
+      .catch(error => recordDiagnosticError("corosBle:saveBond", error));
+  }
+
+  private async loadBond(): Promise<unknown> {
+    if (!(await safeStorage.isAsyncEncryptionAvailable())) {
       throw new Error("macOS secure storage is required to retain the watch's Bluetooth bond.");
     }
     const files = this.paths();
     const saved = getSetting(BOND_SETTING);
-    if (saved) return JSON.parse(safeStorage.decryptString(Buffer.from(saved, "base64")));
+    if (saved) return JSON.parse((await safeStorage.decryptStringAsync(Buffer.from(saved, "base64"))).result);
     const plaintext = fs.readFileSync(files.importFile, "utf8");
     const bond = JSON.parse(plaintext);
     if (!bond.keys?.ltk_central?.value || !bond.watchAddress || !bond.adapterAddress) {
       throw new Error("The imported watch bond is incomplete.");
     }
-    setSetting(BOND_SETTING, safeStorage.encryptString(plaintext).toString("base64"));
+    setSetting(BOND_SETTING, (await safeStorage.encryptStringAsync(plaintext)).toString("base64"));
     setSetting(STATE_SETTING, files.stateDirectory);
     // The one-time Android import is replaced by OS-encrypted storage.
     fs.unlinkSync(files.importFile);
@@ -345,7 +357,7 @@ export class CorosNativeBleService {
             continue;
           }
           if (response.bondUpdate) {
-            setSetting(BOND_SETTING, safeStorage.encryptString(JSON.stringify(response.bondUpdate)).toString("base64"));
+            this.saveBond(response.bondUpdate);
             continue;
           }
           const request = this.pending.get(response.id);
@@ -367,9 +379,7 @@ export class CorosNativeBleService {
             request.reject(other ? Object.assign(expectedError(failure), { identityMismatch: other }) : failure);
           } else {
             if (request.operation !== "status") this.trace.add(`${request.operation} ok`, { elapsedMs, phase: response.result?.phase ?? "" });
-            if (response.bond) {
-              setSetting(BOND_SETTING, safeStorage.encryptString(JSON.stringify(response.bond)).toString("base64"));
-            }
+            if (response.bond) this.saveBond(response.bond);
             const authenticated = backend === "system" && response.result.connected ? {
               systemBind: this.state.systemBind, authenticatedAt: this.state.authenticatedAt,
               authenticationError: this.state.authenticationError, clockSetAt: this.state.clockSetAt, weatherSentAt: this.state.weatherSentAt,
@@ -417,16 +427,16 @@ export class CorosNativeBleService {
     });
   }
 
-  private loadAuth(deviceName?: string): CorosAccountCredential | undefined {
+  private async loadAuth(deviceName?: string): Promise<CorosAccountCredential | undefined> {
     const loginKey = getSetting(COROS_BLE_LOGIN_KEY_SETTING);
     if (loginKey && !deviceName) return undefined;
     const saved = loginKey || getSetting(AUTH_SETTING);
     if (!saved) return undefined;
-    if (!safeStorage.isEncryptionAvailable()) {
+    if (!(await safeStorage.isAsyncEncryptionAvailable())) {
       throw new Error("OS secure storage is required to use the COROS account key.");
     }
     try {
-      const credential = JSON.parse(safeStorage.decryptString(Buffer.from(saved, "base64")));
+      const credential = JSON.parse((await safeStorage.decryptStringAsync(Buffer.from(saved, "base64"))).result);
       return loginKey ? createCorosLoginCredential(credential as CorosBleLoginKey, deviceName!) : credential;
     } catch {
       throw new Error("The saved COROS account key could not be opened. Sign in to your COROS account again.");
@@ -441,9 +451,9 @@ export class CorosNativeBleService {
   async phonePairingCode(): Promise<CorosPhonePairingCode> {
     const saved = getSetting(COROS_BLE_LOGIN_KEY_SETTING);
     if (!saved) throw new Error("Sign in to your COROS account in Watch Faces first. CorosLink gets the watch key from that sign-in.");
-    if (!safeStorage.isEncryptionAvailable()) throw new Error("OS secure storage is required to use the COROS account key.");
+    if (!(await safeStorage.isAsyncEncryptionAvailable())) throw new Error("OS secure storage is required to use the COROS account key.");
     let key: CorosBleLoginKey;
-    try { key = JSON.parse(safeStorage.decryptString(Buffer.from(saved, "base64"))) as CorosBleLoginKey; }
+    try { key = JSON.parse((await safeStorage.decryptStringAsync(Buffer.from(saved, "base64"))).result) as CorosBleLoginKey; }
     catch { throw new Error("The saved COROS account key could not be opened. Sign in to your COROS account again."); }
     let deviceName: string | undefined;
     try { deviceName = (JSON.parse(getSetting(DEVICE_SETTING) ?? "{}") as { deviceName?: unknown }).deviceName as string | undefined; } catch { deviceName = undefined; }
@@ -579,7 +589,7 @@ export class CorosNativeBleService {
       setSetting(BACKEND_SETTING, backend);
       // Connecting only uses a previously saved account key. Obtaining one
       // requires an explicit COROS sign-in, even when credentials are saved.
-      const auth = this.loadAuth();
+      const auth = await this.loadAuth();
       if (backend === "system") {
         const saved = getSetting(DEVICE_SETTING);
         const target = options.device ?? (saved ? JSON.parse(saved) : auth ? { deviceName: auth.deviceName } : undefined);
@@ -630,12 +640,12 @@ export class CorosNativeBleService {
           }
         }
       }
-      const bond = this.loadBond();
+      const bond = (await this.loadBond());
       // The bond's key encrypts the link, so its watch address is this backend's identity. A new pairing replaces it.
       const bondIdentity = (bond as { watchAddress?: string }).watchAddress;
       const expected = pair ? { confirmed: true } : this.identityToExpect("usb", mode, options.confirmIdentity === true, bondIdentity);
       if ("refused" in expected && expected.refused !== undefined) return await this.refuseIdentity("usb", mode, expected.refused, (bond as { deviceName?: string }).deviceName);
-      const usbAuth = this.loadAuth((bond as { deviceName: string }).deviceName);
+      const usbAuth = await this.loadAuth((bond as { deviceName: string }).deviceName);
       this.state = { ...emptyState(), phase: "connecting", available: true };
       this.startWorker(backend);
       const linked = await this.request("connect", { bond, pair, auth: usbAuth, transport: process.env.COROS_BLE_TRANSPORT || "usb:0b05:17cb!" });
@@ -647,7 +657,7 @@ export class CorosNativeBleService {
         if (keyId) this.recordKeyCheck(keyCheck, keyId, linked.deviceName ?? (bond as { deviceName?: string }).deviceName);
       }
       if (linked.systemBind === "authenticated") {
-        this.rememberIdentity("usb", mode, pair ? (this.loadBond() as { watchAddress?: string }).watchAddress : bondIdentity, expected.confirmed);
+        this.rememberIdentity("usb", mode, pair ? ((await this.loadBond()) as { watchAddress?: string }).watchAddress : bondIdentity, expected.confirmed);
       }
       return linked;
     } catch (error) {
@@ -673,7 +683,7 @@ export class CorosNativeBleService {
   private async authenticateSystem(): Promise<void> {
     this.state.systemBind = "authenticating";
     try {
-      const credential = this.loadAuth(this.state.deviceName ?? "");
+      const credential = await this.loadAuth(this.state.deviceName ?? "");
       if (!credential) {
         this.state = { ...this.state, systemBind: "unavailable",
           authenticationError: "Sign in to your COROS account in Watch Faces, then reconnect to authenticate your watch." };
@@ -1023,9 +1033,9 @@ export class CorosNativeBleService {
     }
   }
 
-  private wifiMusicIdentity(): CorosWifiMusicIdentity {
+  private async wifiMusicIdentity(): Promise<CorosWifiMusicIdentity> {
     this.requireMusicSession();
-    const credential = this.loadAuth(this.state.deviceName ?? "");
+    const credential = await this.loadAuth(this.state.deviceName ?? "");
     if (!credential) throw new Error("Authenticate your watch before sending audio over Wi-Fi.");
     return { deviceName: this.state.deviceName!, serialNumber: this.state.serialNumber, accountUserId: credential.accountUserId };
   }
@@ -1035,7 +1045,7 @@ export class CorosNativeBleService {
     this.requireMusicSession();
   }
 
-  wifiMusicStatus(): CorosWifiMusicStatus { return this.wifiMusic.status(); }
+  wifiMusicStatus(): Promise<CorosWifiMusicStatus> { return this.wifiMusic.status(); }
 
   sendMusicOverWifi(pickFiles: () => Promise<string[] | null>, options?: import("./corosWifiMusicTypes").CorosWifiMusicOptions): Promise<CorosWifiMusicStatus> {
     this.requireWifiMusicIdle();
@@ -1097,19 +1107,19 @@ export class CorosNativeBleService {
   }
 
   /** NetEase playlists CorosLink created on the connected watch. Local data only; nothing is sent. */
-  neteasePlaylists(): import("./corosWifiMusicTypes").CorosNeteasePlaylistLabel[] {
+  async neteasePlaylists(): Promise<import("./corosWifiMusicTypes").CorosNeteasePlaylistLabel[]> {
     if (!this.state.connected) return [];
     return this.wifiMusic.neteasePlaylists();
   }
 
   /** Name a NetEase playlist on the connected watch. Local data only; nothing is sent. */
-  renameNeteasePlaylist(id: unknown, name: unknown): import("./corosWifiMusicTypes").CorosNeteasePlaylistLabel[] {
+  async renameNeteasePlaylist(id: unknown, name: unknown): Promise<import("./corosWifiMusicTypes").CorosNeteasePlaylistLabel[]> {
     if (!this.state.connected) throw new Error("Connect your watch to name its playlists.");
     return this.wifiMusic.renameNeteasePlaylist(id, name);
   }
 
   cancelWifiMusicSync(): void { this.wifiMusic.cancel(); }
-  isWifiMusicActive(): boolean { return Boolean(this.wifiMusicTask) && this.wifiMusic.status().phase !== "choosing"; }
+  isWifiMusicActive(): boolean { return Boolean(this.wifiMusicTask) && this.wifiMusic.phase() !== "choosing"; }
   async finishWifiMusicBeforeQuit(): Promise<void> {
     this.wifiMusic.cancel();
     await this.wifiMusicTask?.catch(() => undefined);
@@ -1143,7 +1153,7 @@ export class CorosNativeBleService {
           const inventory: CorosBleMusicInventory = { id: randomUUID(), deviceName: this.state.deviceName, tracks, checkedAt: Date.now() };
           try {
             const payload = await this.controlCommand(0xb6, encodeWirelessAudioInventoryQuery());
-            inventory.wirelessTracks = this.wifiMusic.labelWirelessAudio(decodeWirelessAudioInventory(payload));
+            inventory.wirelessTracks = await this.wifiMusic.labelWirelessAudio(decodeWirelessAudioInventory(payload));
           } catch (error) {
             // Preserve a valid local MP3 list, but never present an unread Wi-Fi
             // library as an empty one. A changed/disconnected session still fails below.
@@ -1155,11 +1165,11 @@ export class CorosNativeBleService {
               const response = await this.send("musicInventoryPage", { page: -1, category: 3 });
               if (typeof response.payload !== "string") throw new Error("The watch did not return its NetEase library.");
               const listed = new Set(inventory.wirelessTracks.filter(track => track.destination === "netease").map(track => track.id));
-              const names = new Map(this.wifiMusic.neteasePlaylists().map(row => [row.id, row.name]));
+              const names = new Map((await this.wifiMusic.neteasePlaylists()).map(row => [row.id, row.name]));
               const songs = decodeNeteaseInventory(Buffer.from(response.payload, "base64")).flatMap(list => list.songIds
                 .filter(id => !listed.has(id) && (listed.add(id), true))
                 .map(id => ({ id, destination: "netease" as const, sizeBytes: 0, playlistId: list.id, ...(names.has(list.id) ? { playlistName: names.get(list.id) } : {}) })));
-              inventory.wirelessTracks = [...inventory.wirelessTracks, ...this.wifiMusic.labelWirelessAudio(songs)];
+              inventory.wirelessTracks = [...inventory.wirelessTracks, ...(await this.wifiMusic.labelWirelessAudio(songs))];
             } catch (error) {
               inventory.neteaseError = error instanceof Error ? error.message : "Could not read the watch's NetEase library.";
             }

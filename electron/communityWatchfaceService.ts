@@ -90,7 +90,7 @@ let progressListener:
 let activeImportSlug: string | undefined;
 
 /** The website account's `clk_` token for a given origin, when this computer is signed in to it. */
-export type CommunityAccountToken = (origin: string) => string | null;
+export type CommunityAccountToken = (origin: string) => string | null | Promise<string | null>;
 let accountToken: CommunityAccountToken = () => null;
 
 /** Lets the face lookup and download open the signed-in member's own private faces. */
@@ -112,7 +112,7 @@ export async function fetchCatalogOrOwned(
 ): Promise<Response> {
   const response = await fetchImpl(url, init);
   if (response.status !== 404) return response;
-  const owned = token(url.origin);
+  const owned = await token(url.origin);
   if (!owned) return response;
   const headers = new Headers(init.headers);
   headers.set("authorization", `Bearer ${owned}`);
@@ -201,7 +201,7 @@ async function requestCatalog(pathname: string, options: { owned?: boolean } = {
     signal: AbortSignal.timeout(15_000)
   };
   const response = options.owned ? await fetchCatalogOrOwned(url, init) : await fetch(url, init);
-  if (options.owned && response.status === 404 && !accountToken(url.origin)) {
+  if (options.owned && response.status === 404 && !(await accountToken(url.origin))) {
     throw new Error(
       "This watch face isn't in the community catalog. If it's one of your private faces, sign in to watchfaces.coroslink.com in Settings → Account, then open it again."
     );

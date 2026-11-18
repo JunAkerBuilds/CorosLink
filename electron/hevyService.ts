@@ -38,9 +38,9 @@ const SETTINGS = {
 const TEMPLATE_REFRESH_MS = 7 * 86_400_000;
 
 interface CredentialStorage {
-  isEncryptionAvailable(): boolean;
-  encryptString(value: string): Buffer;
-  decryptString(value: Buffer): string;
+  isAsyncEncryptionAvailable(): Promise<boolean>;
+  encryptStringAsync(value: string): Promise<Buffer>;
+  decryptStringAsync(value: Buffer): Promise<{ result: string; shouldReEncrypt: boolean }>;
 }
 
 let credentialStorage: CredentialStorage = safeStorage;
@@ -92,26 +92,29 @@ function parseIdentity(): HevyIdentity | undefined {
   }
 }
 
-function readApiKey(): string | undefined {
+async function readApiKey(): Promise<string | undefined> {
   const encrypted = getSetting(SETTINGS.apiKey);
-  if (!encrypted || !credentialStorage.isEncryptionAvailable()) return undefined;
+  if (!encrypted || !(await credentialStorage.isAsyncEncryptionAvailable())) return undefined;
   try {
-    return credentialStorage.decryptString(Buffer.from(encrypted, "base64"));
+    const { result, shouldReEncrypt } = await credentialStorage.decryptStringAsync(Buffer.from(encrypted, "base64"));
+    // A rotated OS key: save under the new one, unless the key changed meanwhile.
+    if (shouldReEncrypt) {
+      const reEncrypted = await encryptApiKey(result).catch(() => undefined);
+      if (reEncrypted && getSetting(SETTINGS.apiKey) === encrypted) setSetting(SETTINGS.apiKey, reEncrypted);
+    }
+    return result;
   } catch {
     return undefined;
   }
 }
 
-function storeApiKey(apiKey: string): void {
-  if (!credentialStorage.isEncryptionAvailable()) {
+async function encryptApiKey(apiKey: string): Promise<string> {
+  if (!(await credentialStorage.isAsyncEncryptionAvailable())) {
     throw new Error(
       "Secure credential storage is unavailable. CorosLink did not save the Hevy API key."
     );
   }
-  setSetting(
-    SETTINGS.apiKey,
-    credentialStorage.encryptString(apiKey).toString("base64")
-  );
+  return (await credentialStorage.encryptStringAsync(apiKey)).toString("base64");
 }
 
 function includeWarmups(): boolean {
@@ -175,10 +178,18 @@ async function fetchIdentity(apiKey: string): Promise<HevyIdentity> {
   };
 }
 
-export function getHevyStatus(): HevyStatus {
+/**
+ * Connected as far as can be told without decrypting the key (for synchronous
+ * callers such as the Coach's tool list); getHevyStatus also checks it decrypts.
+ */
+export function isHevyConnected(): boolean {
+  return Boolean(parseIdentity() && getSetting(SETTINGS.apiKey));
+}
+
+export async function getHevyStatus(): Promise<HevyStatus> {
   const identity = parseIdentity();
   return {
-    connected: Boolean(readApiKey() && identity),
+    connected: Boolean(identity && (await readApiKey())),
     userId: identity?.userId,
     displayName: identity?.displayName,
     profileUrl: identity?.profileUrl,
@@ -190,10 +201,11 @@ export function getHevyStatus(): HevyStatus {
 export async function connectHevy(apiKey: string): Promise<HevyStatus> {
   const key = apiKey.trim();
   if (!key) throw new Error("Enter a Hevy API key.");
-  if (!credentialStorage.isEncryptionAvailable()) {
+  if (!(await credentialStorage.isAsyncEncryptionAvailable())) {
     throw new Error("Secure credential storage is unavailable on this system.");
   }
   const identity = await fetchIdentity(key);
+  const encryptedKey = await encryptApiKey(key);
   const previous = parseIdentity();
   if (previous && previous.userId !== identity.userId) {
     clearHevyCache();
@@ -203,7 +215,7 @@ export async function connectHevy(apiKey: string): Promise<HevyStatus> {
       SETTINGS.lastSyncedAt
     ]);
   }
-  storeApiKey(key);
+  setSetting(SETTINGS.apiKey, encryptedKey);
   setSetting(SETTINGS.identity, JSON.stringify(identity));
   if (getSetting(SETTINGS.includeWarmups) === undefined) {
     setSetting(SETTINGS.includeWarmups, "false");
@@ -211,7 +223,7 @@ export async function connectHevy(apiKey: string): Promise<HevyStatus> {
   return getHevyStatus();
 }
 
-export function updateHevySettings(input: HevySettingsInput): HevyStatus {
+export function updateHevySettings(input: HevySettingsInput): Promise<HevyStatus> {
   setSetting(SETTINGS.includeWarmups, input.includeWarmups ? "true" : "false");
   return getHevyStatus();
 }
@@ -354,7 +366,7 @@ export async function syncHevyStrengthHistory(
   days = 90,
   force = false
 ): Promise<HevySyncResult> {
-  const apiKey = readApiKey();
+  const apiKey = await readApiKey();
   if (!apiKey) throw new Error("Connect Hevy before syncing strength workouts.");
   const requestedSince = windowStartEpochSeconds(days);
   const coverageSince = Number(getSetting(SETTINGS.coverageSince));
@@ -369,8 +381,8 @@ export async function syncHevyStrengthHistory(
 
 // ----- The Coach's Hevy tools: live reads and approved writes -----
 
-function requireApiKey(): string {
-  const apiKey = readApiKey();
+async function requireApiKey(): Promise<string> {
+  const apiKey = await readApiKey();
   if (!apiKey || !parseIdentity()) {
     throw new Error("Hevy isn't connected. Connect it in Strength or Settings → Accounts & API with a Hevy Pro API key.");
   }
@@ -385,7 +397,7 @@ function records(value: unknown): JsonRecord[] {
 
 /** Every page of a 10-per-page Hevy list, up to maxPages. */
 async function listAllPages(path: string, key: string, maxPages = 30): Promise<JsonRecord[]> {
-  const apiKey = requireApiKey();
+  const apiKey = await requireApiKey();
   const items: JsonRecord[] = [];
   for (let page = 1; page <= maxPages; page += 1) {
     const response = await hevyRequest(path, apiKey, { page, pageSize: 10 });
@@ -402,7 +414,7 @@ async function listAllPages(path: string, key: string, maxPages = 30): Promise<J
  * Fetched on first use and refreshed weekly, or at once with refresh.
  */
 export async function getHevyExerciseTemplates(refresh = false): Promise<Map<string, JsonRecord>> {
-  const apiKey = requireApiKey();
+  const apiKey = await requireApiKey();
   const syncedAt = Date.parse(getSetting(SETTINGS.templatesSyncedAt) ?? "");
   const stale = !Number.isFinite(syncedAt) || Date.now() - syncedAt > TEMPLATE_REFRESH_MS;
   let templates = listStoredHevyExerciseTemplates();
@@ -423,7 +435,7 @@ export async function getHevyExerciseTemplate(id: string): Promise<JsonRecord | 
   const cached = listStoredHevyExerciseTemplates().get(id);
   if (cached) return cached;
   try {
-    const template = await hevyRequest(`/exercise_templates/${encodeURIComponent(id)}`, requireApiKey());
+    const template = await hevyRequest(`/exercise_templates/${encodeURIComponent(id)}`, await requireApiKey());
     upsertHevyExerciseTemplate(id, template);
     return template;
   } catch (error) {
@@ -460,7 +472,7 @@ export function listHevyRoutineFolders(): Promise<JsonRecord[]> {
 
 export async function getHevyRoutine(id: string): Promise<JsonRecord | undefined> {
   try {
-    const response = await hevyRequest(`/routines/${encodeURIComponent(id)}`, requireApiKey());
+    const response = await hevyRequest(`/routines/${encodeURIComponent(id)}`, await requireApiKey());
     return record(response.routine) ?? response;
   } catch (error) {
     if (error instanceof HevyApiError && error.status === 404) return undefined;
@@ -469,18 +481,18 @@ export async function getHevyRoutine(id: string): Promise<JsonRecord | undefined
 }
 
 export async function createHevyRoutine(routine: JsonRecord): Promise<JsonRecord> {
-  const response = await hevyRequest("/routines", requireApiKey(), undefined, { method: "POST", body: { routine } });
+  const response = await hevyRequest("/routines", await requireApiKey(), undefined, { method: "POST", body: { routine } });
   // Hevy has answered both { routine } and [routine].
   return record(response.routine) ?? record(records(response.routine)[0]) ?? response;
 }
 
 export async function updateHevyRoutine(id: string, routine: JsonRecord): Promise<JsonRecord> {
-  const response = await hevyRequest(`/routines/${encodeURIComponent(id)}`, requireApiKey(), undefined, { method: "PUT", body: { routine } });
+  const response = await hevyRequest(`/routines/${encodeURIComponent(id)}`, await requireApiKey(), undefined, { method: "PUT", body: { routine } });
   return record(response.routine) ?? record(records(response.routine)[0]) ?? response;
 }
 
 export async function createHevyRoutineFolder(title: string): Promise<JsonRecord> {
-  const response = await hevyRequest("/routine_folders", requireApiKey(), undefined, {
+  const response = await hevyRequest("/routine_folders", await requireApiKey(), undefined, {
     method: "POST",
     body: { routine_folder: { title } }
   });
@@ -489,7 +501,7 @@ export async function createHevyRoutineFolder(title: string): Promise<JsonRecord
 
 /** Creates a custom exercise and caches its template; returns the new template id. */
 export async function createHevyCustomExercise(exercise: JsonRecord): Promise<string> {
-  const apiKey = requireApiKey();
+  const apiKey = await requireApiKey();
   const response = await hevyRequest("/exercise_templates", apiKey, undefined, { method: "POST", body: { exercise } });
   const raw = response.id ?? record(response.exercise_template)?.id;
   const id = typeof raw === "number" ? String(raw) : stringValue(raw);
@@ -506,18 +518,18 @@ export async function getHevyExerciseHistory(
   const search: Record<string, string> = {};
   if (startDate) search.start_date = startDate;
   if (endDate) search.end_date = endDate;
-  const response = await hevyRequest(`/exercise_history/${encodeURIComponent(templateId)}`, requireApiKey(), search);
+  const response = await hevyRequest(`/exercise_history/${encodeURIComponent(templateId)}`, await requireApiKey(), search);
   return records(response.exercise_history);
 }
 
 export async function listHevyWorkouts(page: number, pageSize: number): Promise<{ workouts: JsonRecord[]; pageCount: number }> {
-  const response = await hevyRequest("/workouts", requireApiKey(), { page, pageSize });
+  const response = await hevyRequest("/workouts", await requireApiKey(), { page, pageSize });
   return { workouts: records(response.workouts), pageCount: Math.max(1, numberValue(response.page_count) ?? 1) };
 }
 
 export async function getHevyWorkout(id: string): Promise<JsonRecord | undefined> {
   try {
-    const response = await hevyRequest(`/workouts/${encodeURIComponent(id)}`, requireApiKey());
+    const response = await hevyRequest(`/workouts/${encodeURIComponent(id)}`, await requireApiKey());
     return record(response.workout) ?? response;
   } catch (error) {
     if (error instanceof HevyApiError && error.status === 404) return undefined;
@@ -526,7 +538,7 @@ export async function getHevyWorkout(id: string): Promise<JsonRecord | undefined
 }
 
 export async function listHevyBodyMeasurements(limit: number): Promise<JsonRecord[]> {
-  const apiKey = requireApiKey();
+  const apiKey = await requireApiKey();
   const items: JsonRecord[] = [];
   for (let page = 1; items.length < limit; page += 1) {
     const response = await hevyRequest("/body_measurements", apiKey, { page, pageSize: 10 });

@@ -193,7 +193,7 @@ export class WebsiteAccount {
 
   /** Opens the website's consent page in the browser. Refuses when the token couldn't be kept safely. */
   async beginSignIn(): Promise<void> {
-    this.options.secrets.ensureAvailable();
+    await this.options.secrets.ensureAvailable();
     const { verifier, challenge } = createPkce();
     const state = crypto.randomBytes(32).toString("base64url");
     this.pending = { state, verifier, expiresAt: this.now() + SIGN_IN_TTL_MS };
@@ -245,7 +245,7 @@ export class WebsiteAccount {
         throw new WebsiteAccountError("watchfaces.coroslink.com sent an unexpected answer.");
       }
       const viewer = answer.viewer as Partial<WebsiteViewer> | undefined;
-      this.store(token, {
+      await this.store(token, {
         version: 1,
         viewer: {
           handle: typeof viewer?.handle === "string" ? viewer.handle.slice(0, 64) : "",
@@ -276,7 +276,7 @@ export class WebsiteAccount {
   }
 
   private async fetchRelayToken(): Promise<string> {
-    const appToken = this.appToken();
+    const appToken = await this.appToken();
     if (!appToken) throw new WebsiteAccountError("Sign in to watchfaces.coroslink.com first.", "signed_out");
     const answer = await this.request("/api/v1/app/relay-token", {
       method: "POST",
@@ -292,7 +292,7 @@ export class WebsiteAccount {
 
   /** Signs this computer out on the website (best effort) and forgets the token. */
   async signOut(): Promise<void> {
-    const appToken = this.appToken();
+    const appToken = await this.appToken();
     this.forget();
     if (!appToken) return;
     try {
@@ -315,7 +315,7 @@ export class WebsiteAccount {
    * opening the member's private faces). Null when signed out or for any other origin, so the
    * keychain is only touched for a signed-in account.
    */
-  tokenFor(origin: string): string | null {
+  async tokenFor(origin: string): Promise<string | null> {
     if (!this.signedIn) return null;
     let requested: string;
     try {
@@ -326,21 +326,21 @@ export class WebsiteAccount {
     return requested === new URL(this.options.origin).origin ? this.appToken() : null;
   }
 
-  private appToken(): string | null {
+  private async appToken(): Promise<string | null> {
     const encoded = this.options.settings.get(TOKEN_KEY);
     if (!encoded) return null;
     try {
-      this.options.secrets.ensureAvailable();
-      const token = this.options.secrets.decrypt(Buffer.from(encoded, "base64"));
+      await this.options.secrets.ensureAvailable();
+      const token = await this.options.secrets.decrypt(Buffer.from(encoded, "base64"));
       return APP_TOKEN_PATTERN.test(token) ? token : null;
     } catch {
       return null;
     }
   }
 
-  private store(token: string, account: SavedAccount): void {
-    this.options.secrets.ensureAvailable();
-    this.options.settings.set(TOKEN_KEY, this.options.secrets.encrypt(token).toString("base64"));
+  private async store(token: string, account: SavedAccount): Promise<void> {
+    await this.options.secrets.ensureAvailable();
+    this.options.settings.set(TOKEN_KEY, (await this.options.secrets.encrypt(token)).toString("base64"));
     this.options.settings.set(ACCOUNT_KEY, JSON.stringify(account));
     this.relay = null;
   }

@@ -24,9 +24,9 @@ vm.runInNewContext(fs.readFileSync(filename, "utf8"), {
   require(id) {
     if (id === "electron") return {
       app: { isPackaged: false, getAppPath: () => "/project" },
-      safeStorage: { isEncryptionAvailable: () => true,
-        encryptString: text => Buffer.from(`encrypted:${text}`),
-        decryptString: bytes => bytes.toString().slice("encrypted:".length) }
+      safeStorage: { isAsyncEncryptionAvailable: async () => true,
+        encryptStringAsync: async text => Buffer.from(`encrypted:${text}`),
+        decryptStringAsync: async bytes => ({ result: bytes.toString().slice("encrypted:".length), shouldReEncrypt: false }) }
     };
     if (id === "./database") return { getSetting: key => settings.get(key), setSetting: (key, value) => settings.set(key, value) };
     if (id === "node:fs") return {
@@ -114,7 +114,10 @@ assert.equal((await service.status()).connected, false, "worker exit clears a st
 assert.equal((await service.status()).systemBind, "not_authenticated", "worker exit clears the authenticated session");
 await service.stop();
 
+const workersBefore = workers.length;
 const missingRuntime = service.connect();
+// The saved bond and account key decrypt asynchronously before the helper starts.
+while (workers.length === workersBefore) await new Promise(resolve => setImmediate(resolve));
 workers.at(-1).stderr.emit("data", `ImportError: secret-${fakeBond.keys.ltk_central.value}\n`);
 workers.at(-1).emit("close", 1);
 await assert.rejects(missingRuntime, error => {

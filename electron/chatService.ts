@@ -84,7 +84,7 @@ import {
   isChatHevyTool,
   type ChatHevyToolName
 } from "./chatHevyTools";
-import { getHevyStatus } from "./hevyService";
+import { isHevyConnected } from "./hevyService";
 import { listAthleteFacts } from "./athleteMemoryStore";
 import { formatAthleteMemoryForCoach } from "./athleteMemoryModel";
 import { formatDataStatusForContext } from "./coachDataStatus";
@@ -330,11 +330,21 @@ export async function getChatSettingsForWindow(): Promise<ChatSettings> {
   return getChatSettings();
 }
 
-export function saveChatSettings(settings: ChatSettings): ChatSettings {
+export async function saveChatSettings(settings: ChatSettings): Promise<ChatSettings> {
+  const encrypted = new Map<string, string>();
+  const newKeys: Array<[string, string, string | undefined, boolean | undefined]> = [
+    [CHAT_SETTINGS_KEYS.localApiKey, "local", settings.local.apiKey, settings.local.clearApiKey],
+    [CHAT_SETTINGS_KEYS.openRouterApiKey, "OpenRouter", settings.openRouter?.apiKey, settings.openRouter?.clearApiKey]
+  ];
+  for (const [settingKey, label, apiKey, clear] of newKeys) {
+    if (!clear && typeof apiKey === "string" && apiKey.trim()) {
+      encrypted.set(settingKey, await encryptChatApiKey(label, apiKey.trim()));
+    }
+  }
   return saveChatSettingsToStore(
     chatSettingsStore,
-    localApiKeyStore,
-    openRouterApiKeyStore,
+    chatApiKeyStore(CHAT_SETTINGS_KEYS.localApiKey, encrypted),
+    chatApiKeyStore(CHAT_SETTINGS_KEYS.openRouterApiKey, encrypted),
     settings
   );
 }
@@ -645,7 +655,7 @@ export async function testLocalChatConnection(
   config?: LocalChatConfig
 ): Promise<LocalChatConnectionTest> {
   const saved = getLocalConfig();
-  const runtime = getLocalRuntimeConfig({
+  const runtime = await getLocalRuntimeConfig({
     ...saved,
     ...config,
     baseUrl: config?.baseUrl ?? saved.baseUrl,
@@ -655,7 +665,7 @@ export async function testLocalChatConnection(
     apiKey:
       typeof config?.apiKey === "string" && config.apiKey.trim()
         ? config.apiKey.trim()
-        : readStoredLocalApiKey()
+        : await readStoredLocalApiKey()
   });
   return testLocalChatConnectionRequest(runtime);
 }
@@ -666,7 +676,7 @@ export async function detectLocalChatServers(
   return detectLocalChatServersRequest(
     typeof apiKey === "string" && apiKey.trim()
       ? apiKey.trim()
-      : readStoredLocalApiKey()
+      : await readStoredLocalApiKey()
   );
 }
 
@@ -682,7 +692,7 @@ export async function testOpenRouterConnection(
     apiKey:
       typeof config?.apiKey === "string" && config.apiKey.trim()
         ? config.apiKey.trim()
-        : readStoredOpenRouterApiKey()
+        : await readStoredOpenRouterApiKey()
   });
 }
 
@@ -690,47 +700,48 @@ function getLocalConfig(): LocalChatConfig {
   return getChatSettings().local;
 }
 
-function getLocalRuntimeConfig(config = getLocalConfig()): LocalChatRuntimeConfig {
+async function getLocalRuntimeConfig(config = getLocalConfig()): Promise<LocalChatRuntimeConfig> {
   return {
     baseUrl: config.baseUrl,
     model: config.model,
     apiKey:
       typeof config.apiKey === "string" && config.apiKey.trim()
         ? config.apiKey.trim()
-        : readStoredLocalApiKey(),
+        : await readStoredLocalApiKey(),
     toolsEnabled: config.toolsEnabled
   };
 }
 
-function storeEncryptedChatApiKey(
-  settingKey: string,
-  label: string,
-  apiKey: string
-): void {
-  if (!safeStorage.isEncryptionAvailable()) {
+async function encryptChatApiKey(label: string, apiKey: string): Promise<string> {
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) {
     throw new Error(`Secure ${label} API key storage is not available on this system.`);
   }
-  const encrypted = safeStorage.encryptString(apiKey).toString("base64");
-  setSetting(settingKey, encrypted);
+  return (await safeStorage.encryptStringAsync(apiKey)).toString("base64");
 }
 
-function readStoredChatApiKey(settingKey: string): string | undefined {
+async function readStoredChatApiKey(settingKey: string): Promise<string | undefined> {
   const encoded = getSetting(settingKey);
-  if (!encoded || !safeStorage.isEncryptionAvailable()) {
+  if (!encoded || !(await safeStorage.isAsyncEncryptionAvailable())) {
     return undefined;
   }
   try {
-    return safeStorage.decryptString(Buffer.from(encoded, "base64"));
+    const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(encoded, "base64"));
+    if (shouldReEncrypt) {
+      const reEncrypted = await encryptChatApiKey("chat", result).catch(() => undefined);
+      // Only replace the value read here, never a key saved meanwhile.
+      if (reEncrypted && getSetting(settingKey) === encoded) setSetting(settingKey, reEncrypted);
+    }
+    return result;
   } catch {
     return undefined;
   }
 }
 
-function readStoredLocalApiKey(): string | undefined {
+function readStoredLocalApiKey(): Promise<string | undefined> {
   return readStoredChatApiKey(CHAT_SETTINGS_KEYS.localApiKey);
 }
 
-function readStoredOpenRouterApiKey(): string | undefined {
+function readStoredOpenRouterApiKey(): Promise<string | undefined> {
   return readStoredChatApiKey(CHAT_SETTINGS_KEYS.openRouterApiKey);
 }
 
@@ -740,28 +751,30 @@ const chatSettingsStore: ChatSettingsStore = {
   delete: deleteSettings
 };
 
-const localApiKeyStore: ChatApiKeyStore = {
-  hasApiKey: () => Boolean(getSetting(CHAT_SETTINGS_KEYS.localApiKey)),
-  saveApiKey: (apiKey) =>
-    storeEncryptedChatApiKey(CHAT_SETTINGS_KEYS.localApiKey, "local", apiKey),
-  clearApiKey: () => deleteSettings([CHAT_SETTINGS_KEYS.localApiKey])
-};
+/**
+ * The settings store writes API keys synchronously, so saveChatSettings
+ * encrypts new keys first and hands it a store that writes the ciphertext.
+ */
+function chatApiKeyStore(settingKey: string, encrypted: ReadonlyMap<string, string>): ChatApiKeyStore {
+  return {
+    hasApiKey: () => Boolean(getSetting(settingKey)),
+    saveApiKey: () => {
+      const value = encrypted.get(settingKey);
+      if (!value) throw new Error("API key was not encrypted before saving.");
+      setSetting(settingKey, value);
+    },
+    clearApiKey: () => deleteSettings([settingKey])
+  };
+}
 
-const openRouterApiKeyStore: ChatApiKeyStore = {
-  hasApiKey: () => Boolean(getSetting(CHAT_SETTINGS_KEYS.openRouterApiKey)),
-  saveApiKey: (apiKey) =>
-    storeEncryptedChatApiKey(
-      CHAT_SETTINGS_KEYS.openRouterApiKey,
-      "OpenRouter",
-      apiKey
-    ),
-  clearApiKey: () => deleteSettings([CHAT_SETTINGS_KEYS.openRouterApiKey])
-};
+const NO_NEW_API_KEYS: ReadonlyMap<string, string> = new Map();
+const localApiKeyStore = chatApiKeyStore(CHAT_SETTINGS_KEYS.localApiKey, NO_NEW_API_KEYS);
+const openRouterApiKeyStore = chatApiKeyStore(CHAT_SETTINGS_KEYS.openRouterApiKey, NO_NEW_API_KEYS);
 
 // ----- Auth status -----
 
-export function getChatAuthStatus(): ChatAuthStatus {
-  const token = getStoredToken();
+export async function getChatAuthStatus(): Promise<ChatAuthStatus> {
+  const token = await getStoredToken();
   if (!token) {
     return { signedIn: false };
   }
@@ -810,7 +823,7 @@ export async function loginChat(
     parentWindow
   );
   const token = await exchangeAuthorizationCode(code, verifier);
-  storeToken(token);
+  await storeToken(token);
   return getChatAuthStatus();
 }
 
@@ -1004,7 +1017,7 @@ const tokenRefreshes = new Map<string, Promise<StoredChatToken>>();
 
 /** Returns a non-expired access token, refreshing proactively when close. */
 async function getValidToken(): Promise<StoredChatToken> {
-  const token = getStoredToken();
+  const token = await getStoredToken();
   if (!token) {
     const err = new Error("Sign in with ChatGPT first.");
     (err as Error & { authError?: boolean }).authError = true;
@@ -1016,15 +1029,15 @@ async function getValidToken(): Promise<StoredChatToken> {
     // concurrently can invalidate another job's credentials.
     const pending = tokenRefreshes.get(token.refresh_token);
     if (pending) return pending;
-    const refresh = refreshAccessToken(token).then((refreshed) => {
-      const current = getStoredToken();
+    const refresh = refreshAccessToken(token).then(async (refreshed) => {
+      const current = await getStoredToken();
       if (!current || current.refresh_token !== token.refresh_token ||
           current.access_token !== token.access_token || current.account_id !== token.account_id) {
         const err = new Error("ChatGPT sign-in changed while refreshing. Please retry.");
         (err as Error & { authError?: boolean }).authError = true;
         throw err;
       }
-      storeToken(refreshed);
+      await storeToken(refreshed);
       return refreshed;
     });
     tokenRefreshes.set(token.refresh_token, refresh);
@@ -1039,28 +1052,32 @@ async function getValidToken(): Promise<StoredChatToken> {
 
 // ----- Encrypted token persistence (safeStorage, like trainingHubService) -----
 
-function storeToken(token: StoredChatToken): void {
-  if (!safeStorage.isEncryptionAvailable()) {
+async function storeToken(token: StoredChatToken): Promise<void> {
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) {
     // Degrade rather than crash; the user stays signed in for this session only
     // via the in-memory return values, but nothing persists.
     return;
   }
-  const encrypted = safeStorage
-    .encryptString(JSON.stringify(token))
-    .toString("base64");
+  const encrypted = (
+    await safeStorage.encryptStringAsync(JSON.stringify(token))
+  ).toString("base64");
   setSetting(SETTINGS.token, encrypted);
   setSetting(SETTINGS.authUpdatedAt, new Date().toISOString());
 }
 
-function getStoredToken(): StoredChatToken | null {
+async function getStoredToken(): Promise<StoredChatToken | null> {
   const encoded = getSetting(SETTINGS.token);
-  if (!encoded || !safeStorage.isEncryptionAvailable()) {
+  if (!encoded || !(await safeStorage.isAsyncEncryptionAvailable())) {
     return null;
   }
   try {
-    const decrypted = safeStorage.decryptString(Buffer.from(encoded, "base64"));
-    const parsed = JSON.parse(decrypted) as StoredChatToken;
-    return parsed.access_token ? parsed : null;
+    const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(encoded, "base64"));
+    const parsed = JSON.parse(result) as StoredChatToken;
+    if (!parsed.access_token) return null;
+    if (shouldReEncrypt && getSetting(SETTINGS.token) === encoded) {
+      await storeToken(parsed).catch(() => undefined);
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -1448,7 +1465,7 @@ export async function streamChat(
     }
 
     if (settings.provider === "openrouter") {
-      const apiKey = readStoredOpenRouterApiKey();
+      const apiKey = await readStoredOpenRouterApiKey();
       if (!apiKey) {
         throw new Error("Add an OpenRouter API key in Coach settings first.");
       }
@@ -1525,7 +1542,7 @@ export async function streamChat(
         signal
       );
       const { hasData } = prompt;
-      const runtimeConfig = getLocalRuntimeConfig(settings.local);
+      const runtimeConfig = await getLocalRuntimeConfig(settings.local);
 
       if (runtimeConfig.toolsEnabled) {
         stage("tools");
@@ -1902,7 +1919,7 @@ function getAllChatTools(): CorosMcpTool[] {
 
 function hevyChatTools(): CorosMcpTool[] {
   try {
-    return getChatHevyTools({ connected: getHevyStatus().connected });
+    return getChatHevyTools({ connected: isHevyConnected() });
   } catch {
     // An unreadable Hevy connection must not take the other tools down.
     return [];
@@ -2390,7 +2407,7 @@ async function completeOnce(
   }
 
   if (provider === "openrouter") {
-    const apiKey = readStoredOpenRouterApiKey();
+    const apiKey = await readStoredOpenRouterApiKey();
     if (!apiKey) throw new Error("No OpenRouter API key.");
     const result = await streamOpenRouterChatCompletion({
       ...noTools,
@@ -2404,7 +2421,7 @@ async function completeOnce(
   if (provider === "local") {
     const result = await streamLocalChatCompletion({
       ...noTools,
-      config: { ...getLocalRuntimeConfig(settings.local), toolsEnabled: false },
+      config: { ...(await getLocalRuntimeConfig(settings.local)), toolsEnabled: false },
       instructions,
       messages,
       onToolsDisabled: () => undefined
@@ -2493,11 +2510,11 @@ export async function getWebSearchStatus(): Promise<{
   if (!webSearch) return { provider, label, webSearch, ready: false };
   let ready = false;
   try {
-    if (provider === "chatgpt") ready = getChatAuthStatus().signedIn;
+    if (provider === "chatgpt") ready = (await getChatAuthStatus()).signedIn;
     else if (provider === "claude-code") ready = (await claudeCodeStatusForTurn()).authenticated;
     else if (provider === "gemini-cli") ready = (await geminiCliStatusForTurn()).authenticated;
     else if (provider === "antigravity") ready = (await getAntigravityConnectionStatus()).authenticated;
-    else if (provider === "openrouter") ready = Boolean(readStoredOpenRouterApiKey());
+    else if (provider === "openrouter") ready = Boolean(await readStoredOpenRouterApiKey());
   } catch (error) {
     console.warn("[web search] could not check the provider:", error instanceof Error ? error.message : String(error));
   }
@@ -2608,7 +2625,7 @@ export async function completeWithWebSearch(
   }
 
   if (provider === "openrouter") {
-    const apiKey = readStoredOpenRouterApiKey();
+    const apiKey = await readStoredOpenRouterApiKey();
     if (!apiKey) throw new Error("Add your OpenRouter API key in Coach settings.");
     onProgress({ stage: "search" });
     const result = await streamOpenRouterChatCompletion({

@@ -38,8 +38,8 @@ const mocks = {
   electron: {
     app: { getPath: () => userData },
     safeStorage: {
-      isEncryptionAvailable: () => true,
-      decryptString: (buffer) => buffer.toString()
+      isAsyncEncryptionAvailable: async () => true,
+      decryptStringAsync: async (buffer) => ({ result: buffer.toString(), shouldReEncrypt: false })
     }
   },
   "./database": {

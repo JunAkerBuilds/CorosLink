@@ -15,9 +15,9 @@ database.initializeDatabase(tempRoot);
 
 let encryptionAvailable = true;
 strava.setStravaCredentialStorageForTests({
-  isEncryptionAvailable: () => encryptionAvailable,
-  encryptString: (value) => Buffer.from(`encrypted:${value}`, "utf8"),
-  decryptString: (value) => value.toString("utf8").replace(/^encrypted:/, "")
+  isAsyncEncryptionAvailable: async () => encryptionAvailable,
+  encryptStringAsync: async (value) => Buffer.from(`encrypted:${value}`, "utf8"),
+  decryptStringAsync: async (value) => ({ result: value.toString("utf8").replace(/^encrypted:/, ""), shouldReEncrypt: false })
 });
 
 // The fake browser: approve on Strava, which redirects to the loopback listener.
@@ -157,18 +157,18 @@ const detailRequests = () =>
 
 // --- Configuration ----------------------------------------------------------
 assert.deepEqual(
-  { configured: strava.getStravaStatus().configured, connected: strava.getStravaStatus().connected },
+  { configured: (await strava.getStravaStatus()).configured, connected: (await strava.getStravaStatus()).connected },
   { configured: false, connected: false }
 );
-assert.throws(() => strava.saveStravaConfig({ clientId: "abc", clientSecret: "x" }), /numeric Client ID/);
-assert.throws(() => strava.saveStravaConfig({ clientId: "213543" }), /Client Secret/);
+await assert.rejects(() => strava.saveStravaConfig({ clientId: "abc", clientSecret: "x" }), /numeric Client ID/);
+await assert.rejects(() => strava.saveStravaConfig({ clientId: "213543" }), /Client Secret/);
 await assert.rejects(() => strava.connectStrava(), /Client ID and Client Secret first/);
-const configured = strava.saveStravaConfig({ clientId: " 213543 ", clientSecret: " client-secret " });
+const configured = await strava.saveStravaConfig({ clientId: " 213543 ", clientSecret: " client-secret " });
 assert.equal(configured.configured, true);
 assert.equal(configured.clientId, "213543");
 assert.ok(!database.getSetting("strava.secureState").includes("client-secret"), "secret is not stored in plain text");
 assert.equal(
-  strava.saveStravaConfig({ clientId: "213543", clientSecret: "" }).configured,
+  (await strava.saveStravaConfig({ clientId: "213543", clientSecret: "" })).configured,
   true,
   "a blank secret keeps the saved one"
 );
@@ -180,13 +180,13 @@ await assert.rejects(() => strava.connectStrava(), /does not recognise this Clie
 authorizeError = "redirect_uri";
 await assert.rejects(() => strava.connectStrava(), /Authorization Callback Domain/);
 assert.equal(lastAuthorizeUrl, undefined, "a rejected pre-check never opens the browser");
-assert.equal(strava.getStravaStatus().connecting, false);
+assert.equal((await strava.getStravaStatus()).connecting, false);
 authorizeError = undefined;
 
 grantedScope = "read";
 await assert.rejects(() => strava.connectStrava(), /did not grant activity access/);
-assert.equal(strava.getStravaStatus().connected, false);
-assert.equal(strava.getStravaStatus().connecting, false);
+assert.equal((await strava.getStravaStatus()).connected, false);
+assert.equal((await strava.getStravaStatus()).connecting, false);
 
 grantedScope = "read,activity:read_all";
 const connected = await strava.connectStrava();
@@ -278,8 +278,8 @@ await strava.disconnectStrava();
 await strava.connectStrava();
 refreshFailure = true;
 await assert.rejects(() => strava.syncStravaStrengthHistory(90, true), /expired or was revoked/);
-assert.equal(strava.getStravaStatus().connected, false);
-assert.equal(strava.getStravaStatus().configured, true);
+assert.equal((await strava.getStravaStatus()).connected, false);
+assert.equal((await strava.getStravaStatus()).configured, true);
 assert.equal(database.listStoredStravaActivities(0).length, 0, "a revoked grant erases the cache");
 refreshFailure = false;
 expiresIn = 6 * 3600;
@@ -295,19 +295,19 @@ assert.equal(
   revoked.at(-1).auth,
   `Basic ${Buffer.from("213543:client-secret").toString("base64")}`
 );
-assert.equal(strava.getStravaStatus().connected, false);
-assert.equal(strava.getStravaStatus().configured, true, "the API application stays saved");
+assert.equal((await strava.getStravaStatus()).connected, false);
+assert.equal((await strava.getStravaStatus()).configured, true, "the API application stays saved");
 assert.equal(database.listStoredStravaActivities(0).length, 0);
 assert.equal(database.getSetting("strava.athlete"), undefined);
 
 // --- A different API application drops the old grant ------------------------------
 await strava.connectStrava();
-strava.saveStravaConfig({ clientId: "999", clientSecret: "other" });
-assert.equal(strava.getStravaStatus().connected, false);
-assert.equal(strava.getStravaStatus().clientId, "999");
+await strava.saveStravaConfig({ clientId: "999", clientSecret: "other" });
+assert.equal((await strava.getStravaStatus()).connected, false);
+assert.equal((await strava.getStravaStatus()).clientId, "999");
 
 encryptionAvailable = false;
-assert.throws(
+await assert.rejects(
   () => strava.saveStravaConfig({ clientId: "213543", clientSecret: "client-secret" }),
   /Secure credential storage/
 );

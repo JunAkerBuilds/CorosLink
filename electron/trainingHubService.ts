@@ -144,6 +144,7 @@ import { parseStrengthDetail } from "./strengthDetail";
 import {
   clearStoredCorosCredentials,
   getStoredCorosCredentials,
+  peekStoredCorosCredentials,
   hashCorosPassword,
   storeCorosCredentials
 } from "./corosCredentialStore";
@@ -347,7 +348,7 @@ interface TrainingHubFileUrlData {
 
 export function getTrainingHubStatus(): TrainingHubStatus {
   const auth = getStoredAuth();
-  const credentials = getStoredCorosCredentials();
+  const credentials = peekStoredCorosCredentials();
   const expired = auth ? undefined : getSetting(SESSION_EXPIRED_SETTING);
 
   return {
@@ -526,7 +527,7 @@ export async function loginTrainingHub(
     };
   }
 
-  finalizeTrainingHubLogin(outcome.session, account, pwdHash, remember);
+  await finalizeTrainingHubLogin(outcome.session, account, pwdHash, remember);
   return { twoFactorRequired: false, status: getTrainingHubStatus() };
 }
 
@@ -552,7 +553,7 @@ export async function verifyTrainingHubTwoFactor(
     pending.userId
   );
 
-  finalizeTrainingHubLogin(
+  await finalizeTrainingHubLogin(
     session,
     pending.loginAccount,
     pending.pwdHash,
@@ -579,15 +580,15 @@ export function cancelTrainingHubTwoFactor(): void {
   pendingTwoFactor = null;
 }
 
-function finalizeTrainingHubLogin(
+async function finalizeTrainingHubLogin(
   session: TrainingHubAuthState,
   account: string,
   pwdHash: string,
   remember: boolean
-): void {
+): Promise<void> {
   persistTrainingHubSession(session);
   if (remember) {
-    storeCorosCredentials(account, pwdHash);
+    await storeCorosCredentials(account, pwdHash);
   } else {
     clearStoredCorosCredentials();
   }
@@ -1007,7 +1008,7 @@ export function logoutTrainingHub(): TrainingHubStatus {
  * this surfaces the same emailed-code challenge as a fresh login.
  */
 export async function reconnectTrainingHub(): Promise<TrainingHubLoginResult> {
-  const credentials = getStoredCorosCredentials();
+  const credentials = await getStoredCorosCredentials();
   if (!credentials) {
     throw new Error(
       "Couldn't reconnect with saved credentials. Please log in again."
@@ -1028,7 +1029,7 @@ export async function reconnectTrainingHub(): Promise<TrainingHubLoginResult> {
     };
   }
 
-  finalizeTrainingHubLogin(
+  await finalizeTrainingHubLogin(
     outcome.session,
     credentials.account,
     credentials.pwdHash,
@@ -7605,7 +7606,7 @@ function reauthenticateFromStoredCredentials(
 
 /** Rejects with the reason automatic re-login didn't work; the user must log in again. */
 async function performReauthentication(): Promise<TrainingHubAuthState> {
-  const credentials = getStoredCorosCredentials();
+  const credentials = await getStoredCorosCredentials();
   if (!credentials) {
     console.warn(
       "[trainingHub] COROS access token expired but no stored credentials " +

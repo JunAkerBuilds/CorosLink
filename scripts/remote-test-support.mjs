@@ -25,11 +25,11 @@ export function createRemoteDatabase() {
 export function createFakeSecretBox({ available = true } = {}) {
   return {
     available,
-    ensureAvailable() {
+    async ensureAvailable() {
       if (!this.available) throw new Error("Secure credential storage is unavailable.");
     },
-    encrypt: (plain) => Buffer.from(`enc:${Buffer.from(plain).toString("base64")}`),
-    decrypt: (encrypted) => Buffer.from(encrypted.toString().slice(4), "base64").toString()
+    encrypt: async (plain) => Buffer.from(`enc:${Buffer.from(plain).toString("base64")}`),
+    decrypt: async (encrypted) => Buffer.from(encrypted.toString().slice(4), "base64").toString()
   };
 }
 

@@ -1,6 +1,7 @@
 import { safeStorage, shell } from "electron";
-import { getSetting, setSetting } from "./database";
+import { getSetting } from "./database";
 import { recordDiagnosticError } from "./diagnosticsService";
+import { SecureSettingCache } from "./secureSettingCache";
 import { calendarSourceUserId, calendarSourceRevision, listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
 import {
   GoogleCalendarClient,
@@ -9,9 +10,20 @@ import {
 
 const STORAGE_KEY = "googleCalendar.secureState";
 
+const secureState = new SecureSettingCache<GoogleCalendarState>(STORAGE_KEY, {
+  unreadableMessage:
+    "Could not unlock Google Calendar credentials. Check your system keychain and restart CorosLink.",
+  onSaveError: (error) => recordDiagnosticError("calendarSync:google:saveCredentials", error),
+});
+
+/** Decrypts the saved Google Calendar credentials; awaited at startup before any read. */
+export function loadGoogleCalendarCredentials(): Promise<void> {
+  return secureState.load();
+}
+
 function ensureSecureStorage(): void {
   if (
-    !safeStorage.isEncryptionAvailable() ||
+    !secureState.secureStorageAvailable() ||
     (process.platform === "linux" &&
       safeStorage.getSelectedStorageBackend() === "basic_text")
   ) {
@@ -24,25 +36,13 @@ function ensureSecureStorage(): void {
 export const googleCalendar = new GoogleCalendarClient({
   ensureSecureStorage,
   read: () => {
-    const stored = getSetting(STORAGE_KEY);
-    if (!stored) return {};
+    if (!getSetting(STORAGE_KEY) && secureState.read() === undefined) return {};
     ensureSecureStorage();
-    try {
-      return JSON.parse(
-        safeStorage.decryptString(Buffer.from(stored, "base64")),
-      ) as GoogleCalendarState;
-    } catch {
-      throw new Error(
-        "Could not unlock Google Calendar credentials. Check your system keychain and restart CorosLink.",
-      );
-    }
+    return secureState.read() ?? {};
   },
   write: (state) => {
     ensureSecureStorage();
-    setSetting(
-      STORAGE_KEY,
-      safeStorage.encryptString(JSON.stringify(state)).toString("base64"),
-    );
+    secureState.write(state);
   },
   sourceUserId: calendarSourceUserId,
   listWorkouts: listCalendarWorkoutEntries,

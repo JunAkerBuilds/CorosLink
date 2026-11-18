@@ -17,19 +17,21 @@ const SETTINGS = {
 // what we've imported for this long and force onCoros=true for it.
 export const RECENT_IMPORT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
-function storeSecret(key: string, value: string): void {
-  const payload = safeStorage.isEncryptionAvailable()
-    ? safeStorage.encryptString(value).toString("base64")
+async function storeSecret(key: string, value: string): Promise<void> {
+  const payload = (await safeStorage.isAsyncEncryptionAvailable())
+    ? (await safeStorage.encryptStringAsync(value)).toString("base64")
     : value;
   setSetting(key, payload);
 }
 
-function readSecret(key: string): string | undefined {
+async function readSecret(key: string): Promise<string | undefined> {
   const raw = getSetting(key);
   if (!raw) return undefined;
-  if (!safeStorage.isEncryptionAvailable()) return raw;
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) return raw;
   try {
-    return safeStorage.decryptString(Buffer.from(raw, "base64"));
+    const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(raw, "base64"));
+    if (shouldReEncrypt) await storeSecret(key, result).catch(() => undefined);
+    return result;
   } catch {
     // Decryption failed (e.g. OS keychain unavailable/changed). Do NOT return
     // the raw ciphertext — it would be sent as the API key and produce a
@@ -43,8 +45,8 @@ function authHeader(apiKey: string): string {
   return "Basic " + Buffer.from(`API_KEY:${apiKey}`).toString("base64");
 }
 
-function requireAuth(): { apiKey: string; athleteId: string } {
-  const apiKey = readSecret(SETTINGS.apiKey);
+async function requireAuth(): Promise<{ apiKey: string; athleteId: string }> {
+  const apiKey = await readSecret(SETTINGS.apiKey);
   const athleteId = getSetting(SETTINGS.athleteId);
   if (!apiKey || !athleteId) {
     throw new Error("Not connected to intervals.icu.");
@@ -52,8 +54,8 @@ function requireAuth(): { apiKey: string; athleteId: string } {
   return { apiKey, athleteId };
 }
 
-export function getIntervalsStatus(): IntervalsStatus {
-  const apiKey = readSecret(SETTINGS.apiKey);
+export async function getIntervalsStatus(): Promise<IntervalsStatus> {
+  const apiKey = await readSecret(SETTINGS.apiKey);
   const athleteId = getSetting(SETTINGS.athleteId);
   return apiKey && athleteId
     ? { connected: true, athleteId }
@@ -75,7 +77,7 @@ export async function connectIntervals(
   if (!resp.ok) {
     throw new Error(`intervals.icu error: ${resp.status}`);
   }
-  storeSecret(SETTINGS.apiKey, apiKey.trim());
+  await storeSecret(SETTINGS.apiKey, apiKey.trim());
   setSetting(SETTINGS.athleteId, id);
   return { connected: true, athleteId: id };
 }
@@ -115,7 +117,7 @@ export function parseIntervalsActivities(raw: any[]): IntervalsActivity[] {
 export async function listIntervalsActivities(
   daysBack: number
 ): Promise<IntervalsActivity[]> {
-  const { apiKey, athleteId } = requireAuth();
+  const { apiKey, athleteId } = await requireAuth();
   const to = new Date().toISOString().slice(0, 10);
   const from = new Date(Date.now() - daysBack * 86_400_000)
     .toISOString()
@@ -134,7 +136,7 @@ export async function downloadIntervalsFit(
   intervalsId: string,
   destPath: string
 ): Promise<string> {
-  const { apiKey } = requireAuth();
+  const { apiKey } = await requireAuth();
   const resp = await fetch(`${BASE_URL}/activity/${intervalsId}/file`, {
     headers: { Authorization: authHeader(apiKey) }
   });

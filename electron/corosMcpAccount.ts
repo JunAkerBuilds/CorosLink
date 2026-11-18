@@ -1,4 +1,4 @@
-import { getCorosWatchfaceStatus } from "./corosWatchfaceService";
+import { peekCorosWatchfaceSession } from "./corosWatchfaceService";
 import { getTrainingHubStatus } from "./trainingHubService";
 import type { CorosMcpAccount, CorosWatchfaceRegion } from "./types";
 
@@ -20,7 +20,7 @@ export function getCorosMcpAccount(): CorosMcpAccount {
   // Watch Faces signs "China / Asia-Pacific" accounts in on one host, and COROS
   // MCP's server for Asia-Pacific accounts is unknown, so only US and Europe
   // sessions pick a server.
-  const watchfaceRegion = getCorosWatchfaceStatus().region;
+  const watchfaceRegion = peekCorosWatchfaceSession().region;
   return {
     email: trainingHub.email,
     region:

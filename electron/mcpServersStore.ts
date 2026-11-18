@@ -264,19 +264,31 @@ export function removeMcpServer(
   ]);
 }
 
-export function getMcpBearer(id: string): string | undefined {
-  const raw = getSetting(mcpSecretKey(id, "bearer"));
+/** A bearer token is saved; nothing is decrypted. */
+export function hasMcpBearer(id: string): boolean {
+  return Boolean(getSetting(mcpSecretKey(id, "bearer")));
+}
+
+export async function getMcpBearer(id: string): Promise<string | undefined> {
+  const key = mcpSecretKey(id, "bearer");
+  const raw = getSetting(key);
   if (!raw) {
     return undefined;
   }
   try {
-    return safeStorage().decryptString(Buffer.from(raw, "base64"));
+    const storage = safeStorage();
+    const { result, shouldReEncrypt } = await storage.decryptStringAsync(Buffer.from(raw, "base64"));
+    if (shouldReEncrypt) {
+      const reEncrypted = await storage.encryptStringAsync(result).catch(() => undefined);
+      if (reEncrypted && getSetting(key) === raw) setSetting(key, reEncrypted.toString("base64"));
+    }
+    return result;
   } catch {
     return undefined;
   }
 }
 
-export function setMcpBearer(id: string, token: string): void {
+export async function setMcpBearer(id: string, token: string): Promise<void> {
   const server = getMcpServer(id);
   if (!server) {
     throw new Error(`Unknown MCP server "${id}".`);
@@ -292,12 +304,10 @@ export function setMcpBearer(id: string, token: string): void {
     throw new Error("API key cannot be empty.");
   }
   const storage = safeStorage();
-  if (!storage.isEncryptionAvailable()) {
+  if (!(await storage.isAsyncEncryptionAvailable())) {
     throw new Error("Secure credential storage is unavailable on this system.");
   }
-  setSetting(
-    mcpSecretKey(id, "bearer"),
-    storage.encryptString(value).toString("base64")
-  );
+  const encrypted = (await storage.encryptStringAsync(value)).toString("base64");
+  setSetting(mcpSecretKey(id, "bearer"), encrypted);
   setSetting(`mcp.${id}.resourceUrl`, server.url);
 }

@@ -22,6 +22,7 @@ import {
 } from "./corosMcpRegions";
 import {
   getMcpBearer,
+  hasMcpBearer,
   getMcpServer,
   listMcpServers,
   mcpSecretKey,
@@ -90,12 +91,18 @@ function redirectPathFor(id: string): string {
 
 // ----- token persistence (encrypted, per server) -----
 
-function readTokens(id: string): OAuthTokens | undefined {
+async function readTokens(id: string): Promise<OAuthTokens | undefined> {
   const encoded = getSetting(keysFor(id).tokens);
-  if (!encoded || !safeStorage.isEncryptionAvailable()) return undefined;
+  if (!encoded || !(await safeStorage.isAsyncEncryptionAvailable())) return undefined;
   try {
-    const json = safeStorage.decryptString(Buffer.from(encoded, "base64"));
-    return JSON.parse(json) as OAuthTokens;
+    const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(encoded, "base64"));
+    const tokens = JSON.parse(result) as OAuthTokens;
+    // A rotated OS key: save under the new one, unless a refresh replaced them meanwhile.
+    if (shouldReEncrypt) {
+      const reEncrypted = await encryptJson(tokens).catch(() => undefined);
+      if (reEncrypted && getSetting(keysFor(id).tokens) === encoded) setSetting(keysFor(id).tokens, reEncrypted);
+    }
+    return tokens;
   } catch (error) {
     // The server then just looks unauthorized; say why in the error report.
     recordDiagnosticError(`mcp:${id}/storedTokens`, error);
@@ -103,11 +110,13 @@ function readTokens(id: string): OAuthTokens | undefined {
   }
 }
 
-function writeTokens(id: string, tokens: OAuthTokens, newAuthorization = false): void {
-  if (!safeStorage.isEncryptionAvailable()) return;
-  const encrypted = safeStorage
-    .encryptString(JSON.stringify(tokens))
-    .toString("base64");
+async function encryptJson(value: unknown): Promise<string> {
+  return (await safeStorage.encryptStringAsync(JSON.stringify(value))).toString("base64");
+}
+
+async function writeTokens(id: string, tokens: OAuthTokens, newAuthorization = false): Promise<void> {
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) return;
+  const encrypted = await encryptJson(tokens);
   const keys = keysFor(id);
   if (newAuthorization || !hasStoredTokens(id) || !getSetting(keys.authorizationId)) {
     setSetting(keys.authorizationId, crypto.randomUUID());
@@ -135,23 +144,27 @@ export function getMcpAuthorizationKey(id: string): string {
     .digest("hex");
 }
 
-function readClientInformation(id: string): OAuthClientInformationFull | undefined {
+async function readClientInformation(id: string): Promise<OAuthClientInformationFull | undefined> {
   const key = keysFor(id).clientInfo;
   const raw = getSetting(key);
   if (!raw) return undefined;
   try {
     if (raw.startsWith("encrypted:")) {
-      if (!safeStorage.isEncryptionAvailable()) return undefined;
-      const json = safeStorage.decryptString(
+      if (!(await safeStorage.isAsyncEncryptionAvailable())) return undefined;
+      const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(
         Buffer.from(raw.slice("encrypted:".length), "base64")
       );
-      return JSON.parse(json) as OAuthClientInformationFull;
+      const info = JSON.parse(result) as OAuthClientInformationFull;
+      if (shouldReEncrypt && getSetting(key) === raw) {
+        await writeClientInformation(id, info).catch(() => undefined);
+      }
+      return info;
     }
 
     // Migrate legacy plaintext COROS registrations on first read.
     const parsed = JSON.parse(raw) as OAuthClientInformationFull;
-    if (safeStorage.isEncryptionAvailable()) {
-      writeClientInformation(id, parsed);
+    if (await safeStorage.isAsyncEncryptionAvailable()) {
+      await writeClientInformation(id, parsed);
     }
     return parsed;
   } catch (error) {
@@ -160,11 +173,11 @@ function readClientInformation(id: string): OAuthClientInformationFull | undefin
   }
 }
 
-function writeClientInformation(
+async function writeClientInformation(
   id: string,
   info: OAuthClientInformationFull
-): void {
-  if (!safeStorage.isEncryptionAvailable()) {
+): Promise<void> {
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) {
     if (info.client_secret) {
       throw new Error(
         "Secure credential storage is required for this OAuth server."
@@ -173,9 +186,7 @@ function writeClientInformation(
     setSetting(keysFor(id).clientInfo, JSON.stringify(info));
     return;
   }
-  const encrypted = safeStorage
-    .encryptString(JSON.stringify(info))
-    .toString("base64");
+  const encrypted = await encryptJson(info);
   setSetting(keysFor(id).clientInfo, `encrypted:${encrypted}`);
 }
 
@@ -239,21 +250,22 @@ class McpOAuthProvider implements OAuthClientProvider {
     return this.oauthState;
   }
 
-  clientInformation(): OAuthClientInformationFull | undefined {
+  clientInformation(): Promise<OAuthClientInformationFull | undefined> {
     return readClientInformation(this.config.serverId);
   }
 
-  saveClientInformation(info: OAuthClientInformationFull): void {
-    writeClientInformation(this.config.serverId, info);
+  saveClientInformation(info: OAuthClientInformationFull): Promise<void> {
+    return writeClientInformation(this.config.serverId, info);
   }
 
-  tokens(): OAuthTokens | undefined {
+  tokens(): Promise<OAuthTokens | undefined> {
     return readTokens(this.config.serverId);
   }
 
-  saveTokens(tokens: OAuthTokens): void {
-    writeTokens(this.config.serverId, tokens, this.newAuthorization);
+  async saveTokens(tokens: OAuthTokens): Promise<void> {
+    const newAuthorization = this.newAuthorization;
     this.newAuthorization = false;
+    await writeTokens(this.config.serverId, tokens, newAuthorization);
   }
 
   invalidateCredentials(scope: McpOAuthInvalidationScope): void {
@@ -688,7 +700,7 @@ async function activateClient(
   }
 }
 
-function buildTransport(server: McpServerConfig, authProvider?: McpOAuthProvider) {
+async function buildTransport(server: McpServerConfig, authProvider?: McpOAuthProvider) {
   if (server.transport !== "streamable-http") {
     throw new Error(
       `${server.name} uses unsupported MCP transport "${server.transport}".`
@@ -701,7 +713,7 @@ function buildTransport(server: McpServerConfig, authProvider?: McpOAuthProvider
   // bearer / none: send a static Authorization header when a bearer is stored.
   const headers: Record<string, string> = {};
   if (server.authType === "bearer") {
-    const token = getMcpBearer(server.id);
+    const token = await getMcpBearer(server.id);
     if (token) headers.Authorization = `Bearer ${token}`;
   }
   const { StreamableHTTPClientTransport } = mcpClientSdk();
@@ -724,7 +736,7 @@ async function connectOnce(
   const { Client, UnauthorizedError } = mcpClientSdk();
 
   if (server.authType !== "oauth") {
-    const transport = buildTransport(server);
+    const transport = await buildTransport(server);
     const mcpClient = new Client(
       { name: "CorosLink", version: app.getVersion() },
       { capabilities: {} }
@@ -741,7 +753,7 @@ async function connectOnce(
       parentWindow,
       interactive
     );
-    const transport = buildTransport(server, authProvider);
+    const transport = await buildTransport(server, authProvider);
     const mcpClient = new Client(
       { name: "CorosLink", version: app.getVersion() },
       { capabilities: {} }
@@ -758,7 +770,7 @@ async function connectOnce(
         ) {
           const code = await authProvider.waitForCode();
           await transport.finishAuth(code);
-          const retryTransport = buildTransport(server, authProvider);
+          const retryTransport = await buildTransport(server, authProvider);
           await mcpClient.connect(retryTransport);
         } else if (error instanceof UnauthorizedError) {
           clearStoredAuth(server.id);
@@ -908,7 +920,7 @@ async function ensureMcpConnected(server: McpServerConfig): Promise<void> {
   }
   if (Date.now() < rt.silentRetryAfter) return;
   if (server.authType === "oauth" && !hasStoredTokens(server.id)) return;
-  if (server.authType === "bearer" && !getMcpBearer(server.id)) return;
+  if (server.authType === "bearer" && !hasMcpBearer(server.id)) return;
   try {
     await connectMcpServer(server.id, false, null);
   } catch {
@@ -1092,7 +1104,7 @@ function statusFor(server: McpServerConfig): McpServerStatus {
   const rt = runtime(server.id);
   let authenticated: boolean;
   if (server.authType === "none") authenticated = true;
-  else if (server.authType === "bearer") authenticated = Boolean(getMcpBearer(server.id));
+  else if (server.authType === "bearer") authenticated = hasMcpBearer(server.id);
   else authenticated = hasStoredTokens(server.id);
   return {
     id: server.id,

@@ -14,13 +14,14 @@ const calls = [];
 let nonce = 0;
 let refreshOnRead = false;
 const server = { id: 'coros', name: 'COROS', url: 'https://example.invalid/mcp', enabled: true, authType: 'oauth', transport: 'streamable-http' };
+const encryptString = value => Buffer.from(`${++nonce}:${value}`);
 const safeStorage = {
-  isEncryptionAvailable: () => true,
-  encryptString: value => Buffer.from(`${++nonce}:${value}`),
-  decryptString: value => value.toString().replace(/^\d+:/, '')
+  isAsyncEncryptionAvailable: async () => true,
+  encryptStringAsync: async value => encryptString(value),
+  decryptStringAsync: async value => ({ result: value.toString().replace(/^\d+:/, ''), shouldReEncrypt: false })
 };
 const tokens = version => ({ access_token: `access-${version}`, refresh_token: `refresh-${version}`, token_type: 'Bearer' });
-settings.set('corosMcp.tokens', safeStorage.encryptString(JSON.stringify(tokens(1))).toString('base64'));
+settings.set('corosMcp.tokens', encryptString(JSON.stringify(tokens(1))).toString('base64'));
 settings.set('corosMcp.resourceUrl', server.url);
 settings.set('corosMcp.clientInfo', JSON.stringify({ client_id: 'same-client-across-accounts' }));
 
@@ -47,7 +48,7 @@ stub('@modelcontextprotocol/sdk/client/index.js', { Client: class {
     if (request.name.startsWith('query')) {
       if (refreshOnRead) {
         refreshOnRead = false;
-        this.provider.saveTokens(tokens(2));
+        await this.provider.saveTokens(tokens(2));
       }
       return { content: [{ type: 'text', text: '{"name":"Easy","editable":true}' }] };
     }
@@ -96,19 +97,19 @@ assert.equal(writes().length, 1, 'A pending review saves once after refresh');
 let pending = await stage();
 const provider = clients.at(-1).provider;
 provider.saveCodeVerifier('new-authorization-code-verifier');
-provider.saveTokens(tokens('other-account'));
+await provider.saveTokens(tokens('other-account'));
 assert.notEqual(key(), originalKey);
 await assert.rejects(service.confirm(pending.requestId), /connection changed/);
 assert.equal(writes().length, 1);
 
 const reauthorizedKey = key();
-provider.saveTokens(tokens('other-account-refreshed'));
+await provider.saveTokens(tokens('other-account-refreshed'));
 assert.equal(key(), reauthorizedKey, 'Later refreshes retain the new authorization identity');
 for (const scope of ['tokens', 'client', 'all']) {
   pending = await stage();
   const previousKey = key();
   provider.invalidateCredentials(scope);
-  provider.saveTokens(tokens(scope));
+  await provider.saveTokens(tokens(scope));
   assert.notEqual(key(), previousKey, scope);
   await assert.rejects(service.confirm(pending.requestId), /connection changed/);
 }
@@ -124,7 +125,7 @@ await manager.disconnectMcpServer('coros');
 assert.equal(key(), '');
 assert.equal(settings.get('corosMcp.authorizationId'), undefined);
 await manager.connectMcpServer('coros');
-clients.at(-1).provider.saveTokens(tokens('reconnected'));
+await clients.at(-1).provider.saveTokens(tokens('reconnected'));
 assert.notEqual(key(), beforeDisconnect);
 await assert.rejects(service.confirm(pending.requestId), /connection changed/);
 assert.equal(writes().length, 1, 'Account changes never dispatch the old review');

@@ -1,4 +1,4 @@
-import { getCorosWatchfaceStatus } from "./corosWatchfaceService";
+import { peekCorosWatchfaceSession } from "./corosWatchfaceService";
 import { getMcpStatuses } from "./mcpClientManager";
 import { listMcpServers } from "./mcpServersStore";
 import { getTrainingHubStatus } from "./trainingHubService";
@@ -20,9 +20,9 @@ export function corosAccountDiagnostics(): string[] {
       : `signed out${expired} · ${autoLogin}`;
   }));
   lines.push(describe("Watch Faces (COROS app account)", () => {
-    const watchfaces = getCorosWatchfaceStatus();
+    const watchfaces = peekCorosWatchfaceSession();
     const parts = [watchfaces.authenticated ? `signed in · region ${watchfaces.region ?? "unknown"}` : "signed out"];
-    if (!watchfaces.secureStorageAvailable) parts.push("secure storage unavailable");
+    if (watchfaces.secureStorageAvailable === false) parts.push("secure storage unavailable");
     if (watchfaces.watchAuthenticationError) parts.push(`watch sign-in error: ${watchfaces.watchAuthenticationError}`);
     return parts.join(" · ");
   }));

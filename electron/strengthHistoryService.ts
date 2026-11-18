@@ -40,8 +40,8 @@ export async function syncStrengthHistory(
   const wantsHevy = source === "combined" || source === "hevy";
   const wantsStrava = source === "combined" || source === "strava";
   const corosConnected = getTrainingHubStatus().authenticated;
-  const hevyConnected = getHevyStatus().connected;
-  const stravaConnected = getStravaStatus().connected;
+  const hevyConnected = (await getHevyStatus()).connected;
+  const stravaConnected = (await getStravaStatus()).connected;
   const warnings: string[] = [];
   const notices: string[] = [];
 
@@ -149,8 +149,8 @@ export async function listCalendarStrengthSessions(
   startDay: string,
   endDay: string
 ): Promise<StrengthSession[]> {
-  const hevyConnected = getHevyStatus().connected;
-  const stravaConnected = getStravaStatus().connected;
+  const hevyConnected = (await getHevyStatus()).connected;
+  const stravaConnected = (await getStravaStatus()).connected;
   const rangeStart = localDayStartEpochSeconds(startDay);
   const rangeEndDay = localDayStartEpochSeconds(endDay);
   if ((!hevyConnected && !stravaConnected) || rangeStart === undefined || rangeEndDay === undefined) {

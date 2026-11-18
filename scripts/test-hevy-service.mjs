@@ -15,9 +15,9 @@ database.initializeDatabase(tempRoot);
 
 let encryptionAvailable = true;
 hevy.setHevyCredentialStorageForTests({
-  isEncryptionAvailable: () => encryptionAvailable,
-  encryptString: (value) => Buffer.from(`encrypted:${value}`, "utf8"),
-  decryptString: (value) => value.toString("utf8").replace(/^encrypted:/, "")
+  isAsyncEncryptionAvailable: async () => encryptionAvailable,
+  encryptStringAsync: async (value) => Buffer.from(`encrypted:${value}`, "utf8"),
+  decryptStringAsync: async (value) => ({ result: value.toString("utf8").replace(/^encrypted:/, ""), shouldReEncrypt: false })
 });
 
 const now = Date.now();
@@ -151,7 +151,7 @@ assert.equal(hevy.getStoredHevyStrengthSessions(90).length, 1, "cached data surv
 
 phase = "bad-auth";
 await assert.rejects(() => hevy.connectHevy("bad-key"), /rejected the API key/);
-assert.equal(hevy.getHevyStatus().userId, "user-1", "failed auth keeps the prior account");
+assert.equal((await hevy.getHevyStatus()).userId, "user-1", "failed auth keeps the prior account");
 
 phase = "connect";
 activeUser = { id: "user-2", name: "Grace", url: "https://hevy.com/user/grace" };
@@ -164,7 +164,7 @@ encryptionAvailable = false;
 await assert.rejects(() => hevy.connectHevy("cannot-save"), /Secure credential storage/);
 encryptionAvailable = true;
 hevy.disconnectHevy();
-assert.equal(hevy.getHevyStatus().connected, false);
+assert.equal((await hevy.getHevyStatus()).connected, false);
 assert.equal(database.listStoredHevyWorkouts(0).length, 0);
 assert.equal(database.listStoredHevyExerciseTemplates().size, 0);
 

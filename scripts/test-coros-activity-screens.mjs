@@ -206,7 +206,7 @@ try {
   vm.runInNewContext(await fs.readFile(filename, "utf8"), {
     exports: nativeExports, Buffer, process, clearTimeout, setTimeout,
     require(id) {
-      if (id === "electron") return { app, safeStorage: { isEncryptionAvailable: () => true } };
+      if (id === "electron") return { app, safeStorage: { isAsyncEncryptionAvailable: async () => true } };
       if (id === "./database") return { getSetting: () => undefined, setSetting: () => {} };
       return nativeRequire(id);
     }

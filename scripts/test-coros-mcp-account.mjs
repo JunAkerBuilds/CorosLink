@@ -23,9 +23,9 @@ function register(id, url, builtin = false) {
 }
 
 const safeStorage = {
-  isEncryptionAvailable: () => true,
-  encryptString: (value) => Buffer.from(value),
-  decryptString: (value) => value.toString()
+  isAsyncEncryptionAvailable: async () => true,
+  encryptStringAsync: async (value) => Buffer.from(value),
+  decryptStringAsync: async (value) => ({ result: value.toString(), shouldReEncrypt: false })
 };
 stub("electron", {
   app: { getVersion: () => "test" },

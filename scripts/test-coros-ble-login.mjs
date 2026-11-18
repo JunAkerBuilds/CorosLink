@@ -133,9 +133,9 @@ vm.runInNewContext(fs.readFileSync(filename, "utf8"), {
   },
   require(id) {
     if (id === "electron") return { app: { getPath: () => "/unused", getVersion: () => "0.0.0-test" }, nativeImage: {}, safeStorage: {
-      isEncryptionAvailable: () => secureStorage,
-      encryptString: text => Buffer.from(`encrypted:${text}`),
-      decryptString: bytes => bytes.toString().slice(10)
+      isAsyncEncryptionAvailable: async () => secureStorage,
+      encryptStringAsync: async text => Buffer.from(`encrypted:${text}`),
+      decryptStringAsync: async bytes => ({ result: bytes.toString().slice(10), shouldReEncrypt: false })
     }};
     if (id === "./database") return { getSetting: key => settings.get(key),
       setSetting: (key,value) => settings.set(key,value), deleteSettings: keys => keys.forEach(key => settings.delete(key)) };
@@ -189,12 +189,12 @@ assert.equal(missing.watchAuthenticationAvailable, false);
 assert.match(missing.watchAuthenticationError, /valid watch account key/);
 assert.equal(settings.has(COROS_BLE_LOGIN_KEY_SETTING), false, "an account switch cannot reuse the previous account key");
 
-exports.logoutCorosWatchfaces();
+await exports.logoutCorosWatchfaces();
 responseData = fixture();
 savedCredentials = {account:"runner@example.com",pwdHash:"0123456789abcdef0123456789abcdef"};
 settings.set("trainingHub.baseUrl", "https://teamcnapi.coros.com");
 const before = calls.length;
-const signedOut = exports.getCorosWatchfaceStatus();
+const signedOut = await exports.getCorosWatchfaceStatus();
 assert.equal(signedOut.authenticated, false);
 assert.equal(signedOut.savedCredentialsAvailable, true);
 assert.equal(signedOut.suggestedRegion, "cn");
@@ -203,11 +203,11 @@ assert.equal(settings.has(COROS_BLE_LOGIN_KEY_SETTING), false, "remembered crede
 await exports.loginCorosWatchfacesWithSavedCredentials("cn");
 assert.equal(calls.length, before+1, "the explicit saved-account sign-in retrieves the key");
 assert.equal(calls.at(-1).url.origin, "https://apicn.coros.com");
-assert.equal(exports.getCorosWatchfaceStatus().watchAuthenticationAvailable, true);
-exports.getCorosWatchfaceStatus();
+assert.equal((await exports.getCorosWatchfaceStatus()).watchAuthenticationAvailable, true);
+await exports.getCorosWatchfaceStatus();
 assert.equal(calls.length, before+1, "checking an existing session does not log in again");
 const retainedKey = settings.get(COROS_BLE_LOGIN_KEY_SETTING);
-const loggedOut = exports.logoutCorosWatchfaces();
+const loggedOut = await exports.logoutCorosWatchfaces();
 assert.equal(settings.get(COROS_BLE_LOGIN_KEY_SETTING), retainedKey, "cloud logout preserves the encrypted Bluetooth key");
 assert.equal(settings.has("watchfaces.mobileSession"), false);
 assert.equal(loggedOut.authenticated, false);
@@ -218,7 +218,7 @@ savedCredentials = null;
 await assert.rejects(exports.loginCorosWatchfacesWithSavedCredentials("cn"), /No saved COROS credentials/);
 assert.equal(calls.length, before+1, "saved-account sign-in needs remembered credentials");
 const restarted = loadService();
-const afterRestart = restarted.getCorosWatchfaceStatus();
+const afterRestart = await restarted.getCorosWatchfaceStatus();
 assert.equal(afterRestart.authenticated, false);
 assert.equal(afterRestart.savedCredentialsAvailable, false);
 assert.equal(afterRestart.watchAuthenticationAvailable, true, "a new app process can use the saved key without a session or password");
@@ -232,10 +232,10 @@ expiredMobileSession = true;
 await assert.rejects(exports.listCorosPairedDevices(), /mobile session expired/);
 assert.equal(settings.has("watchfaces.mobileSession"), false);
 assert.equal(settings.get(COROS_BLE_LOGIN_KEY_SETTING), keyBeforeExpiry, "cloud-session expiry preserves the encrypted Bluetooth key");
-assert.equal(exports.getCorosWatchfaceStatus().authenticated, false);
-assert.equal(exports.getCorosWatchfaceStatus().watchAuthenticationAvailable, true);
+assert.equal((await exports.getCorosWatchfaceStatus()).authenticated, false);
+assert.equal((await exports.getCorosWatchfaceStatus()).watchAuthenticationAvailable, true);
 const afterExpiry = calls.length;
-exports.logoutCorosWatchfaces();
+await exports.logoutCorosWatchfaces();
 assert.equal(settings.get(COROS_BLE_LOGIN_KEY_SETTING), keyBeforeExpiry, "logout without remembered credentials preserves Bluetooth access");
 await assert.rejects(exports.queryCorosGear(), /Sign in to your COROS mobile account/);
 assert.equal(calls.length, afterExpiry, "an expired session does not cause automatic login");
@@ -244,7 +244,7 @@ expiredMobileSession = false;
 releaseResponse = "hold";
 responseData = fixture({keyInfo:{userId:"2"},login:{userId:"2"}});
 const pendingLogin = exports.loginCorosWatchfaces("runner@example.com", "synthetic-password", "us");
-exports.logoutCorosWatchfaces();
+await exports.logoutCorosWatchfaces();
 releaseResponse();
 await assert.rejects(pendingLogin, /sign-in changed/);
 assert.equal(settings.get(COROS_BLE_LOGIN_KEY_SETTING), keyBeforeExpiry, "logout prevents an in-flight login from replacing the retained key");
@@ -255,12 +255,12 @@ responseData = fixture();
 // A key saved by 0.1.57 (no metadata) is still shown and used; its saved time is unknown.
 settings.set(COROS_BLE_LOGIN_KEY_SETTING, Buffer.from("encrypted:" + JSON.stringify({ version: 1, accountUserId: userId,
   privateKeyDer: privateDer, unit: 0, dataCollectSwitch: 131342 })).toString("base64"));
-const legacy = exports.getCorosWatchfaceStatus();
+const legacy = await exports.getCorosWatchfaceStatus();
 assert.equal(legacy.watchAuthenticationAvailable, true);
 assert.deepEqual(legacy.watchKey, { keyId, accountId: "•••• 5678" });
 settings.set(COROS_WATCH_KEY_CHECK_SETTING, nextWatchKeyCheck(undefined, "ok", "COROS PACE 4 1A2B", keyId, at));
-assert.deepEqual(exports.getCorosWatchfaceStatus().watchKey.lastUsed, { at, watch: "COROS PACE 4 1A2B" }, "the status follows a new check record");
-const forgotten = exports.forgetCorosWatchKey();
+assert.deepEqual((await exports.getCorosWatchfaceStatus()).watchKey.lastUsed, { at, watch: "COROS PACE 4 1A2B" }, "the status follows a new check record");
+const forgotten = await exports.forgetCorosWatchKey();
 assert.equal(forgotten.watchAuthenticationAvailable, false);
 assert.equal(forgotten.watchKey, undefined);
 assert.equal(settings.has(COROS_WATCH_KEY_CHECK_SETTING), false, "removing the key also removes where it was used");
@@ -403,7 +403,7 @@ try {
   await assert.rejects(fresh.openCorosWatchKeyBackup(backup.data, "wrong passphrase!"), error => error.message === "Wrong passphrase or damaged file.");
 
   // Restore after removal (or on a new computer): stored through secure storage, saved now, last-used record cleared.
-  fresh.forgetCorosWatchKey();
+  await fresh.forgetCorosWatchKey();
   settings.set(COROS_WATCH_KEY_CHECK_SETTING, nextWatchKeyCheck(undefined, "mismatch", "COROS PACE 4 1A2B", keyId, at));
   settings.set("coros.ble.accountAuth", "old-import");
   const restorable = await fresh.openCorosWatchKeyBackup(backup.data, passphrase);
@@ -411,7 +411,7 @@ try {
   assert.equal(restorable.replaces, undefined);
   assert.equal(restorable.signsOutOtherAccount, false);
   const beforeRestore = Date.now();
-  const restoredStatus = fresh.saveRestoredCorosWatchKey(restorable);
+  const restoredStatus = await fresh.saveRestoredCorosWatchKey(restorable);
   assert.equal(restoredStatus.watchAuthenticationAvailable, true);
   assert.equal(restoredStatus.watchKey.keyId, keyId);
   assert.equal(restoredStatus.watchKey.problem, undefined, "the old check record is gone");
@@ -444,7 +444,7 @@ try {
   assert.equal((await loadService().openCorosWatchKeyBackup(backup.data, passphrase)).signsOutOtherAccount, false, "the key's own account stays signed in");
   sessionFor("987654321");
   const fresh2 = loadService();
-  const switched = fresh2.saveRestoredCorosWatchKey(await fresh2.openCorosWatchKeyBackup(backup.data, passphrase));
+  const switched = await fresh2.saveRestoredCorosWatchKey(await fresh2.openCorosWatchKeyBackup(backup.data, passphrase));
   assert.equal(switched.authenticated, false, "the other account is signed out");
   assert.equal(settings.has("watchfaces.mobileSession"), false);
   assert.equal(switched.watchKey.keyId, keyId);
@@ -453,7 +453,7 @@ try {
   secureStorage = false;
   const keptValue = settings.get(COROS_BLE_LOGIN_KEY_SETTING);
   await assert.rejects(fresh2.openCorosWatchKeyBackup(backup.data, passphrase), /OS secure storage is required/);
-  assert.throws(() => fresh2.saveRestoredCorosWatchKey(restorable), /OS secure storage is required/);
+  await assert.rejects(() => fresh2.saveRestoredCorosWatchKey(restorable), /OS secure storage is required/);
   await assert.rejects(fresh2.createCorosWatchKeyBackup(passphrase), /OS secure storage is required/);
   assert.equal(settings.get(COROS_BLE_LOGIN_KEY_SETTING), keptValue);
   secureStorage = true;
@@ -542,7 +542,7 @@ try {
   assert.equal(replaced.outcome, "restored");
   assert.equal(storedKey().privateKeyDer, privateDer);
   // Another account signed in: the warning says restoring signs it out.
-  fresh2.forgetCorosWatchKey();
+  await fresh2.forgetCorosWatchKey();
   sessionFor("987654321");
   await invoke("watchfaces:chooseWatchKeyBackup", main);
   const crossAccount = await invoke("watchfaces:restoreWatchKey", main, { passphrase });

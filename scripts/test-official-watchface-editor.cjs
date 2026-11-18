@@ -13,7 +13,7 @@ app.setPath("downloads", temp);
 // This offline test never reads or writes the user's login/keychain.
 const load = Module._load;
 Module._load = function (id, ...args) {
-  if (id === "electron") return { ...electron, safeStorage: { isEncryptionAvailable: () => false } };
+  if (id === "electron") return { ...electron, safeStorage: { isAsyncEncryptionAvailable: async () => false } };
   return load.call(this, id, ...args);
 };
 

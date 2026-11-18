@@ -32,7 +32,7 @@ const { createCoachAttachmentStore } = requireDist("./coachAttachments.js");
 
 const LAN = "192.168.77.5";
 const TUNNEL = "env-test.tunnel.example";
-const identity = loadOrCreateRemoteIdentity(createSettings(), createFakeSecretBox());
+const identity = await loadOrCreateRemoteIdentity(createSettings(), createFakeSecretBox());
 const db = createRemoteDatabase();
 const auth = new RemoteAuth({ database: () => db });
 const { hub, stream } = createHub();

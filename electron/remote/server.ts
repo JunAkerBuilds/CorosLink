@@ -89,7 +89,7 @@ export interface RemoteServerOptions {
   defaultProvider: () => ChatProvider;
   /** Coach's provider and model settings, for `coach.getModels` and `coach.setModel`. */
   chatSettings?: () => ChatSettings;
-  saveChatSettings?: (settings: ChatSettings) => ChatSettings;
+  saveChatSettings?: (settings: ChatSettings) => ChatSettings | Promise<ChatSettings>;
   /** The live model catalog for a provider; the static list without it. */
   chatModels?: (provider: ChatProvider) => Promise<ChatModelOption[]>;
   /** Where files a phone attaches are kept (coachAttachments.ts); without it phones can't attach. */
@@ -439,7 +439,7 @@ export class RemoteServer {
         const rawModel = params.model ?? "";
         if (typeof rawModel !== "string" || rawModel.length > 200) throw invalidParams("model must be a string.");
         const model = rawModel.trim();
-        this.options.saveChatSettings(applyModelChoice(settings, provider as ChatProvider, model));
+        await this.options.saveChatSettings(applyModelChoice(settings, provider as ChatProvider, model));
         return { result: await this.modelCatalog() };
       },
       "coach.deleteSession": (client, params) => {

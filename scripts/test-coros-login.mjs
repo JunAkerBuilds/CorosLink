@@ -99,7 +99,8 @@ const settings = new Map();
 let savedCredentials = null;
 mock.method(database, "getSetting", (key) => settings.get(key));
 mock.method(database, "setSetting", (key, value) => settings.set(key, value));
-mock.method(credentials, "getStoredCorosCredentials", () => savedCredentials);
+mock.method(credentials, "getStoredCorosCredentials", async () => savedCredentials);
+mock.method(credentials, "peekStoredCorosCredentials", () => savedCredentials);
 mock.method(credentials, "storeCorosCredentials", (account, pwdHash) => {
   savedCredentials = { account, pwdHash };
   return true;

@@ -41,16 +41,18 @@ const NETWORK_ACCESS_KEY = "remote.networkAccess";
 const KEEP_AWAKE_KEY = "remote.keepAwake";
 
 const safeStorageBox: RemoteSecretBox = {
-  ensureAvailable() {
+  async ensureAvailable() {
     if (
-      !safeStorage.isEncryptionAvailable() ||
+      !(await safeStorage.isAsyncEncryptionAvailable()) ||
       (process.platform === "linux" && safeStorage.getSelectedStorageBackend() === "basic_text")
     ) {
       throw new Error("Secure credential storage is unavailable. Unlock your system keychain to use remote access.");
     }
   },
-  encrypt: (plain) => safeStorage.encryptString(plain),
-  decrypt: (encrypted) => safeStorage.decryptString(encrypted)
+  encrypt: (plain) => safeStorage.encryptStringAsync(plain),
+  // Values saved under a key the OS has since rotated still decrypt; they move
+  // to the new key the next time they're saved.
+  decrypt: async (encrypted) => (await safeStorage.decryptStringAsync(encrypted)).result
 };
 
 export interface RemoteAccessOptions {
@@ -58,7 +60,7 @@ export interface RemoteAccessOptions {
   settings: RemoteSettingsStore;
   defaultProvider: () => ChatProvider;
   chatSettings?: () => ChatSettings;
-  saveChatSettings?: (settings: ChatSettings) => ChatSettings;
+  saveChatSettings?: (settings: ChatSettings) => ChatSettings | Promise<ChatSettings>;
   chatModels?: (provider: ChatProvider) => Promise<ChatModelOption[]>;
   attachments?: RemoteAttachmentStore;
   scheduledPrograms?: (startDay: string, endDay: string) => Promise<ScheduledProgram[]>;
@@ -180,7 +182,7 @@ export class RemoteAccess {
 
   private async start(): Promise<RemoteServer> {
     try {
-      this.identity ??= loadOrCreateRemoteIdentity(this.options.settings, safeStorageBox);
+      this.identity ??= await loadOrCreateRemoteIdentity(this.options.settings, safeStorageBox);
       const settings = this.options.settings;
       this.server ??= new RemoteServer({
         identity: this.identity,

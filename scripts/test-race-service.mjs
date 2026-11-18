@@ -141,9 +141,9 @@ assert.equal(overview.races[0].placing, "48th of 912");
 
 // --- Strava import -------------------------------------------------------------
 strava.setStravaCredentialStorageForTests({
-  isEncryptionAvailable: () => true,
-  encryptString: (value) => Buffer.from(`encrypted:${value}`, "utf8"),
-  decryptString: (value) => value.toString("utf8").replace(/^encrypted:/, "")
+  isAsyncEncryptionAvailable: async () => true,
+  encryptStringAsync: async (value) => Buffer.from(`encrypted:${value}`, "utf8"),
+  decryptStringAsync: async (value) => ({ result: value.toString("utf8").replace(/^encrypted:/, ""), shouldReEncrypt: false })
 });
 const realFetch = globalThis.fetch;
 strava.setStravaUrlOpenerForTests(async (url) => {
@@ -217,7 +217,7 @@ globalThis.fetch = async (input, init = {}) => {
 };
 
 await assert.rejects(() => races.importStravaRaces(), /Connect Strava/);
-strava.saveStravaConfig({ clientId: "213543", clientSecret: "client-secret" });
+await strava.saveStravaConfig({ clientId: "213543", clientSecret: "client-secret" });
 await strava.connectStrava();
 
 let result = await races.importStravaRaces();

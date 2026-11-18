@@ -13,7 +13,8 @@ require.cache[require.resolve("../dist-electron/database.js")] = { exports: {
   deleteSettings: (keys) => keys.forEach((key) => settings.delete(key))
 } };
 require.cache[require.resolve("../dist-electron/corosCredentialStore.js")] = { exports: {
-  getStoredCorosCredentials: () => credentials(),
+  getStoredCorosCredentials: async () => credentials(),
+  peekStoredCorosCredentials: () => credentials(),
   clearStoredCorosCredentials: () => undefined,
   hashCorosPassword: (password) => password,
   storeCorosCredentials: () => undefined

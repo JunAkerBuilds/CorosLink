@@ -115,7 +115,7 @@ async function harness(mode="ok",existingStore,options) {
    }
    throw Error("Unexpected probe command");
   }};
- service=new CorosWifiMusicService(bridge,{batchFiles:["big-batch","legacy-relay"].includes(mode)?undefined:20,wait:async()=>{samples.push(service.status());if(mode==="cancel-waiting")service.cancel();},openLookup:async input=>{
+ service=new CorosWifiMusicService(bridge,{batchFiles:["big-batch","legacy-relay"].includes(mode)?undefined:20,wait:async()=>{samples.push(await service.status());if(mode==="cancel-waiting")service.cancel();},openLookup:async input=>{
   if(mode==="lookup-failure")throw Error("lookup unavailable");
   if(mode==="legacy-relay"&&input.fileIds.length>20)throw Error("Could not prepare the secure NetEase lookup. Secure lookup setup failed (400).");
   return {prefix:"relay.coroslink.com/AbCdEf_123/",token:"0123456789abcdef0123456789abcdef",close:async()=>{calls.push({operation:"lookup-closed"});}};
@@ -127,8 +127,8 @@ async function harness(mode="ok",existingStore,options) {
  return {service,store,calls,batches,samples,get staged(){return staged;},get reconnects(){return reconnects;},get readinessChecks(){return readinessChecks;},setMode:v=>{mode=v;},resetIdentity:()=>{current={...identity};connected=true;}};
 }
 try {
- const h=await harness();assert.equal(h.service.status().ready,false);await h.service.importBackup(backup);assert.equal(h.service.status().ready,true);
- assert.equal(JSON.stringify(h.service.status()).includes(baseline.toString("base64")),false,"settings payload never reaches renderer status");
+ const h=await harness();assert.equal((await h.service.status()).ready,false);await h.service.importBackup(backup);assert.equal((await h.service.status()).ready,true);
+ assert.equal(JSON.stringify(await h.service.status()).includes(baseline.toString("base64")),false,"settings payload never reaches renderer status");
  const success=await h.service.send(resolveWifiMusicLibraryFiles(["library-one","library-two"],id=>library.get(id)));assert.equal(success.phase,"complete",success.error);assert.equal(success.completedFiles,2);assert.equal(success.restorePending,false);
  assert.deepEqual(h.calls.filter(c=>c.opcode===0xb2).at(-1).payload,baseline,"exact original packet is restored after success");
  assert.deepEqual(await fs.readFile(source),tagged,"source files are never edited");
@@ -163,11 +163,11 @@ try {
   assert.equal(queue.calls.filter(c=>c.opcode===0xb2&&c.payload.equals(baseline)).length,2,"settings restore after each batch");
   const destinationName=destination?.destination??"podcasts";
   const onWatch=queue.batches.flatMap(b=>b.files.map(file=>({id:file.id,destination:destinationName,sizeBytes:file.size})));
-  assert.deepEqual(queue.service.labelWirelessAudio(onWatch).map(file=>file.name),queueFiles.slice(0,32).map(file=>path.basename(file)),"completed transfers retain display names for live inventory IDs");
-  assert.deepEqual(queue.service.labelWirelessAudio([]),[],"saved names never invent files absent from the watch");
-  assert.equal(queue.service.labelWirelessAudio([{id:"UNKNOWN1",destination:destinationName,sizeBytes:10}])[0].name,undefined,"older uploads stay identified by their actual watch ID");
+  assert.deepEqual((await queue.service.labelWirelessAudio(onWatch)).map(file=>file.name),queueFiles.slice(0,32).map(file=>path.basename(file)),"completed transfers retain display names for live inventory IDs");
+  assert.deepEqual(await queue.service.labelWirelessAudio([]),[],"saved names never invent files absent from the watch");
+  assert.equal((await queue.service.labelWirelessAudio([{id:"UNKNOWN1",destination:destinationName,sizeBytes:10}]))[0].name,undefined,"older uploads stay identified by their actual watch ID");
   const relaunch=await harness("ok",queue.store,destination);
-  assert.equal(relaunch.service.labelWirelessAudio([onWatch[0]])[0].name,onWatch[0]?path.basename(queueFiles[0]):undefined,"labels survive app restart");
+  assert.equal((await relaunch.service.labelWirelessAudio([onWatch[0]]))[0].name,onWatch[0]?path.basename(queueFiles[0]):undefined,"labels survive app restart");
   const progress=queue.samples.map(s=>s.downloadedBytes);
   assert.ok(progress.every((value,index)=>index===0||value>=progress[index-1]),"overall byte progress never resets between batches");
   assert.ok(queue.samples.some(s=>s.batchIndex===2&&s.completedFiles===20),"second batch retains the first 20 completed tracks");
@@ -241,7 +241,7 @@ try {
    assert.equal(stopped.restorePending,true);
    assert.equal(JSON.parse(decrypt(queue.store.get("coros.ble.wifiMusic.restorePending"))).taskId,queue.batches.at(-1).id);
    const recovery=await harness("ok",queue.store,netease);await recovery.service.restore();
-   assert.equal(recovery.service.status().restorePending,false,"a restarted app recovers the active batch journal");
+   assert.equal((await recovery.service.status()).restorePending,false,"a restarted app recovers the active batch journal");
   }else assert.equal(stopped.restorePending,false);
  }
  for(const destination of [undefined,netease]) for(const mode of ["download-failure","cancel","cancel-before-write","lost-connection"]){
@@ -265,37 +265,37 @@ try {
  {
   // Adding to an existing playlist keeps its ID; CorosLink remembers the name for next time.
   const reuse=await harness("ok",undefined,{destination:"netease",playlistName:"Morning run",playlistId:"1234ABCD"});await reuse.service.importBackup(backup);
-  assert.deepEqual(reuse.service.neteasePlaylists(),[]);
+  assert.deepEqual(await reuse.service.neteasePlaylists(),[]);
   const done=await reuse.service.send([source],{destination:"netease",playlistName:"Morning run",playlistId:"1234ABCD"});
   assert.equal(done.phase,"complete");assert.equal(reuse.batches[0].playlistId,"1234ABCD","the manifest names the existing playlist");
   assert.equal(done.playlistId,"1234ABCD","status names the playlist it added to");
-  assert.deepEqual(reuse.service.neteasePlaylists().map(({id,name})=>({id,name})),[{id:"1234ABCD",name:"Morning run"}]);
-  assert.ok(Math.abs(reuse.service.neteasePlaylists()[0].updatedAt-Date.now())<60_000,"a send stamps when the playlist was last updated");
+  assert.deepEqual((await reuse.service.neteasePlaylists()).map(({id,name})=>({id,name})),[{id:"1234ABCD",name:"Morning run"}]);
+  assert.ok(Math.abs((await reuse.service.neteasePlaylists())[0].updatedAt-Date.now())<60_000,"a send stamps when the playlist was last updated");
   const fresh=await harness("ok",reuse.store,netease);const created=await fresh.service.send([source],netease);
-  assert.deepEqual(fresh.service.neteasePlaylists().map(p=>p.name),["Morning run","Trail 音乐"],"a new playlist is remembered by its new ID");
-  assert.equal(fresh.service.neteasePlaylists()[1].id,fresh.batches[0].playlistId);
+  assert.deepEqual((await fresh.service.neteasePlaylists()).map(p=>p.name),["Morning run","Trail 音乐"],"a new playlist is remembered by its new ID");
+  assert.equal((await fresh.service.neteasePlaylists())[1].id,fresh.batches[0].playlistId);
   assert.equal(created.playlistId,fresh.batches[0].playlistId,"a new playlist's ID comes back with the finished send");
   // Names are local: rename a remembered playlist, or name one the watch has but CorosLink never named.
-  fresh.service.renameNeteasePlaylist("1234ABCD"," Tempo ");
-  assert.deepEqual(fresh.service.neteasePlaylists().map(p=>p.name),["Tempo","Trail 音乐"],"renaming keeps the order and trims");
-  assert.ok(fresh.service.neteasePlaylists()[0].updatedAt,"renaming keeps the last update time");
-  assert.deepEqual(fresh.service.renameNeteasePlaylist("C5EC7F80","Found on watch").at(-1),{id:"C5EC7F80",name:"Found on watch"});
+  await fresh.service.renameNeteasePlaylist("1234ABCD"," Tempo ");
+  assert.deepEqual((await fresh.service.neteasePlaylists()).map(p=>p.name),["Tempo","Trail 音乐"],"renaming keeps the order and trims");
+  assert.ok((await fresh.service.neteasePlaylists())[0].updatedAt,"renaming keeps the last update time");
+  assert.deepEqual((await fresh.service.renameNeteasePlaylist("C5EC7F80","Found on watch")).at(-1),{id:"C5EC7F80",name:"Found on watch"});
   for(const [id,name] of [["c5ec7f80","x"],["C5EC7F80"," "],["C5EC7F80","界".repeat(22)],["C5EC7F80","a\nb"]])
-   assert.throws(()=>fresh.service.renameNeteasePlaylist(id,name),/Choose a playlist|Enter a playlist name/);
+   await assert.rejects(()=>fresh.service.renameNeteasePlaylist(id,name),/Choose a playlist|Enter a playlist name/);
   for(const playlistId of ["1234abcd","1234ABC",12,"../x"])assert.throws(()=>validateWifiMusicOptions({destination:"netease",playlistName:"x",playlistId}),/Choose a playlist/);
  }
  const broken=await harness("wrong-watch");await broken.service.importBackup(backup);const interrupted=await broken.service.send([source]);
  assert.equal(interrupted.phase,"restore-required");assert.equal(interrupted.restorePending,true);
  assert.equal(broken.calls.filter(c=>c.opcode===0xb2&&c.payload.equals(baseline)).length,0,"never writes the original settings to another watch");
- const resumed=await harness("ok",broken.store);await resumed.service.restore();assert.equal(resumed.service.status().restorePending,false,"a new service instance recovers the durable journal");
+ const resumed=await harness("ok",broken.store);await resumed.service.restore();assert.equal((await resumed.service.status()).restorePending,false,"a new service instance recovers the durable journal");
  assert.deepEqual(resumed.calls.filter(c=>c.opcode===0xb2).at(-1).payload,baseline);
  const missing=await harness();await assert.rejects(missing.service.send([source]),/backup/);assert.equal(missing.calls.length,0);
  await fs.writeFile(backup,makeBackup({deviceName:"COROS PACE Pro OTHER"}));await assert.rejects(missing.service.importBackup(backup),/this watch/);
  await fs.writeFile(backup,makeBackup({accountUserId:"another-account"}));await assert.rejects(missing.service.importBackup(backup),/this watch and COROS account/);
  const capturedAt=new Date(Date.now()-21*24*60*60_000).toISOString();
  await fs.writeFile(backup,makeBackup({source:capturedAt}));await missing.service.importBackup(backup);
- assert.equal(missing.service.status().ready,true,"an existing backup can be imported without a daily refresh");
- assert.equal(missing.service.status().backupSavedAt,Date.parse(capturedAt),"import keeps the real capture date");
+ assert.equal((await missing.service.status()).ready,true,"an existing backup can be imported without a daily refresh");
+ assert.equal((await missing.service.status()).backupSavedAt,Date.parse(capturedAt),"import keeps the real capture date");
  for(const sourceDate of ["invalid",new Date(Date.now()+24*60*60_000).toISOString(),new Date(0).toISOString()]) {
   await fs.writeFile(backup,makeBackup({source:sourceDate}));await assert.rejects(missing.service.importBackup(backup),/capture date/);
  }
@@ -303,13 +303,13 @@ try {
  await fs.writeFile(backup,makeBackup({source:capturedAt}));const saved=await harness();await saved.service.importBackup(backup);
  const realNow=Date.now;Date.now=()=>realNow()+25*60*60_000;
  try {
-  assert.equal(saved.service.status().ready,true,"the saved backup remains ready after another day passes");
-  assert.equal(saved.service.status().backupSavedAt,Date.parse(capturedAt),"reuse does not rewrite the capture date");
+  assert.equal((await saved.service.status()).ready,true,"the saved backup remains ready after another day passes");
+  assert.equal((await saved.service.status()).backupSavedAt,Date.parse(capturedAt),"reuse does not rewrite the capture date");
   const reused=await saved.service.send([source]);assert.equal(reused.phase,"complete");
   assert.deepEqual(saved.calls.filter(c=>c.opcode===0xb2).at(-1).payload,baseline,"reuse still restores the exact saved packet");
   const restarted=await harness("ok",saved.store);
-  assert.equal(restarted.service.status().ready,true,"a saved backup remains reusable across app restarts");
-  assert.equal(restarted.service.status().backupSavedAt,Date.parse(capturedAt));
+  assert.equal((await restarted.service.status()).ready,true,"a saved backup remains reusable across app restarts");
+  assert.equal((await restarted.service.status()).backupSavedAt,Date.parse(capturedAt));
  } finally {Date.now=realNow;}
  console.log("Wi-Fi MP3 sync: library ID/path boundaries, automatic batches (one task for 32 songs, 20+12 with an older relay), 4 KB list pages, shared NetEase playlist, aggregate progress, transient screen readiness retries, readiness cancellation/blockers, later-batch failure recovery, preserved settings, private HTTP snapshots/ranges, cancellation, disconnect recovery, durable crash recovery, identity binding, encrypted backup reuse and capture-date checks passed.");
 } finally {await fs.rm(tmp,{recursive:true,force:true});}

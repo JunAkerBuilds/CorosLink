@@ -13,10 +13,10 @@ export interface WatchKeyBackupIpcDependencies {
   /** The main window, when it sent the request; throws otherwise. */
   owner: (event: Electron.IpcMainInvokeEvent) => Owner;
   service: {
-    status: () => CorosWatchfaceStatus;
+    status: () => Promise<CorosWatchfaceStatus>;
     createBackup: (passphrase: string) => Promise<{ data: Buffer; keyId: string }>;
     openBackup: (data: Buffer, passphrase: string) => Promise<CorosWatchKeyRestore>;
-    saveRestored: (restore: CorosWatchKeyRestore) => CorosWatchfaceStatus;
+    saveRestored: (restore: CorosWatchKeyRestore) => Promise<CorosWatchfaceStatus>;
   };
   saveDialog: (owner: Owner, options: Electron.SaveDialogOptions) => Promise<Electron.SaveDialogReturnValue>;
   openDialog: (owner: Owner, options: Electron.OpenDialogOptions) => Promise<Electron.OpenDialogReturnValue>;
@@ -47,7 +47,7 @@ export function registerCorosWatchKeyBackupIpc(deps: WatchKeyBackupIpcDependenci
   ipc.handle("watchfaces:backupWatchKey", async (event, input: unknown): Promise<CorosWatchKeyBackupResult> => {
     const window = deps.owner(event);
     const passphrase = passphraseOf(input, "export");
-    const keyId = service.status().watchKey?.keyId;
+    const keyId = (await service.status()).watchKey?.keyId;
     if (!keyId) throw new Error("No watch key is saved on this computer. Sign in to COROS first.");
     const selection = await deps.saveDialog(window, {
       title: "Back up watch key",
@@ -103,7 +103,7 @@ export function registerCorosWatchKeyBackupIpc(deps: WatchKeyBackupIpcDependenci
     }
     if (restore.alreadySaved) {
       chosen = undefined;
-      return { outcome: "alreadySaved", status: service.status() };
+      return { outcome: "alreadySaved", status: await service.status() };
     }
     if (restore.replaces || restore.signsOutOtherAccount) {
       const details = [
@@ -118,10 +118,10 @@ export function registerCorosWatchKeyBackupIpc(deps: WatchKeyBackupIpcDependenci
       });
       if (response !== 1) {
         chosen = undefined;
-        return { outcome: "cancelled", status: service.status() };
+        return { outcome: "cancelled", status: await service.status() };
       }
     }
-    const status = service.saveRestored(restore);
+    const status = await service.saveRestored(restore);
     chosen = undefined;
     deps.notice(`Watch key imported from a backup (key ${restore.backup.keyId}).`);
     return { outcome: "restored", status };

@@ -308,14 +308,14 @@ export function encryptMobileLoginField(value: string): string {
 let watchKeySummaryCache: { saved: string; check: string | undefined; summary: CorosWatchKeySummary | undefined } | undefined;
 
 /** What Connection details shows about the saved key; no key material leaves this function. */
-function savedWatchKeySummary(): CorosWatchKeySummary | undefined {
+async function savedWatchKeySummary(): Promise<CorosWatchKeySummary | undefined> {
   const saved = getSetting(COROS_BLE_LOGIN_KEY_SETTING);
-  if (!saved || !safeStorage.isEncryptionAvailable()) return undefined;
+  if (!saved || !(await safeStorage.isAsyncEncryptionAvailable())) return undefined;
   const check = getSetting(COROS_WATCH_KEY_CHECK_SETTING);
   if (watchKeySummaryCache?.saved === saved && watchKeySummaryCache.check === check) return watchKeySummaryCache.summary;
   let summary: CorosWatchKeySummary | undefined;
   try {
-    summary = summarizeCorosBleLoginKey(JSON.parse(safeStorage.decryptString(Buffer.from(saved, "base64"))) as CorosBleLoginKey, check);
+    summary = summarizeCorosBleLoginKey(JSON.parse(await decryptSecret(saved)) as CorosBleLoginKey, check);
   } catch {
     summary = undefined;
   }
@@ -323,16 +323,48 @@ function savedWatchKeySummary(): CorosWatchKeySummary | undefined {
   return summary;
 }
 
-export function getCorosWatchfaceStatus(): CorosWatchfaceStatus {
-  const session = readStoredSession();
-  const credentials = getStoredCorosCredentials();
-  const watchKey = savedWatchKeySummary();
+/** Whether OS secure storage was available when last asked. */
+let secureStorageAvailableAtLastCheck: boolean | undefined;
+
+/**
+ * Decrypts the saved mobile session so the synchronous readers below answer
+ * from memory. Called once at startup; sign-in and sign-out keep it current.
+ */
+export async function loadCorosWatchfaceSession(): Promise<void> {
+  secureStorageAvailableAtLastCheck = await safeStorage.isAsyncEncryptionAvailable();
+  await readStoredSession();
+}
+
+/**
+ * The parts of the status that need no decrypting, for synchronous readers
+ * (diagnostics, the COROS MCP account). Needs loadCorosWatchfaceSession first.
+ */
+export function peekCorosWatchfaceSession(): Pick<CorosWatchfaceStatus, "authenticated" | "region" | "watchAuthenticationError"> & { secureStorageAvailable?: boolean } {
+  return {
+    authenticated: Boolean(inMemorySession),
+    region: inMemorySession?.region,
+    watchAuthenticationError,
+    secureStorageAvailable: secureStorageAvailableAtLastCheck
+  };
+}
+
+/** A watch key is saved (only ever with OS secure storage); nothing is decrypted. */
+export function hasSavedCorosWatchKey(): boolean {
+  return Boolean(getSetting(COROS_BLE_LOGIN_KEY_SETTING));
+}
+
+export async function getCorosWatchfaceStatus(): Promise<CorosWatchfaceStatus> {
+  const session = await readStoredSession();
+  const credentials = await getStoredCorosCredentials();
+  const watchKey = await savedWatchKeySummary();
+  const secureStorageAvailable = await safeStorage.isAsyncEncryptionAvailable();
+  secureStorageAvailableAtLastCheck = secureStorageAvailable;
   return {
     authenticated: Boolean(session),
-    secureStorageAvailable: safeStorage.isEncryptionAvailable(),
+    secureStorageAvailable,
     savedCredentialsAvailable: Boolean(credentials),
     savedEmail: credentials?.account,
-    watchAuthenticationAvailable: Boolean(safeStorage.isEncryptionAvailable() && getSetting(COROS_BLE_LOGIN_KEY_SETTING)),
+    watchAuthenticationAvailable: Boolean(secureStorageAvailable && getSetting(COROS_BLE_LOGIN_KEY_SETTING)),
     ...(watchKey ? { watchKey } : {}),
     watchAuthenticationError,
     region: session?.region,
@@ -354,7 +386,7 @@ export async function loginCorosWatchfaces(
   await establishCorosWatchfaceSession(account, pwdHash, region);
 
   if (remember) {
-    storeCorosCredentials(account, pwdHash);
+    await storeCorosCredentials(account, pwdHash);
   } else {
     clearStoredCorosCredentials();
   }
@@ -365,7 +397,7 @@ export async function loginCorosWatchfaces(
 export async function loginCorosWatchfacesWithSavedCredentials(
   region?: CorosWatchfaceRegion
 ): Promise<CorosWatchfaceStatus> {
-  const credentials = getStoredCorosCredentials();
+  const credentials = await getStoredCorosCredentials();
   if (!credentials) {
     throw new Error(
       "No saved COROS credentials are available. Enter your email and password first."
@@ -413,15 +445,15 @@ let watchKeyCheckRunning = false;
  * signing in again would. Uses the saved account unless a password is given.
  */
 export async function checkCorosWatchKey(input: { email?: string; password?: string } = {}): Promise<CorosWatchKeyCheckResult> {
-  const saved = getStoredCorosCredentials();
+  const saved = await getStoredCorosCredentials();
   const account = (input.email?.trim() || saved?.account || "").trim();
   const pwdHash = input.password ? hashCorosPassword(input.password) : saved && saved.account === account ? saved.pwdHash : undefined;
   if (!account || !pwdHash) return { needsPassword: true };
   if (watchKeyCheckRunning) throw new Error("The watch key check is already running.");
   watchKeyCheckRunning = true;
   try {
-    const session = readStoredSession();
-    const savedKey = savedWatchKeySummary();
+    const session = await readStoredSession();
+    const savedKey = await savedWatchKeySummary();
     const problem = readWatchKeyCheck(getSetting(COROS_WATCH_KEY_CHECK_SETTING)).problem;
     const watchKeyId = problem?.result === "mismatch" ? problem.watchKeyId : undefined;
     const first = session?.region ?? suggestWatchfaceRegion();
@@ -435,7 +467,7 @@ export async function checkCorosWatchKey(input: { email?: string; password?: str
         const accessToken = envelope.data?.accessToken?.trim();
         // Same account and server as the saved session: keep it signed in with the newer token.
         if (accessToken && session && session.region === region && session.userId && session.userId === userId) {
-          writeStoredSession({ ...session, accessToken });
+          await writeStoredSession({ ...session, accessToken });
         }
         const found = findCorosLoginKeys(envelope.data, userId);
         servers.push({ region, host, signedIn: true, ...(userId ? { accountId: `•••• ${userId.slice(-4)}` } : {}),
@@ -472,23 +504,31 @@ async function establishCorosWatchfaceSession(
   const userId = extractDecimalProperty(envelope.raw, "userId") ??
     (typeof (envelope.data as Record<string, unknown>)?.userId === "string"
       ? String((envelope.data as Record<string, unknown>).userId) : undefined);
-  writeStoredSession({
+  await writeStoredSession({
     accessToken,
     userId,
     region: resolvedRegion
   });
+  const signInChanged = () => new Error("COROS sign-in changed while this login was running. Sign in again.");
+  if (revision !== mobileLoginRevision) throw signInChanged();
   watchAuthenticationError = undefined;
   try {
     // savedAt and accountEmail are optional fields, which CorosLink 0.1.57 ignores.
     const key: CorosBleLoginKey = { ...decodeCorosBleLoginKey(envelope.data, userId ?? ""), savedAt: Date.now(), accountEmail: account };
-    if (!safeStorage.isEncryptionAvailable()) throw new Error("OS secure storage is required to save your COROS watch account key.");
+    if (!(await safeStorage.isAsyncEncryptionAvailable())) throw new Error("OS secure storage is required to save your COROS watch account key.");
+    const encrypted = await encryptSecret(JSON.stringify(key));
+    if (revision !== mobileLoginRevision) throw signInChanged();
     deleteSettings(WATCH_KEY_SETTINGS);
-    setSetting(COROS_BLE_LOGIN_KEY_SETTING, safeStorage.encryptString(JSON.stringify(key)).toString("base64"));
+    setSetting(COROS_BLE_LOGIN_KEY_SETTING, encrypted);
   } catch (error) {
+    // Signed out or in again while saving: that newer state keeps its keys.
+    if (revision !== mobileLoginRevision) throw signInChanged();
     // Keep catalog access available if the server omits/changes watch auth.
     // A successful account switch must never keep another account's BLE key;
     // this same account's working key stays.
-    deleteSettings(WATCH_KEY_SETTINGS.filter(setting => !userId || savedWatchKeyAccount(setting) !== userId));
+    const accounts = await Promise.all(WATCH_KEY_SETTINGS.map(setting => userId ? savedWatchKeyAccount(setting) : undefined));
+    if (revision !== mobileLoginRevision) throw signInChanged();
+    deleteSettings(WATCH_KEY_SETTINGS.filter((_setting, index) => !userId || accounts[index] !== userId));
     if (!getSetting(COROS_BLE_LOGIN_KEY_SETTING)) {
       watchAuthenticationError = error instanceof Error ? error.message : "Sign in again to enable COROS watch authentication.";
     }
@@ -497,18 +537,19 @@ async function establishCorosWatchfaceSession(
 }
 
 /** The COROS account a saved Bluetooth key belongs to, if it can be read. */
-function savedWatchKeyAccount(setting: string): string | undefined {
+async function savedWatchKeyAccount(setting: string): Promise<string | undefined> {
   const saved = getSetting(setting);
-  if (!saved || !safeStorage.isEncryptionAvailable()) return undefined;
+  if (!saved || !(await safeStorage.isAsyncEncryptionAvailable())) return undefined;
   try {
-    const accountUserId = (JSON.parse(safeStorage.decryptString(Buffer.from(saved, "base64"))) as { accountUserId?: unknown }).accountUserId;
+    const accountUserId = (JSON.parse(await decryptSecret(saved)) as { accountUserId?: unknown }).accountUserId;
     return typeof accountUserId === "string" ? accountUserId : undefined;
   } catch {
     return undefined;
   }
 }
 
-export function logoutCorosWatchfaces(): CorosWatchfaceStatus {
+/** Signs out at once; the returned status is read afterwards. */
+export function logoutCorosWatchfaces(): Promise<CorosWatchfaceStatus> {
   mobileLoginRevision++;
   inMemorySession = null;
   watchAuthenticationError = undefined;
@@ -522,7 +563,7 @@ export function logoutCorosWatchfaces(): CorosWatchfaceStatus {
  * Removes the saved watch account key (and a legacy imported one). The COROS
  * session stays signed in; the next sign-in saves a key again.
  */
-export function forgetCorosWatchKey(): CorosWatchfaceStatus {
+export function forgetCorosWatchKey(): Promise<CorosWatchfaceStatus> {
   watchAuthenticationError = undefined;
   deleteSettings([...WATCH_KEY_SETTINGS, COROS_WATCH_KEY_CHECK_SETTING]);
   return getCorosWatchfaceStatus();
@@ -531,11 +572,11 @@ export function forgetCorosWatchKey(): CorosWatchfaceStatus {
 const SECURE_STORAGE_REQUIRED = "OS secure storage is required to save your COROS watch account key.";
 
 /** The saved key itself. Main process only: never return it, or anything derived from it but its summary, over IPC. */
-function readSavedWatchKey(): CorosBleLoginKey | undefined {
+async function readSavedWatchKey(): Promise<CorosBleLoginKey | undefined> {
   const saved = getSetting(COROS_BLE_LOGIN_KEY_SETTING);
-  if (!saved || !safeStorage.isEncryptionAvailable()) return undefined;
+  if (!saved || !(await safeStorage.isAsyncEncryptionAvailable())) return undefined;
   try {
-    return JSON.parse(safeStorage.decryptString(Buffer.from(saved, "base64"))) as CorosBleLoginKey;
+    return JSON.parse(await decryptSecret(saved)) as CorosBleLoginKey;
   } catch {
     return undefined;
   }
@@ -551,8 +592,8 @@ function watchKeyLabel(key: CorosBleLoginKey): CorosWatchKeyLabel {
 
 /** The saved key encrypted under `passphrase`, for a `.coroswatchkey` file. The key never leaves the main process unencrypted. */
 export async function createCorosWatchKeyBackup(passphrase: string): Promise<{ data: Buffer; keyId: string }> {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error(SECURE_STORAGE_REQUIRED);
-  const key = readSavedWatchKey();
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) throw new Error(SECURE_STORAGE_REQUIRED);
+  const key = await readSavedWatchKey();
   if (!key) throw new Error("No watch key is saved on this computer. Sign in to COROS first.");
   return { data: await sealWatchKeyBackup(key, passphrase), keyId: corosBleLoginKeyId(key) };
 }
@@ -573,11 +614,11 @@ export interface CorosWatchKeyRestore {
 }
 
 export async function openCorosWatchKeyBackup(data: Buffer, passphrase: string): Promise<CorosWatchKeyRestore> {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error(SECURE_STORAGE_REQUIRED);
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) throw new Error(SECURE_STORAGE_REQUIRED);
   const key = await openWatchKeyBackup(data, passphrase);
-  const saved = readSavedWatchKey();
+  const saved = await readSavedWatchKey();
   const alreadySaved = Boolean(saved && sameCorosBleLoginKey(saved, key));
-  const session = readStoredSession();
+  const session = await readStoredSession();
   return {
     key, backup: watchKeyLabel(key), alreadySaved,
     ...(saved && !alreadySaved ? { replaces: watchKeyLabel(saved) } : {}),
@@ -591,13 +632,13 @@ export async function openCorosWatchKeyBackup(data: Buffer, passphrase: string):
  * account's key never sits beside another account's COROS sign-in: a session
  * for another account is signed out first.
  */
-export function saveRestoredCorosWatchKey(restore: CorosWatchKeyRestore): CorosWatchfaceStatus {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error(SECURE_STORAGE_REQUIRED);
-  const session = readStoredSession();
-  if (session && session.userId !== restore.key.accountUserId) logoutCorosWatchfaces();
+export async function saveRestoredCorosWatchKey(restore: CorosWatchKeyRestore): Promise<CorosWatchfaceStatus> {
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) throw new Error(SECURE_STORAGE_REQUIRED);
   const { savedAt: _ignored, ...key } = restore.key;
   const stored: CorosBleLoginKey = { ...key, savedAt: Date.now() };
-  const encrypted = safeStorage.encryptString(JSON.stringify(stored)).toString("base64");
+  const encrypted = await encryptSecret(JSON.stringify(stored));
+  const session = await readStoredSession();
+  if (session && session.userId !== restore.key.accountUserId) void logoutCorosWatchfaces();
   watchAuthenticationError = undefined;
   deleteSettings([...WATCH_KEY_SETTINGS, COROS_WATCH_KEY_CHECK_SETTING]);
   setSetting(COROS_BLE_LOGIN_KEY_SETTING, encrypted);
@@ -678,7 +719,7 @@ export async function readCachedCorosWatchfaceThemes(
 ): Promise<CorosWatchfaceThemeCacheEntry | null> {
   let session: StoredMobileSession | null;
   try {
-    session = readStoredSession();
+    session = await readStoredSession();
   } catch {
     return null;
   }
@@ -776,12 +817,12 @@ export async function listCorosWatchfaceThemes(
   input: CorosWatchfaceThemeListInput
 ): Promise<CorosWatchfaceTheme[]> {
   const request = normalizeThemeListRequest(input);
-  if (!readStoredSession()) {
+  if (!(await readStoredSession())) {
     // Signed out: the bundled templates, or the usual sign-in error.
     const bundled = bundledTemplateCatalog(request);
     if (bundled) return bundled.themes;
   }
-  const session = requireSession();
+  const session = await requireSession();
   const {
     catalog,
     firmwareType,
@@ -856,7 +897,7 @@ export async function fetchCorosWatchfaceThemePackage(packageUrl: string): Promi
   if (!knownThemePackageUrls.has(packageUrl)) {
     throw new Error("Load the template catalog first, then choose a listed template.");
   }
-  return (await fetchThemePackage(packageUrl, readStoredSession())).bytes;
+  return (await fetchThemePackage(packageUrl, await readStoredSession())).bytes;
 }
 
 /** Package bytes keyed by URL (minus the rotating access token). */
@@ -962,7 +1003,7 @@ async function fetchThemePackage(
 export async function downloadCorosWatchfaceTheme(
   input: CorosWatchfaceThemeDownloadInput
 ): Promise<CorosWatchfaceThemeDownload> {
-  const session = readStoredSession();
+  const session = await readStoredSession();
   const packageUrl = typeof input?.packageUrl === "string" ? input.packageUrl : "";
   const firmwareType = normalizeOptionalFirmwareType(input?.firmwareType);
   if (!knownThemePackageUrls.has(packageUrl)) {
@@ -1298,7 +1339,7 @@ export async function importCorosWatchfaceShareLink(
 export async function getCorosBatteryReport(
   input: CorosBatteryQueryInput
 ): Promise<CorosBatteryReport> {
-  const session = requireSession();
+  const session = await requireSession();
   const deviceId = normalizeCorosDeviceIdentifier(input?.deviceId, "Device ID");
   const uuid = normalizeCorosDeviceIdentifier(input?.uuid, "Watch UUID");
   const firmwareType = input?.firmwareType?.trim();
@@ -1345,7 +1386,7 @@ export interface CorosWeatherProbeResult {
 export async function probeCorosWeather(
   input?: { lat?: number; lng?: number; label?: string }
 ): Promise<CorosWeatherProbeResult> {
-  const session = requireSession();
+  const session = await requireSession();
   const baseUrl = mobileApiBaseUrl(session.region);
   const custom = typeof input?.lat === "number" && typeof input?.lng === "number";
   if (custom && (!Number.isFinite(input!.lat) || Math.abs(input!.lat!) > 90 ||
@@ -1472,7 +1513,7 @@ export async function probeCorosWeather(
 export async function fetchCorosWeatherStruct(
   input: { lat: number; lng: number }
 ): Promise<{ weatherStruct: Buffer; summary: WeatherForecastSummary | null }> {
-  const session = requireSession();
+  const session = await requireSession();
   const { lat, lng } = input ?? {};
   if (typeof lat !== "number" || typeof lng !== "number" || !Number.isFinite(lat) || !Number.isFinite(lng) ||
     Math.abs(lat) > 90 || Math.abs(lng) > 180) {
@@ -1503,7 +1544,7 @@ export async function fetchCorosWeatherStruct(
 
 /** Lists paired watches from the authenticated account's mobile profile. */
 export async function listCorosPairedDevices(): Promise<CorosPairedDevice[]> {
-  const session = requireSession();
+  const session = await requireSession();
   const response = await mobileRequest<unknown>("/user/profile", {
     method: "POST",
     accessToken: session.accessToken,
@@ -1517,7 +1558,7 @@ export async function listCorosPairedDevices(): Promise<CorosPairedDevice[]> {
 
 /** Lists activity gear from the authenticated COROS mobile account. */
 export async function queryCorosGear(): Promise<CorosGearCatalog> {
-  const session = requireSession();
+  const session = await requireSession();
   const response = await mobileRequest<unknown>("/user/gear/query", {
     method: "GET",
     accessToken: session.accessToken,
@@ -1534,7 +1575,7 @@ export async function queryCorosGear(): Promise<CorosGearCatalog> {
 export async function saveCorosGear(
   input: CorosGearSaveInput
 ): Promise<CorosGearCatalog> {
-  const session = requireSession();
+  const session = await requireSession();
   await mobileRequest<unknown>("/user/gear/save", {
     method: "POST",
     accessToken: session.accessToken,
@@ -2504,7 +2545,7 @@ async function conversionCarrier(target: WatchfaceTarget, wanted: Set<string> = 
     if (cached) return cached;
     // Signed out with nothing cached: the built-in compiler installs over
     // Bluetooth without a COROS template identity, so a local carrier will do.
-    if (!readStoredSession()) return localConversionCarrier(target);
+    if (!(await readStoredSession())) return localConversionCarrier(target);
     throw error;
   }
 }
@@ -3731,7 +3772,7 @@ async function openTemplateArchive(
 export async function publishCorosWatchface(
   input: CorosWatchfacePublishInput
 ): Promise<CorosWatchfaceShareLink> {
-  const session = requireSession();
+  const session = await requireSession();
   const archive = selectedArchives.get(input.archiveId);
   if (!archive) {
     throw new Error("Choose the watchface archive again before publishing.");
@@ -3851,7 +3892,7 @@ async function fitCorosUploadLimit(archive: SelectedArchive): Promise<Buffer<Arr
 export async function createCorosWatchfaceShareLink(
   input: CorosWatchfaceExistingShareInput
 ): Promise<CorosWatchfaceShareLink> {
-  const session = requireSession();
+  const session = await requireSession();
   const name = sanitizeTemplateName(input.name);
   const firmwareType = normalizeOptionalFirmwareType(input.firmwareType);
   if (!firmwareType) {
@@ -5425,7 +5466,7 @@ async function mobileRequest<T>(
   if (typeof options.body === "string") {
     headers["Content-Type"] = "application/json";
   }
-  const baseUrl = options.baseUrl ?? mobileApiBaseUrl(readStoredSession()?.region);
+  const baseUrl = options.baseUrl ?? mobileApiBaseUrl((await readStoredSession())?.region);
   const response = await fetch(`${baseUrl}${endpoint}${query}`, {
     method: options.method,
     headers,
@@ -5447,7 +5488,7 @@ async function mobileRequest<T>(
   const result = mobileApiResult(payload);
   if (result !== API_SUCCESS && !options.allowedResultCodes?.includes(result)) {
     if (result === "1019") {
-      logoutCorosWatchfaces();
+      void logoutCorosWatchfaces();
       throw new Error("Your COROS mobile session expired. Sign in again.");
     }
     throw annotateDiagnosticRequest(
@@ -5530,43 +5571,59 @@ function isOfficialShareUrl(value: string): boolean {
   }
 }
 
-function requireSession(): StoredMobileSession {
-  const session = readStoredSession();
+async function requireSession(): Promise<StoredMobileSession> {
+  const session = await readStoredSession();
   if (!session) {
     throw new Error("Sign in to your COROS mobile account to continue.");
   }
   return session;
 }
 
-function readStoredSession(): StoredMobileSession | null {
+async function readStoredSession(): Promise<StoredMobileSession | null> {
   if (inMemorySession) {
     return inMemorySession;
   }
   const encoded = getSetting(SETTINGS.session);
-  if (!encoded || !safeStorage.isEncryptionAvailable()) {
+  if (!encoded || !(await safeStorage.isAsyncEncryptionAvailable())) {
     return null;
   }
   try {
-    const session = JSON.parse(
-      safeStorage.decryptString(Buffer.from(encoded, "base64"))
-    ) as StoredMobileSession;
+    const session = JSON.parse(await decryptSecret(encoded)) as StoredMobileSession;
     if (!session.accessToken?.trim()) {
       return null;
     }
-    inMemorySession = session;
-    return session;
+    // A sign-in or sign-out while this decrypted wins over what was read.
+    if (getSetting(SETTINGS.session) !== encoded) {
+      return inMemorySession;
+    }
+    inMemorySession ??= session;
+    return inMemorySession;
   } catch {
     return null;
   }
 }
 
-function writeStoredSession(session: StoredMobileSession): void {
+async function writeStoredSession(session: StoredMobileSession): Promise<void> {
   inMemorySession = session;
-  if (!safeStorage.isEncryptionAvailable()) {
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) {
     // Never fall back to plaintext persistence for a mobile session.
     deleteSettings([SETTINGS.session]);
     return;
   }
-  const encrypted = safeStorage.encryptString(JSON.stringify(session)).toString("base64");
+  const encrypted = await encryptSecret(JSON.stringify(session));
+  // Signed out (or in again) meanwhile: that newer state stays.
+  if (inMemorySession !== session) return;
   setSetting(SETTINGS.session, encrypted);
+}
+
+async function encryptSecret(plainText: string): Promise<string> {
+  return (await safeStorage.encryptStringAsync(plainText)).toString("base64");
+}
+
+/**
+ * Decrypts a stored value. A rotated OS key (shouldReEncrypt) still decrypts
+ * old values; they move to the new key when next saved (sign-in, restore).
+ */
+async function decryptSecret(encoded: string): Promise<string> {
+  return (await safeStorage.decryptStringAsync(Buffer.from(encoded, "base64"))).result;
 }

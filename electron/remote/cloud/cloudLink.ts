@@ -224,20 +224,20 @@ export class CloudLink {
     this.settings.set(TUNNEL_HOSTNAME_KEY, link.hostname);
   }
 
-  private connectorToken(): string | null {
+  private async connectorToken(): Promise<string | null> {
     const encoded = this.settings.get(CONNECTOR_TOKEN_KEY);
     if (!encoded) return null;
     try {
-      this.options.secrets.ensureAvailable();
-      return this.options.secrets.decrypt(Buffer.from(encoded, "base64")) || null;
+      await this.options.secrets.ensureAvailable();
+      return (await this.options.secrets.decrypt(Buffer.from(encoded, "base64"))) || null;
     } catch {
       return null;
     }
   }
 
-  private saveConnectorToken(token: string): void {
-    this.options.secrets.ensureAvailable();
-    this.settings.set(CONNECTOR_TOKEN_KEY, this.options.secrets.encrypt(token).toString("base64"));
+  private async saveConnectorToken(token: string): Promise<void> {
+    await this.options.secrets.ensureAvailable();
+    this.settings.set(CONNECTOR_TOKEN_KEY, (await this.options.secrets.encrypt(token)).toString("base64"));
   }
 
   private storedTrust(): StoredTrust | null {
@@ -424,7 +424,7 @@ export class CloudLink {
         this.settings.set(CONSENT_KEY, "1");
         this.connector = { path: binary, source: "managed", version: CLOUDFLARED_VERSION };
         // A version bump while running: start the new one; the old stops once it registers.
-        const token = this.connectorToken();
+        const token = await this.connectorToken();
         if (this.supervisor.running && token) this.supervisor.run({ binary, token, version: CLOUDFLARED_VERSION });
         return binary;
       })
@@ -461,7 +461,7 @@ export class CloudLink {
     this.changed();
     try {
       if (!this.platform) throw new Error("Access away from home isn't available on this system.");
-      this.options.secrets.ensureAvailable();
+      await this.options.secrets.ensureAvailable();
       if (!this.linked && !this.options.account.signedIn) throw new Error("Sign in to watchfaces.coroslink.com first.");
       const connector = await this.ensureConnector(input.allowDownload === true);
       // No connector and no consent yet: the panel asks, then calls again with allowDownload.
@@ -501,7 +501,7 @@ export class CloudLink {
       }
       // Pin the relay's keys now, so mint requests can be checked from here on.
       const keys = await client.jwks();
-      this.saveConnectorToken(answer.connectorToken);
+      await this.saveConnectorToken(answer.connectorToken);
       this.saveTrust({ issuer: client.origin, userId: answer.userId, keys, fetchedAt: this.now() });
       this.saveLink({
         version: 1,
@@ -536,7 +536,7 @@ export class CloudLink {
     const connector = this.connector && !this.connector.stale ? this.connector : await this.ensureConnector(false);
     await this.recover(input.forceRecovery ? "link" : "startup", { force: input.forceRecovery });
     if (!this.linked || !this.enabled) return;
-    const token = this.connectorToken();
+    const token = await this.connectorToken();
     if (!connector) throw new Error("Download Cloudflare's connector to go online.");
     if (!token) throw new Error("This computer's tunnel key is missing. Sign out, then sign in again to link it again.");
     this.supervisor.run({ binary: connector.path, token, version: connector.version });
@@ -565,9 +565,9 @@ export class CloudLink {
     try {
       const answer = await this.client(identity, link.relayOrigin).recovery({ tunnelId: link.tunnelId, port });
       this.relayNotice = undefined;
-      if (answer.connectorToken) this.saveConnectorToken(answer.connectorToken);
+      if (answer.connectorToken) await this.saveConnectorToken(answer.connectorToken);
       this.saveLink({ ...link, hostname: answer.hostname, tunnelId: answer.tunnelId, generation: answer.generation });
-      const token = this.connectorToken();
+      const token = await this.connectorToken();
       const binary = this.connector?.path;
       if (answer.connectorToken && this.supervisor.running && binary && token) {
         this.supervisor.run({ binary, token, version: this.connector?.version ?? null });
