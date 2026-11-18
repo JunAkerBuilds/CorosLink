@@ -129,6 +129,19 @@ try {
   ...Object.entries(glyphs).map(([name,data])=>[name.replace('/digits/','/digits_copy/'),data])]),{faceId:1}).bin;
  assert.equal(copied.readUInt32LE(FIELDS.step_font[1]),copied.readUInt32LE(FIELDS.time_hour_high_font[1]),'identical digit folders share one block');
  assert.equal(copied.length,compileWatchface(new Map(built.map(e=>[e.name,e.data])),{faceId:1}).bin.length,'a copied folder adds no bytes');
+ // One PNG used two ways gets a block for each (it used to reuse whichever came first).
+ const mip=watchfaceBinTarget(getWatchfaceTarget('pace-3')), soft=png(240,240,(x,y)=>[x,y,0,x<120?128:255]);
+ const mipCase=(normal,aod)=>compileWatchface(new Map([['info.json',Buffer.from('{}')],['watchface_240x240/config.txt',Buffer.from(normal)],
+  ['watchface_240x240/AODconfig.txt',Buffer.from(aod)],['watchface_240x240/bg.png',soft],['watchface_240x240/copy.png',soft]]),{faceId:1,target:mip}).bin;
+ const backdrops=mipCase('[background_icon_pos]={0,0}\n[background_icon]=bg.png\n[bg_color]=0xff0000\n','[background_icon]=bg.png\n[bg_color]=0x000000\n');
+ assert.notEqual(backdrops.readUInt32LE(backdrops.readUInt32LE(0x322)+0x1a),backdrops.readUInt32LE(0x1a),'memory-in-pixel backdrops blend the same PNG separately');
+ const sameBackdrop=mipCase('[background_icon_pos]={0,0}\n[background_icon]=bg.png\n[bg_color]=0xff0000\n','[background_icon]=copy.png\n[bg_color]=0xff0000\n');
+ assert.equal(sameBackdrop.readUInt32LE(sameBackdrop.readUInt32LE(0x322)+0x1a),sameBackdrop.readUInt32LE(0x1a),'a copy over the same backdrop shares one block');
+ const twoWays=mipCase('[background_icon_pos]={0,0}\n[background_icon]=bg.png\n[bluetooth_icon_pos]={1,1}\n[bluetooth_icon]=bg.png\n','[time_hour_high_pos]={1,1}\n');
+ assert.notEqual(twoWays.readUInt32LE(FIELDS.bluetooth_icon[1]),twoWays.readUInt32LE(0x1a),'a PNG used as background and as an icon is encoded for each');
+ // battery_level_font repeats its frames; the same folder elsewhere must not get the repeated block.
+ const repeated=compileWatchface(new Map([...built.map(e=>[e.name,e.name==='watchface_416x416/config.txt'?Buffer.from(e.data.toString()+'\r\n[battery_level_rect]={1,1,40,20,left}\r\n[battery_level_font]=digits\r\n'):e.data])]),{faceId:1}).bin;
+ assert.notEqual(repeated.readUInt32LE(FIELDS.battery_level_font[1]),repeated.readUInt32LE(FIELDS.time_hour_high_font[1]),'a repeated font is its own block');
  assert.deepEqual(blockAt(FIELDS.bluetooth_icon[1]),[10,10,1]);
  assert.deepEqual([bin.readInt32LE(FIELDS.bluetooth_icon_pos[1]),bin.readInt32LE(FIELDS.bluetooth_icon_pos[1]+4)],[5,6],'COROS drops minus signs in positions');
  assert.ok(compiled.warnings.includes('bluetooth_icon_pos is {-5,6}, but COROS drops minus signs, so it lands at {5,6}.'),compiled.warnings.join('\n'));

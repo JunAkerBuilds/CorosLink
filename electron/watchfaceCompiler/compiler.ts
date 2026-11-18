@@ -50,7 +50,9 @@ export class WatchfaceCompileError extends Error {}
 
 class BlockStream {
   private readonly parts: Buffer[] = [];
-  private readonly positions = new Map<string, number>();
+  /** Block positions by source bytes and encoding (see `single` and `frames`). */
+  private readonly encoded = new Map<string, number>();
+  private readonly contentKeys = new Map<string, string>();
   private readonly decoded = new Map<string, RgbaImage | null>();
   private readonly blocks = new Map<string, number>();
   offset: number;
@@ -107,26 +109,42 @@ class BlockStream {
     return block;
   }
 
+  /** A file's bytes as a short key, so copies of one PNG at different paths are recognized. */
+  private contentKey(path: string): string {
+    let key = this.contentKeys.get(path);
+    if (key === undefined) {
+      const data = this.files.get(path);
+      key = data ? createHash("sha256").update(data).digest("hex") : `missing:${path}`;
+      this.contentKeys.set(path, key);
+    }
+    return key;
+  }
+
   /**
-   * A single image, deduplicated by path. Missing or unreadable images point at 0, as in COROS.
+   * A single image, deduplicated by its bytes and how it is encoded, so a copy at another path costs
+   * nothing and one PNG used two ways (background and icon, or over two memory-in-pixel backdrops)
+   * gets a block for each. The transform follows `inside`: backgrounds scale to the screen,
+   * thumbnails to the thumbnail. Missing or unreadable images point at 0, as in COROS.
    * A memory-in-pixel background blends its partly transparent pixels over `background` (`bg_color`).
    */
   single(path: string, inside: InsideType = InsideType.Normal, transform?: (image: RgbaImage) => RgbaImage, background = 0): number {
-    const cached = this.positions.get(path);
-    if (cached !== undefined) return cached;
+    const mip = this.target.display === "mip";
+    const key = `single|${this.contentKey(path)}|${inside}|${mip ? background : 0}`;
+    const cached = this.encoded.get(key);
+    if (cached !== undefined) { if (cached === 0) this.missing(path); return cached; }
     const image = this.image(path);
     if (!image) this.missing(path);
-    const encode = this.target.display === "mip" ? (image: RgbaImage, inside: InsideType) => encodeMipImageBlock(image, inside, background, this.smoothEdges)
+    const encode = mip ? (image: RgbaImage, inside: InsideType) => encodeMipImageBlock(image, inside, background, this.smoothEdges)
       : (image: RgbaImage, inside: InsideType) => encodeImageBlock(image, inside, this.fullColor);
     const at = image ? this.appendImage(this.checked(encode(transform ? transform(image) : image, inside), path)) : 0;
-    this.positions.set(path, at);
+    this.encoded.set(key, at);
     return at;
   }
 
   /**
-   * A directory's PNGs (sorted bytewise) as one block, deduplicated by its
-   * first frame's path. `repeat` duplicates the list, as COROS does for the
-   * battery level font.
+   * A directory's PNGs (sorted bytewise) as one block, deduplicated by the frames' bytes and
+   * `repeat`, so a copied folder costs nothing. `repeat` duplicates the list, as COROS does for
+   * the battery level font.
    */
   frames(directory: string, repeat = 1): number {
     const prefix = directory.replace(/\/+$/, "") + "/";
@@ -134,14 +152,15 @@ class BlockStream {
       .filter(name => name.startsWith(prefix) && !name.slice(prefix.length).includes("/") && name.endsWith(".png") && name.length - prefix.length > 4)
       .sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
     if (!names.length) { this.missing(prefix.slice(0, -1)); return 0; }
-    const cached = this.positions.get(names[0]!);
-    if (cached !== undefined) return cached;
+    const key = `frames|${repeat}|${names.map(name => this.contentKey(name)).join(",")}`;
+    const cached = this.encoded.get(key);
+    if (cached !== undefined) { if (cached === 0) this.missing(names[0]!); return cached; }
     if (names.length * repeat > 255) throw new WatchfaceCompileError(`${directory.slice(this.layout.length + 1)} has too many images for one element (COROS allows 255).`);
     const images = Array.from({ length: repeat }, () => names.map(name => this.image(name))).flat();
-    if (!images[0]) { this.missing(names[0]!); this.positions.set(names[0]!, 0); return 0; }
+    if (!images[0]) { this.missing(names[0]!); this.encoded.set(key, 0); return 0; }
     const encode = this.target.display === "mip" ? (images: RgbaImage[]) => encodeMipFramesBlock(images, this.smoothEdges) : (images: RgbaImage[]) => encodeFramesBlock(images, this.fullColor);
     const at = this.appendImage(this.checked(encode(images.map(image => image ?? { width: 0, height: 0, data: new Uint8Array() })), directory));
-    this.positions.set(names[0]!, at);
+    this.encoded.set(key, at);
     return at;
   }
 
