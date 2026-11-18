@@ -215,6 +215,24 @@ export async function nativeDataAsset(id: string, style: Style, role: Role, inde
       ctx.strokeStyle = part.color; ctx.lineWidth = Math.max(1, height / 16);
       ctx.beginPath(); ctx.moveTo(0, r); ctx.lineTo(0, -r); ctx.lineTo(-r / 2, -r / 2);
       ctx.moveTo(0, -r); ctx.lineTo(r / 2, -r / 2); ctx.stroke();
+    } else if (role === "states" && id === "sedentary") {
+      // COROS's own frames (nativeDataAutomation): 0–4 a ring filling while
+      // seated, 5 the move reminder, 6 inactive (dimmed).
+      const cx = width / 2, cy = height / 2;
+      const line = Math.max(1, Math.min(width, height) * 0.12);
+      const r = Math.max(1, Math.min(width, height) / 2 - line);
+      ctx.strokeStyle = part.color; ctx.lineWidth = line; ctx.lineCap = "round";
+      ctx.globalAlpha = index === 6 ? 0.35 : 0.3;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+      if (index <= 4) {
+        ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (index + 1) / 5); ctx.stroke();
+      } else if (index === 5) {
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = Math.max(1, line * 0.9);
+        ctx.beginPath(); ctx.moveTo(cx, cy - r * 0.45); ctx.lineTo(cx, cy + r * 0.1); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy + r * 0.4, ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fill();
+      }
     } else if (role === "states" && id === "chart") {
       const r = Math.min(width, height) * 0.42, cx = width / 2, cy = height / 2;
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();

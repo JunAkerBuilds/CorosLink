@@ -12,6 +12,7 @@ import {
   storeCorosCredentials
 } from "./corosCredentialStore";
 import { createStoreZip } from "./zipStore";
+import { imageDimensions } from "./watchfaceAutomationAssets";
 import {
   decodeProtobufGeneric,
   decodeWeatherMessage,
@@ -2486,16 +2487,23 @@ export async function loadCorosWatchfaceArtwork(
     throw new Error("Choose an image smaller than 10 MB.");
   }
 
-  const image = nativeImage.createFromPath(artworkPath);
-  if (image.isEmpty()) {
-    throw new Error("That image could not be opened.");
-  }
   const bytes = await fs.promises.readFile(artworkPath);
   const mimeType = artworkMimeType(bytes);
   if (mimeType === "application/octet-stream") {
     throw new Error("Choose a PNG, JPEG, or WebP image.");
   }
-  const size = image.getSize();
+  // The size comes from the file header. Electron's nativeImage decoder
+  // rejects some valid PNGs (16-bit, interlaced, unusual metadata) that the
+  // renderer's Chromium decoder opens fine, so it is only a fallback here.
+  const headerSize = imageDimensions(
+    bytes,
+    mimeType as "image/png" | "image/jpeg" | "image/webp"
+  );
+  const fallback = headerSize ? null : nativeImage.createFromPath(artworkPath);
+  if (!headerSize && (!fallback || fallback.isEmpty())) {
+    throw new Error("That image could not be opened.");
+  }
+  const size = headerSize ?? fallback!.getSize();
   return {
     dataUrl: `data:${mimeType};base64,${bytes.toString("base64")}`,
     width: size.width,

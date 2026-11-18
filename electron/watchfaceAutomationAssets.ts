@@ -58,7 +58,8 @@ function imageMimeType(bytes: Buffer): StoredAssetMetadata["mimeType"] | undefin
   return undefined;
 }
 
-function imageDimensions(
+/** Pixel size read from a PNG/JPEG/WebP header, without decoding pixels. */
+export function imageDimensions(
   bytes: Buffer,
   mimeType: StoredAssetMetadata["mimeType"]
 ): { width: number; height: number } | undefined {
