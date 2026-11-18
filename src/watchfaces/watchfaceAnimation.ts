@@ -7,6 +7,7 @@ import type {
   CorosWatchfaceTemplateDetails
 } from "../../electron/types";
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, parseConfigPos, pickPreviewResolution } from "./watchfaceStudio";
+import { DEFAULT_ANIMATION_DELAY, MAX_ANIMATION_DELAY, MAX_ANIMATION_FRAMES, MIN_ANIMATION_DELAY } from "./watchfaceAnimationLimits";
 
 /**
  * Native sprite animation (compiled header 0x312). PACE 4 (W336) and PACE Pro
@@ -26,11 +27,7 @@ export const ANIMATION_CONFIG_KEYS = [ANIMATION_POS_KEY, ANIMATION_DIR_KEY, ANIM
 export function animationFolder(frameCount: number): string {
   return `cl_animation_${String(frameCount).padStart(2, "0")}`;
 }
-/** The firmware record times at most this many frames ((0x94 − 0x3c) / 2). */
-export const MAX_ANIMATION_FRAMES = 44;
-export const MIN_ANIMATION_DELAY = 1;
-export const MAX_ANIMATION_DELAY = 65535;
-export const DEFAULT_ANIMATION_DELAY = 100;
+export { DEFAULT_ANIMATION_DELAY, MAX_ANIMATION_DELAY, MAX_ANIMATION_FRAMES, MIN_ANIMATION_DELAY };
 
 export function clampAnimationDelay(value: number): number {
   return Number.isFinite(value) ? Math.min(MAX_ANIMATION_DELAY, Math.max(MIN_ANIMATION_DELAY, Math.round(value))) : DEFAULT_ANIMATION_DELAY;

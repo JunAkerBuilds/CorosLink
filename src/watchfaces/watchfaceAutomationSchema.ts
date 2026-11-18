@@ -1,3 +1,4 @@
+import { MAX_ANIMATION_DELAY, MAX_ANIMATION_FRAMES, MIN_ANIMATION_DELAY } from "./watchfaceAnimationLimits";
 import { WATCHFACE_SIMULATION_CAPABILITIES } from "./watchfaceSimulation";
 import { getNativeDataAutomationCatalog } from "./nativeDataAutomation";
 import { NATIVE_DATA_BY_ID, NATIVE_CHART_SOURCES, NATIVE_CHART_STUDIO_READOUTS, NATIVE_ASSET_ROLES, NATIVE_PARTS, nativeAssetCount } from "../../electron/watchfaceNativeCatalog";
@@ -61,6 +62,11 @@ const WATCHFACE_SCHEMA_DEFINITIONS = {
   staticSeparator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "size", "color"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, size: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, fontFamily: { type: "string" }, fontWeight: { type: "number", minimum: 1, maximum: 1000, description: "Absent draws the separator bold (700)." }, fontStyle: { enum: ["normal", "italic"] } } },
   indicator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, scale: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, fontFamily: { type: "string" }, fontWeight: { type: "number", minimum: 1, maximum: 1000 }, fontStyle: { enum: ["normal", "italic"] }, letterSpacing: { type: "number" }, rasterFont: { $ref: "#/$defs/rasterFont" } } },
   weatherIndicator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, scale: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, temperatureEnabled: { type: "boolean" }, assets: { type: "object", additionalProperties: false, properties: Object.fromEntries(["day", "night", "digits", "symbols", "units"].map(key => [key, { type: "object", additionalProperties: { $ref: "#/$defs/pngImageValue" } }])) } } },
+  animation: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "width", "height", "frames", "delays"],
+    description: "Native sprite animation the watch plays on its own timer (PACE 4 / PACE Pro, Current only, never AOD). Drawn over the flattened background, under arcs, time and data. x/y = top-left and width/height = every frame's pixel size, all in the capabilities.placement frame; frames are ordered PNGs of exactly that size; delays are whole ms per frame, one per frame. Max 44 frames. Remove it with op unset on /design/animation, or hide it with enabled false.",
+    properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, width: { type: "number", exclusiveMinimum: 0 }, height: { type: "number", exclusiveMinimum: 0 },
+      frames: { type: "array", minItems: 1, maxItems: MAX_ANIMATION_FRAMES, items: { $ref: "#/$defs/pngImageValue" } },
+      delays: { type: "array", minItems: 1, maxItems: MAX_ANIMATION_FRAMES, items: { type: "integer", minimum: MIN_ANIMATION_DELAY, maximum: MAX_ANIMATION_DELAY } } } },
   pngImageValue: { allOf: [{ $ref: "#/$defs/imageValue" }, { if: { type: "string" }, then: { pattern: "^data:image/png;base64," } }], description: "PNG artwork, passed as a reusable assetId or hydrated PNG data URL." },
   nativeColor: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", description: "Six-digit RGB hex color supported by the native compiler." },
   nativeDataMap: { type: "object", propertyNames: { enum: [...NATIVE_DATA_BY_ID.keys()] }, additionalProperties: { $ref: "#/$defs/nativeDataStyle" } },
@@ -164,6 +170,7 @@ export const WATCHFACE_AUTOMATION_DOCUMENT_JSON_SCHEMA = {
         staticSeparators: { type: "object", additionalProperties: false, required: ["colon", "dateSlash"], properties: { colon: { $ref: "#/$defs/staticSeparator" }, dateSlash: { $ref: "#/$defs/staticSeparator" } } },
         ampmIndicator: { $ref: "#/$defs/indicator" },
         weatherIndicator: { $ref: "#/$defs/weatherIndicator" }, nativeData: {$ref:"#/$defs/nativeDataMap"},
+        animation: { $ref: "#/$defs/animation" },
         layoutOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } },
         linkedLayerGroups: { type: "array", items: { type: "array", items: { type: "string" } } },
         editorGroups: { type: "array", items: { $ref: "#/$defs/group" } },
@@ -630,10 +637,52 @@ export function validateWatchfaceAutomationDocument(
     }
   } else if (design.modeDesigns !== undefined) issue(diagnostics, "mode.invalid", "modeDesigns must be an object.", "/design/modeDesigns");
   validateCollections(design, diagnostics);
+  validateAnimation(design.animation, diagnostics);
   validateWeatherTemperature(design, diagnostics);
   if (context?.mode === "aod" && !design.modeDesigns?.aod) diagnostics.push({ severity: "warning", code: "mode.aod_unmaterialized", message: "AOD has not been materialized; edits will create independent AOD state.", path: "/design/modeDesigns/aod" });
   if (context?.details && context.details.resolutions.length === 0) diagnostics.push({ severity: "warning", code: "template.no_resolutions", message: "The starter template has no editable resolution trees." });
   return diagnostics;
+}
+
+/** PNG width/height from the IHDR of a hydrated data URL; null for an unhydrated ref or another format. */
+function pngDataUrlSize(value: unknown): { width: number; height: number } | null {
+  if (typeof value !== "string" || !value.startsWith("data:image/png;base64,")) return null;
+  try {
+    const head = atob(value.slice("data:image/png;base64,".length, "data:image/png;base64,".length + 44));
+    if (head.charCodeAt(1) !== 0x50 || head.slice(12, 16) !== "IHDR") return null;
+    const u32 = (at: number) => ((head.charCodeAt(at) << 24) | (head.charCodeAt(at + 1) << 16) | (head.charCodeAt(at + 2) << 8) | head.charCodeAt(at + 3)) >>> 0;
+    return { width: u32(16), height: u32(20) };
+  } catch { return null; }
+}
+
+/** The native animation record (header 0x312): what the compiler will accept, checked before export. */
+function validateAnimation(value: unknown, diagnostics: WatchfaceAutomationDiagnostic[]): void {
+  if (value === undefined) return;
+  const path = "/design/animation";
+  if (!objectOf(value)) return issue(diagnostics, "animation.invalid", "animation must be an object.", path);
+  allowedKeys(value, ["enabled", "x", "y", "width", "height", "frames", "delays"], diagnostics, path);
+  bool(value.enabled, diagnostics, `${path}/enabled`);
+  for (const key of ["x", "y"] as const) finite(value[key], diagnostics, `${path}/${key}`);
+  for (const key of ["width", "height"] as const) finite(value[key], diagnostics, `${path}/${key}`, { positive: true });
+  const frames = Array.isArray(value.frames) ? value.frames : null;
+  const delays = Array.isArray(value.delays) ? value.delays : null;
+  if (!frames || !frames.length) return issue(diagnostics, "animation.frames", "An animation needs at least one PNG frame. To remove it, unset /design/animation.", `${path}/frames`);
+  if (frames.length > MAX_ANIMATION_FRAMES) issue(diagnostics, "animation.frame_limit", `The watch times at most ${MAX_ANIMATION_FRAMES} frames; this has ${frames.length}.`, `${path}/frames`);
+  if (!delays || delays.length !== frames.length) issue(diagnostics, "animation.delays", `Give one delay per frame: ${frames.length} frames need ${frames.length} delays.`, `${path}/delays`);
+  delays?.forEach((delay, index) => finite(delay, diagnostics, `${path}/delays/${index}`, { minimum: MIN_ANIMATION_DELAY, maximum: MAX_ANIMATION_DELAY, integer: true }));
+  let first: { width: number; height: number } | null = null;
+  frames.forEach((frame, index) => {
+    const framePath = `${path}/frames/${index}`;
+    if (typeof frame === "string" && !frame.startsWith("data:image/png;base64,")) return issue(diagnostics, "animation.png", "Animation frames must be PNG.", framePath);
+    const size = pngDataUrlSize(frame);
+    if (!size) return;
+    if (!first) {
+      first = size;
+      if (size.width !== value.width || size.height !== value.height) issue(diagnostics, "animation.size", `Frame 0 is ${size.width} × ${size.height}; set width ${size.width} and height ${size.height}, or resize the frames.`, `${path}/width`);
+    } else if (size.width !== first.width || size.height !== first.height) {
+      issue(diagnostics, "animation.frame_size", `Every frame must be ${first.width} × ${first.height} like frame 0; frame ${index} is ${size.width} × ${size.height}.`, framePath);
+    }
+  });
 }
 
 /** Faults that only show on a watch below zero or set to Fahrenheit, where a normal preview looks right. */

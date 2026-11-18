@@ -58,7 +58,7 @@ export class WatchfacePlacementError extends Error {
 
 function movementKeyForLayer(layer: ReturnType<typeof deriveEditorLayers>[number]): string | null {
   if (layer.kind === "customSprite") return layer.id;
-  if (layer.staticSeparatorId || layer.ampmIndicator || layer.weatherIndicator || layer.nativeDataId) {
+  if (layer.staticSeparatorId || layer.ampmIndicator || layer.weatherIndicator || layer.nativeDataId || layer.animation) {
     return layer.id;
   }
   if (layer.layoutGroupId && layer.capabilities.position) {
@@ -451,6 +451,11 @@ export function moveWatchfacePlacementLayers(
         ? moveChartReadout(style, style.x + requested.dx, style.y + requested.dy)
         : {...style, x: style.x + requested.dx, y: style.y + requested.dy};
       next = {...next, nativeData: {...next.nativeData, [id]: moved}}; continue;
+    }
+    if (key === "animation") {
+      if (!next.animation) placementFail("placement.unsupported", "The face has no animation to move.");
+      next = { ...next, animation: { ...next.animation, x: next.animation.x + requested.dx, y: next.animation.y + requested.dy } };
+      continue;
     }
     if (key === "weather") {
       const bounds = scene.layers.find((layer) => layer.id === "weather")?.bounds;

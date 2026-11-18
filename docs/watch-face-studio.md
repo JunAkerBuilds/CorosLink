@@ -418,6 +418,20 @@ hand pointing up (12 o'clock) with the pivot in the middle of the canvas.
 and **Replace image** without moving the pivot. On-watch rendering of
 Studio-added hands is not yet confirmed.
 
+### Animation
+
+Some official faces carry an animation the watch plays by itself while the
+screen is lit, such as NANJING MARATHON's running mascot. Studio opens it as an
+**Animation** layer: it plays on the canvas over the background and under the
+time and data, as on the watch. Move it like any layer; the inspector shows
+every frame with its own delay in milliseconds, a **Set all** field, a play /
+pause button, and **Replace frames…** for a folder of numbered PNGs. A face
+without one gets **Add → Device → Animation**. Up to 44 frames, all the same
+size. The always-on screen never animates. PACE 4 and PACE Pro play it; other
+watches leave it out when the face is built. Watchmaker can create and edit
+animations too. On-watch timing (how long it plays after a wrist raise) is not
+yet confirmed.
+
 ### Date
 
 - **Weekday**, **Date month** and **Date day** each have horizontal

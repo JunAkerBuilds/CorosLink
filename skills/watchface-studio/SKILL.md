@@ -268,6 +268,8 @@ Never place a padded square and hope it lines up.
   is `(masterWidth/2, masterHeight/2)`). Keep the aspect ratio: `w/h = W/H`.
 - **Native / weather artwork slots:** PNG only, and they follow the catalog in
   `get_schema.nativeData`.
+- **Animation frames:** `/design/animation` (see "Animations" below), never
+  `add_sprite`: a sprite is one still image baked into the background.
 - After placing, `render_preview` to confirm it appears. A missing layer usually
   means a wrong path or id.
 
@@ -298,13 +300,74 @@ Constraints: no text, no numbers, no clock hands, no watermark; <transparent bac
   the user asks to use one directly. Pasted images already have an `assetId`
   and can be placed like generated ones.
 
+## Animations
+
+A face can carry one native animation: a loop of PNG frames the watch plays on
+its own timer while the screen is lit (a running mascot, a flickering flame, a
+spinning icon). It is the firmware's animation record (header `0x312` in the
+compiled face), not a sprite, and it is the only way to get motion other than
+the live time, data and analog hands.
+
+- **Shape:** `/design/animation` =
+  `{"enabled":true,"x":X,"y":Y,"width":W,"height":H,"frames":[{"assetId":"…"},…],"delays":[100,…]}`.
+  `x`/`y` is the frame's **top-left** (not its center) and `W`×`H` the exact PNG
+  size of every frame, all in `capabilities.placement` pixels. `delays` holds
+  one whole-millisecond value per frame (1–65535). At most **44** frames.
+- **Where it shows:** Current only, drawn over the flattened background and
+  under progress arcs, time, date and data. Always-on never animates; don't
+  put it in `modeDesigns.aod`. PACE 4 and PACE Pro play it; MIP watches
+  (PACE 3, APEX 4, NOMAD…) drop it at compile with a warning, so say so when
+  the target is MIP.
+- **Existing faces:** official faces opened in Studio keep theirs (NANJING
+  MARATHON's running duck: 10 frames of 376 × 340 at (0,31), 100 ms each).
+  Read its contract in `capabilities.assetContracts` (`layerId: animation`)
+  and keep frames and timing unless the user asks to change them.
+
+### Making one
+
+1. **Plan the loop.** Decide the cycle (for example 8 frames × 100 ms = 0.8 s)
+   and the frame box. Keep it compact: every frame adds to the compiled face,
+   which must stay under about 3.2 MB to send, so a large, detailed loop with
+   many frames can push it over.
+2. **Make same-size, registered frames.** Every frame needs the same canvas
+   size with the subject anchored at the same spot (feet on the same line, the
+   pivot of a spinner in the same pixel); otherwise it jitters. Either:
+   - generate **one sheet** with the frames in an equal grid on a transparent
+     background ("8 frames of a run cycle in a 4 × 2 grid of equal cells, same
+     character size and baseline in every cell"), then `crop_image` each cell
+     with identical boxes, **`trim:false`** and the same `width`/`height`; or
+   - `render_svg` each frame at the same size, for geometric motion (pulses,
+     spinners, blinking dots), changing only the moving parts.
+   `inspect_asset` the frames side by side; regenerate rather than ship a
+   frame that changes size, style or palette.
+3. **Install it** in one `apply_commands` batch:
+   `{"op":"set","path":"/design/animation","value":{…}}`. The validator rejects
+   mixed frame sizes, a `width`/`height` that differs from the PNGs, a delay
+   count that differs from the frame count, and more than 44 frames.
+4. **Check it.** `render_preview` shows frame 0 as a still: confirm placement
+   and that it doesn't cover the time or key data. The editor canvas plays
+   the loop for the user. Playback length on the watch itself (wake, how
+   long it runs) is not something you can verify; don't claim it.
+
+### Editing one
+
+- Move: `move_layer` / `place_layers` with id `animation`. Hide or show:
+  `set_visibility`. Remove: `{"op":"unset","path":"/design/animation"}`.
+- Retime: set `/design/animation/delays` (one value per frame). A slower or
+  faster loop changes every delay; a pause on one pose lengthens just that
+  frame's delay.
+- Replace or recolor frames: set `/design/animation/frames` with new assets of
+  the same size (or update `width`/`height` with them). Recolor every frame
+  the same way (`recolor_image`) so the loop stays consistent.
+
 ## Draw order
 
-The watch paints the face in three passes, bottom to top:
+The watch paints the face in these passes, bottom to top:
 
 1. **Background.** One flattened image: `backgroundColor`, `/design/artwork`,
    then every `add_sprite` sprite and `add_element` shape or text, in
    `artworkLayerOrder`. `reorder_layer` only reorders within this pass.
+   The **native animation** (`/design/animation`) is drawn right over it.
 2. **Progress arcs and bars.** The firmware draws `kcalProgress` and
    `exerciseProgress` (arc and rect) live, over the whole background.
 3. **Firmware layers.** Time, date and metric digits, icons, native data and

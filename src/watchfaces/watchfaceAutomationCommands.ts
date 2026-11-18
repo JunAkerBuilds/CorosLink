@@ -233,6 +233,7 @@ function affectedLayerIds(command: JsonObject, design: CorosWatchfaceDesignState
     ? [`native:${segments[2]}`]
     : [...new Set([...Object.keys(design.nativeData ?? {}), ...Object.keys(isObject(command.value) ? command.value : {})])].map(id => `native:${id}`);
   if (segments[1] === "weatherIndicator") return ["weather"];
+  if (segments[1] === "animation") return ["animation"];
   if (segments[1] === "designSprites" && segments[2] !== undefined) {
     const sprite = design.designSprites[Number(segments[2])];
     return sprite ? [`sprite:${sprite.id}`] : [];
@@ -508,6 +509,10 @@ export function applyWatchfaceAutomationCommands(
   let activeDirty = false;
   for (const [index, raw] of commands.entries()) {
     if (!isObject(raw) || typeof raw.op !== "string") fail("command.invalid", "Each command must be an object with an op.", undefined, index);
+    // The watch never animates always-on; the record lives on the Current screen only.
+    if (mode === "aod" && typeof raw.path === "string" && /^\/design\/animation(?:\/|$)/.test(raw.path)) {
+      fail("animation.current_only", "The animation plays only on the lit (Current) screen; always-on never animates. Edit it with mode current.", raw.path, index);
+    }
     if (raw.op === "set_mode_overrides") {
       assertExactKeys(raw, ["op", "mode", "overrides", "copyFrom"], index);
       if (raw.mode !== "aod") fail("command.field", "Only aod mode overrides are supported.", undefined, index);

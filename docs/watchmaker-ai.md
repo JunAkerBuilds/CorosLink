@@ -317,3 +317,13 @@ same PATH, including an npm installation's sibling Node executable, so GUI and
 terminal environments behave consistently. Detection is cancellable; failures
 are reported without terminal color escapes. This was verified with the broken
 home-directory npm wrapper ahead of the working NVM installation in PATH.
+
+Native animations (`/design/animation`, compiled header `0x312`) are part of the
+document schema, the validator, placement (`animation` layer), visibility and
+`capabilities.assetContracts` (`kind: frame-sequence`). The validator reads each
+hydrated frame's PNG header, so mixed frame sizes, a `width`/`height` that does
+not match the PNGs, a delay count that differs from the frame count and more
+than 44 frames are rejected before export. The skill's "Animations" section
+explains how to make registered frames (one equal-cell sheet cropped with
+`trim:false`, or `render_svg` per frame) and that `render_preview` shows frame 0
+only.

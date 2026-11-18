@@ -188,7 +188,7 @@
     "test:watchface-codex-cli": "npm run build:electron && node scripts/test-watchface-codex-cli.mjs",
     "test:watchface-ai-panel": "electron scripts/test-watchface-ai-panel.cjs",
     "test:watchface-ai-chat": "npm run build:electron && node scripts/test-watchface-ai-chat.mjs && node scripts/test-watchface-ai-context.mjs && node scripts/test-watchface-ai-requirements.mjs && node scripts/test-watchface-ai-parallel.mjs && node scripts/test-watchface-ai-asset-review.mjs && node scripts/test-watchface-ai-generation.mjs && node scripts/test-watchface-ai-image.mjs && node scripts/test-watchface-asset-contracts.mjs && node scripts/test-watchface-native-contracts.mjs",
-    "test:watchface-automation": "npm run build:electron && node scripts/test-watchface-automation-broker.mjs && node scripts/test-watchface-automation-server.mjs && node scripts/test-watchface-automation-commands.mjs && node scripts/test-watchface-automation-placement.mjs && node scripts/test-watchface-automation-visibility.mjs",
+    "test:watchface-automation": "npm run build:electron && node scripts/test-watchface-automation-broker.mjs && node scripts/test-watchface-automation-server.mjs && node scripts/test-watchface-automation-commands.mjs && node scripts/test-watchface-automation-placement.mjs && node scripts/test-watchface-automation-visibility.mjs && node scripts/test-watchface-automation-animation.mjs",
     "test:watchface-automation-e2e": "npm run build:electron && electron scripts/test-watchface-automation-e2e.cjs",
     "test:watchface-automation-tools": "npm run build:electron && electron scripts/test-watchface-automation-e2e.cjs --tools-only",
     "test:watchface-glyph-pixels": "electron scripts/test-watchface-glyph-pixels.cjs",

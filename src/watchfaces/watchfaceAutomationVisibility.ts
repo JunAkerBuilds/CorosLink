@@ -139,6 +139,10 @@ function applyLayerVisibility(
   if (layer.nativeDataId && design.nativeData?.[layer.nativeDataId]) {
     return {...design, nativeData: {...design.nativeData, [layer.nativeDataId]: {...design.nativeData[layer.nativeDataId], enabled: visible}}};
   }
+  if (layer.animation) {
+    if (!design.animation) return visibilityFail("layer.missing", "This face has no animation.");
+    return { ...design, animation: { ...design.animation, enabled: visible } };
+  }
   if (layer.weatherIndicator) {
     const capability = getWeatherCapability(details);
     if (!capability) {

@@ -221,7 +221,7 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
       "controlBarometerMode", "controlBatteryEnabled", "controlSunriseEnabled",
       "controlSunsetEnabled", "controlFloorEnabled", "controlTemperatureEnabled",
       "controlIconOffsets", "separateAutoTime", "addSeconds", "addWeekday", "addDateMonth", "addDateDay", "timeStyles", "dateStyles",
-      "staticSeparators", "ampmIndicator", "weatherIndicator", "nativeData", "layoutOffsets"
+      "staticSeparators", "ampmIndicator", "weatherIndicator", "nativeData", "layoutOffsets", "animation"
     ],
     editor: [
       "linkedLayerGroups", "editorGroups", "editorGuides", "lockedLayerIds", "removedLayerIds",
@@ -234,11 +234,13 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
     alternateModes:
       "modeDesigns.aod may override any visual/editor field above and adds backgroundEdited.",
     imageFields:
-      "artwork, designSprites[].dataUrl, configAssetOverrides replacements, rasterFont.dataUrl/sprites, weatherIndicator.assets, nativeData.*.assets, and AOD equivalents are returned as opaque {assetId} refs. Pass those refs unchanged in commands."
+      "artwork, designSprites[].dataUrl, configAssetOverrides replacements, rasterFont.dataUrl/sprites, weatherIndicator.assets, nativeData.*.assets, animation.frames, and AOD equivalents are returned as opaque {assetId} refs. Pass those refs unchanged in commands."
   },
   objectShapes: {
     nativeData:
       "nativeData in get_schema catalogs every addable field, chart source, default style, component, artwork role and state index. get_document capabilities.nativeData lists supported IDs; each configured native layer includes effective component styles and edit paths. Use add_native_field with id, x, y and optional style to create a catalog field, even if its layer/config/assets are absent from the starting template. This initializes defaults and export creates the binding and sprites. date_year is a live calendar year; use set/merge/unset for parts, assetTexts, assets and chartStyle. Use native:<id> for placement and visibility. Image overrides require PNG asset references. Use mode:'aod' and the same paths for AOD. One slot per field and one chart per mode; a chart can carry several readouts (chartSource plus nativeData.chart.readouts), and the watch pages through them with Back. Live graph representation and which pages exist are firmware-controlled.",
+    animation:
+      "Native sprite animation, Current only (header 0x312 in the compiled face): {enabled, x, y, width, height, frames:[PNG {assetId}], delays:[ms]}. The watch loops the frames on its own timer, each held delays[i] ms (1–65535, one per frame, at most 44 frames), drawn over the flattened background and under progress arcs, time and data; AOD never animates. x/y is the top-left and width/height every frame's exact PNG size, in capabilities.placement pixels. Layer id animation (move_layer, place_layers, set_visibility). Remove with op unset on /design/animation. Recovered official faces (e.g. a running mascot) arrive with it filled in; keep their frames and timing unless asked. Plays on PACE 4 and PACE Pro; MIP watches drop it at compile.",
     placementCapabilities:
       "{width,height,unit:'pixels'} defines the authoritative placement canvas. Width and height come from the template's largest native resolution.",
     layerPlacement:
