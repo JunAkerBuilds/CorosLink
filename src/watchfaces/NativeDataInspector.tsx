@@ -2,11 +2,11 @@ import { t, useLanguage, getLocale, midSentence } from "../i18n/watchfaces";
 import { WatchfaceColorInput } from "./WatchfaceColorInput";
 import { EditableNumberInput } from "./EditableNumberInput";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ChevronDown, Eye, EyeOff, FolderInput, ImagePlus, Pin, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, FolderInput, ImagePlus, Pin, Plus, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceNativePartStyle } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { NATIVE_DATA_BY_ID, nativeDataAsset, nativeDataPreviewValue } from "./nativeData";
-import { NATIVE_CHART_BAR_PAGES, NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel, nativeChartRepresentation } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_BAR_PAGES, NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel, nativeChartRepresentation, nativeConfigPrefix } from "../../electron/watchfaceNativeCatalog";
 import { nativeAssetText, nativeComponentFontSize, nativeFontRole, nativeFontSizePart, nativeHasGlyphArt, nativePart, nativePartForFontSize, nativePartHasPosition, nativeParts, nativeRoleDrawsText, nativeRoleIndices, nativeScaleForFontSize, withNativeFont } from "./nativeDataParts";
 import { chartReadoutHidden } from "./chartReadouts";
 import { loadStudioImage, resizeAndTintSprite, type WatchfaceTypography } from "./watchfaceStudio";
@@ -14,6 +14,15 @@ import { LocalFontPicker } from "./LocalFontPicker";
 import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
 import { WatchfaceHint } from "./WatchfaceHint";
 import type { WatchfaceInspectorSectionId } from "./watchfaceInspectorSections";
+
+export interface NativeOfficialBrowseRequest {
+  title: string;
+  /** Template key the set should be bound to, so the library opens on matching sets. */
+  configKey?: string;
+  /** A whole state table (sprite sets) rather than one image. */
+  set: boolean;
+  onPick: (frames: string[], frameIndex?: number) => void | Promise<void>;
+}
 
 const PART_LABELS: Record<Part, string> = {
   icon: "Label / icon", value: "Number / time", states: "State artwork", unit: "Units", symbols: "Symbols", progress: "Sun / moon progress",
@@ -244,7 +253,7 @@ type RenderSection = (
  * selected part, and Advanced for preview-only settings. The editor renders
  * the Transform section itself so it matches every other layer.
  */
-export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, onDeleteReadout, pageFields, onSelectField, fieldPages, facePages = [], shownPage, onShowPage, graphOnlyPage, onAddDailyPage, removedPages, onAddMinMaxPartner, pairPartner, embeddedParts, partLabels }: {
+export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, onDeleteReadout, pageFields, onSelectField, fieldPages, facePages = [], shownPage, onShowPage, graphOnlyPage, onAddDailyPage, removedPages, onAddMinMaxPartner, pairPartner, embeddedParts, partLabels, onBrowseOfficial }: {
   id: string; style: Style; api: CorosLinkApi; disabled: boolean; coordinateScale: number;
   renderSection: RenderSection;
   /** The editor's shared Font size field, in master pixels. */
@@ -284,6 +293,8 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   onAddDailyPage?: () => void;
   onPatch: (patch: Partial<Style>) => void; onError: (message: string) => void;
   onImportStart: (target: string) => number | null; onImportFinish: (token: number) => void; isImportCurrent: (token: number) => boolean;
+  /** Opens the official COROS library on sets for this field; picked frames arrive in firmware order. */
+  onBrowseOfficial?: (request: NativeOfficialBrowseRequest) => void;
 }) {
   useLanguage();
   const definition = NATIVE_DATA_BY_ID.get(id)!;
@@ -323,7 +334,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   const fontSizeField = (fontSize: number, change: (fontSize: number) => void) =>
     <div className="watchface-position-inputs">{renderFontSizeField(Math.round(fontSize), change)}</div>;
 
-  async function importArtwork(folder: boolean) {
+  async function importArtwork(folder: boolean, preset?: Record<string, string>) {
     if (!role) return;
     const editorToken = onImportStart(`native:${id}:${role}`);
     if (editorToken === null) return;
@@ -331,7 +342,9 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
     setBusy(true);
     try {
       const states: Record<string, string> = {};
-      if (folder) {
+      if (preset) {
+        Object.assign(states, preset);
+      } else if (folder) {
         const picked = await api.chooseCorosWatchfaceRasterFontFolder();
         if (!picked) return;
         for (const sprite of picked.sprites) {
@@ -516,6 +529,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
               <div className="wf-native-artwork-actions">
                 <button type="button" className="secondary-button" onClick={()=>void importArtwork(false)}><ImagePlus size={14} /> {replacement ? t("Replace image") : t("Use an image")}</button>
                 {indices.length > 1 && <button type="button" className="secondary-button" onClick={()=>void importArtwork(true)}><FolderInput size={14} />{" "}{t("Import numbered PNGs")}</button>}
+                {onBrowseOfficial && <button type="button" className="secondary-button" disabled={locked} onClick={()=>browseOfficial()}><Sparkles size={14} />{" "}{indices.length > 1 ? t("Official sprites") : t("Official image")}</button>}
                 {replacement && <button type="button" className="secondary-button wf-native-artwork-remove" onClick={removeImage}><Trash2 size={14} />{" "}{t("Remove image")}</button>}
               </div>
             </div>}
@@ -525,6 +539,31 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         </section>;
       })}
       </div>;
+  /** Official sets for this part: a whole state table, or one image for the selected frame. */
+  function browseOfficial() {
+    if (!role || !onBrowseOfficial) return;
+    const set = indices.length > 1;
+    // Sets are matched by the template key they were bound to. Frame counts
+    // are not filtered: some official tables differ from Studio's catalog
+    // (Sleep HRV ships 5 frames), and frames fill states in order.
+    const configKey = role === "states" ? definition.stateKey
+      : role === "digits" ? `${nativeConfigPrefix(definition)}_font`
+      : role === "icon" ? `${definition.id}_icon`
+      : role === "unit" ? definition.unitKey
+      : undefined;
+    const pickedIndex = index;
+    onBrowseOfficial({
+      title: set ? t("Official sprites for {{value1}}", { value1: t(definition.label) }) : t("Official image for {{value1}}", { value1: t(definition.label) }),
+      configKey,
+      set,
+      onPick: (frames, frameIndex) => {
+        const preset: Record<string, string> = {};
+        if (set) indices.forEach((state, position) => { if (frames[position]) preset[state] = frames[position]!; });
+        else if (frames[frameIndex ?? 0] ?? frames[0]) preset[pickedIndex] = (frames[frameIndex ?? 0] ?? frames[0])!;
+        return importArtwork(set, preset);
+      }
+    });
+  }
   const openPart = (part: Part) => { setSelectedPart(part); setSelectedIndex(0); setPartOpen(true); };
 
   const isChart = definition.kind === "chart";

@@ -662,6 +662,8 @@ export const watchfacesGerman: Record<string, string> = {
   "Nudge control battery icon down": "Wählbares Akkusymbol nach unten verschieben",
   "Replace sprite folder": "Spriteordner ersetzen",
   "Import sprite folder": "Spriteordner importieren",
+  "Official image": "Offizielles Bild",
+  "Official sprites for {{value1}}": "Offizielle Sprites für {{value1}}",
   "Official sprites": "Offizielle Sprites",
   "Restore": "Wiederherstellen",
   "Scale": "Skalierung",

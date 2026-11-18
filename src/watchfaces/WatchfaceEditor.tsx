@@ -14010,6 +14010,14 @@ export function WatchfaceEditor({
             chartReadouts={layer.nativeDataId === "chart" ? chartReadouts : undefined}
             pageFields={layer.nativeDataId === "chart" ? shownPageFields : undefined}
             onSelectField={id => { selectEditorItem(`native:${id}`); }}
+            onBrowseOfficial={request => setOfficialBrowser({
+              mode: request.set ? "sprites" : "image",
+              title: request.title,
+              defaultCategory: request.configKey ? officialCategoryForConfigKey(request.configKey) : undefined,
+              // Single images browse the category; an exact icon key is too narrow.
+              configKey: request.set ? request.configKey : undefined,
+              onPick: (frames, frameIndex) => request.onPick(frames.frames, frameIndex)
+            })}
             fieldPages={layer.nativeDataId !== "chart" ? nativeLayerChartPages(layer.nativeDataId, design.nativeData, facePageIds) : undefined}
             facePages={design.nativeData?.chart?.enabled ? stripChartPages.map(page => page.page) : facePageIds ?? []}
             shownPage={shownChartPage}

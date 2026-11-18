@@ -661,6 +661,8 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Nudge control battery icon down": "将控制电池图标向下微移",
   "Replace sprite folder": "替换素材文件夹",
   "Import sprite folder": "导入素材文件夹",
+  "Official image": "官方图片",
+  "Official sprites for {{value1}}": "{{value1}} 的官方素材",
   "Official sprites": "官方素材",
   "Restore": "恢复",
   "Scale": "缩放",
