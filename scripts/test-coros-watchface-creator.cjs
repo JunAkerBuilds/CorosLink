@@ -939,13 +939,15 @@ async function main() {
     assert.ok(configEntry, `${configPath} should remain in the archive`);
     const config = watchfaces.parseCorosWatchfaceConfig((await configEntry.buffer()).toString("utf8"));
     for (const [key, value] of Object.entries(statusValues)) {
-      assert.equal(config[key], value, `${configPath} must retain ${key}`);
+      if (!key.endsWith("_icon")) { assert.equal(config[key], value, `${configPath} must retain ${key}`); continue; }
+      // Identical icons share one packaged folder, so check the picture each reference reaches.
+      assert.ok(config[key]?.startsWith("studio\\"), `${configPath} must retain ${key}`);
+      const assetPath = `watchface_800x800/${config[key].replaceAll("\\", "/")}`;
+      const assetEntry = statusZip.files.find((entry) => entry.path === assetPath);
+      assert.ok(assetEntry, `${assetPath} should be packaged with its config reference`);
+      const expected = statusAssets.find(({ path }) => path === `watchface_800x800/${value.replaceAll("\\", "/")}`).data;
+      assert.deepEqual(await assetEntry.buffer(), expected, `${configPath} ${key} must show its own picture`);
     }
-  }
-  for (const { path: assetPath, data } of statusAssets) {
-    const assetEntry = statusZip.files.find((entry) => entry.path === assetPath);
-    assert.ok(assetEntry, `${assetPath} should be packaged with its config reference`);
-    assert.deepEqual(await assetEntry.buffer(), data);
   }
 
   // --- Weather must be wired into normal and always-on configs ----------
@@ -1261,10 +1263,11 @@ async function main() {
       path: "watchface_800x800/config.txt",
       values: {
         time_hour_high_font: "studio\\current_font",
+        time_minute_low_font: "studio\\copy_font",
         control_step_icon: "__COROSLINK_DELETE_CONFIG_KEY__"
       }
     }],
-    assetReplacements: ["current_font", "unused_new"].map((folder) => ({
+    assetReplacements: ["current_font", "copy_font", "unused_new"].map((folder) => ({
       path: `watchface_800x800/studio/${folder}/00.png`,
       dataUrl: pngDataUrl(tinyPng), create: true
     }))
@@ -1273,17 +1276,29 @@ async function main() {
   await watchfaces.exportCorosWatchfaceArchive(pruned.archiveId, prunedOutput);
   const prunedZip = await unzipper.Open.file(prunedOutput);
   const prunedPaths = new Set(prunedZip.files.map((entry) => entry.path));
-  assert.ok(prunedPaths.has("watchface_800x800/studio/current_font/00.png"));
   assert.ok(!prunedPaths.has("watchface_800x800/studio/unused_new/00.png"));
+  // A byte-identical copy (Studio writes one folder per digit slot) is stored once,
+  // and both references point at the folder that is kept.
+  const keptFonts = ["current_font", "copy_font"].filter((folder) => prunedPaths.has(`watchface_800x800/studio/${folder}/00.png`));
+  assert.equal(keptFonts.length, 1, "identical studio folders are shared");
+  const prunedConfig = (await prunedZip.files.find((entry) => entry.path === "watchface_800x800/config.txt").buffer()).toString("utf8");
+  for (const key of ["time_hour_high_font", "time_minute_low_font"]) {
+    assert.match(prunedConfig, new RegExp(`^\\[${key}\\]=studio\\\\${keptFonts[0]}\\r?$`, "m"), `${key} points at the kept folder`);
+  }
   for (const resolution of [800, 416]) {
     const prefix = `watchface_${resolution}x${resolution}`;
     assert.ok(prunedPaths.has(`${prefix}/AODconfig.txt`));
     for (let digit = 0; digit < 10; digit += 1) {
       assert.ok(prunedPaths.has(`${prefix}/cl_shared/0${digit}.png`), "AOD font glyphs must survive");
-      assert.ok(prunedPaths.has(`${prefix}/cl_aod_only/0${digit}.png`), "AOD fallback fonts must survive");
+      const aodLowFont = watchfaces.parseCorosWatchfaceConfig((await prunedZip.files.find((entry) => entry.path === `${prefix}/AODconfig.txt`).buffer()).toString("utf8")).time_hour_low_font.replace(/^a\\/, "");
+      // An a\ reference is kept as is; a plain one may point at an identical shared folder.
+      assert.ok(prunedPaths.has(`${prefix}/${aodLowFont}/0${digit}.png`), "AOD fallback fonts must survive");
       assert.ok(!prunedPaths.has(`${prefix}/cl_obsolete/0${digit}.png`), "replaced generated fonts should be pruned");
     }
-    assert.ok(prunedPaths.has(`${prefix}/studio/aod_background/00.png`));
+    // The fixture's images are all one tiny PNG, so the AOD background may be shared with an identical folder.
+    const aodConfigEntry = prunedZip.files.find((entry) => entry.path === `${prefix}/AODconfig.txt`);
+    const aodBackground = watchfaces.parseCorosWatchfaceConfig((await aodConfigEntry.buffer()).toString("utf8")).background_icon;
+    assert.ok(prunedPaths.has(`${prefix}/${aodBackground.replaceAll("\\", "/")}`), "the AOD background reference reaches a packaged file");
     assert.ok(!prunedPaths.has(`${prefix}/studio/aod_background/01.png`), "direct image references should not retain unused siblings");
     assert.ok(!prunedPaths.has(`${prefix}/studio/old_icon/00.png`));
     assert.ok(prunedPaths.has(`${prefix}/weather/00.png`), "unreferenced official weather assets must survive");

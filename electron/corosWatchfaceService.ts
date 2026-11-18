@@ -5000,8 +5000,12 @@ async function rewriteTemplateArchive(
       finalPaths.add(aodPath);
     }
   }
+  // Prune first so each folder holds only what is referenced, share identical
+  // folders, then prune the copies nothing points at any more.
   const finalEntries = finalizeWatchfaceDeviceLayout(
-    removeUnreferencedStudioSprites(fitGeneratedWatchfaceFontRects(orderedEntries))
+    removeUnreferencedStudioSprites(shareIdenticalStudioSprites(
+      removeUnreferencedStudioSprites(fitGeneratedWatchfaceFontRects(orderedEntries))
+    ))
   );
   validateArchiveInventory(
     finalEntries.map((entry) => ({
@@ -5020,6 +5024,76 @@ async function rewriteTemplateArchive(
     throw new Error("The generated watch-face archive must be smaller than 100 MB.");
   }
   return zip;
+}
+
+/**
+ * Studio writes a folder per slot and per display mode, so a face often carries
+ * byte-identical copies: one 0-9 set per time digit, the same weekday strip for
+ * every language, Current artwork cloned for always-on. Points every config
+ * reference at the first copy of each owned folder; the copies are then pruned
+ * as unreferenced. Folders must match file for file (names and bytes), and only
+ * CorosLink-owned folders take part. An `a\` value (always-on with a fallback to
+ * the main folder) is left alone, since it may name a separate always-on folder. Editing stays isolated: Studio clones an
+ * asset into its own folder whenever one display mode changes it.
+ */
+export function shareIdenticalStudioSprites(
+  entries: { name: string; data: Buffer }[]
+): { name: string; data: Buffer }[] {
+  const folders = new Map<string, { name: string; data: Buffer }[]>();
+  for (const entry of entries) {
+    if (!OWNED_STUDIO_SPRITE_PATTERN.test(entry.name)) continue;
+    const folder = entry.name.slice(0, entry.name.lastIndexOf("/"));
+    const files = folders.get(folder) ?? [];
+    files.push(entry);
+    folders.set(folder, files);
+  }
+  const same = (left: { name: string; data: Buffer }[], right: { name: string; data: Buffer }[], leftFolder: string, rightFolder: string) =>
+    left.length === right.length && left.every((file, index) => {
+      const other = right[index]!;
+      return file.name.slice(leftFolder.length) === other.name.slice(rightFolder.length) && file.data.equals(other.data);
+    });
+  // Resolution directory → lower-case relative folder of a copy → relative folder of the kept original.
+  const replacements = new Map<string, Map<string, string>>();
+  const kept = new Map<string, { folder: string; files: { name: string; data: Buffer }[] }[]>();
+  for (const [folder, unsorted] of folders) {
+    const files = [...unsorted].sort((left, right) => left.name.localeCompare(right.name));
+    const resolution = folder.split("/", 1)[0]!;
+    const signature = `${resolution}|${files.map((file) => `${file.name.slice(folder.length)}:${file.data.byteLength}`).join(",")}`;
+    const candidates = kept.get(signature) ?? [];
+    const original = candidates.find((candidate) => same(candidate.files, files, candidate.folder, folder));
+    if (original) {
+      const byResolution = replacements.get(resolution) ?? new Map<string, string>();
+      byResolution.set(folder.slice(resolution.length + 1).toLowerCase(), original.folder.slice(resolution.length + 1));
+      replacements.set(resolution, byResolution);
+    } else {
+      candidates.push({ folder, files });
+      kept.set(signature, candidates);
+    }
+  }
+  if (!replacements.size) return entries;
+  return entries.map((entry) => {
+    if (!CONFIG_TEXT_PATH_PATTERN.test(entry.name) && !entry.name.endsWith(`/${RETAINED_AOD_CONFIG}`)) return entry;
+    const byResolution = replacements.get(entry.name.split("/", 1)[0]!);
+    if (!byResolution) return entry;
+    let changed = false;
+    const text = entry.data.toString("utf8").replace(
+      /^(\[[^\]\r\n]+\]=\s*(?:\.[\\/])?)([^\r\n]*)$/gm,
+      (line, prefix: string, value: string) => {
+        const parts = value.split(/[\\/]/);
+        // Owned folders are studio/<name> or a top-level cl_<name>.
+        for (const depth of [2, 1]) {
+          if (parts.length < depth) continue;
+          const original = byResolution.get(parts.slice(0, depth).join("/").toLowerCase());
+          if (original === undefined) continue;
+          const separator = value.includes("\\") ? "\\" : "/";
+          changed = true;
+          return prefix + [original.split("/").join(separator), ...parts.slice(depth)].join(separator);
+        }
+        return line;
+      }
+    );
+    return changed ? { name: entry.name, data: Buffer.from(text, "utf8") } : entry;
+  });
 }
 
 /** Prune owned sprites only after all overrides and missing AOD configs exist. */
