@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **One picture used two ways on a face.** A PNG used both as the background and as an icon, or as a memory-in-pixel always-on background over a different background color, reused the first version the compiler made, so it could show at the wrong size or with the wrong edge color. Each use now gets its own, and copies of the same picture are recognized before they are converted, so faces also compile faster.
 - **Temperature alignment with °C turned off.** A hidden degree sign was still sent as an invisible full-width image, and the watch counted it when aligning the reading, so a right-aligned temperature sat about a digit to the left of where Studio showed it. Hidden degree and minus signs now take no space. Minimum and maximum temperature get the same fix.
+- **Minus sign on negative elevation.** A negative sign added in Studio was exported as a bare bar, and the watch drew it at the top of the elevation number instead of in line with it. It is now exported at the height of the elevation digits with the bar in the middle, like COROS's own minus images.
 
 ## [0.1.78] - 2026-11-16
 

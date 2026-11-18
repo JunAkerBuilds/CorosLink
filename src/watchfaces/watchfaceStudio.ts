@@ -1253,6 +1253,21 @@ function normalizePositiveScale(scale: number | undefined): number {
 }
 
 /**
+ * The row a negative elevation is drawn on. The watch puts negative_sign_icon
+ * in front of the elevation digits without centring it, so COROS's own minus
+ * images are a full digit tall with the bar in the middle (7x26 beside 13x26
+ * digits, bar at rows 11-15). A bare bar sat at the top of the number on the
+ * watch ("-7", 2026-11-18). Temperature has its own minus keys.
+ */
+function negativeSignCellHeight(
+  resolution: CorosWatchfaceResolutionDetails
+): number | null {
+  const rect = parseConfigRect(resolution.config.elevation_rect);
+  if (rect && rect.y1 > rect.y0) return rect.y1 - rect.y0;
+  return findSpriteFolder(resolution, resolution.config.elevation_font)?.files[0]?.height ?? null;
+}
+
+/**
  * Resolves a config asset's exported/preview canvas without mutating its
  * position. Imported replacement dimensions are authored in the master
  * resolution; `nativeScale` converts them to the target tree. A resized
@@ -1981,6 +1996,17 @@ export async function buildWatchfaceConfigAssetReplacements(
               ) ?? resolution
             )
           : null;
+        const replacementHeight = Math.max(
+          1,
+          Math.round(override!.replacement!.height * nativeScale)
+        );
+        const signCellHeight = !source && configKey === "negative_sign_icon"
+          ? negativeSignCellHeight(
+              options.layoutDetails?.resolutions.find(
+                (candidate) => candidate.directory === resolution.directory
+              ) ?? resolution
+            )
+          : null;
         const canvasSize = configAssetCanvasSize(
           configKey,
           effectiveOverride,
@@ -1991,10 +2017,7 @@ export async function buildWatchfaceConfigAssetReplacements(
                 Math.round(override!.replacement!.width * nativeScale)
               ),
             height: source?.height ?? virtualCanvas?.height ??
-              Math.max(
-                1,
-                Math.round(override!.replacement!.height * nativeScale)
-              )
+              Math.max(replacementHeight, signCellHeight ?? 0)
           },
           nativeScale
         );
