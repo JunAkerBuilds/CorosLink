@@ -20,3 +20,57 @@ export function batteryPreviewStateIndex(stateCount: number, percentage?: number
 export function batteryReplacementStateCount(states: Record<string, unknown> | undefined): number {
   return Math.max(0, ...Object.keys(states ?? {}).filter(key => /^\d+$/.test(key)).map(key => Number(key) + 1));
 }
+
+interface BatteryFrameSize { width: number; height: number }
+
+/**
+ * Whether artwork has (within 5%) the same proportions as a fixed frame, so it
+ * may be stretched to fill it. Otherwise callers fit it inside, centered.
+ */
+export function artworkMatchesFrame(
+  frame: BatteryFrameSize,
+  artwork: BatteryFrameSize
+): boolean {
+  if (frame.width <= 0 || frame.height <= 0 || artwork.width <= 0 || artwork.height <= 0) return true;
+  const shapeRatio = (frame.width / frame.height) / (artwork.width / artwork.height);
+  return Math.abs(shapeRatio - 1) <= 0.05;
+}
+
+/**
+ * The bitmap frame a fixed-battery state is exported into. Artwork shaped like
+ * the template's frame fills that frame (official sets, resized templates).
+ * Artwork of another shape keeps its own proportions, at the target
+ * resolution's scale, so a wide 125×30 set is never squeezed into a tall
+ * template frame. `coversTemplate` is false when some template states keep
+ * their original PNGs; the frame then stays the template's so one folder never
+ * mixes PNG sizes.
+ */
+export function batteryStateFrameSize(
+  template: BatteryFrameSize | null | undefined,
+  artwork: BatteryFrameSize,
+  resolutionScale = 1,
+  coversTemplate = true
+): BatteryFrameSize & { native: boolean } {
+  const own = {
+    width: Math.max(1, Math.round(artwork.width * resolutionScale)),
+    height: Math.max(1, Math.round(artwork.height * resolutionScale))
+  };
+  if (!template || template.width <= 0 || template.height <= 0) return { ...own, native: true };
+  const templateFrame = { width: template.width, height: template.height, native: false };
+  if (!coversTemplate || artwork.width <= 0 || artwork.height <= 0) return templateFrame;
+  const shapeRatio = (template.width / template.height) / (artwork.width / artwork.height);
+  return Math.abs(shapeRatio - 1) <= 0.05 ? templateFrame : { ...own, native: true };
+}
+
+/** Whether every template state has imported artwork (or a single fallback). */
+export function batteryStatesCoverTemplate(
+  templateStateCount: number,
+  states: Record<string, unknown> | undefined,
+  hasFallback = false
+): boolean {
+  if (hasFallback) return true;
+  for (let index = 0; index < templateStateCount; index += 1) {
+    if (!states?.[String(index)]) return false;
+  }
+  return true;
+}

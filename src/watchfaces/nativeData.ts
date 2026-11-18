@@ -1,7 +1,8 @@
 import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import type { ChartPageCompanions } from "./recoveredWatchfaceDesign";
 import { NATIVE_CHART_PAGES, NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey, nativeTraditionalKey } from "../../electron/watchfaceNativeCatalog";
-import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, parseConfigRect, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
+import { COROS_CONFIG_DELETE_VALUE, fitWholeSpriteToCanvas, loadStudioImage, offsetConfigValue, parseConfigPos, parseConfigRect, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
+import { artworkMatchesFrame } from "./watchfaceBatteryStates";
 import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount, nativeTextFontSize } from "./nativeDataParts";
 import { type ChartPageModes, removedChartPageKeys, templateChartPageOverrides } from "./templateChartPages";
 import { chartGraphBounds, chartPageFillers, chartReadoutBounds, chartReadoutFolder, chartReadoutPage, chartSourceOf, storedChartReadouts } from "./chartReadouts";
@@ -170,9 +171,17 @@ export async function nativeDataAsset(id: string, style: Style, role: Role, inde
   if (replacement) {
     // Keep an imported chart backdrop at native size without another canvas
     // pass, which can change edge pixels and transparent RGB channels.
-    const image = id === "chart" && role === "background" ? await loadStudioImage(replacement) : null;
-    if (image && image.naturalWidth === Math.round(width) && image.naturalHeight === Math.round(height)) return replacement;
-    return resizeAndTintSprite(replacement, Math.max(1, Math.round(width)), Math.max(1, Math.round(height)));
+    const chartBackdrop = id === "chart" && role === "background";
+    const image = await loadStudioImage(replacement);
+    if (chartBackdrop && image.naturalWidth === Math.round(width) && image.naturalHeight === Math.round(height)) return replacement;
+    const frameWidth = Math.max(1, Math.round(width)), frameHeight = Math.max(1, Math.round(height));
+    // Icons and digits keep their proportions: art of another shape is fitted
+    // and centered in the part's PNG size instead of stretched to fill it. A
+    // chart backdrop still fills its chart area.
+    if (!chartBackdrop && !artworkMatchesFrame({ width: frameWidth, height: frameHeight }, { width: image.naturalWidth, height: image.naturalHeight })) {
+      return fitWholeSpriteToCanvas(replacement, frameWidth, frameHeight);
+    }
+    return resizeAndTintSprite(replacement, frameWidth, frameHeight);
   }
   const text = nativeAssetText(id, style, role, index);
   return canvasImage(width, height, ctx => {

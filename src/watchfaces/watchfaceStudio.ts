@@ -1,4 +1,4 @@
-import { batteryPreviewStateIndex, batteryReplacementStateCount } from "./watchfaceBatteryStates.ts";
+import { artworkMatchesFrame, batteryPreviewStateIndex, batteryReplacementStateCount, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates.ts";
 export { batteryPreviewStateIndex } from "./watchfaceBatteryStates.ts";
 import { drawSpritePreservingCore, renderAlignedRasterGlyph, spaceWatchfaceGlyph } from "./watchfaceGlyphLayout.ts";
 import { getWatchfaceTarget } from "../../electron/watchfaceTargets.ts";
@@ -2092,23 +2092,38 @@ export async function buildWatchfaceConfigAssetReplacements(
       const fixedTargetFolder = isolateFixedBattery
         ? "cl_battery_icon"
         : batteryFolder?.folder;
+      const fixedBatteryBase = pickPreviewResolution(details);
+      const fixedBatteryResolutionScale = fixedBatteryBase
+        ? resolution.width / fixedBatteryBase.width
+        : 1;
+      const fixedBatteryCoversTemplate = batteryStatesCoverTemplate(
+        batteryFolder?.files.length ?? 0,
+        batteryOverride.stateReplacements,
+        Boolean(batteryOverride.replacement)
+      );
       for (const [index, sprite] of (batteryFolder?.files ?? []).entries()) {
         const replacement =
           batteryOverride.stateReplacements?.[String(index)] ??
           batteryOverride.replacement;
         if (!replacement) continue;
+        const frame = batteryStateFrameSize(
+          { width: Math.max(1, sprite.width), height: Math.max(1, sprite.height) },
+          replacement,
+          fixedBatteryResolutionScale,
+          fixedBatteryCoversTemplate
+        );
         replacements.push({
           path: fixedTargetFolder
             ? `${resolution.directory}/${fixedTargetFolder}/${sprite.path.split("/").at(-1)}`
             : sprite.path,
           dataUrl: await renderScaledSpriteInSlot(
             replacement.dataUrl,
-            Math.max(1, sprite.width),
-            Math.max(1, sprite.height),
+            frame.width,
+            frame.height,
             batteryOverride.scale ?? 1
           ),
           ...(isolateFixedBattery ? { create: true } : {}),
-          allowDimensionOverride: (batteryOverride.scale ?? 1) !== 1
+          allowDimensionOverride: frame.native || (batteryOverride.scale ?? 1) !== 1
         });
       }
       if (!batteryFolder) {
@@ -2205,20 +2220,22 @@ export async function buildWatchfaceConfigAssetReplacements(
       }
       for (const [state, replacement] of states) {
         const templateState = controlBatteryFolder?.files[Number(state)];
+        const slotWidth = Math.max(
+          1,
+          templateState?.width ??
+            Math.round(replacement.width * resolutionScale)
+        );
+        const slotHeight = Math.max(
+          1,
+          templateState?.height ??
+            Math.round(replacement.height * resolutionScale)
+        );
         replacements.push({
           path: `${resolution.directory}/cl_control_battery_icon/${String(Number(state)).padStart(2, "0")}.png`,
-          dataUrl: await renderScaledSpriteInSlot(
-            replacement.dataUrl,
-            Math.max(
-              1,
-              templateState?.width ??
-                Math.round(replacement.width * resolutionScale)
-            ),
-            Math.max(
-              1,
-              templateState?.height ??
-                Math.round(replacement.height * resolutionScale)
-            ),
+          dataUrl: await renderControlBatteryIcon(
+            replacement,
+            slotWidth,
+            slotHeight,
             controlBatteryOverride.scale ?? 1
           ),
           create: true
@@ -3839,6 +3856,26 @@ export async function rotateSpriteInCanvas(
   );
   context.restore();
   return canvas.toDataURL("image/png");
+}
+
+/**
+ * A control-slot battery icon keeps the slot's PNG size (one size per folder,
+ * same position). Artwork of another shape is centered inside it with its
+ * proportions kept rather than stretched to fill the slot.
+ */
+async function renderControlBatteryIcon(
+  artwork: { dataUrl: string; width: number; height: number },
+  slotWidth: number,
+  slotHeight: number,
+  scale = 1
+): Promise<string> {
+  if (
+    normalizePositiveScale(scale) === 1 &&
+    !artworkMatchesFrame({ width: slotWidth, height: slotHeight }, artwork)
+  ) {
+    return fitWholeSpriteToCanvas(artwork.dataUrl, slotWidth, slotHeight);
+  }
+  return renderScaledSpriteInSlot(artwork.dataUrl, slotWidth, slotHeight, scale);
 }
 
 /** Renders a battery-state sprite at the selected bitmap scale. */
@@ -10709,12 +10746,29 @@ export async function drawStudioPreview(
     const createdBatteryScale = batteryFolder
       ? 1
       : options.batteryIconResolutionScale ?? 1;
-    const image = batteryReplacement
+    const batteryFrame = batteryReplacement
+      ? batteryFolder
+        ? batteryStateFrameSize(
+            batteryFile,
+            batteryReplacement,
+            options.batteryIconResolutionScale ?? 1,
+            batteryStatesCoverTemplate(
+              batteryFolder.files.length,
+              batteryOverride?.stateReplacements,
+              Boolean(batteryOverride?.replacement)
+            )
+          )
+        : {
+            width: Math.max(1, Math.round(batteryFile.width * createdBatteryScale)),
+            height: Math.max(1, Math.round(batteryFile.height * createdBatteryScale))
+          }
+      : null;
+    const image = batteryReplacement && batteryFrame
       ? await loadStudioImage(
           await renderScaledSpriteInSlot(
             batteryReplacement.dataUrl,
-            Math.max(1, Math.round(batteryFile.width * createdBatteryScale)),
-            Math.max(1, Math.round(batteryFile.height * createdBatteryScale)),
+            batteryFrame.width,
+            batteryFrame.height,
             batteryIconScale
           )
         )
@@ -11134,8 +11188,8 @@ export async function drawStudioPreview(
     const image =
       complication?.id === "battery" && controlBatteryReplacement
         ? await loadStudioImage(
-            await renderScaledSpriteInSlot(
-              controlBatteryReplacement.dataUrl,
+            await renderControlBatteryIcon(
+              controlBatteryReplacement,
               complicationIcon.width,
               complicationIcon.height,
               controlBatteryOverride?.scale ?? 1
