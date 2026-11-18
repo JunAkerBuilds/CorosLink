@@ -15,6 +15,7 @@ const { findCorosBitmapBlocks, decodeCorosBitmapFrame, decodeCorosLayout, readLa
 const { recoverCompiledCorosWatchface } = require('../dist-electron/corosCompiledWatchface.js');
 const { getWatchfaceTarget, watchfaceBinTarget } = require('../dist-electron/watchfaceTargets.js');
 
+const DELAYS = '70,125,260,100,100,100,100,100,100,40';
 const PACE_4 = watchfaceBinTarget(getWatchfaceTarget('pace-4'));
 const PACE_PRO = watchfaceBinTarget(getWatchfaceTarget('pace-pro'));
 
@@ -183,6 +184,30 @@ for (const id of ['vertix-2', 'pace-2', 'apex-pro', 'vertix']) {
   assert.equal(big.bin[list + 6], 2);
   assert.deepEqual([0, 1, 2].map(i => big.bin.readUInt16LE(record + 0x3c + i * 2)), [60, 85, 0], 'the loop takes as long as before');
   assert.ok(!mipBlockOverflows(big.bin.subarray(list, list + 10 + 3 * 2 + big.bin.readUInt16LE(list + 10 + 2 * 2))));
+  // One frame kept of several is a still: the longest delay there is, so the watch redraws it least often.
+  const pace3 = watchfaceBinTarget(getWatchfaceTarget('pace-3'));
+  const still = compileWatchface(archive(pace3, { sizes: Array(10).fill([240, 240]), aod: true, delays: DELAYS, pos: '{0,0}' }), { faceId: 7, target: pace3 });
+  assert.deepEqual(still.warnings, ['The animation is too large for PACE 3, so it shows only its first frame. Use smaller frames.']);
+  assert.equal(still.bin.readUInt16LE(still.bin.readUInt32LE(0x312) + 0x3c), 65535);
+  // A kept frame cannot stay up past 65,535 ms: the loop is shorter, and the warning says so.
+  const slow = compileWatchface(archive(target, { sizes: Array(10).fill([200, 200]), aod: true, delays: Array(10).fill(60000).join(','), pos: '{0,0}' }), { faceId: 7, target });
+  assert.deepEqual(slow.warnings, ['The animation is too large for APEX 4 with all 10 frames, so it plays 2 of them. Its loop is shorter too: a frame stays up 65.5 s at most.']);
+  record = slow.bin.readUInt32LE(0x312);
+  assert.deepEqual([0, 1, 2].map(i => slow.bin.readUInt16LE(record + 0x3c + i * 2)), [65535, 65535, 0]);
+  // A position past 32 bits wraps like every other field (and like the phone compilers), not a RangeError.
+  const wrapped = compileWatchface(archive(PACE_4, { aod: true, delays: DELAYS, pos: '{3000000000,5}' }), { faceId: 7, target: PACE_4 }).bin;
+  assert.deepEqual([wrapped.readInt32LE(wrapped.readUInt32LE(0x312)), wrapped.readInt32LE(wrapped.readUInt32LE(0x312) + 4)], [-1294967296, 5]);
+  // The bytes C-LINK's iOS and Android tests pin for the same archives: a change here must be made there too.
+  const sha = bin => crypto.createHash('sha256').update(bin).digest('hex');
+  const pinned = (id, options) => { const t = watchfaceBinTarget(getWatchfaceTarget(id)); return sha(compileWatchface(archive(t, { aod: true, delays: DELAYS, pos: '{-12,31}', ...options }), { faceId: 7, target: t }).bin); };
+  assert.equal(pinned('pace-pro'), 'f3f0583bab155397064b9e625f0ac22aea83d46e999f33c1b41edcfecaa4df8a');
+  assert.equal(pinned('pace-4'), 'c7bcaa7b7eda1a786a6f3e8dc8885dfd981597b09aec7d53fc412af74a74f17a');
+  assert.equal(pinned('pace-3'), '43ab61be297bd49898b68ebb44e077e1d2169306a70dfecf097711a948cf5902');
+  assert.equal(pinned('apex-4'), 'a768804754652f7372d92a027b5297e128eb77a4dc7ebfb82b376bf8f4bb54f4');
+  assert.equal(pinned('vertix-2'), 'cd85d604aa9265dff308788c14f5abc5ebebfbc5ca47c6e11f7bef1671dd3f5e');
+  assert.equal(sha(still.bin), 'e439540e853f3f3ffb12dc2bd1467b4b66aa78aa4e2262f401b3dc6fbf3d861f');
+  assert.equal(sha(slow.bin), '32215f2ae6bd9bf05fcd461891d4cf5aa1fbe984bf70804d37fceb7216c6d3fd');
+  assert.equal(sha(wrapped), '49e8d77cf028584ef90d557a5dac2b763715964d639e7d7a80768b018245fa84');
 }
 {
   // The shared plan Studio's preview plays from: same frames and delays as the build, and the

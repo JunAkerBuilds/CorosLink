@@ -852,7 +852,7 @@ export function WatchfacesView({
       : quickAnimationOutcome(target)?.kind === "unsupported"
         ? t("{{watch}} does not play animations, so this face is built without its animation there.", { watch: t(target.label) })
         : target.display === "mip"
-          ? t("{{watch}} plays the animation in its own 64 colors and may leave frames out to fit; the status under the preview says how many play.", { watch: t(target.label) })
+          ? t("{{watch}} plays the animation in its own 64 colors and may leave frames out to fit; the Animation layer says how many play.", { watch: t(target.label) })
           : "";
     try {
       if (bakeForWatch) {

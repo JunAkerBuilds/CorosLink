@@ -13,6 +13,8 @@ export type WatchAnimationOutcome =
   | { kind: "unsupported" }
   /** A memory-in-pixel watch whose 64 KB frame list cannot hold even one frame. */
   | { kind: "tooLarge" }
+  /** The frames could not be read to measure them; only the build will tell. */
+  | { kind: "unmeasured" }
   /** A memory-in-pixel watch: frames in its 64 colors, margin cut off, and frames left out if they do not all fit. */
   | {
     kind: "fitted";
@@ -22,6 +24,8 @@ export type WatchAnimationOutcome =
     kept: number[];
     /** One delay per kept frame, the left-out frames' time added to the frame before them. */
     delays: number[];
+    /** A kept frame's time passed the longest delay, so the loop is shorter than the design's. */
+    capped: boolean;
     /** Bytes used of the watch's 65,535. */
     bytes: number;
     /** The kept frames as the watch draws them, in watch pixels. */
@@ -47,7 +51,8 @@ async function watchFramePixels(url: string, scale: number): Promise<ImageData> 
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
   canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-  const context = canvas.getContext("2d", { willReadFrequently: true });
+  // A plain canvas, like the export's own (`scaledFrame`), so both read the same pixels.
+  const context = canvas.getContext("2d");
   if (!context) throw new Error("Cannot read an animation frame.");
   context.imageSmoothingQuality = "high";
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
@@ -73,7 +78,7 @@ export async function watchAnimationOutcome(
   const plan = planMipAnimation(pixels.map(frame => mip2222(frame.data, width, height)), width, height, animation.delays);
   if (!plan) return { kind: "tooLarge" };
   return {
-    kind: "fitted", total: animation.frames.length, kept: plan.kept, delays: plan.delays, bytes: plan.bytes,
+    kind: "fitted", total: animation.frames.length, kept: plan.kept, delays: plan.delays, capped: plan.capped, bytes: plan.bytes,
     frames: plan.frames.map(frame => new ImageData(mip2222ToRgba(frame) as Uint8ClampedArray<ArrayBuffer>, plan.width, plan.height)),
     x: plan.x, y: plan.y, scale
   };
@@ -81,5 +86,6 @@ export async function watchAnimationOutcome(
 
 /** Whether the outcome is something the designer should be told about. */
 export function animationOutcomeNeedsNotice(outcome: WatchAnimationOutcome | null): boolean {
-  return Boolean(outcome && (outcome.kind === "unsupported" || outcome.kind === "tooLarge" || (outcome.kind === "fitted" && outcome.kept.length < outcome.total)));
+  return Boolean(outcome && (outcome.kind === "unsupported" || outcome.kind === "tooLarge" || outcome.kind === "unmeasured"
+    || (outcome.kind === "fitted" && outcome.kept.length < outcome.total)));
 }

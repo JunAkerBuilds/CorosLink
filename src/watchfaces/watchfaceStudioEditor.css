@@ -2641,9 +2641,53 @@ body.wf-is-resizing-layers {
 }
 
 .watchface-shell .wf-animation-frames > li {
+  position: relative;
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+/* Delete one frame: a small round badge in the thumbnail's corner, shown on hover or keyboard
+   focus. Studio's own button rules give buttons a minimum height, so every size is pinned. */
+:root .watchface-shell.watchface-shell--studio .wf-animation-frames .wf-animation-frame-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  min-width: 0;
+  max-width: 18px;
+  height: 18px;
+  min-height: 0;
+  max-height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.62);
+  color: #fff;
+  cursor: pointer;
+  line-height: 0;
+  opacity: 0;
+  padding: 0;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-animation-frames > li:hover .wf-animation-frame-delete,
+:root .watchface-shell.watchface-shell--studio .wf-animation-frames .wf-animation-frame-delete:focus-visible {
+  opacity: 1;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-animation-frames .wf-animation-frame-delete:hover {
+  background: var(--wf-danger);
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root .watchface-shell.watchface-shell--studio .wf-animation-frames .wf-animation-frame-delete {
+    transition: none;
+  }
 }
 
 .watchface-shell .wf-animation-frame-thumb {

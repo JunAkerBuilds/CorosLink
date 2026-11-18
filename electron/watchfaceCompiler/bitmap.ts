@@ -763,10 +763,10 @@ export function encodeMipFramesBlock(images: RgbaImage[], smoothEdges = false): 
  * `planMipAnimation` (margin cut off, then frames left out). `x`, `y` say how far the picture moved,
  * so its position follows. Undefined when a single frame is already too large.
  */
-export function fitMipAnimation(images: RgbaImage[], delays: number[], smoothEdges = false): { block: Buffer; delays: number[]; x: number; y: number } | undefined {
+export function fitMipAnimation(images: RgbaImage[], delays: number[], smoothEdges = false): { block: Buffer; delays: number[]; x: number; y: number; capped: boolean } | undefined {
   const width = images[0]!.width, height = images[0]!.height;
   const plan = planMipAnimation(images.map(image => to2222(image, smoothEdges)), width, height, delays);
-  return plan && { block: mipBlock(plan.frames, plan.width, plan.height), delays: plan.delays, x: plan.x, y: plan.y };
+  return plan && { block: mipBlock(plan.frames, plan.width, plan.height), delays: plan.delays, x: plan.x, y: plan.y, capped: plan.capped };
 }
 
 /** Frame data past 64 KB, whose u16 ends COROS truncates, so the watch would misread the block. */

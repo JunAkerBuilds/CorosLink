@@ -355,7 +355,8 @@ function writeAnimation(config: Map<string, string>, header: Buffer, stream: Blo
   }
   let delays = parseAnimationDelays(config.get(ANIMATION_KEYS.delays) ?? "100", names.length);
   // A Studio-owned record with signed i32 slots, so unlike COROS's own keys a minus sign is kept.
-  let [x = 0, y = 0] = (config.get(ANIMATION_KEYS.position)?.match(/-?\d+/g) ?? []).map(Number);
+  // Like every other field, a value past 32 bits wraps instead of failing the build.
+  let [x = 0, y = 0] = (config.get(ANIMATION_KEYS.position)?.match(/-?\d+/g) ?? []).map(value => Number(value) | 0);
   // A memory-in-pixel frame list holds 64 KB at most: its empty margin is cut off, then frames are left out.
   let fitted: Buffer | undefined;
   if (stream.target.display === "mip") {
@@ -364,10 +365,13 @@ function writeAnimation(config: Map<string, string>, header: Buffer, stream: Blo
       stream.warn(`The animation is too large for ${stream.target.label} (one frame passes 64 KB), so the face was built without it. Use smaller frames.`);
       return;
     }
-    if (fit.delays.length < names.length) {
-      stream.warn(`The animation is too large for ${stream.target.label} with all ${names.length} frames, so it plays ${fit.delays.length} of them.`);
+    if (fit.delays.length === 1 && names.length > 1) {
+      stream.warn(`The animation is too large for ${stream.target.label}, so it shows only its first frame. Use smaller frames.`);
+    } else if (fit.delays.length < names.length) {
+      stream.warn(`The animation is too large for ${stream.target.label} with all ${names.length} frames, so it plays ${fit.delays.length} of them.`
+        + (fit.capped ? " Its loop is shorter too: a frame stays up 65.5 s at most." : ""));
     }
-    fitted = fit.block; delays = fit.delays; x += fit.x; y += fit.y;
+    fitted = fit.block; delays = fit.delays; x = (x + fit.x) | 0; y = (y + fit.y) | 0;
   }
   const record = Buffer.alloc(ANIMATION_RECORD);
   record.writeInt32LE(x, 0); record.writeInt32LE(y, 4);

@@ -67,8 +67,13 @@ export interface MipAnimationPlan {
   height: number;
   /** The source frames that play, in order. */
   kept: number[];
-  /** One delay per kept frame: its own plus those of the frames left out after it. */
+  /**
+   * One delay per kept frame: its own plus those of the frames left out after it. A lone frame kept
+   * of several is a still, so it gets the longest delay there is and the watch redraws it least often.
+   */
   delays: number[];
+  /** A kept frame's time passed the 65,535 ms a delay holds, so the loop is shorter than the design's. */
+  capped: boolean;
   /** The kept frames' memory-in-pixel bytes, cut to `width` × `height`. */
   frames: Uint8Array[];
   /** Bytes the frames take in the block, of `MIP_FRAME_LIST_BYTES`. */
@@ -107,9 +112,12 @@ export function planMipAnimation(encoded: Uint8Array[], width: number, height: n
     const kept = Array.from({ length: keep }, (_, i) => Math.floor(i * cropped.length / keep));
     const bytes = kept.reduce((sum, index) => sum + sizes[index]!, 0);
     if (bytes > MIP_FRAME_LIST_BYTES) continue;
+    const still = keep === 1 && cropped.length > 1;
+    const sums = kept.map((start, i) => delays.slice(start, kept[i + 1] ?? delays.length).reduce((sum, delay) => sum + delay, 0));
     return {
       x: x0, y: y0, width: w, height: h, kept, bytes, frames: kept.map(index => cropped[index]!),
-      delays: kept.map((start, i) => Math.min(0xffff, delays.slice(start, kept[i + 1] ?? delays.length).reduce((sum, delay) => sum + delay, 0)))
+      delays: still ? [0xffff] : sums.map(sum => Math.min(0xffff, sum)),
+      capped: !still && sums.some(sum => sum > 0xffff)
     };
   }
   return undefined;

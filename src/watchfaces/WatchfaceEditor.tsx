@@ -2944,19 +2944,25 @@ export function WatchfaceEditor({
   const animationTarget = useMemo(() => getWatchfaceTarget(targetWatchModel ?? targetFirmwareType), [targetWatchModel, targetFirmwareType]);
   const outcomeAnimation = design.animation?.enabled && design.animation.frames.length ? design.animation : undefined;
   const outcomeFrames = outcomeAnimation?.frames, outcomeDelays = outcomeAnimation?.delays;
+  // The size the build stores this watch's frames at: its own screen over the preview's, as the export
+  // scales them. Not the editor's coordinate readout, which is the 800 px master on some projects.
+  const animationWatchScale = animationTarget && previewWidth > 0 ? animationTarget.previewSize / previewWidth : watchCoordinateScale;
   useEffect(() => {
     if (!outcomeFrames || !outcomeDelays) { setAnimationOutcome(null); return; }
     const quick = quickAnimationOutcome(animationTarget);
     if (quick) { setAnimationOutcome(quick); return; }
     let cancelled = false;
+    // The last answer was for other frames or delays: show none until this one is measured, so the
+    // preview and the frame strip never play or dim by a stale result.
+    setAnimationOutcome(null);
     // Measuring reads every frame's pixels, so it waits for edits (delays, a drag of new frames) to settle.
     const timer = window.setTimeout(() => {
-      void watchAnimationOutcome({ enabled: true, x: 0, y: 0, width: 0, height: 0, frames: outcomeFrames, delays: outcomeDelays }, animationTarget, watchCoordinateScale)
+      void watchAnimationOutcome({ enabled: true, x: 0, y: 0, width: 0, height: 0, frames: outcomeFrames, delays: outcomeDelays }, animationTarget, animationWatchScale)
         .then((outcome) => { if (!cancelled) setAnimationOutcome(outcome); })
-        .catch(() => { if (!cancelled) setAnimationOutcome(null); });
+        .catch(() => { if (!cancelled) setAnimationOutcome({ kind: "unmeasured" }); });
     }, 150);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [outcomeFrames, outcomeDelays, animationTarget, watchCoordinateScale]);
+  }, [outcomeFrames, outcomeDelays, animationTarget, animationWatchScale]);
   const animationSelected = selectedId === "animation";
   useEffect(() => {
     const canvas = animationCanvasRef.current;
@@ -16195,10 +16201,18 @@ export function WatchfaceEditor({
       return short ? t("Animation too large for {{watch}}", { watch })
         : t("One frame alone is too large for {{watch}}, so the face is built without the animation. Use smaller frames.", { watch });
     }
+    if (outcome.kind === "unmeasured") {
+      return short ? t("Animation not checked for {{watch}}", { watch }) : t("Could not check what {{watch}} plays of the animation. Building the face will say.", { watch });
+    }
     if (outcome.kind === "fitted") {
+      if (outcome.kept.length === 1 && outcome.total > 1) {
+        return short ? t("Animation: first frame only on {{watch}}", { watch })
+          : t("Too large for {{watch}}, so it shows only the first frame, as a still. Smaller frames let it play.", { watch });
+      }
       if (outcome.kept.length < outcome.total) {
         return short ? t("Animation: {{kept}} of {{total}} frames on {{watch}}", { kept: outcome.kept.length, total: outcome.total, watch })
-          : t("Too large for {{watch}} with all {{total}} frames, so it plays {{kept}} of them, each held longer so the loop takes as long. Smaller frames keep more. The preview shows what the watch plays.", { kept: outcome.kept.length, total: outcome.total, watch });
+          : [t("Too large for {{watch}} with all {{total}} frames, so it plays {{kept}} of them, each held longer so the loop takes as long. Smaller frames keep more. The preview shows what the watch plays.", { kept: outcome.kept.length, total: outcome.total, watch }),
+            outcome.capped ? t("Its loop is shorter too: a frame stays up 65.5 s at most.") : ""].filter(Boolean).join(" ");
       }
       return t("Plays on {{watch}} with all {{total}} frames, in the watch's 64 colors, as the preview shows ({{percent}}% of its animation memory).", { watch, total: outcome.total, percent: Math.max(1, Math.round(outcome.bytes / 65535 * 100)) });
     }
@@ -16216,6 +16230,12 @@ export function WatchfaceEditor({
     };
     const setDelay = (index: number, value: number) =>
       updateAnimation({ delays: animation.delays.map((delay, i) => (i === index ? clampAnimationDelay(value) : delay)) });
+    const removeFrame = (index: number) => {
+      // The last frame goes with the layer itself (Delete), not from here.
+      if (animation.frames.length <= 1) return;
+      updateAnimation({ frames: animation.frames.filter((_, i) => i !== index), delays: animation.delays.filter((_, i) => i !== index) });
+      setAnimationStillFrame((shown) => Math.max(0, Math.min(shown > index ? shown - 1 : shown, animation.frames.length - 2)));
+    };
     const uniform = animation.delays.every((delay) => delay === animation.delays[0]);
     const cycle = animation.delays.reduce((sum, delay) => sum + delay, 0);
     const problem = animationProblem(animation);
@@ -16300,6 +16320,17 @@ export function WatchfaceEditor({
                     <img src={url} alt="" />
                     <span>{index + 1}</span>
                   </button>
+                  {animation.frames.length > 1 ? (
+                    <button
+                      type="button"
+                      className="wf-animation-frame-delete"
+                      title={t("Delete frame {{index}}", { index: index + 1 })}
+                      aria-label={t("Delete frame {{index}}", { index: index + 1 })}
+                      onClick={() => removeFrame(index)}
+                    >
+                      <X size={12} strokeWidth={2.6} aria-hidden="true" />
+                    </button>
+                  ) : null}
                   <label>
                     <EditableNumberInput
                       aria-label={t("Frame {{index}} delay (ms)", { index: index + 1 })}
