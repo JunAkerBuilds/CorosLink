@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Temperature alignment with °C turned off.** A hidden degree sign was still sent as an invisible full-width image, and the watch counted it when aligning the reading, so a right-aligned temperature sat about a digit to the left of where Studio showed it. Hidden degree and minus signs now take no space. Minimum and maximum temperature get the same fix.
+
 ## [0.1.78] - 2026-11-16
 
 ### Added

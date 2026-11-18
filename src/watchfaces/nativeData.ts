@@ -380,19 +380,29 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
             values[field.percentKey ?? field.unitKey!] = field.unitKey ? folders.unit : unit;
           }
           if (field.decimalKey && part("decimal").enabled) values[field.decimalKey] = await sprite("decimal");
+          // A hidden minus or degree sign goes as a 1x1 image. The watch still
+          // places it after the digits and aligns the whole run, so a full-size
+          // transparent one pushed a right-aligned reading a digit to the left
+          // (W942 SIMPLE, 2026-11-17: "9" well away from the weather icon).
           if (id === "weather_temp") {
-            values.weather_negasign_icon = await sprite("symbols", 0);
-            // One image shows for both units. With a second one, the watch picks
-            // frame 0 in Celsius and frame 1 in Fahrenheit (W332 3.2008.0, 0x454f76).
-            const unit = await sprite("unit");
-            const perUnit = Boolean(style.assets?.unit?.["1"]) || style.assetTexts?.unit?.["1"] !== undefined;
-            if (perUnit) await sprite("unit", 1);
-            values.weather_dgree_icon = perUnit ? folders.unit : unit;
+            values.weather_negasign_icon = part("symbols").enabled ? await sprite("symbols", 0) : blankIcon();
+            if (!part("unit").enabled) values.weather_dgree_icon = blankIcon();
+            else {
+              // One image shows for both units. With a second one, the watch picks
+              // frame 0 in Celsius and frame 1 in Fahrenheit (W332 3.2008.0, 0x454f76).
+              const unit = await sprite("unit");
+              const perUnit = Boolean(style.assets?.unit?.["1"]) || style.assetTexts?.unit?.["1"] !== undefined;
+              if (perUnit) await sprite("unit", 1);
+              values.weather_dgree_icon = perUnit ? folders.unit : unit;
+            }
           } else if (id.startsWith("weather_temp_")) {
-            const shared = temperatureStyle ?? style;
-            values.weather_temp_max_min_negasign_icon = await sprite("symbols", 0, shared, "cl_nd_temp_symbols");
-            for (let i = 0; i < 2; i++) await sprite("unit", i, shared, "cl_nd_temp_units");
-            values.weather_temp_max_min_dgree_icon = "cl_nd_temp_units";
+            const shared = temperatureStyle ?? style, sharedPart = (key: Part) => nativePart(id, shared, key);
+            values.weather_temp_max_min_negasign_icon = sharedPart("symbols").enabled
+              ? await sprite("symbols", 0, shared, "cl_nd_temp_symbols") : blankIcon();
+            if (sharedPart("unit").enabled) {
+              for (let i = 0; i < 2; i++) await sprite("unit", i, shared, "cl_nd_temp_units");
+              values.weather_temp_max_min_dgree_icon = "cl_nd_temp_units";
+            } else values.weather_temp_max_min_dgree_icon = blankFrames("cl_nd_temp_units_blank", 2);
           }
         }
         if (nativeHasIcon(field)) await icon(id);
