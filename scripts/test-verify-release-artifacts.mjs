@@ -3,6 +3,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { verifyPlatform } from "./verify-release-artifacts.mjs";
+import { darwinVersionForMacOS, stampMacUpdateMinimum } from "./stamp-mac-update-minimum.mjs";
+
+assert.equal(darwinVersionForMacOS("13.0"), "22.0.0");
+assert.equal(darwinVersionForMacOS("12.0"), "21.0.0");
+assert.throws(() => darwinVersionForMacOS("10.15"), /Unsupported/);
 
 const version = "1.2.3";
 const logger = () => {};
@@ -124,9 +129,20 @@ withReleaseDir((releaseDir) => {
     ].join("\n")
   );
 
+  // A yml without the minimum would let macOS 12 auto-update into Electron 45.
+  assert.throws(
+    () => verifyPlatform("macos", { releaseDir, expectedVersion: macVersion, expectedMacMinimum: "22.0.0", logger }),
+    /minimumSystemVersion missing does not match Electron's 22\.0\.0/
+  );
+  stampMacUpdateMinimum(path.join(releaseDir, "latest-mac.yml"), "21.0.0");
+  stampMacUpdateMinimum(path.join(releaseDir, "latest-mac.yml"), "22.0.0");
+  const stamped = fs.readFileSync(path.join(releaseDir, "latest-mac.yml"), "utf8");
+  assert.equal(stamped.match(/^minimumSystemVersion:/gm)?.length, 1, "restamping replaces the line");
+
   verifyPlatform("macos", {
     releaseDir,
     expectedVersion: macVersion,
+    expectedMacMinimum: "22.0.0",
     logger
   });
 });

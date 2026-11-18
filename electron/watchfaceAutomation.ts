@@ -1,4 +1,4 @@
-import { app, clipboard, ipcMain, nativeImage, type BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
+import { app, clipboard, ClipboardItem, ipcMain, nativeImage, type BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
 import { getSetting, setSetting } from "./database";
 import { WatchfaceAutomationBroker } from "./watchfaceAutomationBroker";
 import { WatchfaceAutomationServer } from "./watchfaceAutomationServer";
@@ -133,7 +133,8 @@ export function registerWatchfaceAutomation(getWindow: () => BrowserWindow | und
     // including its alpha channel, without copying the checkerboard or caption.
     const image = nativeImage.createFromDataURL(await server.readAgentImage(assetId));
     if (image.isEmpty()) throw new Error("The original image could not be loaded.");
-    clipboard.writeImage(image);
+    // Electron 44 replaced writeImage with the W3C-style async write().
+    await clipboard.write([new ClipboardItem({ "image/png": new Blob([new Uint8Array(image.toPNG())], { type: "image/png" }) })]);
   });
   ipcMain.handle("watchfaceAi:cancel", (event, requestId: unknown) => {
     if (!trusted(event)) throw new Error("This connection is only available to the CorosLink window.");

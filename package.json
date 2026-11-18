@@ -205,7 +205,7 @@
     "dmg:background": "python3 scripts/generate-dmg-background.py",
     "rebuild": "electron-builder install-app-deps",
     "dist": "npm run binaries:prepare && npm run build && electron-builder --publish never",
-    "dist:mac": "npm run binaries:prepare:mac && npm run build && electron-builder --mac --arm64 --x64 --publish never",
+    "dist:mac": "npm run binaries:prepare:mac && npm run build && electron-builder --mac --arm64 --x64 --publish never && node scripts/stamp-mac-update-minimum.mjs",
     "dist:win": "npm run binaries:prepare:win && npm run build && electron-builder --win nsis --x64 --publish never",
     "dist:linux": "npm run binaries:prepare:linux && npm run build && electron-builder --linux AppImage deb --x64 --publish never",
     "release:prepare": "node scripts/prepare-release.mjs",
@@ -385,7 +385,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.206",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^13.2.0",
     "electron-updater": "^6.8.9",
     "fast-xml-parser": "^5.12.0",
     "jose": "^6.2.12",
@@ -416,7 +416,7 @@
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "d3-geo": "^3.1.1",
-    "electron": "^42.11.16",
+    "electron": "^45.3.4",
     "electron-builder": "^26.15.6",
     "ffmpeg-static": "^5.3.0",
     "glob": "file:scripts/npm-compat/glob-callback",
@@ -454,8 +454,8 @@
     "glob@^7": "$glob"
   },
   "allowScripts": {
-    "better-sqlite3@12.11.1": true,
-    "electron@42.5.0": true,
+    "better-sqlite3@13.2.0": true,
+    "electron@45.3.4": true,
     "electron-winstaller@5.4.0": true,
     "ffmpeg-static@5.3.0": true,
     "fsevents@2.3.3": true

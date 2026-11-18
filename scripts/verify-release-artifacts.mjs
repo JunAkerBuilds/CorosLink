@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { darwinVersionForMacOS, electronMinimumMacOS } from "./stamp-mac-update-minimum.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultReleaseDir = path.join(repoRoot, "release");
@@ -217,6 +218,19 @@ export function verifyPlatform(platform, options = {}) {
       errors.push(
         `${check.metadataFile} version ${metadataVersion} does not match package.json ${expectedVersion}`
       );
+    }
+
+    // Without it, auto-update installs a build an older Mac can't open
+    // (see stamp-mac-update-minimum.mjs).
+    if (platform === "macos") {
+      const expectedMinimum = options.expectedMacMinimum ??
+        darwinVersionForMacOS(electronMinimumMacOS());
+      const minimum = readYamlField(metadata.contents, "minimumSystemVersion");
+      if (minimum !== expectedMinimum) {
+        errors.push(
+          `${check.metadataFile} minimumSystemVersion ${minimum ?? "missing"} does not match Electron's ${expectedMinimum}`
+        );
+      }
     }
 
     if (platform === "windows") {

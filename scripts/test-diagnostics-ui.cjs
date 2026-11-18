@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { app, BrowserWindow, clipboard, ipcMain } = require("electron");
+const { app, BrowserWindow, clipboard, ClipboardItem, ipcMain } = require("electron");
 
 const root = path.resolve(__dirname, "..");
 const temporaryRoot = path.join(os.tmpdir(), `coroslink-diagnostics-ui-${process.pid}`);
@@ -34,7 +34,10 @@ async function main() {
   let vite;
   const originalFetch = globalThis.fetch;
   const originalClipboardWrite = clipboard.writeText;
-  const oldClipboard = { text: clipboard.readText(), html: clipboard.readHTML(), rtf: clipboard.readRTF(), image: clipboard.readImage() };
+  // Electron 44+: the clipboard is async and W3C-shaped. Items from read() can't be written back,
+  // so copy each format into a new ClipboardItem for the restore below.
+  const oldClipboard = await Promise.all((await clipboard.read().catch(() => [])).map(async (item) =>
+    new ClipboardItem(Object.fromEntries(await Promise.all(item.types.map(async (type) => [type, await item.getType(type)]))))));
   let clipboardChanged = false;
   const watchdog = setTimeout(() => app.exit(1), 90_000);
   try {
@@ -93,7 +96,7 @@ async function main() {
     clipboardChanged = true;
     await click("Copy error report");
     await until(() => js('document.querySelector(".diagnostics-notice").textContent'), (value) => value.startsWith("Copied"), "clipboard copy");
-    assert.equal(clipboard.readText(), await report(), "copied text matches the visible report");
+    assert.equal(await clipboard.readText(), await report(), "copied text matches the visible report");
     await js('document.querySelector(".diagnostics-preview").open = false; document.querySelector(".diagnostics-preview summary").click(); void 0;');
     assert.equal(await js('document.querySelector(".diagnostics-preview").open'), true, "report preview opens");
     window.webContents.invalidate();
@@ -101,7 +104,7 @@ async function main() {
     const imagePath = path.join(os.tmpdir(), "coroslink-diagnostics-settings.png");
     await fs.writeFile(imagePath, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
 
-    clipboard.writeText = () => { throw new Error("Clipboard unavailable"); };
+    clipboard.writeText = async () => { throw new Error("Clipboard unavailable"); };
     await click("Copy error report");
     await until(() => js('document.querySelector(".diagnostics-error")?.textContent'), (value) => value?.includes("select and copy"), "clipboard fallback");
     assert.match(await report(), /ENOTFOUND/);
@@ -122,7 +125,7 @@ async function main() {
     clearTimeout(watchdog);
     globalThis.fetch = originalFetch;
     clipboard.writeText = originalClipboardWrite;
-    if (clipboardChanged) clipboard.write(oldClipboard);
+    if (clipboardChanged) await (oldClipboard.length ? clipboard.write(oldClipboard) : clipboard.clear()).catch((error) => console.warn(`Clipboard not restored: ${error.message}`));
     window?.destroy();
     await vite?.close();
     await fs.rm(temporaryRoot, { recursive: true, force: true });

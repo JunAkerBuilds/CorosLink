@@ -91,10 +91,10 @@ export function initializeDiagnostics(getWindow: () => BrowserWindow | undefined
     getLog().clear();
     return getLog().snapshot(currentStatus());
   });
-  ipcMain.handle("diagnostics:copy", (event, rangeHours?: unknown) => {
+  ipcMain.handle("diagnostics:copy", async (event, rangeHours?: unknown) => {
     assertSender(event);
     const snapshot = getLog().snapshot(currentStatus(), range(rangeHours));
-    clipboard.writeText(snapshot.report);
+    await clipboard.writeText(snapshot.report);
     return snapshot;
   });
   ipcMain.on("diagnostics:rendererError", (event, input: RendererDiagnosticError) => {
