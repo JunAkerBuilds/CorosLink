@@ -146,12 +146,19 @@ class BlockStream {
    * `repeat`, so a copied folder costs nothing. `repeat` duplicates the list, as COROS does for
    * the battery level font.
    */
-  frames(directory: string, repeat = 1): number {
+  /** A directory's PNG paths in the bytewise order COROS stacks them as frames. */
+  frameNames(directory: string): string[] {
     const prefix = directory.replace(/\/+$/, "") + "/";
-    const names = [...this.files.keys()]
+    return [...this.files.keys()]
       .filter(name => name.startsWith(prefix) && !name.slice(prefix.length).includes("/") && name.endsWith(".png") && name.length - prefix.length > 4)
       .sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
-    if (!names.length) { this.missing(prefix.slice(0, -1)); return 0; }
+  }
+
+  warn(message: string): void { this.warnings.add(message); }
+
+  frames(directory: string, repeat = 1): number {
+    const names = this.frameNames(directory);
+    if (!names.length) { this.missing(directory.replace(/\/+$/, "")); return 0; }
     const key = `frames|${repeat}|${names.map(name => this.contentKey(name)).join(",")}`;
     const cached = this.encoded.get(key);
     if (cached !== undefined) { if (cached === 0) this.missing(names[0]!); return cached; }
@@ -290,8 +297,63 @@ function buildLayout(config: Map<string, string>, mode: "normal" | "aod", stream
     if (value !== undefined && ownerKey && written(config, ownerKey)) header[offset] = rgb222(parseNumber(value));
   }
   writeSpecials(config, header);
+  if (mode === "normal") writeAnimation(config, header, stream, path);
   header[0x13a] = version & 0xff;
   return header;
+}
+
+/** Animation keys: CorosLink-owned spellings (COROS's DIY compiler has no key for this record). */
+export const ANIMATION_KEYS = { position: "cl_animation_pos", directory: "cl_animation_dir", delays: "cl_animation_delays_ms" } as const;
+/** Frames the firmware's 0x94-byte record can time: (0x94 − 0x3c) / 2 delay slots. */
+export const MAX_ANIMATION_FRAMES = 44;
+const ANIMATION_RECORD = 0x94, ANIMATION_DELAYS = 0x3c, ANIMATION_POINTERS = 0x28;
+
+/** `100,100,70` → delays in milliseconds; a single value applies to every frame. */
+export function parseAnimationDelays(value: string, frames: number): number[] {
+  const parts = value.split(/[\s,]+/).filter(Boolean);
+  if (!parts.length || parts.some(part => !/^\d+$/.test(part))) throw new WatchfaceCompileError(`${ANIMATION_KEYS.delays} must list whole milliseconds, like 100,100,100.`);
+  const delays = parts.map(Number);
+  const list = delays.length === 1 ? Array.from({ length: frames }, () => delays[0]!) : delays;
+  if (list.length !== frames) throw new WatchfaceCompileError(`The animation has ${frames} frames but ${list.length} delays; give one delay per frame.`);
+  if (list.some(delay => delay < 1 || delay > 0xffff)) throw new WatchfaceCompileError("Animation frame delays must be between 1 and 65535 ms.");
+  return list;
+}
+
+/**
+ * The native animation record at header 0x312, read by PACE 4 (W336) and PACE Pro (W332)
+ * 3.2108.0 at render time: five (i32 x, i32 y) slot positions, five u32 frame-list pointers
+ * at +0x28, then u16 per-frame delays in ms at +0x3c (delay[0] = 0 disables it). The firmware
+ * draws slot frames as `counter % frameCount` after the background and re-arms a timer with
+ * delay[counter]. Studio writes one slot; the AOD layout never animates.
+ */
+function writeAnimation(config: Map<string, string>, header: Buffer, stream: BlockStream, path: (v: string) => string): void {
+  const directory = config.get(ANIMATION_KEYS.directory);
+  if (!directory) return;
+  if (stream.target.display === "mip") {
+    stream.warn(`Animations are not supported on ${stream.target.label} yet; the face was built without it.`);
+    return;
+  }
+  const folder = path(directory);
+  if (!folder) return;
+  const names = stream.frameNames(folder);
+  if (!names.length) throw new WatchfaceCompileError(`The animation folder ${directory} has no PNG frames.`);
+  if (names.length > MAX_ANIMATION_FRAMES) throw new WatchfaceCompileError(`The animation has ${names.length} frames; the watch times at most ${MAX_ANIMATION_FRAMES}.`);
+  const images = names.map(name => stream.image(name));
+  const unreadable = names.find((_, i) => !images[i]);
+  if (unreadable) throw new WatchfaceCompileError(`Animation frame ${unreadable.slice(stream.target.layout.length + 1)} is not a readable PNG.`);
+  const { width, height } = images[0]!;
+  if (images.some(image => image!.width !== width || image!.height !== height)) {
+    throw new WatchfaceCompileError(`Every animation frame must be ${width} × ${height}, like the first one.`);
+  }
+  const delays = parseAnimationDelays(config.get(ANIMATION_KEYS.delays) ?? "100", names.length);
+  // A Studio-owned record with signed i32 slots, so unlike COROS's own keys a minus sign is kept.
+  const [x = 0, y = 0] = (config.get(ANIMATION_KEYS.position)?.match(/-?\d+/g) ?? []).map(Number);
+  const record = Buffer.alloc(ANIMATION_RECORD);
+  record.writeInt32LE(x, 0); record.writeInt32LE(y, 4);
+  delays.forEach((delay, i) => record.writeUInt16LE(delay, ANIMATION_DELAYS + i * 2));
+  const at = stream.append(record);
+  record.writeUInt32LE(stream.frames(folder), ANIMATION_POINTERS);
+  header.writeUInt32LE(at, 0x312);
 }
 
 /** SetStatus ends with heart rate: a 34-byte record (rect, align, font pointer) followed by its font. */

@@ -109,6 +109,12 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
    * `arc_cut_icon` cover the arc exactly as the firmware draws them.
    */
   transparentBackground?: boolean;
+  /**
+   * The native animation's still frame, drawn over the background. Absent
+   * reads it from the template's `cl_animation_*` keys (exported and compiled
+   * faces); the editor passes its design's frame, or null to draw none.
+   */
+  animationStill?: { dataUrl: string; x: number; y: number } | null;
   /** Shared bitmap style for values shown in the selectable control slot. */
   complicationStyle?: WatchfaceMetricSpriteStyle;
   /** Scales a Studio-created standalone battery folder from authoring size. */
@@ -9790,6 +9796,38 @@ export function renderWatchfaceProgressLayers(
  * Draws a live preview of the face: the canvas background plus the actual
  * sprites the watch will render, placed with the template's own layout keys.
  */
+/** First frame of `cl_animation_dir` (watchfaceAnimation.ts) at `cl_animation_pos`. */
+async function drawTemplateAnimationStill(
+  context: CanvasRenderingContext2D,
+  scale: number,
+  resolution: NonNullable<ReturnType<typeof pickPreviewResolution>>,
+  options: WatchfaceStudioOptions,
+  loadAssets: WatchfaceAssetLoader
+): Promise<void> {
+  if (options.animationStill === null) return;
+  if (options.animationStill) {
+    const image = await loadStudioImage(options.animationStill.dataUrl);
+    context.drawImage(image, options.animationStill.x * scale, options.animationStill.y * scale, image.naturalWidth * scale, image.naturalHeight * scale);
+    return;
+  }
+  const relative = resolution.config.cl_animation_dir?.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+  if (!relative) return;
+  const prefix = `${resolution.directory}/${relative}/`;
+  const first = [...resolution.icons, ...resolution.spriteFolders.flatMap((folder) => folder.files)]
+    .map((file) => file.path)
+    .filter((path) => path.startsWith(prefix) && !path.slice(prefix.length).includes("/") && /\.png$/i.test(path))
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))[0];
+  if (!first) return;
+  const asset = (await loadAssets([first]))[0];
+  if (!asset?.dataUrl) return;
+  const image = await loadStudioImage(asset.dataUrl);
+  const position = parseConfigPos(resolution.config.cl_animation_pos) ?? { x: 0, y: 0 };
+  const x = position.x * scale, y = position.y * scale;
+  const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+  context.drawImage(image, x, y, width, height);
+  if (options.compiledPixels) options.onCompiledSprite?.("animation", image, x, y, width, height);
+}
+
 export async function drawStudioPreview(
   canvas: HTMLCanvasElement,
   backgroundDataUrl: string,
@@ -9831,6 +9869,10 @@ export async function drawStudioPreview(
       canvas.width,
       canvas.height
     );
+    // A still of the native sprite animation (its first frame), over the
+    // background and under time and data, as the firmware layers it. The
+    // editor plays it on its own canvas instead (transparentBackground).
+    await drawTemplateAnimationStill(context, scale, resolution, options, loadAssets);
   }
 
   const config = resolution.config;

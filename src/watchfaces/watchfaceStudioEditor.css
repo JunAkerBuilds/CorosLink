@@ -2585,3 +2585,101 @@ body.wf-is-resizing-layers {
   color: var(--text-secondary);
   font-size: 11.5px;
 }
+
+/* --- Animation inspector (native sprite animation, header 0x312) --------- */
+
+.watchface-shell .wf-animation-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.watchface-shell .wf-animation-summary > span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-animation-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--warning-text);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.watchface-shell .wf-animation-problem > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* One row per frame: thumbnail on the face backing, then its delay. */
+.watchface-shell .wf-animation-frames {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  max-height: 264px;
+  margin: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0;
+  list-style: none;
+}
+
+.watchface-shell .wf-animation-frames > li {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.watchface-shell .wf-animation-frame-thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  min-height: 44px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--wf-bezel-face);
+  cursor: pointer;
+  overflow: hidden;
+  padding: 4px;
+}
+
+.watchface-shell .wf-animation-frame-thumb:hover {
+  border-color: color-mix(in srgb, var(--text-primary) 32%, transparent);
+}
+
+.watchface-shell .wf-animation-frames > li.is-shown .wf-animation-frame-thumb {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.watchface-shell .wf-animation-frame-thumb > img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.watchface-shell .wf-animation-frame-thumb > span {
+  position: absolute;
+  left: 4px;
+  bottom: 3px;
+  color: var(--text-secondary);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 9.5px;
+  line-height: 1;
+}
+
+.watchface-shell .wf-animation-frames input {
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

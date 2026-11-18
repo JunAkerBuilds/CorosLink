@@ -3198,11 +3198,13 @@
 }
 
 /* The face is stacked the way the firmware paints it: background canvas,
+   the native animation (its own canvas, so playback never recomposites),
    then the progress arcs on their own layer (so color/geometry edits refresh
    without recompositing), then the transparent sprite composite above both.
    PARTICLES's arc_cut_icon must cover its calorie ring, not sit under it. */
 .watchface-shell .watchface-preview-background,
-.watchface-shell .watchface-preview-arc {
+.watchface-shell .watchface-preview-arc,
+.watchface-shell .watchface-preview-animation {
   position: absolute;
   inset: 9px;
   width: calc(100% - 18px);

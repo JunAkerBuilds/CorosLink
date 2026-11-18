@@ -1,3 +1,4 @@
+import { buildAnimationOverrides, buildAnimationSpriteReplacements } from "./watchfaceAnimation";
 import { composeNativeData, finalizeNativeControlOverrides } from "./nativeData";
 import { buildWatchThemeOverrides } from "./watchfaceThemeColor";
 import type {
@@ -395,6 +396,10 @@ export function toStudioOptions(
   design: CorosWatchfaceDesignState
 ): WatchfaceStudioOptions {
   return {
+    // A design-driven preview shows its own animation still, never the template's.
+    animationStill: design.animation?.enabled && design.animation.frames[0]
+      ? { dataUrl: design.animation.frames[0], x: design.animation.x, y: design.animation.y }
+      : design.animation ? null : undefined,
     fontFamily: design.fontFamily,
     fontWeight: design.fontWeight,
     fontStyle: design.fontStyle,
@@ -841,6 +846,8 @@ export async function composeWatchfaceReplacements(
       : [],
     nativeDataComposition.assetReplacements
   );
+  // Frames bypass the sprite effect passes: the compiler stores them verbatim.
+  const animationReplacements = await buildAnimationSpriteReplacements(details, design.animation);
 
   const timeStyleOverrides = timeStyleActive
     ? buildTimeStyleOverrides(
@@ -958,6 +965,7 @@ export async function composeWatchfaceReplacements(
       buildDisabledControlComplicationOverrides(details, design),
       nativeDataComposition.configOverrides,
       buildWatchThemeOverrides(details, design),
+      buildAnimationOverrides(details, design.animation),
       // Apply after asset replacements so they cannot resurrect a hidden colon.
       buildStaticSeparatorOverrides(details, design.staticSeparators, design.configAssetOverrides)
   );
@@ -988,7 +996,10 @@ export async function composeWatchfaceReplacements(
 
   return {
     // Keep this after all scaling, rotation, opacity, and decoration passes.
-    assetReplacements: await buildSolidFontSpriteReplacements(design, effectedAssets.replacements),
+    assetReplacements: mergeAssetReplacements(
+      await buildSolidFontSpriteReplacements(design, effectedAssets.replacements),
+      animationReplacements
+    ),
     configOverrides,
     ...(minimumWatchFaceVersion !== undefined
       ? { minWatchFaceVersion: minimumWatchFaceVersion }

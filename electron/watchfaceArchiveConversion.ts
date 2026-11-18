@@ -10,6 +10,8 @@ export interface WatchfaceConversionEntry { name: string; data: Buffer }
 // Keep AOD editable through a MIP round trip without exposing it to the MIP
 // compiler or to Studio's active-mode detection.
 export const RETAINED_AOD_CONFIG = "CorosLinkAODconfig.txt";
+/** Studio-owned keys for the native sprite animation (header 0x312); Current only. */
+const ANIMATION_CONFIG_KEYS = ["cl_animation_pos", "cl_animation_dir", "cl_animation_delays_ms"] as const;
 const CONFIG_FILE = /^(?:AODconfig|config|CorosLinkAODconfig)\.txt$/i;
 
 export function normalizeConversionPath(name: string): string {
@@ -360,6 +362,8 @@ function convertEntries(
       // With no source AOD, a generated one is a full-brightness copy of Current: only where it is reviewed.
       if (file !== "config.txt" && !aodSize && !generateAod) continue;
       let scaled = scaleWatchfaceConfig(text, size / masterSize);
+      // Firmware never animates always-on; a generated AOD (a copy of Current) must not carry the record.
+      if (file !== "config.txt") for (const key of ANIMATION_CONFIG_KEYS) scaled = setConfigValue(scaled, key, undefined);
       if (id !== undefined) scaled = setConfigValue(scaled, "watchface_id", id);
       if (recoveredExport) scaled = setConfigValue(scaled, "watchface_thmb_icon", "thmb.png");
       entries.push({ name: `${dir(size)}/${file}`, data: Buffer.from(scaled) });

@@ -1,3 +1,4 @@
+import { normalizeAnimationDelays } from "./watchfaceAnimation";
 import type {
   CorosWatchfaceBackgroundElement,
   CorosWatchfaceDesignState,
@@ -204,6 +205,12 @@ export function normalizeEditorDesign(
     backgroundElements: migratedStrokes.elements,
     lockedLayerIds: [...new Set((design.lockedLayerIds ?? []).filter(Boolean))],
     modeDesigns: normalizedModeDesigns,
+    // One positive whole-millisecond delay per frame, whatever an older or hand-edited project stored.
+    ...(design.animation ? { animation: {
+      ...design.animation,
+      enabled: design.animation.enabled !== false,
+      delays: normalizeAnimationDelays(design.animation.delays, design.animation.frames.length)
+    } } : {}),
     // Global tinting has been replaced by explicit controls in each layer.
     tintLabels: false,
     tintIcons: false

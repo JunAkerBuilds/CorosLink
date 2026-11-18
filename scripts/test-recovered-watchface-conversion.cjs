@@ -259,6 +259,56 @@ async function main() {
     const generated = convertWatchfaceEntries(source.filter(entry => !/AODconfig/.test(entry.name)), carrierEntries, pace4Target);
     assert.equal(generated.generatedAod, true, "Studio still creates an editable AOD by default");
 
+    // A native sprite animation (cl_animation_*, header 0x312) converts once from the
+    // master: position and every frame scale together, delays stay, and the generated
+    // AOD (a copy of Current) never carries it. The PACE Pro BIN then gets the record.
+    {
+      const pngSized = (w, h) => PNG.sync.write({ width: w, height: h, data: Buffer.alloc(w * h * 4, 200) });
+      const animated = [
+        { name: "info.json", data: Buffer.from('{"m_name":"Run","m_app":"watchface_390x390","m_preview":"watchface_customize.png","o_template_id":1,"o_diy_version":1,"o_wf_ver":4}') },
+        { name: "watchface_customize.png", data: png(390) },
+        { name: "watchface_390x390/background.png", data: png(390) },
+        ...Array.from({ length: 10 }, (_, i) => ({ name: `watchface_390x390/recovered/group-22/${String(i).padStart(2, "0")}.png`, data: pngSized(376, 340) })),
+        { name: "watchface_390x390/config.txt", data: cfg("[watchface_id]=1000001880\n[background_icon]=background.png\n[background_icon_pos]={0,0}\n[cl_animation_pos]={0,31}\n[cl_animation_dir]=recovered\\group-22\n[cl_animation_delays_ms]=70,100,100,100,100,100,100,100,100,260\n") }
+      ];
+      const paceProTarget = WATCHFACE_TARGETS.find(target => target.model === "pace-pro");
+      // Recovered faces convert from their native tree (PACE 4's 390) straight to the destination.
+      const { prepareRecoveredWatchfaceExport } = require("../dist-electron/watchfaceArchiveConversion.js");
+      const recoveredInfo = { name: "info.json", data: Buffer.from('{"m_name":"Run","m_app":"watchface_390x390","m_preview":"watchface_customize.png","o_template_id":1,"o_diy_version":1,"o_wf_ver":4,"coroslinkRecovery":{"partial":true}}') };
+      const convertedEntries = prepareRecoveredWatchfaceExport([recoveredInfo, ...animated.slice(1)], carrier(paceProTarget.sizes, "90071992547409950"), paceProTarget);
+      const converted = { entries: convertedEntries };
+      const config = (name) => service.parseCorosWatchfaceConfig(converted.entries.find(entry => entry.name === name).data.toString("utf8"));
+      assert.equal(config("watchface_416x416/config.txt").cl_animation_pos, "{0,33}", "(0,31) at 390 lands at (0,33) at 416");
+      assert.equal(config("watchface_416x416/config.txt").cl_animation_delays_ms, "70,100,100,100,100,100,100,100,100,260", "Delays never scale");
+      assert.equal(config("watchface_800x800/config.txt").cl_animation_pos, "{0,64}");
+      // A Studio conversion from an 800px master generates an editable AOD from Current: never animated.
+      const masterAnimated = convertWatchfaceEntries([
+        ...source.filter(entry => !/AODconfig/.test(entry.name) && !/800x800\/config/.test(entry.name)),
+        ...Array.from({ length: 3 }, (_, i) => ({ name: `watchface_800x800/cl_animation_03/0${i}.png`, data: pngSized(80, 60) })),
+        { name: "watchface_800x800/config.txt", data: cfg("[watchface_id]=0x00000020\n[background_icon]=background.png\n[time_hour_high_pos]={200,300}\n[cl_animation_pos]={10,20}\n[cl_animation_dir]=cl_animation_03\n[cl_animation_delays_ms]=100,100,100\n") }
+      ], carrierEntries, pace4Target);
+      assert(masterAnimated.generatedAod, "A Studio conversion generates an editable AOD");
+      for (const size of pace4Target.sizes) {
+        const text = (name) => masterAnimated.entries.find(entry => entry.name === name).data.toString("utf8");
+        assert.match(text(`watchface_${size}x${size}/config.txt`), /\[cl_animation_dir\]=cl_animation_03/, `Current keeps the animation at ${size}px`);
+        assert.doesNotMatch(text(`watchface_${size}x${size}/AODconfig.txt`), /cl_animation/, `The generated ${size}px AOD has no animation keys`);
+      }
+      const frames = converted.entries.filter(entry => entry.name.startsWith("watchface_416x416/recovered/group-22/"));
+      assert.equal(frames.length, 10, "Every frame converts");
+      const sizes = new Set(frames.map(entry => { const image = PNG.sync.read(entry.data); return `${image.width}x${image.height}`; }));
+      assert.deepEqual([...sizes], ["401x363"], "Frames scale once from the same baseline and keep one size");
+      const { compileWatchface } = require("../dist-electron/watchfaceCompiler/compiler.js");
+      const { watchfaceBinTarget } = require("../dist-electron/watchfaceTargets.js");
+      const { findCorosBitmapBlocks, decodeCorosLayout, readLayoutHeaders } = require("../dist-electron/corosBinLayout.js");
+      const { bin, warnings } = compileWatchface(new Map(converted.entries.map(entry => [entry.name, entry.data])), { faceId: 1, target: watchfaceBinTarget(paceProTarget) });
+      assert.equal(bin.toString("latin1", 0, 4), "614A");
+      const headers = readLayoutHeaders(bin);
+      const layout = decodeCorosLayout(bin, findCorosBitmapBlocks(bin, Math.max(...headers.map(header => header.offset + header.length))));
+      assert.deepEqual(layout.modes[0].animation.slots.map(slot => [slot.position.x, slot.position.y, slot.frameCount, slot.width, slot.height]), [[0, 33, 10, 401, 363]], warnings.join("; "));
+      assert.deepEqual(layout.modes[0].animation.delays, [70, 100, 100, 100, 100, 100, 100, 100, 100, 260]);
+      assert.equal(layout.modes[1]?.animation, undefined, "The converted AOD stays static");
+    }
+
     // The largest watch tree declares the colon blank and a smaller one draws it: the value wins over
     // the blank, scaled from the tree that has it, and the image it names travels with it.
     const tiers = [

@@ -11,6 +11,7 @@ import { loadWatchfaceGoogleFont, loadWatchfaceGoogleFontsFor, parseWatchfaceGoo
 import { renameWatchfaceFontFamily } from "./watchfaceFontRename";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
 import { recoverChartGroup, recoverChartPageCompanions, recoverGraphlessChart, recoveredChartReadouts, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
+import { animationFrameAt, animationNextChange, animationProblem, clampAnimationDelay, DEFAULT_ANIMATION_DELAY, importAnimationFrames, MAX_ANIMATION_FRAMES, normalizeAnimationDelays, readTemplateAnimation } from "./watchfaceAnimation";
 import { WATCHFACE_TARGETS } from "../../electron/watchfaceTargets";
 import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
 import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
@@ -169,7 +170,9 @@ import {
   Maximize2,
   Minimize2,
   TriangleAlert,
-  ArrowUpRight
+  ArrowUpRight,
+  Play,
+  Pause
 } from "lucide-react";
 import {
   resizeWatchfaceDimensions,
@@ -188,6 +191,7 @@ import type {
   CorosWatchfaceBackgroundLine,
   CorosWatchfaceBackgroundRect,
   CorosWatchfaceBackgroundText,
+  CorosWatchfaceAnimation,
   CorosWatchfaceDesignState,
   CorosWatchfaceDesignSprite,
   CorosWatchfaceEditorGuide,
@@ -706,6 +710,7 @@ interface WatchfaceDragState {
     | "staticSeparator"
     | "ampm"
     | "weather"
+    | "animation"
     | "nativeData"
     | "selectorIcon";
   targetId: string;
@@ -984,6 +989,12 @@ export function WatchfaceEditor({
   const arcOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const watchThemeRef = useRef<number | null>(null);
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
+  /** The native animation's own canvas, between the background and the face composite. */
+  const animationCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [animationPlaying, setAnimationPlaying] = useState(() =>
+    typeof window === "undefined" || !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+  /** Frame shown while playback is paused (picked in the inspector's frame strip). */
+  const [animationStillFrame, setAnimationStillFrame] = useState(0);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewStackRef = useRef<HTMLDivElement>(null);
   const componentDragBoundsRef = useRef<SVGRectElement>(null);
@@ -1917,6 +1928,10 @@ export function WatchfaceEditor({
         // their Chart layer now, so its pages list like any other chart's.
         const graphlessChart = initialDesign && !initialDesign.nativeData?.chart
           ? await recoverGraphlessChart(applyConfigTextEditsToDetails(described, initialDesign.configTextEdits), loadAssets).catch(() => null) : null;
+        // A recovered official face's native sprite animation (cl_animation_*),
+        // also for projects saved before Studio could edit it.
+        const templateAnimation = initialDesign?.animation ? undefined
+          : await readTemplateAnimation(applyConfigTextEditsToDetails(described, initialDesign?.configTextEdits), loadAssets).catch(() => undefined);
         if (cancelled) return;
 
         const baselines: Record<string, string> = {};
@@ -1955,6 +1970,7 @@ export function WatchfaceEditor({
           };
         }
         if (graphlessChart) nextDesign = { ...nextDesign, nativeData: { ...nextDesign.nativeData, chart: graphlessChart } };
+        if (templateAnimation) nextDesign = { ...nextDesign, animation: templateAnimation };
         if (!initialDesign?.ampmIndicator) {
           const capability = getAmPmCapability(described);
           if (capability) {
@@ -2915,6 +2931,44 @@ export function WatchfaceEditor({
     void paint();
     return () => { cancelled = true; };
   }, [previewBackgroundDataUrl, previewStudioOptions.previewMode, canvasBackingRevision, watchTheme]);
+  // The native animation plays on its own canvas over the background, under
+  // the time and data composite, the way the watch layers it. The frame comes
+  // from elapsed time over the cumulative delays, so late ticks never drift.
+  // Playback is preview-only state, outside the design and undo history.
+  const playedAnimation = previewMode === "current" && design.animation?.enabled ? design.animation : undefined;
+  useEffect(() => {
+    const canvas = animationCanvasRef.current;
+    const context = canvas?.getContext("2d", { colorSpace: "display-p3" });
+    if (!canvas || !context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    if (!playedAnimation?.frames.length) return;
+    let cancelled = false, timer = 0, shown = -1;
+    const images: (HTMLImageElement | null)[] = playedAnimation.frames.map(() => null);
+    const scale = canvas.width / previewWidth;
+    const draw = (index: number) => {
+      const image = images[index];
+      if (!image) return false;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, playedAnimation.x * scale, playedAnimation.y * scale, image.naturalWidth * scale, image.naturalHeight * scale);
+      applyWatchThemeToCanvas(canvas, watchTheme);
+      return true;
+    };
+    void Promise.all(playedAnimation.frames.map((url, index) => loadStudioImage(url).then((image) => { images[index] = image; }))).then(() => {
+      if (cancelled) return;
+      // One timer per frame boundary, not a 60 Hz loop: the frame is still
+      // derived from elapsed time, so a late timer never makes playback drift.
+      const start = performance.now();
+      const tick = () => {
+        if (cancelled) return;
+        const elapsed = performance.now() - start;
+        const index = animationPlaying ? animationFrameAt(playedAnimation.delays, elapsed) : animationStillFrame;
+        if (index !== shown && draw(index)) shown = index;
+        if (animationPlaying) timer = window.setTimeout(tick, animationNextChange(playedAnimation.delays, elapsed));
+      };
+      tick();
+    });
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [playedAnimation, previewWidth, canvasBackingRevision, watchTheme, animationPlaying, animationStillFrame]);
   const selectedElementId = selectedId.startsWith("bgel:")
     ? selectedId.slice("bgel:".length)
     : null;
@@ -3547,6 +3601,7 @@ export function WatchfaceEditor({
     );
     const movesAmPm = movingLayers.some((layer) => layer.ampmIndicator);
     const movesWeather = movingLayers.some((layer) => layer.weatherIndicator);
+    const movesAnimation = movingLayers.some((layer) => layer.animation);
     const movingNativeIds = new Set(movingLayers.map(layer => layer.nativeDataId).filter(Boolean));
     const movesExercise = movingIdSet.has("exercise");
     const hiddenLayerVisibility = { ...design.layerVisibility };
@@ -3592,6 +3647,10 @@ export function WatchfaceEditor({
         movesWeather && design.weatherIndicator
           ? { ...design.weatherIndicator, enabled: false }
           : design.weatherIndicator,
+      animation:
+        movesAnimation && design.animation
+          ? { ...design.animation, enabled: false }
+          : design.animation,
       layerVisibility: {
         ...design.layerVisibility,
         ...Object.fromEntries(
@@ -3647,6 +3706,9 @@ export function WatchfaceEditor({
         ? chartDragSplit(style, drag.chartPart ?? "readout", true) : {...style, enabled: style.enabled && movingNativeIds.has(id)}])),
       weatherIndicator: design.weatherIndicator
         ? { ...design.weatherIndicator, enabled: movesWeather }
+        : undefined,
+      animation: design.animation
+        ? { ...design.animation, enabled: movesAnimation && design.animation.enabled }
         : undefined,
       layerVisibility: hiddenLayerVisibility
     };
@@ -5209,6 +5271,20 @@ export function WatchfaceEditor({
         baseBounds: chartReadout ?? liveHit.bounds!, selectionIds: movementIds, ...(liveHit.nativeDataId === "chart" ? { chartPart: "readout" as const } : {})});
       return;
     }
+    if (liveHit.animation && design.animation) {
+      startElementDrag(event, {
+        kind: "animation",
+        targetId: "animation",
+        startX: point.x,
+        startY: point.y,
+        baseX: design.animation.x,
+        baseY: design.animation.y,
+        snapId: liveHit.id,
+        baseBounds: liveHit.bounds!,
+        selectionIds: movementIds
+      });
+      return;
+    }
     if (liveHit.weatherIndicator && design.weatherIndicator) {
       startElementDrag(event, {
         kind: "weather",
@@ -5363,6 +5439,12 @@ export function WatchfaceEditor({
       if (!style) return {dx:0,dy:0};
       const size = nativeDataSize(drag.targetId, style);
       return {dx: Math.max(0, Math.min(previewWidth - size.width, drag.baseX + movement.dx)) - drag.baseX, dy: Math.max(0, Math.min(previewHeight - size.height, drag.baseY + movement.dy)) - drag.baseY};
+    }
+    if (drag.kind === "animation") {
+      const style = design.animation;
+      if (!style) return { dx: 0, dy: 0 };
+      const position = clampAnimationPosition(style, drag.baseX + movement.dx, drag.baseY + movement.dy);
+      return { dx: position.x - drag.baseX, dy: position.y - drag.baseY };
     }
     if (drag.kind === "weather") {
       const capability = details ? getWeatherCapability(details) : null;
@@ -5585,6 +5667,10 @@ export function WatchfaceEditor({
       return;
     }
     if (drag.kind === "nativeData") { updateNativeData(drag.targetId, {x: drag.baseX + movement.dx, y: drag.baseY + movement.dy}); return; }
+    if (drag.kind === "animation") {
+      if (design.animation) updateAnimation(clampAnimationPosition(design.animation, drag.baseX + movement.dx, drag.baseY + movement.dy));
+      return;
+    }
     if (drag.kind === "weather") {
       const capability = details ? getWeatherCapability(details) : null;
       const style = design.weatherIndicator;
@@ -5721,6 +5807,10 @@ export function WatchfaceEditor({
         next = {...next, nativeData: {...next.nativeData, [layer.nativeDataId]: layer.nativeDataId === "chart"
           ? moveChartReadout(style, style.x + movement.dx, style.y + movement.dy)
           : {...style, x:Math.max(0,Math.min(previewWidth-size.width,style.x+movement.dx)), y:Math.max(0,Math.min(previewHeight-size.height,style.y+movement.dy))}}};
+        continue;
+      }
+      if (layer.animation && next.animation) {
+        next = { ...next, animation: { ...next.animation, ...clampAnimationPosition(next.animation, next.animation.x + movement.dx, next.animation.y + movement.dy) } };
         continue;
       }
       if (layer.weatherIndicator && next.weatherIndicator) {
@@ -7312,6 +7402,24 @@ export function WatchfaceEditor({
     }
     selectEditorItem(`native:${ids[0]}`);
     openQuickStartProperties();
+  }
+
+  /** Keeps at least a quarter of the frame on the face; the record stores signed positions. */
+  function clampAnimationPosition(style: CorosWatchfaceAnimation, x: number, y: number): { x: number; y: number } {
+    const faceWidth = previewResolution?.width ?? previewWidth;
+    const faceHeight = previewResolution?.height ?? previewHeight;
+    return {
+      x: Math.round(Math.max(-style.width * 0.75, Math.min(faceWidth - style.width * 0.25, x))),
+      y: Math.round(Math.max(-style.height * 0.75, Math.min(faceHeight - style.height * 0.25, y)))
+    };
+  }
+
+  function updateAnimation(patch: Partial<CorosWatchfaceAnimation>) {
+    const { x, y, ...otherPatch } = patch;
+    const safePatch = isPositionLocked("animation")
+      ? otherPatch
+      : { ...otherPatch, ...(x !== undefined ? { x } : {}), ...(y !== undefined ? { y } : {}) };
+    setDesign((prev) => prev.animation ? { ...prev, animation: { ...prev.animation, ...safePatch } } : prev);
   }
 
   function updateWeatherIndicator(
@@ -10100,6 +10208,10 @@ export function WatchfaceEditor({
     return [{ ...layer, label: group.label, visible: members.some(item => item.visible) }];
   });
   const faceAddOptions: WatchfaceAddFaceOption[] = [
+    // A face without one authors a new animation from a folder of PNG frames.
+    ...(!design.animation?.frames.length && previewMode === "current"
+      ? [{ id: "animation", label: t("Animation"), category: "Device" as const, added: false, onAdd: () => void chooseAnimationFrames() }]
+      : []),
     ...(canAddSeconds ? [{ id: "seconds", label: t("Seconds"), category: "Time" as const, added: Boolean(design.addSeconds), onAdd: addSeconds }] : []),
     { id: "analog", label: t("Analog hands"), category: "Time", added: analogHandsOnFace, onAdd: addAnalogHands },
     ...(!layers.some((layer) => layer.id === NEGATIVE_SIGN_LAYER_ID && layer.present)
@@ -11029,6 +11141,13 @@ export function WatchfaceEditor({
             <canvas
               ref={backgroundCanvasRef}
               className="watchface-preview-background"
+              width={PREVIEW_SIZE}
+              height={PREVIEW_SIZE}
+              aria-hidden="true"
+            />
+            <canvas
+              ref={animationCanvasRef}
+              className="watchface-preview-animation"
               width={PREVIEW_SIZE}
               height={PREVIEW_SIZE}
               aria-hidden="true"
@@ -12102,6 +12221,8 @@ export function WatchfaceEditor({
     // Weather keeps its own section: on a face with a chart the watch hides
     // some of it on some pages, which each field's inspector explains.
     // With chart pages, the fields the page switches sit with the Chart.
+    // The watch plays it over the background on its own timer.
+    if (layer.kind === "animation") return "Animation";
     if (previewMode === "current" && layerPageScope(layer)) return "Chart pages";
     if (layer.kind === "weather" || layer.nativeDataId?.startsWith("weather_")) return "Weather";
     if (
@@ -12395,6 +12516,7 @@ export function WatchfaceEditor({
       complication: "Selectable data",
       metric: "Dynamic metric",
       weather: "Dynamic weather",
+      animation: "Animation",
       configAsset: "Template asset",
       customSprite: "Image"
     }[layer.kind];
@@ -12617,7 +12739,8 @@ export function WatchfaceEditor({
   }
 
   function renderLayerSection(layer: EditorLayer) {
-    if (layer.nativeDataId) return null;
+    // The watch draws animation frames as stored; there is no layer opacity to bake in.
+    if (layer.nativeDataId || layer.animation) return null;
     const sprite = layer.spriteId
       ? (design.designSprites ?? []).find(
           (candidate) => candidate.id === layer.spriteId
@@ -13327,6 +13450,8 @@ export function WatchfaceEditor({
       if (reference) updateConfigAsset(reference, { enabled: on });
     } else if (layer.metricId) {
       setMetricVisible(layer.metricId, on);
+    } else if (layer.animation) {
+      updateAnimation({ enabled: on });
     } else if (layer.weatherIndicator) {
       updateWeatherIndicator({ enabled: on });
     } else if (layer.ampmIndicator) {
@@ -13803,6 +13928,10 @@ export function WatchfaceEditor({
     if (layer.configAssetId) {
       const reference = configAssetsById.get(layer.configAssetId);
       return reference ? renderConfigAssetInspector(reference, layer) : null;
+    }
+
+    if (layer.animation) {
+      return renderAnimationInspector();
     }
 
     if (layer.weatherIndicator) {
@@ -15955,6 +16084,156 @@ export function WatchfaceEditor({
     } catch (error) {
       if (isSpriteImportCurrent(importId)) onError(error instanceof Error ? error.message : t("Could not import weather sprites."));
     } finally { finishSpriteImport(importId); }
+  }
+
+  /** Frames from a folder of numbered PNGs, sized in watch pixels. */
+  async function chooseAnimationFrames() {
+    const importId = beginSpriteImport("animation-frames");
+    if (importId === null) return;
+    try {
+      const folder = await api.chooseCorosWatchfaceRasterFontFolder();
+      if (!folder) return;
+      const imported = await importAnimationFrames(folder.sprites, watchCoordinateScale > 0 ? 1 / watchCoordinateScale : 1);
+      if (!isSpriteImportCurrent(importId)) return;
+      const faceWidth = previewResolution?.width ?? previewWidth;
+      const faceHeight = previewResolution?.height ?? previewHeight;
+      setDesign((prev) => {
+        const previous = prev.animation;
+        // A replacement keeps the old place and timing where it can.
+        const keepTiming = previous && previous.delays.length === imported.frames.length;
+        return {
+          ...prev,
+          animation: {
+            enabled: true,
+            x: previous?.frames.length ? previous.x : Math.round((faceWidth - imported.width) / 2),
+            y: previous?.frames.length ? previous.y : Math.round((faceHeight - imported.height) / 2),
+            ...imported,
+            delays: keepTiming ? previous.delays : normalizeAnimationDelays([previous?.delays[0] ?? DEFAULT_ANIMATION_DELAY], imported.frames.length)
+          }
+        };
+      });
+      setAnimationStillFrame(0);
+      selectEditorItem("animation");
+      onNotice(t("Imported {{count}} animation frames.", { count: imported.frames.length }));
+    } catch (error) {
+      if (isSpriteImportCurrent(importId)) onError(error instanceof Error ? error.message : t("Could not import animation frames."));
+    } finally { finishSpriteImport(importId); }
+  }
+
+  function renderAnimationInspector() {
+    const animation = design.animation;
+    if (!animation) return null;
+    const faceWidth = previewResolution?.width ?? previewWidth;
+    const faceHeight = previewResolution?.height ?? previewHeight;
+    const setPosition = (x: number, y: number) => {
+      if (isMovementLockedForId("animation")) return;
+      updateAnimation(clampAnimationPosition(animation, x, y));
+    };
+    const setDelay = (index: number, value: number) =>
+      updateAnimation({ delays: animation.delays.map((delay, i) => (i === index ? clampAnimationDelay(value) : delay)) });
+    const uniform = animation.delays.every((delay) => delay === animation.delays[0]);
+    const cycle = animation.delays.reduce((sum, delay) => sum + delay, 0);
+    const problem = animationProblem(animation);
+    return (
+      <>
+        {renderPositionPanel("animation", t("Watch screen position"), <>
+          <div className="watchface-position-inputs">
+            <label>
+              X
+              <EditableNumberInput
+                step="1"
+                value={toWatchCoordinate(animation.x)}
+                fallback={toWatchCoordinate(animation.x)}
+                onValueChange={(next) => setPosition(fromWatchCoordinate(next), animation.y)}
+              />
+            </label>
+            <label>
+              Y
+              <EditableNumberInput
+                step="1"
+                value={toWatchCoordinate(animation.y)}
+                fallback={toWatchCoordinate(animation.y)}
+                onValueChange={(next) => setPosition(animation.x, fromWatchCoordinate(next))}
+              />
+            </label>
+          </div>
+          <span>{t("Align to face")}</span>
+          <div className="wf-align-icon-grid" role="group" aria-label={t("Align animation to face")}>
+            <button type="button" title={t("Align horizontal center")} aria-label={t("Align horizontal center")} onClick={() => setPosition((faceWidth - animation.width) / 2, animation.y)}><AlignHorizontalJustifyCenter size={14} /></button>
+            <button type="button" title={t("Align vertical center")} aria-label={t("Align vertical center")} onClick={() => setPosition(animation.x, (faceHeight - animation.height) / 2)}><AlignVerticalJustifyCenter size={14} /></button>
+          </div>
+        </>, <span className="wf-hint-line">{t("The watch draws the animation over the background, under the time and data.")}</span>)}
+        {renderPropertySection(
+          "specific",
+          "Playback",
+          <div className="wf-property-stack wf-animation-playback">
+            <div className="wf-animation-summary">
+              <button
+                type="button"
+                className="secondary-button wf-animation-play"
+                aria-pressed={animationPlaying}
+                onClick={() => setAnimationPlaying((playing) => !playing)}
+              >
+                {animationPlaying ? <Pause size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}
+                {animationPlaying ? t("Pause preview") : t("Play preview")}
+              </button>
+              <span>{t("{{count}} frames · {{seconds}} s loop", { count: animation.frames.length, seconds: (cycle / 1000).toLocaleString(undefined, { maximumFractionDigits: 2 }) })}</span>
+            </div>
+            <label className="watchface-inspector-field">
+              <span title={t("How long each frame stays up")}>{uniform ? t("Delay (ms)") : t("Set all (ms)")}</span>
+              <EditableNumberInput
+                step="10"
+                min="1"
+                max="65535"
+                value={animation.delays[0] ?? DEFAULT_ANIMATION_DELAY}
+                fallback={animation.delays[0] ?? DEFAULT_ANIMATION_DELAY}
+                onValueChange={(next) => updateAnimation({ delays: normalizeAnimationDelays([next], animation.frames.length) })}
+              />
+            </label>
+            {problem ? <p className="wf-animation-problem" role="status"><TriangleAlert size={12} aria-hidden="true" />{problem}</p> : null}
+            <p className="watchface-studio-summary">{t("Plays on PACE 4 and PACE Pro while the face is lit. Always-on shows no animation.")}</p>
+          </div>
+        )}
+        {renderPropertySection(
+          "assets",
+          "Frames",
+          <div className="wf-property-stack">
+            <ol className="wf-animation-frames" aria-label={t("Animation frames")}>
+              {animation.frames.map((url, index) => (
+                <li key={index} className={!animationPlaying && animationStillFrame === index ? "is-shown" : undefined}>
+                  <button
+                    type="button"
+                    className="wf-animation-frame-thumb"
+                    title={t("Show frame {{index}}", { index: index + 1 })}
+                    aria-label={t("Show frame {{index}}", { index: index + 1 })}
+                    onClick={() => { setAnimationPlaying(false); setAnimationStillFrame(index); }}
+                  >
+                    <img src={url} alt="" />
+                    <span>{index + 1}</span>
+                  </button>
+                  <label>
+                    <EditableNumberInput
+                      aria-label={t("Frame {{index}} delay (ms)", { index: index + 1 })}
+                      step="10"
+                      min="1"
+                      max="65535"
+                      value={animation.delays[index] ?? DEFAULT_ANIMATION_DELAY}
+                      fallback={animation.delays[index] ?? DEFAULT_ANIMATION_DELAY}
+                      onValueChange={(next) => setDelay(index, next)}
+                    />
+                  </label>
+                </li>
+              ))}
+            </ol>
+            <p className="watchface-studio-summary">{t("{{width}} × {{height}} px per frame, up to {{max}} frames.", { width: toWatchCoordinate(animation.width), height: toWatchCoordinate(animation.height), max: MAX_ANIMATION_FRAMES })}</p>
+            <button type="button" className="secondary-button wf-animation-replace" disabled={spriteImportPending} onClick={() => void chooseAnimationFrames()}>
+              <FolderDown size={14} aria-hidden="true" />
+              {t("Replace frames…")}
+            </button>
+          </div>
+        )}
+      </>
+    );
   }
 
   function renderWeatherInspector() {

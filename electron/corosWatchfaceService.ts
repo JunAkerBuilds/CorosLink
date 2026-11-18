@@ -3031,6 +3031,10 @@ export function applyCorosWatchfaceConfigOverrides(
   const appendableKeys = new Set([
     ...NATIVE_DATA_CONFIG_KEYS,
     "watchface_id",
+    // Studio's native sprite animation (header 0x312); no COROS key exists for it.
+    "cl_animation_pos",
+    "cl_animation_dir",
+    "cl_animation_delays_ms",
     // Studio's MIP theme picker; most DIY templates only declare theme_color_off.
     "watchface_default_theme_color",
     // Independent AOD artwork may add a flattened background to a valid

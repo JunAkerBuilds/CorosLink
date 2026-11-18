@@ -60,6 +60,15 @@ function recoveredConfig(mode: CorosBinLayout["modes"][number], blocks: BitmapBl
   // The calorie goal arc is firmware-drawn: without these keys the recovered
   // face keeps only its static backdrop, and the goal ring stops moving.
   for (const [key, value] of progressArcConfigValues(mode.kcalProgressArc)) values.set(key, value);
+  // The native sprite animation (header 0x312) has no COROS config key; Studio
+  // keeps its first slot under CorosLink-owned keys that the compiler writes
+  // back to the same record. Only the normal layout animates on the watch.
+  const animation = mode.mode === "normal" ? mode.animation?.slots[0] : undefined;
+  if (animation && mode.animation && animation.asset.group != null) {
+    values.set("cl_animation_pos", formatConfigPos(animation.position));
+    values.set("cl_animation_dir", recoveredFolder(blocks[animation.asset.group]));
+    values.set("cl_animation_delays_ms", mode.animation.delays.slice(0, animation.frameCount).join(","));
+  }
   if (mode.pointerCenter) values.set("time_center_pos", formatConfigPos(mode.pointerCenter));
   if (mode.autoAlignDigitOneWidth) values.set("autoalign_time_digit_one_real_xsize", String(mode.autoAlignDigitOneWidth));
   // The combined date has no known 4.9.9 config binding. Translate its original
@@ -154,9 +163,11 @@ export function recoverCompiledCorosWatchface(bytes: Buffer, name: string, templ
   const layoutEnd = Math.max(...headers.map((h) => h.offset + h.length));
   const unresolved = new Set(layout.modes.flatMap((mode) => mode.elements
     .filter((e) => e.asset && e.asset.group === null && e.asset.pointer >= layoutEnd).map((e) => e.asset!.pointer)));
+  const extraSlots = Math.max(0, (layout.modes[0].animation?.slots.length ?? 0) - 1);
   const recovery = { partial: true, unmappedBitmapReferences: unmapped, unresolvedBitmapPointers: unresolved.size,
     message: "Opened an editable copy. Some elements and behavior may differ from the official face."
-      + (unresolved.size ? ` ${unresolved.size} image ${unresolved.size === 1 ? "set" : "sets"} could not be decoded, so the elements that use ${unresolved.size === 1 ? "it were" : "them were"} left out.` : "") };
+      + (unresolved.size ? ` ${unresolved.size} image ${unresolved.size === 1 ? "set" : "sets"} could not be decoded, so the elements that use ${unresolved.size === 1 ? "it were" : "them were"} left out.` : "")
+      + (extraSlots ? ` Only the first of ${extraSlots + 1} animation layers is editable; the others were left out.` : "") };
   const id = templateId && /^[1-9]\d{0,19}$/.test(templateId) ? templateId : String(layout.modes[0].id || 1);
   // m_app and m_preview are the DIY manifest fields official templates carry;
   // the website's upload validator requires both.

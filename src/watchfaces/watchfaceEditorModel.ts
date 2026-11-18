@@ -62,6 +62,7 @@ export type EditorLayerKind =
   | "complication"
   | "metric"
   | "weather"
+  | "animation"
   | "configAsset"
   | "customSprite";
 
@@ -108,6 +109,8 @@ export interface EditorLayer {
   ampmIndicator?: true;
   /** Set for the dynamic 41-state weather sprite folder. */
   weatherIndicator?: true;
+  /** Set for the native sprite animation (compiled header 0x312). */
+  animation?: true;
   nativeDataId?: string;
   visible: boolean;
   /** Whether the user may hide/remove this layer. */
@@ -633,6 +636,26 @@ export function deriveEditorLayers(
         font: false,
         stroke: true
       }
+    });
+  }
+
+  // The native animation draws right over the background, so it lists last
+  // (bottom of the stack) among the face's layers.
+  const animation = design.animation;
+  if (animation && animation.frames.length) {
+    const label = "Animation";
+    layers.push({
+      id: "animation",
+      kind: "animation",
+      label,
+      animation: true,
+      visible: animation.enabled,
+      canHide: true,
+      present: true,
+      bounds: animation.enabled
+        ? { id: "animation", label, x0: animation.x, y0: animation.y, x1: animation.x + animation.width, y1: animation.y + animation.height }
+        : null,
+      capabilities: { position: true, color: false, scale: false, font: false }
     });
   }
 

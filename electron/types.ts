@@ -1205,6 +1205,19 @@ export interface CorosWatchfaceFontSnapshot {
   glyphs: Record<string, CorosWatchfaceFontSnapshotGlyph>;
 }
 
+export interface CorosWatchfaceAnimation {
+  enabled: boolean;
+  x: number;
+  y: number;
+  /** Frame size in preview-resolution pixels; every frame has it. */
+  width: number;
+  height: number;
+  /** PNG data URLs in playback order, all one size. */
+  frames: string[];
+  /** Milliseconds each frame stays up, one per frame (1–65535). */
+  delays: number[];
+}
+
 export interface CorosWatchfaceDesignState {
   version: 1;
   /**
@@ -1394,6 +1407,13 @@ export interface CorosWatchfaceDesignState {
     letterSpacing?: number;
     rasterFont?: CorosWatchfaceRasterFont;
   };
+  /**
+   * Native sprite animation the watch plays on its own (header 0x312): ordered
+   * PNG frames drawn over the background, before time and data. Coordinates and
+   * frame sizes are in the preview resolution. Absent leaves the template's
+   * `cl_animation_*` keys untouched; the always-on layout never animates.
+   */
+  animation?: CorosWatchfaceAnimation;
   /** Dynamic 41-state weather icon; absent in older projects. */
   weatherIndicator?: {
     enabled: boolean;

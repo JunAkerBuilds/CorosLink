@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { animationFrameAt, animationNextChange, animationProblem, buildAnimationOverrides, normalizeAnimationDelays, parseAnimationDelays, templateAnimationFiles, MAX_ANIMATION_FRAMES } from "../src/watchfaces/watchfaceAnimation.ts";
 import { collectWatchfaceFaceColors, recolorWatchfaceFace } from "../src/watchfaces/watchfaceFaceColors.ts";
 import { watchfaceLayerSampleValue } from "../src/watchfaces/watchfaceLayerValues.ts";
 import {
@@ -122,5 +123,36 @@ assert.deepEqual([...pixels], [
 const red = new Uint8ClampedArray([255, 0, 0, 255]);
 assert.equal(recolorWatchThemePixels(red, 0), false, "row 0 draws the face as stored");
 assert.deepEqual([...red], [255, 0, 0, 255]);
+
+// --- Native sprite animation ------------------------------------------------
+
+// The frame comes from elapsed time over the cumulative delays (no drift from late ticks).
+assert.deepEqual([0, 69, 70, 194, 195, 454, 455, 524].map(t => animationFrameAt([70, 125, 260, 70], t)), [0, 0, 1, 1, 2, 2, 3, 3]);
+assert.equal(animationFrameAt([70, 125, 260, 70], 525 * 3 + 80), 1, "loops");
+assert.equal(animationFrameAt([], 500), 0);
+assert.deepEqual([0, 69, 70, 450, 524].map(t => animationNextChange([70, 125, 260, 70], t)), [70, 1, 125, 5, 1], "the timer waits for the next frame boundary");
+assert.deepEqual(normalizeAnimationDelays([120], 3), [120, 120, 120], "one delay fills every frame");
+assert.deepEqual(normalizeAnimationDelays([0, 70000, 55.4, 80], 3), [1, 65535, 55], "clamped, rounded and cut to the frame count");
+assert.deepEqual(parseAnimationDelays("100, 100,70"), [100, 100, 70]);
+assert.equal(parseAnimationDelays("100,-1"), null);
+const animation = { enabled: true, x: 0, y: 31, width: 376, height: 340, frames: Array(10).fill("data:image/png;base64,"), delays: Array(10).fill(100) };
+assert.equal(animationProblem(animation), null);
+assert.match(animationProblem({ ...animation, frames: Array(MAX_ANIMATION_FRAMES + 1).fill(""), delays: Array(MAX_ANIMATION_FRAMES + 1).fill(100) }), /at most 44/);
+assert.match(animationProblem({ ...animation, delays: [100] }), /one delay per frame/);
+assert.match(animationProblem(animation, [{ width: 4, height: 4 }, { width: 5, height: 4 }]), /must be 4 × 4/);
+assert.equal(animationProblem({ ...animation, enabled: false, frames: [] }), null, "a turned-off animation never blocks export");
+// Current gets the keys scaled per tree from the design's (preview) resolution, the 800px
+// master when there is one; AOD loses them; the folder is named by frame count.
+const animatedFace = { archiveId: "n", resolutions: [{ ...tree(390, {}), aodConfig: { watchface_id: "41" } }, tree(800, {})] };
+assert.deepEqual(buildAnimationOverrides(animatedFace, animation), [
+  { path: "watchface_390x390/config.txt", values: { cl_animation_pos: "{0,15}", cl_animation_dir: "cl_animation_10", cl_animation_delays_ms: "100,100,100,100,100,100,100,100,100,100" } },
+  { path: "watchface_390x390/AODconfig.txt", values: { cl_animation_pos: "__COROSLINK_DELETE_CONFIG_KEY__", cl_animation_dir: "__COROSLINK_DELETE_CONFIG_KEY__", cl_animation_delays_ms: "__COROSLINK_DELETE_CONFIG_KEY__" } },
+  { path: "watchface_800x800/config.txt", values: { cl_animation_pos: "{0,31}", cl_animation_dir: "cl_animation_10", cl_animation_delays_ms: "100,100,100,100,100,100,100,100,100,100" } }
+]);
+assert.deepEqual(buildAnimationOverrides(animatedFace, { ...animation, enabled: false })[0].values.cl_animation_dir, "__COROSLINK_DELETE_CONFIG_KEY__", "turning it off removes the record");
+assert.deepEqual(buildAnimationOverrides(animatedFace, undefined), [], "old projects leave the template's keys alone");
+// Frames are listed in the compiler's bytewise order.
+const recoveredTree = { ...tree(390, { cl_animation_dir: "recovered\\group-22" }), spriteFolders: [{ folder: "recovered/group-22", files: ["10", "02", "01"].map(n => ({ path: `watchface_390x390/recovered/group-22/${n}.png`, width: 4, height: 4 })) }] };
+assert.deepEqual(templateAnimationFiles(only(recoveredTree)).map(f => f.path.slice(-6)), ["01.png", "02.png", "10.png"]);
 
 console.log("watchface studio editor helpers: ok");

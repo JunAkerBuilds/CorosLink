@@ -178,15 +178,30 @@ export function findCorosBitmapBlocks(buffer: Buffer, start = 0): CorosBitmapBlo
   const blockEnd = (block: BitmapBlockShape) => block.dataOffset + block.frameEnds.at(-1)!;
   const covered = (at: number) => blocks.some((b) => at >= b.offset && at < blockEnd(b));
   const tried = new Set<number>();
-  for (let field = 0; field + 4 <= start; field++) {
-    const pointer = buffer.readUInt32LE(field);
+  // Frame lists behind the animation record (header 0x312 of each layout) are
+  // linked from outside the headers, so their slot pointers vouch for blocks too.
+  const animationPointers: number[] = [];
+  const aodHeader = start >= 0x326 ? buffer.readUInt32LE(0x322) : 0;
+  for (const base of aodHeader && aodHeader + 0x316 <= start ? [0, aodHeader] : [0]) {
+    if (base + 0x316 > start) continue;
+    const record = buffer.readUInt32LE(base + 0x312);
+    if (record < start || record + ANIMATION_RECORD_SIZE > buffer.length) continue;
+    for (let slot = 0; slot < 5; slot++) animationPointers.push(buffer.readUInt32LE(record + 0x28 + slot * 4));
+  }
+  const candidates = function* () {
+    for (let field = 0; field + 4 <= start; field++) yield buffer.readUInt32LE(field);
+    yield* animationPointers;
+  };
+  for (const pointer of candidates()) {
     if (pointer < start || pointer + 14 > buffer.length || tried.has(pointer) || covered(pointer)) continue;
     tried.add(pointer);
     const block = readBitmapBlockAt(buffer, pointer, false);
     if (!block || !everyFrameDecodes(buffer, block)) continue;
     // Scan hits inside the vouched block were false positives from its RLE stream.
     for (let i = blocks.length - 1; i >= 0; i--) if (blocks[i].offset > block.offset && blocks[i].offset < blockEnd(block)) blocks.splice(i, 1);
-    admit(block, true);
+    // An uncompressed palette block (0x2000, version 1) is a known format the
+    // scan leaves to pointers on purpose; only stranger words are worth a note.
+    admit(block, !(block.encoding === 0x2000 && block.version === 1));
   }
   blocks.sort((a, b) => a.offset - b.offset);
   blocks.forEach((block, index) => { block.index = index; });
@@ -214,9 +229,14 @@ export function decodeCorosBitmapFrame(bytes: Buffer, block: BitmapBlockShape, f
     return rgba;
   }
   const mip = block.version === 0; // Only MIP (0x0802) blocks are version 0.
-  const decoded = Buffer.alloc(mip ? pixels : block.version === 3 ? pixels * 4 : pixels + 1024);
-  let cursor = 0;
-  for (let i = 0; i < encoded.length; i++) {
+  // CorosLink's compiler stores a palette frame uncompressed (0x2000, version 1)
+  // when RLE would be larger, as on photos and noise. The linear scan does not
+  // admit that word; a layout or animation-record pointer vouches for it.
+  const rawPalette = block.version === 1 && (block.encoding & 0xff) === 0;
+  if (rawPalette && encoded.length !== pixels + 1024) throw new Error("Invalid watchface image data.");
+  const decoded = rawPalette ? Buffer.from(encoded) : Buffer.alloc(mip ? pixels : block.version === 3 ? pixels * 4 : pixels + 1024);
+  let cursor = rawPalette ? decoded.length : 0;
+  for (let i = 0; !rawPalette && i < encoded.length; i++) {
     const control = encoded[i];
     const count = control >= 0xc0 ? control & 0x3f : 1;
     if (control >= 0xc0 && i + 1 >= encoded.length) throw new Error("Truncated watchface image.");
@@ -458,6 +478,55 @@ export function expandChartColor(raw: number): number {
   return raw > 0x3f ? raw & 0xffffff : expandRgb222(raw);
 }
 
+export interface CorosBinAnimationSlot {
+  slot: number; position: CorosBinPoint; asset: CorosBinReference; frameCount: number; width: number; height: number;
+}
+export interface CorosBinAnimation {
+  recordOffset: number; recordOffsetHex: string;
+  /** Populated slots in draw order (the firmware visits slots 0–4). */
+  slots: CorosBinAnimationSlot[];
+  /** Per-frame delays in ms for the frames the firmware cycles through. */
+  delays: number[];
+  rawRecordHex: string;
+}
+export const ANIMATION_RECORD_SIZE = 0x94;
+const ANIMATION_SLOTS = 5, ANIMATION_DELAY_SLOTS = (ANIMATION_RECORD_SIZE - 0x3c) / 2;
+
+/**
+ * Header 0x312: the native sprite animation record (PACE 4 W336 / PACE Pro W332
+ * 3.2108.0 renderer, probed 2026-11-18). 0x94 bytes: five (i32 x, i32 y) slot
+ * positions, five u32 frame-list pointers at +0x28 (0 skips a slot), u16 delays
+ * in ms at +0x3c indexed by the shared frame counter. A zero first delay or an
+ * all-empty record (the AOD layout of NANJING MARATHON) draws nothing.
+ */
+function decodeAnimationRecord(bytes: Buffer, mode: string, pointer: number, layoutEnd: number,
+  bitmapMap: Map<number, BitmapLink>, warnings: string[]): CorosBinAnimation | undefined {
+  if (!pointer) return undefined;
+  if (pointer < layoutEnd || pointer + ANIMATION_RECORD_SIZE > bytes.length) {
+    warnings.push(`${mode}: invalid animation record ${hex(pointer)}.`);
+    return undefined;
+  }
+  const record = bytes.subarray(pointer, pointer + ANIMATION_RECORD_SIZE);
+  const slots: CorosBinAnimationSlot[] = [];
+  for (let slot = 0; slot < ANIMATION_SLOTS; slot++) {
+    const target = record.readUInt32LE(0x28 + slot * 4);
+    if (!target) continue;
+    const block = bitmapMap.get(target);
+    if (!block) { warnings.push(`${mode}: animation slot ${slot} points at ${hex(target)}, which is not an image set.`); continue; }
+    slots.push({
+      slot, position: { x: record.readInt32LE(slot * 8), y: record.readInt32LE(slot * 8 + 4) },
+      asset: { pointer: target, pointerHex: hex(target), fieldOffset: pointer + 0x28 + slot * 4, group: block.index },
+      frameCount: Number(block.frameCount ?? 1), width: Number(block.width ?? 0), height: Number(block.height ?? 0)
+    });
+  }
+  const firstDelay = record.readUInt16LE(0x3c);
+  if (!slots.length || !firstDelay) return undefined;
+  const frames = Math.min(ANIMATION_DELAY_SLOTS, Math.max(...slots.map(s => s.frameCount)));
+  const delays = Array.from({ length: frames }, (_, i) => record.readUInt16LE(0x3c + i * 2));
+  if (delays.some(delay => !delay)) warnings.push(`${mode}: animation record ${hex(pointer)} has a zero delay inside its ${frames} frames.`);
+  return { recordOffset: pointer, recordOffsetHex: hex(pointer), slots, delays, rawRecordHex: record.toString("hex") };
+}
+
 export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
   const headers = readLayoutHeaders(bytes);
   const bitmapMap = new Map(blocks.map((b) => [Number(b.offset), b]));
@@ -693,6 +762,12 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
         autoAlignDigitOneWidth = bytes.readUInt16LE(autoAlignPointer + 10);
       }
     }
+    const animation = decodeAnimationRecord(bytes, header.mode, inHeader(base + 0x312, 4) ? u32(0x312) : 0, layoutEnd, bitmapMap, warnings);
+    // 0x31a points at a 38-byte record beside the animation one (all zero in
+    // NANJING MARATHON); firmware playback ignores it, so keep its bytes only.
+    const sideRecordPointer = inHeader(base + 0x31a, 4) ? u32(0x31a) : 0;
+    const sideRecordHex = sideRecordPointer >= layoutEnd && sideRecordPointer + 38 <= bytes.length
+      ? bytes.subarray(sideRecordPointer, sideRecordPointer + 38).toString("hex") : undefined;
     // Present in official PLANET, but no writer for this record was found in
     // 4.9.9. Retain exact geometry and all three pointers; do not invent INI keys.
     const dateFonts = [0x6b4, 0x6b8, 0x6bc].map((off) => reference(base + off));
@@ -719,6 +794,8 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
       ...(autoAlignDigitOneWidth && elements.some((e) => e.active && e.id === "time.autoAlign") ? { autoAlignDigitOneWidth } : {}),
       ...(chart ? { chart } : {}),
       ...(kcalProgressArc ? { kcalProgressArc } : {}),
+      ...(animation ? { animation } : {}),
+      ...(sideRecordHex ? { record0x31a: { pointer: sideRecordPointer, pointerHex: hex(sideRecordPointer), rawHex: sideRecordHex } } : {}),
       ...(elements.some((e) => e.active && /^time\.(hour|minute|second)Hand$/.test(e.id)) ? { pointerCenter } : {}),
       elements, unmappedBitmapReferences,
       rawHeaderHex: bytes.subarray(base, base + length).toString("hex")
