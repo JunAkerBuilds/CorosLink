@@ -49,6 +49,7 @@ import type {
   CorosWatchfacePublishInput,
   CorosWatchfaceProject,
   CorosWatchfaceProjectExportInput,
+  CorosWatchfacePreviewAnimation,
   CorosWatchfaceProjectSaveInput,
   CorosWatchfaceProjectListOptions,
   CorosWatchfaceProjectSummary,
@@ -149,7 +150,9 @@ const MAX_INFO_BYTES = 1024 * 1024;
 const MAX_SHARE_PAGE_BYTES = 1024 * 1024;
 const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
 const MAX_PROJECT_BYTES = 60 * 1024 * 1024;
-const MAX_PROJECT_MANIFEST_BYTES = MAX_PROJECT_BYTES + 64 * 1024;
+/** The website's animation layers (see CorosWatchfacePreviewAnimation), on top of the design. */
+const MAX_PREVIEW_ANIMATION_BYTES = 16 * 1024 * 1024;
+const MAX_PROJECT_MANIFEST_BYTES = MAX_PROJECT_BYTES + MAX_PREVIEW_ANIMATION_BYTES + 64 * 1024;
 const MAX_PROJECT_PACKAGE_BYTES = 100 * 1024 * 1024;
 const MAX_PROJECT_PACKAGE_EXPANDED_BYTES = 130 * 1024 * 1024;
 const MAX_PROJECT_PACKAGE_FILES = 100;
@@ -248,6 +251,8 @@ interface CorosLinkWatchfaceProjectManifest {
   design: CorosWatchfaceProjectExportInput["design"];
   /** See CorosWatchfaceEditableProject.openAsTemplate. `design` stays for versions without it. */
   openAsTemplate?: boolean;
+  /** For the website only; the app ignores it when it opens the project. */
+  previewAnimation?: CorosWatchfacePreviewAnimation;
 }
 
 interface CorosLinkWatchfaceProjectPackage {
@@ -1724,13 +1729,15 @@ export async function exportCorosWatchfaceProject(
   const firmwareType =
     normalizeOptionalFirmwareType(input.firmwareType) ?? source.firmwareType;
   const preview = decodePortableProjectPreview(input.previewDataUrl);
+  const previewAnimation = portablePreviewAnimation(input.previewAnimation, preview);
   const manifest: CorosLinkWatchfaceProjectManifest = {
     format: "coroslink-watchface-project",
     version: 1,
     name,
     sourceTemplateId: verified.sourceTemplateId,
     ...(firmwareType ? { firmwareType } : {}),
-    design: input.design
+    design: input.design,
+    ...(previewAnimation ? { previewAnimation } : {})
   };
   const projectZip = createStoreZip([
     {
@@ -1836,6 +1843,7 @@ export async function readCorosWatchfaceProjectPackage(
   const {
     firmwareType: _firmwareType,
     openAsTemplate: _openAsTemplate,
+    previewAnimation: _previewAnimation,
     ...manifestWithoutOptionalFields
   } = manifest;
   manifest = {
@@ -1868,6 +1876,39 @@ function assertPackageEntrySize(
   if (!Number.isFinite(size) || !size || size < 1 || size > maximum) {
     throw new Error(`The editable watch-face ${label} has an invalid size.`);
   }
+}
+
+const PNG_DATA_URL = /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/;
+const MAX_PREVIEW_ANIMATION_FRAMES = 44;
+
+/**
+ * The website's copy of the animation, checked so the site never gets a malformed one:
+ * PNG layers the size of the preview, one delay per frame. Anything off is left out
+ * (the website then shows the still preview), never an export error.
+ */
+function portablePreviewAnimation(
+  value: CorosWatchfacePreviewAnimation | undefined,
+  preview: Buffer
+): CorosWatchfacePreviewAnimation | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+  const { size, x, y, width, height, delays, frames, under, over, watch } = value;
+  const previewSize = preview.byteLength >= 24 ? [preview.readUInt32BE(16), preview.readUInt32BE(20)] : [];
+  const ok =
+    value.version === 1 &&
+    Number.isInteger(size) && size >= 64 && size <= 2048 &&
+    previewSize[0] === size && previewSize[1] === size &&
+    [x, y].every((n) => finite(n) && Math.abs(n) <= size * 2) &&
+    [width, height].every((n) => finite(n) && n > 0 && n <= size * 2) &&
+    Array.isArray(frames) && frames.length >= 1 && frames.length <= MAX_PREVIEW_ANIMATION_FRAMES &&
+    Array.isArray(delays) && delays.length === frames.length &&
+    delays.every((delay) => Number.isInteger(delay) && delay >= 1 && delay <= 65535) &&
+    [under, over, ...frames].every((url) => typeof url === "string" && PNG_DATA_URL.test(url)) &&
+    (watch === undefined || (typeof watch === "string" && /^[a-z0-9-]{1,40}$/.test(watch)));
+  if (!ok) return undefined;
+  const bytes = [under, over, ...frames].reduce((sum, url) => sum + url.length, 0);
+  if (bytes > MAX_PREVIEW_ANIMATION_BYTES) return undefined;
+  return { version: 1, size, x, y, width, height, delays: [...delays], frames: [...frames], under, over, ...(watch ? { watch } : {}) };
 }
 
 function decodePortableProjectPreview(dataUrl: string): Buffer {

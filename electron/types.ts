@@ -1585,6 +1585,36 @@ export interface CorosWatchfaceProjectExportInput
   firmwareType?: string;
   /** Current rendered face used by websites as the package thumbnail. */
   previewDataUrl: string;
+  /** The face's native animation as the website plays it over `previewDataUrl`. */
+  previewAnimation?: CorosWatchfacePreviewAnimation;
+}
+
+/**
+ * A native sprite animation (header 0x312) laid out for the website, which plays it the
+ * way Studio's preview does: `under`, then the current frame, then `over`. Frames are the
+ * ones the target watch plays (on memory-in-pixel watches, its colors and the frames that
+ * fit 64 KB). Written to the project manifest as `previewAnimation`; CorosLink-web reads
+ * it when it publishes the face.
+ */
+export interface CorosWatchfacePreviewAnimation {
+  version: 1;
+  /** Edge, in pixels, of preview.png, `under` and `over`, which all line up. */
+  size: number;
+  /** Where every frame is drawn, in those pixels. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Milliseconds each frame shows, one per frame. */
+  delays: number[];
+  /** PNG data URLs, in playing order, all the same size. */
+  frames: string[];
+  /** PNG data URL: the face under the animation (its background). */
+  under: string;
+  /** PNG data URL: the face over the animation, transparent where the animation shows. */
+  over: string;
+  /** The model the frames were fitted for (WatchfaceTarget.model). */
+  watch?: string;
 }
 
 export interface CorosWatchfaceProject extends CorosWatchfaceProjectSummary {

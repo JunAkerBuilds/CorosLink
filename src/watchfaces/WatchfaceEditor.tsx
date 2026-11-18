@@ -12,6 +12,7 @@ import { renameWatchfaceFontFamily } from "./watchfaceFontRename";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
 import { recoverChartGroup, recoverChartPageCompanions, recoverGraphlessChart, recoveredChartReadouts, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
 import { animationOutcomeNeedsNotice, quickAnimationOutcome, watchAnimationOutcome, type WatchAnimationOutcome } from "./watchfaceAnimationOutcome";
+import { buildPreviewAnimation } from "./watchfacePreviewAnimation";
 import { animationFrameAt, animationNextChange, animationProblem, clampAnimationDelay, DEFAULT_ANIMATION_DELAY, importAnimationFrames, MAX_ANIMATION_FRAMES, normalizeAnimationDelays, readTemplateAnimation } from "./watchfaceAnimation";
 import { WATCHFACE_TARGETS, getWatchfaceTarget } from "../../electron/watchfaceTargets";
 import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
@@ -194,6 +195,7 @@ import type {
   CorosWatchfaceBackgroundText,
   CorosWatchfaceAnimation,
   CorosWatchfaceDesignState,
+  CorosWatchfacePreviewAnimation,
   CorosWatchfaceDesignSprite,
   CorosWatchfaceEditorGuide,
   CorosWatchfaceExerciseProgressStyle,
@@ -8171,7 +8173,9 @@ export function WatchfaceEditor({
     resolutionDirectory = watchPreviewDirectory,
     scenario?: WatchfacePreviewScenario,
     previewComplication?: WatchfaceStudioOptions["previewComplication"],
-    onPreviewState?: (state: { previewComplication: string | null }) => void
+    onPreviewState?: (state: { previewComplication: string | null }) => void,
+    /** "over": only what the watch draws over the animation, on a transparent canvas. */
+    layer?: "over"
   ): Promise<string> {
     if (!details) {
       throw new Error(t("The editor is still loading. Try again in a moment."));
@@ -8205,6 +8209,7 @@ export function WatchfaceEditor({
           )
         : snapshotPreviewDetails ?? snapshotSourceDetails;
     const renderedBackground =
+      layer === "over" ? "" :
       snapshotBackgroundDataUrl ??
       (await renderDesignBackground(
         designSnapshot,
@@ -8224,6 +8229,7 @@ export function WatchfaceEditor({
       ...(previewComplication ? { previewComplication } : {}),
       previewMode: hasWatchfaceAod(details) ? mode : "current",
       ...simulationStudioOptions(scenario),
+      ...(layer === "over" ? { transparentBackground: true } : {}),
       batteryIconResolutionScale: resolutionScale,
       effectResolutionScale: resolutionScale,
       nativeSpriteResolutionScale: resolutionScale,
@@ -8269,6 +8275,42 @@ export function WatchfaceEditor({
     }
     maskCanvasToCircle(archivePreview);
     return archivePreview.toDataURL("image/png");
+  }
+
+  /**
+   * The animation as the website plays it over the exported preview: the background under
+   * it, the face over it, and the frames the target watch plays. Never blocks the export.
+   */
+  async function renderWebsitePreviewAnimation(
+    designSnapshot: CorosWatchfaceDesignState
+  ): Promise<{ previewAnimation?: CorosWatchfacePreviewAnimation }> {
+    const animation = designSnapshot.animation;
+    if (!details || !animation?.enabled || !animation.frames.length) return {};
+    try {
+      const baseWidth = pickPreviewResolution(details)?.width ?? previewWidth;
+      const size = 800;
+      const under = document.createElement("canvas");
+      under.width = size;
+      under.height = size;
+      const context = under.getContext("2d", { colorSpace: "display-p3" });
+      if (!context) return {};
+      // As drawStudioPreview paints the current layout's background, before the animation.
+      context.drawImage(await loadStudioImage(await renderDesignBackground(resolveWatchfaceModeDesign(designSnapshot, "current"), baseWidth), false), 0, 0, size, size);
+      maskCanvasToCircle(under);
+      const over = await renderExportPreview(designSnapshot, "current", undefined, size, undefined, undefined, undefined, undefined, "over");
+      const previewAnimation = await buildPreviewAnimation({
+        animation,
+        previewWidth: baseWidth,
+        size,
+        under: under.toDataURL("image/png"),
+        over,
+        target: animationTarget
+      });
+      return previewAnimation ? { previewAnimation } : {};
+    } catch (caught) {
+      console.warn("The website animation preview was left out of the export.", caught);
+      return {};
+    }
   }
 
   async function renderExportBackground(
@@ -8345,7 +8387,8 @@ export function WatchfaceEditor({
         name,
         ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
         design: await attachWatchfaceFontSnapshots(designSnapshot),
-        previewDataUrl: await renderExportPreview(designSnapshot, "current")
+        previewDataUrl: await renderExportPreview(designSnapshot, "current"),
+        ...await renderWebsitePreviewAnimation(designSnapshot)
       });
       if (result.saved) {
         onNotice(t("Exported “{{name}}” as an editable website ZIP.", { name }));
