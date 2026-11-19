@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.80] - 2026-11-18
+
+### Added
+
+- **Choose how hard Coach thinks.** A new effort control next to the model picker opens a slider with the levels the selected model offers, such as Low, Medium, High, Extra high and Max. The reset button returns to the model's default. It works with ChatGPT, Claude Code and OpenCode, shows only for models that have effort levels, and remembers your choice for each provider. (#173)
+- **Official images for data fields in Studio.** A data field that shows a picture, such as the sedentary reminder, has a new **Official sprites** or **Official image** button. It opens the library of COROS's own artwork for that field, and the frames you pick fill the field's states in order.
+- **A default sedentary reminder.** The sedentary reminder had no artwork of its own, so it showed nothing until you added some. It now draws a ring that fills as you sit, a full ring with "!" when it is time to move, and a dimmed ring when the reminder is off.
+- **Animated faces keep moving on the website.** A face with an animation, such as NANJING MARATHON or one made with the Animation layer, now sends its frames with the editable copy you publish. Before, the website only got a still picture with the first frame in it.
+
+### Fixed
+
+- **Any valid PNG opens as artwork.** Some PNGs, such as 16-bit or interlaced ones, failed with "That image could not be opened" although they were fine. They now open.
+- **Imported artwork keeps its shape.** Battery art imported in a different shape from the template's own, such as a wide bar into a tall frame, was stretched to fit on the canvas and on the watch. It now keeps its proportions. Battery icons in control slots and imported data-field images are centered in their frame instead of stretched.
+
 ## [0.1.79] - 2026-11-18
 
 ### Added
