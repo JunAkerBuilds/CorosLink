@@ -71,6 +71,8 @@ export interface StreamClaudeCodeOptions extends ClaudeCodeToolCallbacks {
   timeoutMs?: number;
   /** Model alias (opus/fable/sonnet/haiku) or full id. Omit for the account default. */
   model?: string;
+  /** Reasoning effort; Claude Code lowers it to what the model supports. */
+  effort?: string;
   /**
    * Claude Code's own tools to allow, such as "WebSearch". Coach turns leave
    * this out: they use only CorosLink's tools.
@@ -509,6 +511,12 @@ export async function listClaudeCodeModels(
   }
 }
 
+const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+function isClaudeEffort(value: unknown): value is (typeof CLAUDE_EFFORTS)[number] {
+  return (CLAUDE_EFFORTS as readonly unknown[]).includes(value);
+}
+
 export async function streamClaudeCodeCompletion(
   options: StreamClaudeCodeOptions
 ): Promise<{ fullText: string }> {
@@ -589,6 +597,7 @@ export async function streamClaudeCodeCompletion(
         ...(options.workspaceDir ? { cwd: options.workspaceDir } : {}),
         systemPrompt: options.instructions,
         ...(options.model ? { model: options.model } : {}),
+        ...(isClaudeEffort(options.effort) ? { effort: options.effort } : {}),
         tools: builtinTools,
         allowedTools,
         permissionMode: "dontAsk",

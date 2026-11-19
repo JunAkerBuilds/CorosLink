@@ -2429,3 +2429,219 @@
     transition: none;
   }
 }
+
+/* ---------- Effort slider ---------- */
+
+:root .app .chat-composer .chat-effort-select {
+  position: relative;
+}
+
+.chat-effort-pop {
+  position: absolute;
+  z-index: 40;
+  bottom: calc(100% + 10px);
+  left: 0;
+  width: 286px;
+  padding: 12px 14px 12px;
+  border: 1px solid var(--coach-glass-edge);
+  border-radius: 16px;
+  background: var(--coach-glass-fill);
+  box-shadow: var(--coach-pop-shadow), var(--coach-glass-inset);
+  transform: translateX(-50%);
+  animation: chat-effort-pop-in 180ms var(--coach-ease);
+}
+
+:root[data-theme="paper"] .chat-effort-pop {
+  background: #ffffff;
+}
+
+@keyframes chat-effort-pop-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.98);
+  }
+}
+
+.chat-effort-pop-head {
+  display: grid;
+  grid-template-columns: 28px 1fr 28px;
+  align-items: start;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.chat-effort-pop-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  text-align: center;
+}
+
+.chat-effort-pop-title strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.chat-effort-pop-title strong[data-default] {
+  color: var(--text-secondary);
+}
+
+.chat-effort-pop-title span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .app .chat-composer .chat-effort-pop-reset {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+  transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft), opacity 160ms var(--coach-ease-soft);
+}
+
+:root .app .chat-composer .chat-effort-pop-reset:hover:not(:disabled) {
+  background: var(--coach-ink-8);
+  color: var(--text-primary);
+}
+
+:root .app .chat-composer .chat-effort-pop-reset:disabled {
+  opacity: 0.32;
+}
+
+.chat-effort-slider {
+  --effort-thumb: 26px;
+  --effort-at: 0;
+  position: relative;
+  height: var(--effort-thumb);
+  border-radius: 999px;
+  background: var(--coach-ink-8);
+}
+
+.chat-effort-slider-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--effort-thumb) + (100% - var(--effort-thumb)) * var(--effort-at));
+  border-radius: 999px;
+  background: var(--coach-send-bg);
+  opacity: 0.9;
+  transition: width 220ms var(--coach-ease), background 200ms var(--coach-ease-soft);
+}
+
+.chat-effort-slider[data-default] .chat-effort-slider-fill {
+  background: var(--coach-ink-12);
+  opacity: 1;
+}
+
+.chat-effort-slider-dot {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--effort-thumb) / 2 + (100% - var(--effort-thumb)) * var(--dot-at));
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.55;
+  transition: background 200ms var(--coach-ease-soft);
+}
+
+.chat-effort-slider-dot[data-covered] {
+  background: var(--coach-send-fg);
+}
+
+:root .app .chat-composer .chat-effort-slider input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+:root .app .chat-composer .chat-effort-slider input[type="range"]:focus-visible {
+  outline: 2px solid var(--text-secondary);
+  outline-offset: 3px;
+}
+
+.chat-effort-slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.chat-effort-slider input[type="range"]::-webkit-slider-thumb {
+  width: var(--effort-thumb);
+  height: var(--effort-thumb);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Drawn thumb: the native one jumps, this one glides and snaps. */
+.chat-effort-slider-thumb {
+  position: absolute;
+  top: 0;
+  left: calc((100% - var(--effort-thumb)) * var(--effort-at));
+  width: var(--effort-thumb);
+  height: var(--effort-thumb);
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.32);
+  pointer-events: none;
+  transition: left 220ms var(--coach-ease), scale 140ms var(--coach-ease), background 200ms var(--coach-ease-soft);
+}
+
+.chat-effort-slider[data-dragging] .chat-effort-slider-thumb {
+  scale: 1.08;
+  transition: scale 140ms var(--coach-ease);
+}
+
+.chat-effort-slider[data-dragging] .chat-effort-slider-fill {
+  transition: none;
+}
+
+.chat-effort-slider[data-default] .chat-effort-slider-thumb {
+  background: var(--text-muted);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.chat-effort-pop-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-effort-pop {
+    animation: none;
+  }
+
+  .chat-effort-slider-fill,
+  .chat-effort-slider-thumb {
+    transition: none;
+  }
+}

@@ -1176,6 +1176,7 @@ export async function streamChat(
         tools: chatTools,
         signal,
         model: settings.claudeCode.model,
+        effort: settings.claudeCode.effort,
         onToken: (delta) => {
           fullText += delta;
           send("chat:streamToken", { requestId, delta });
@@ -1644,6 +1645,17 @@ export async function streamChat(
     // and our tool results.
     const input: Record<string, unknown>[] = history.messages.map(toInputMessageItem);
 
+    // A saved effort is sent only to a model that accepts it; others would reject the request.
+    const chosenEffort = settings.chatgpt.effort;
+    const effortCatalog = chosenEffort
+      ? await unlessCancelled(listChatGptModels(), signal)
+      : [];
+    const effortForModel = (model: string) =>
+      chosenEffort &&
+      effortCatalog.find((entry) => entry.slug === model)?.efforts.includes(chosenEffort)
+        ? chosenEffort
+        : undefined;
+
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const opened = await resolveModelAndOpenStream(
         token,
@@ -1652,7 +1664,8 @@ export async function streamChat(
         input,
         tools,
         signal,
-        settings.chatgpt.model
+        settings.chatgpt.model,
+        effortForModel
       );
       if ("error" in opened) {
         send("chat:streamError", {
@@ -2196,7 +2209,8 @@ async function resolveModelAndOpenStream(
   tools: Record<string, unknown>[],
   signal: AbortSignal,
   selectedModel?: string,
-  reasoningEffort?: string
+  /** One effort for every candidate, or a per-model choice (Auto tries several models). */
+  reasoningEffort?: string | ((model: string) => string | undefined)
 ): Promise<{ response: Response } | { error: string; authError: boolean }> {
   // A model cached under an older Auto order would hide newer models forever.
   const cached =
@@ -2228,7 +2242,7 @@ async function resolveModelAndOpenStream(
             input,
             tools,
             includeReasoningSummary,
-            reasoningEffort
+            typeof reasoningEffort === "function" ? reasoningEffort(model) : reasoningEffort
           )
         )
       });

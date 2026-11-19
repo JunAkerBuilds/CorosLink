@@ -849,7 +849,9 @@ const { readChatSettingsFromStore, saveChatSettingsToStore } = await import(
 const {
   getChatGptModelCandidates,
   chatGptModelOptionsFromCatalog,
-  claudeModelOptionsFromCli
+  claudeModelOptionsFromCli,
+  resolveChatEffort,
+  normalizeChatEffort
 } = await import(`${distUrl("chatModels.js")}?cacheBust=${Date.now()}`);
 
 assert.deepEqual(
@@ -872,6 +874,34 @@ assert.deepEqual(
     { value: "gpt-5.5", label: "GPT-5.5" }
   ]
 );
+
+// Effort levels ride along per model; Auto shows those of the first model it would try.
+assert.deepEqual(
+  chatGptModelOptionsFromCatalog([
+    { slug: "gpt-5.5", displayName: "GPT-5.5", efforts: ["low", "high"] },
+    { slug: "gpt-6-sol", displayName: "GPT-6-Sol", efforts: ["low", "medium", "ultra"], defaultEffort: "medium" }
+  ]),
+  [
+    { value: "", label: "Auto", efforts: ["low", "medium", "ultra"], defaultEffort: "medium" },
+    { value: "gpt-5.5", label: "GPT-5.5", efforts: ["low", "high"] },
+    { value: "gpt-6-sol", label: "GPT-6 Sol", efforts: ["low", "medium", "ultra"], defaultEffort: "medium" }
+  ]
+);
+assert.deepEqual(
+  claudeModelOptionsFromCli([
+    { value: "default", resolvedModel: "claude-opus-5-5", displayName: "Default", supportsEffort: true, supportedEffortLevels: ["low", "medium", "high", "xhigh", "max"] },
+    { value: "haiku", resolvedModel: "claude-haiku-5-5", displayName: "Haiku", supportsEffort: false }
+  ]),
+  [
+    { value: "", label: "Default", detail: "Opus 5.5", efforts: ["low", "medium", "high", "xhigh", "max"] },
+    { value: "haiku", label: "Claude Haiku 5.5" }
+  ]
+);
+assert.equal(resolveChatEffort({ efforts: ["low", "high"] }, "high"), "high");
+assert.equal(resolveChatEffort({ efforts: ["low", "high"] }, "max"), undefined);
+assert.equal(resolveChatEffort({}, "high"), undefined);
+assert.equal(normalizeChatEffort(" XHigh "), "xhigh");
+assert.equal(normalizeChatEffort("high; rm"), undefined);
 
 // Rows as Claude Code 2.1.296 reports them through supportedModels().
 assert.deepEqual(
@@ -949,7 +979,8 @@ const saved = saveChatSettingsToStore(
   {
   provider: "claude-code",
   chatgpt: {
-    model: "gpt-5.6-terra"
+    model: "gpt-5.6-terra",
+    effort: "High"
   },
   openRouter: {
     model: "anthropic/claude-sonnet-4",
@@ -958,6 +989,7 @@ const saved = saveChatSettingsToStore(
   },
   claudeCode: {
     model: "sonnet",
+    effort: "xhigh",
     executablePath: "/opt/claude/bin/claude",
     lastConnectionStatus: "connected",
     lastCheckedAt: "2026-07-10T12:00:00.000Z",
@@ -997,6 +1029,16 @@ assert.equal(
 );
 assert.equal(saved.provider, "claude-code");
 assert.equal(saved.chatgpt.model, "gpt-5.6-terra");
+assert.equal(saved.chatgpt.effort, "high");
+assert.equal(saved.claudeCode.effort, "xhigh");
+assert.equal(
+  saveChatSettingsToStore(fakeStore, fakeApiKeyStore, fakeOpenRouterApiKeyStore, {
+    ...saved,
+    claudeCode: { ...saved.claudeCode, effort: undefined }
+  }).claudeCode.effort,
+  undefined
+);
+saveChatSettingsToStore(fakeStore, fakeApiKeyStore, fakeOpenRouterApiKeyStore, saved);
 assert.equal(saved.openRouter.model, "anthropic/claude-sonnet-4");
 assert.equal(saved.openRouter.hasApiKey, true);
 assert.equal(saved.openRouter.apiKey, undefined);

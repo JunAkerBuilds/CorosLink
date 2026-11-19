@@ -5,14 +5,17 @@ import {
   normalizeLocalChatBaseUrl
 } from "./localChatProvider";
 import { DEFAULT_OPENROUTER_MODEL } from "./openRouterProvider";
+import { normalizeChatEffort } from "./chatModels";
 
 export const CHAT_SETTINGS_KEYS = {
   provider: "chat.provider",
   chatgptModel: "chat.chatgpt.model",
+  chatgptEffort: "chat.chatgpt.effort",
   openRouterModel: "chat.openRouter.model",
   openRouterApiKey: "chat.openRouter.apiKey",
   claudeExecutablePath: "chat.claudeCode.executablePath",
   claudeModel: "chat.claudeCode.model",
+  claudeEffort: "chat.claudeCode.effort",
   claudeLastConnectionStatus: "chat.claudeCode.lastConnectionStatus",
   claudeLastCheckedAt: "chat.claudeCode.lastCheckedAt",
   claudeRecentActivities: "chat.claudeCode.permissions.recentActivities",
@@ -60,7 +63,8 @@ export function readChatSettingsFromStore(
   return {
     provider: normalizeProvider(store.get(CHAT_SETTINGS_KEYS.provider)),
     chatgpt: {
-      model: store.get(CHAT_SETTINGS_KEYS.chatgptModel) || undefined
+      model: store.get(CHAT_SETTINGS_KEYS.chatgptModel) || undefined,
+      effort: normalizeChatEffort(store.get(CHAT_SETTINGS_KEYS.chatgptEffort))
     },
     openRouter: {
       model:
@@ -72,6 +76,7 @@ export function readChatSettingsFromStore(
       executablePath:
         store.get(CHAT_SETTINGS_KEYS.claudeExecutablePath) || undefined,
       model: store.get(CHAT_SETTINGS_KEYS.claudeModel) || undefined,
+      effort: normalizeChatEffort(store.get(CHAT_SETTINGS_KEYS.claudeEffort)),
       lastConnectionStatus: normalizeCliConnectionStatus(
         store.get(CHAT_SETTINGS_KEYS.claudeLastConnectionStatus)
       ),
@@ -148,6 +153,12 @@ export function saveChatSettingsToStore(
   } else {
     store.delete([CHAT_SETTINGS_KEYS.chatgptModel]);
   }
+  const chatgptEffort = normalizeChatEffort(settings.chatgpt?.effort);
+  if (chatgptEffort) {
+    store.set(CHAT_SETTINGS_KEYS.chatgptEffort, chatgptEffort);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.chatgptEffort]);
+  }
   const openRouterModel = settings.openRouter?.model?.trim();
   store.set(
     CHAT_SETTINGS_KEYS.openRouterModel,
@@ -164,6 +175,12 @@ export function saveChatSettingsToStore(
     store.set(CHAT_SETTINGS_KEYS.claudeModel, claudeModel);
   } else {
     store.delete([CHAT_SETTINGS_KEYS.claudeModel]);
+  }
+  const claudeEffort = normalizeChatEffort(settings.claudeCode?.effort);
+  if (claudeEffort) {
+    store.set(CHAT_SETTINGS_KEYS.claudeEffort, claudeEffort);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.claudeEffort]);
   }
   if (settings.claudeCode?.lastConnectionStatus) {
     store.set(

@@ -127,7 +127,7 @@ import { AntigravityGatePanel, useAntigravity, type AntigravityControls } from "
 import { OpencodeGatePanel, opencodeReady, useOpencode, type OpencodeControls } from "./opencode";
 import { ChatSidebar } from "./ChatSidebar";
 import { CoachTurnStatus, coachTurnStatusLabel } from "./CoachTurnStatus";
-import { ModelSwitch } from "./ModelSwitch";
+import { EffortSwitch, ModelSwitch } from "./ModelSwitch";
 import { ProviderSwitch } from "./ProviderSwitch";
 import {
   isChatVisualEntry,
@@ -3271,6 +3271,31 @@ export function ChatView({
     }
   };
 
+  const handleEffortChange = async (effort: string) => {
+    if (!api) return;
+    const nextEffort = effort || undefined;
+    const nextSettings: ChatSettings =
+      chatSettings.provider === "claude-code"
+        ? { ...chatSettings, claudeCode: { ...chatSettings.claudeCode, effort: nextEffort } }
+        : chatSettings.provider === "chatgpt"
+          ? { ...chatSettings, chatgpt: { ...chatSettings.chatgpt, effort: nextEffort } }
+          : chatSettings;
+    if (nextSettings === chatSettings) return;
+
+    setChatSettings(nextSettings);
+    setSavingSettings(true);
+    onError(null);
+    try {
+      setChatSettings(await api.saveChatSettings(nextSettings));
+    } catch (caught) {
+      onError(
+        caught instanceof Error ? caught.message : t("Could not save the selected effort.")
+      );
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   const updateOpenRouterDraft = (
     patch: Partial<ChatSettings["openRouter"]>
   ) => {
@@ -4010,6 +4035,20 @@ export function ChatView({
         model={selectedModel}
         disabled={savingSettings || isBusy}
         onChange={(model) => void handleModelChange(model)}
+      />
+      <EffortSwitch
+        api={api}
+        provider={chatSettings.provider}
+        model={selectedModel}
+        effort={
+          chatSettings.provider === "claude-code"
+            ? chatSettings.claudeCode.effort ?? ""
+            : chatSettings.provider === "chatgpt"
+              ? chatSettings.chatgpt.effort ?? ""
+              : ""
+        }
+        disabled={savingSettings || isBusy}
+        onChange={(effort) => void handleEffortChange(effort)}
       />
     </div>
   );

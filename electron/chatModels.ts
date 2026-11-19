@@ -3,6 +3,24 @@ export interface ChatModelOption {
   label: string;
   /** Version an alias resolves to, shown after the label (e.g. "Opus 5.5"). */
   detail?: string;
+  /** Reasoning efforts the model accepts, lowest first. Absent when it has none. */
+  efforts?: string[];
+  /** The effort the model runs at when none is chosen. */
+  defaultEffort?: string;
+}
+
+/** A stored effort only counts while the selected model still offers it. */
+export function resolveChatEffort(
+  option: Pick<ChatModelOption, "efforts"> | undefined,
+  effort: string | undefined
+): string | undefined {
+  return effort && option?.efforts?.includes(effort) ? effort : undefined;
+}
+
+/** Keeps a saved effort to a plain level name such as "high" or "xhigh". */
+export function normalizeChatEffort(value: unknown): string | undefined {
+  const effort = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return /^[a-z]{2,16}$/.test(effort) ? effort : undefined;
 }
 
 export const CHATGPT_MODEL_OPTIONS: ChatModelOption[] = [
@@ -113,11 +131,23 @@ function formatChatGptModelName(displayName: string): string {
 export function chatGptModelOptionsFromCatalog(
   models: ChatGptModelInfo[]
 ): ChatModelOption[] {
+  const effortFields = (model: ChatGptModelInfo | undefined) =>
+    model?.efforts.length
+      ? {
+          efforts: model.efforts,
+          ...(model.defaultEffort ? { defaultEffort: model.defaultEffort } : {})
+        }
+      : {};
+  // Auto runs the first model of its order that the account offers.
+  const autoModel =
+    CHATGPT_AUTO_MODEL_IDS.map((id) => models.find((model) => model.slug === id)).find(Boolean) ??
+    models[0];
   return [
-    CHATGPT_MODEL_OPTIONS[0],
+    { ...CHATGPT_MODEL_OPTIONS[0], ...effortFields(autoModel) },
     ...models.map((model) => ({
       value: model.slug,
-      label: formatChatGptModelName(model.displayName)
+      label: formatChatGptModelName(model.displayName),
+      ...effortFields(model)
     }))
   ];
 }
@@ -127,6 +157,8 @@ export interface ClaudeCliModel {
   value: string;
   resolvedModel?: string;
   displayName: string;
+  supportsEffort?: boolean;
+  supportedEffortLevels?: string[];
 }
 
 /** "claude-opus-5-5" → Opus 5.5; "claude-haiku-4-5-20251001" → Haiku 4.5. */
@@ -154,6 +186,10 @@ export function claudeModelOptionsFromCli(
   const familyOf = (model: ClaudeCliModel) =>
     parseClaudeModelId(model.resolvedModel ?? model.value)?.family ??
     (isAlias(model) ? model.value : undefined);
+  const effortFields = (model: ClaudeCliModel | undefined) =>
+    model && model.supportsEffort !== false && model.supportedEffortLevels?.length
+      ? { efforts: model.supportedEffortLevels }
+      : {};
   const rows = models.filter((model) => model.value !== "default");
   const aliasFamilies = new Set(rows.filter(isAlias).map(familyOf));
   const shown = new Set<string>();
@@ -168,17 +204,17 @@ export function claudeModelOptionsFromCli(
       parseClaudeModelId(model.resolvedModel ?? model.value)?.name ?? model.displayName;
     options.push({
       value: model.value,
-      label: /^claude\b/i.test(name) ? name : `Claude ${name}`
+      label: /^claude\b/i.test(name) ? name : `Claude ${name}`,
+      ...effortFields(model)
     });
   }
-  const defaultVersion = parseClaudeModelId(
-    models.find((model) => model.value === "default")?.resolvedModel
-  )?.name;
+  const defaultModel = models.find((model) => model.value === "default");
+  const defaultVersion = parseClaudeModelId(defaultModel?.resolvedModel)?.name;
   // "Default · Opus 5.5" fits the composer pill; "Account default · …" truncates.
   return [
     defaultVersion
-      ? { value: "", label: "Default", detail: defaultVersion }
-      : CLAUDE_MODEL_OPTIONS[0],
+      ? { value: "", label: "Default", detail: defaultVersion, ...effortFields(defaultModel) }
+      : { ...CLAUDE_MODEL_OPTIONS[0], ...effortFields(defaultModel) },
     ...options
   ];
 }

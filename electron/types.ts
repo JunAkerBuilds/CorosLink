@@ -3343,6 +3343,8 @@ export interface ClaudeCodeConfig {
   executablePath?: string;
   /** Model alias (e.g. "opus", "sonnet", "haiku") or full id. Empty = account default. */
   model?: string;
+  /** Reasoning effort (low…max). Empty = the model's default. */
+  effort?: string;
   lastConnectionStatus?: ClaudeCodeConnectionState;
   lastCheckedAt?: string;
   permissions: ClaudeCodePermissions;
@@ -3483,6 +3485,8 @@ export interface LocalChatConfig {
 export interface ChatGptConfig {
   /** Optional model id. Empty uses the best model available to the account. */
   model?: string;
+  /** Reasoning effort the model should use. Empty = the model's default. */
+  effort?: string;
 }
 
 export interface OpenRouterConfig {
