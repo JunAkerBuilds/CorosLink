@@ -1,4 +1,4 @@
-import { batteryReplacementStateCount, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates";
+import { batteryReplacementStateCount, batteryScalesFromArtwork, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates";
 import { NATIVE_DATA_BY_ID, nativeDataBounds } from "./nativeData";
 import type {
   CorosWatchfaceDesignState,
@@ -350,7 +350,8 @@ export function deriveEditorLayers(
                     batteryFolder?.files.length ?? 0,
                     batteryOverride?.stateReplacements,
                     Boolean(batteryOverride?.replacement)
-                  )
+                  ),
+                  batteryScalesFromArtwork(batteryOverride)
                 );
                 return scaledBatterySpriteCanvasSize(
                   artwork.width,

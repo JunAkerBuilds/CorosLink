@@ -2592,6 +2592,41 @@ assert.deepEqual(
   { width: 144, height: 72 },
   "battery sprite scale should not have a fixed upper limit"
 );
+{
+  const {
+    batteryScalesFromArtwork,
+    batteryStateFrameSize
+  } = await import("../src/watchfaces/watchfaceBatteryStates.ts");
+  const tallFrame = { width: 23, height: 30 };
+  const official = { width: 125, height: 30 };
+  assert.deepEqual(
+    batteryStateFrameSize(tallFrame, official, 1, true, batteryScalesFromArtwork({})),
+    { width: 125, height: 30, native: true },
+    "a differently shaped battery set at scale 1 keeps its own size"
+  );
+  assert.deepEqual(
+    batteryStateFrameSize(tallFrame, official, 1, true, batteryScalesFromArtwork({ scale: 1.5, ownSize: true })),
+    { width: 125, height: 30, native: true },
+    "a battery marked ownSize scales from its own size"
+  );
+  // A project saved before own sizing: 242x51 artwork at scale 5 was five
+  // times its fit inside the template frame, never five times its raw pixels.
+  const legacy = { scale: 5, nativeSize: true };
+  const hiRes = { width: 242, height: 51 };
+  assert.equal(batteryScalesFromArtwork(legacy), false);
+  const legacyFrame = batteryStateFrameSize(tallFrame, hiRes, 1, true, batteryScalesFromArtwork(legacy));
+  assert.deepEqual(legacyFrame, { width: 23, height: 30, native: false });
+  assert.deepEqual(
+    scaledBatterySpriteCanvasSize(hiRes.width, hiRes.height, legacyFrame.width, legacyFrame.height, legacy.scale),
+    { width: 115, height: 24 },
+    "an older project's battery scale stays relative to the template frame"
+  );
+  assert.deepEqual(
+    batteryStateFrameSize({ width: 250, height: 60 }, official, 1, true, true),
+    { width: 250, height: 60, native: false },
+    "same-shape artwork still fills the template frame"
+  );
+}
 assert.deepEqual(
   configAssetCanvasSize(
     "control_hr_icon",

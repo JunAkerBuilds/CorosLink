@@ -782,6 +782,11 @@ export interface CorosWatchfaceConfigAssetOverride {
   scale?: number;
   /** Allow supported selectable-control icons to use the imported PNG dimensions. */
   nativeSize?: boolean;
+  /**
+   * Fixed battery only: `scale` multiplies the artwork's own size. Absent on
+   * projects whose scale was set against the template frame.
+   */
+  ownSize?: boolean;
   /** One source PNG is resized independently for every device resolution. */
   replacement?: CorosWatchfaceArtwork;
   /** Per-state PNGs for a stateful sprite folder such as the battery indicator. */

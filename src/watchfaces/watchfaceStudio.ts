@@ -1,4 +1,4 @@
-import { artworkMatchesFrame, batteryPreviewStateIndex, batteryReplacementStateCount, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates.ts";
+import { artworkMatchesFrame, batteryPreviewStateIndex, batteryReplacementStateCount, batteryScalesFromArtwork, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates.ts";
 export { batteryPreviewStateIndex } from "./watchfaceBatteryStates.ts";
 import { drawSpritePreservingCore, renderAlignedRasterGlyph, spaceWatchfaceGlyph } from "./watchfaceGlyphLayout.ts";
 import { getWatchfaceTarget } from "../../electron/watchfaceTargets.ts";
@@ -2110,7 +2110,8 @@ export async function buildWatchfaceConfigAssetReplacements(
           { width: Math.max(1, sprite.width), height: Math.max(1, sprite.height) },
           replacement,
           fixedBatteryResolutionScale,
-          fixedBatteryCoversTemplate
+          fixedBatteryCoversTemplate,
+          batteryScalesFromArtwork(batteryOverride)
         );
         replacements.push({
           path: fixedTargetFolder
@@ -10756,7 +10757,8 @@ export async function drawStudioPreview(
               batteryFolder.files.length,
               batteryOverride?.stateReplacements,
               Boolean(batteryOverride?.replacement)
-            )
+            ),
+            batteryScalesFromArtwork(batteryOverride)
           )
         : {
             width: Math.max(1, Math.round(batteryFile.width * createdBatteryScale)),

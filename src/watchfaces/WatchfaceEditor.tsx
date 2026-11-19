@@ -1,6 +1,6 @@
 import { t, useLanguage, getLocale, midSentence } from "../i18n/watchfaces";
 import { createCollapsedWatchfaceLayerSections, watchfaceLayerMatchesSearch } from "./watchfaceLayerSearch";
-import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
+import { batteryScalesFromArtwork, batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { announceStudioEditor } from "./studioEditorPresence";
 import { watchfaceLayerSampleValue } from "./watchfaceLayerValues";
 import { WatchfaceHint } from "./WatchfaceHint";
@@ -6438,7 +6438,8 @@ export function WatchfaceEditor({
           [overrideId]: {
             ...(prev.configAssetOverrides?.[overrideId] ?? {}),
             enabled: true,
-            stateReplacements
+            stateReplacements,
+            ...batteryOwnSizeMark(overrideId, prev.configAssetOverrides?.[overrideId])
           }
         },
         ...(overrideId === "config:battery_icon"
@@ -6570,6 +6571,20 @@ export function WatchfaceEditor({
     onNotice(t("Battery icon added. Replace its images in the inspector."));
   }
 
+  /**
+   * Marks a fixed battery still at scale 1 as scaling from its own size, so
+   * later scale changes keep that meaning. A battery already scaled against
+   * the template frame (older projects) is left as saved.
+   */
+  function batteryOwnSizeMark(
+    overrideId: string,
+    override: { scale?: number; ownSize?: boolean } | undefined
+  ): { ownSize?: true } {
+    return overrideId === "config:battery_icon" && batteryScalesFromArtwork(override)
+      ? { ownSize: true }
+      : {};
+  }
+
   function setBatteryIconScale(
     scale: number,
     overrideId:
@@ -6583,6 +6598,7 @@ export function WatchfaceEditor({
         [overrideId]: {
           ...(prev.configAssetOverrides?.[overrideId] ?? {}),
           enabled: true,
+          ...batteryOwnSizeMark(overrideId, prev.configAssetOverrides?.[overrideId]),
           scale: Math.max(0.1, Number.isFinite(scale) ? scale : 1)
         }
       }
