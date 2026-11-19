@@ -531,7 +531,7 @@ export async function recheckOpencodeConnectionStatus(): Promise<OpencodeStatus>
     getChatSettings().opencode.executablePath,
     opencodeWorkspaceDir()
   );
-  opencodeModelCache = null;
+  opencodeModelCache.clear();
   recordOpencodeStatus(status);
   return status;
 }
@@ -578,12 +578,12 @@ export async function installAntigravity(): Promise<AntigravityStatus> {
 
 export async function removeAntigravity(): Promise<AntigravityStatus> {
   await removeAntigravityRuntime(antigravityRoot());
-  antigravityModelCache = null;
+  antigravityModelCache.clear();
   return getAntigravityConnectionStatus();
 }
 
 export async function connectAntigravity(): Promise<AntigravityStatus> {
-  antigravityModelCache = null;
+  antigravityModelCache.clear();
   const status = await signInToAntigravity(antigravityRoot(), openAntigravitySignIn);
   recordAntigravityStatus(status);
   return status;
@@ -591,7 +591,7 @@ export async function connectAntigravity(): Promise<AntigravityStatus> {
 
 /** "Check again": asks Google again when a refusal or failed sign-in is on screen. */
 export async function recheckAntigravityConnection(): Promise<AntigravityStatus> {
-  antigravityModelCache = null;
+  antigravityModelCache.clear();
   const status = await recheckAntigravity(antigravityRoot());
   recordAntigravityStatus(status);
   return status;
@@ -610,7 +610,7 @@ export function reopenAntigravitySignIn(): void {
 }
 
 export async function disconnectAntigravity(): Promise<AntigravityStatus> {
-  antigravityModelCache = null;
+  antigravityModelCache.clear();
   const status = await signOutOfAntigravity(antigravityRoot());
   recordAntigravityStatus(status);
   return status;
@@ -1346,6 +1346,7 @@ export async function streamChat(
         tools: chatTools,
         signal,
         model: settings.opencode.model,
+        effort: settings.opencode.effort,
         onToken: (delta) => {
           fullText += delta;
           send("chat:streamToken", { requestId, delta });
@@ -1424,6 +1425,7 @@ export async function streamChat(
         tools: chatTools,
         signal,
         model: settings.antigravity.model,
+        effort: settings.antigravity.effort,
         onToken: (delta) => {
           fullText += delta;
           send("chat:streamToken", { requestId, delta });
@@ -2918,17 +2920,19 @@ async function listGeminiModelOptions(): Promise<ChatModelOption[]> {
   return options;
 }
 
-let antigravityModelCache: { at: number; options: Promise<ChatModelOption[]> } | null = null;
+// One entry per selected model: each list carries that model's effort levels.
+const antigravityModelCache = new Map<string, { at: number; options: Promise<ChatModelOption[]> }>();
 
 /** Starting a session never signs in here, so listing can't open a browser. */
-async function listAntigravityModelOptions(): Promise<ChatModelOption[]> {
+async function listAntigravityModelOptions(model = ""): Promise<ChatModelOption[]> {
   const status = await inspectAntigravityStatus(antigravityRoot());
   if (!status.authenticated) return ANTIGRAVITY_MODEL_OPTIONS;
-  if (antigravityModelCache && Date.now() - antigravityModelCache.at < MODELS_CACHE_MS) {
-    return antigravityModelCache.options;
+  const cached = antigravityModelCache.get(model);
+  if (cached && Date.now() - cached.at < MODELS_CACHE_MS) {
+    return cached.options;
   }
   const seen = getAntigravitySessionModels();
-  const options = listAntigravityModels(antigravityRoot())
+  const options = listAntigravityModels(antigravityRoot(), model || undefined)
     .then((listed) => {
       if (listed.length < 2) throw new Error("Antigravity listed no models");
       return listed;
@@ -2938,31 +2942,31 @@ async function listAntigravityModelOptions(): Promise<ChatModelOption[]> {
         "[chat] Antigravity model list unavailable:",
         error instanceof Error ? error.message : error
       );
-      if (antigravityModelCache?.options === options) antigravityModelCache = null;
+      if (antigravityModelCache.get(model)?.options === options) antigravityModelCache.delete(model);
       return seen.length >= 2 ? seen : ANTIGRAVITY_MODEL_OPTIONS;
     });
-  antigravityModelCache = { at: Date.now(), options };
+  antigravityModelCache.set(model, { at: Date.now(), options });
   return options;
 }
 
-let opencodeModelCache:
-  | { at: number; executablePath: string; options: Promise<ChatModelOption[]> }
-  | null = null;
+// One entry per selected model: each list carries that model's effort levels.
+const opencodeModelCache = new Map<
+  string,
+  { at: number; executablePath: string; options: Promise<ChatModelOption[]> }
+>();
 
 /** The models of the providers connected in OpenCode, from a session that sends no prompt. */
-async function listOpencodeModelOptions(): Promise<ChatModelOption[]> {
+async function listOpencodeModelOptions(model = ""): Promise<ChatModelOption[]> {
   const status = await inspectOpencodeStatus(getChatSettings().opencode.executablePath);
   if (!status.installed || !status.executablePath || status.state === "connection-failed") {
     return OPENCODE_MODEL_OPTIONS;
   }
   const executablePath = status.executablePath;
-  if (
-    opencodeModelCache?.executablePath === executablePath &&
-    Date.now() - opencodeModelCache.at < MODELS_CACHE_MS
-  ) {
-    return opencodeModelCache.options;
+  const cached = opencodeModelCache.get(model);
+  if (cached?.executablePath === executablePath && Date.now() - cached.at < MODELS_CACHE_MS) {
+    return cached.options;
   }
-  const options = listOpencodeModels(executablePath, opencodeWorkspaceDir())
+  const options = listOpencodeModels(executablePath, opencodeWorkspaceDir(), model || undefined)
     .then((listed) => {
       if (listed.length < 2) throw new Error("OpenCode listed no models");
       return listed;
@@ -2972,11 +2976,11 @@ async function listOpencodeModelOptions(): Promise<ChatModelOption[]> {
         "[chat] OpenCode model list unavailable:",
         error instanceof Error ? error.message : error
       );
-      if (opencodeModelCache?.options === options) opencodeModelCache = null;
+      if (opencodeModelCache.get(model)?.options === options) opencodeModelCache.delete(model);
       const seen = getOpencodeSessionModels(executablePath);
       return seen.length >= 2 ? seen : OPENCODE_MODEL_OPTIONS;
     });
-  opencodeModelCache = { at: Date.now(), executablePath, options };
+  opencodeModelCache.set(model, { at: Date.now(), executablePath, options });
   return options;
 }
 
@@ -2985,12 +2989,15 @@ async function listOpencodeModelOptions(): Promise<ChatModelOption[]> {
  * catalog where it has one. Falls back to the static list on any failure.
  */
 export async function listChatModelOptions(
-  provider: ChatProvider
+  provider: ChatProvider,
+  /** OpenCode and Antigravity report effort levels for one model at a time: this one. */
+  selectedModel?: string
 ): Promise<ChatModelOption[]> {
+  const model = typeof selectedModel === "string" ? selectedModel.trim().slice(0, 200) : "";
   if (provider === "claude-code") return listClaudeModelOptions();
   if (provider === "gemini-cli") return listGeminiModelOptions();
-  if (provider === "antigravity") return listAntigravityModelOptions();
-  if (provider === "opencode") return listOpencodeModelOptions();
+  if (provider === "antigravity") return listAntigravityModelOptions(model);
+  if (provider === "opencode") return listOpencodeModelOptions(model);
   if (provider === "chatgpt") {
     return chatGptModelOptionsFromCatalog(await listChatGptModels());
   }

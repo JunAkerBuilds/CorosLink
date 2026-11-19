@@ -3404,6 +3404,8 @@ export interface OpencodeConfig {
   executablePath?: string;
   /** "provider/model" as OpenCode lists it. Empty = OpenCode's own default. */
   model?: string;
+  /** Reasoning effort. Empty = the model's default. */
+  effort?: string;
   lastConnectionStatus?: OpencodeConnectionState;
   lastCheckedAt?: string;
 }
@@ -3435,6 +3437,8 @@ export type AntigravityConnectionState =
 export interface AntigravityConfig {
   /** A model id from the account's list. Empty = the account default. */
   model?: string;
+  /** Reasoning effort. Empty = the model's default. */
+  effort?: string;
   lastConnectionStatus?: AntigravityConnectionState;
   lastCheckedAt?: string;
 }

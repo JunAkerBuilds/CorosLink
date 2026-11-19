@@ -451,3 +451,42 @@ export async function startToolBridge(
     }
   };
 }
+
+/** A session's reasoning-effort setting, as an ACP agent reports it for its current model. */
+export interface AcpEffortConfig {
+  /** The config option to set, usually "effort". */
+  configId: string;
+  /** Levels the current model accepts, in the agent's order; its "default" row is left out. */
+  efforts: string[];
+  /** The level in force; undefined while the agent is on its default. */
+  current?: string;
+}
+
+/**
+ * Reads the `thought_level` option from a session's `configOptions`. Agents
+ * list it only for a model that has effort levels, and replace it whenever the
+ * model changes.
+ */
+export function readAcpEffortConfig(configOptions: unknown): AcpEffortConfig | undefined {
+  if (!Array.isArray(configOptions)) return undefined;
+  const option = configOptions.find(
+    (entry): entry is { id: string; currentValue?: unknown; options?: unknown } =>
+      Boolean(entry) &&
+      typeof entry === "object" &&
+      typeof (entry as { id?: unknown }).id === "string" &&
+      ((entry as { category?: unknown }).category === "thought_level" ||
+        (entry as { id?: unknown }).id === "effort")
+  );
+  if (!option || !Array.isArray(option.options)) return undefined;
+  const values = (option.options as Array<{ value?: unknown; options?: unknown }>)
+    .flatMap((row) => (Array.isArray(row?.options) ? (row.options as Array<{ value?: unknown }>) : [row]))
+    .map((row) => row?.value)
+    .filter((value): value is string => typeof value === "string" && /^[a-z]{2,16}$/.test(value));
+  const efforts = values.filter((value) => value !== "default");
+  if (efforts.length === 0) return undefined;
+  const current =
+    typeof option.currentValue === "string" && efforts.includes(option.currentValue)
+      ? option.currentValue
+      : undefined;
+  return { configId: option.id, efforts, ...(current ? { current } : {}) };
+}

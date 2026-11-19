@@ -8,6 +8,7 @@ import { pipeline } from "node:stream/promises";
 import {
   AcpAgent,
   acpErrorMessage,
+  readAcpEffortConfig,
   startToolBridge,
   toolBridgeServer,
   toolBridgeStdioServer,
@@ -160,6 +161,8 @@ export interface StreamAntigravityOptions extends GeminiCliToolCallbacks {
   timeoutMs?: number;
   /** A model id from the session's model list. Omit for the account default. */
   model?: string;
+  /** Reasoning effort; sent only when the model in use offers that level. */
+  effort?: string;
   /**
    * Antigravity built-ins to allow, such as "search_web". Coach turns leave
    * this out. When set, the only built-ins it can ask to use are these.
@@ -720,7 +723,11 @@ export function antigravityModelOptions(configOptions: unknown): ChatModelOption
  * The models this account can use, from a session that never sends a prompt.
  * Sign-in is never started from here: a lapsed one just fails.
  */
-export async function listAntigravityModels(root: string): Promise<ChatModelOption[]> {
+export async function listAntigravityModels(
+  root: string,
+  /** The selected model: its row comes back with the effort levels it offers, if any. */
+  model?: string
+): Promise<ChatModelOption[]> {
   const status = await getAntigravityStatus(root);
   if (!status.authenticated) return [];
   await prepareHome(root);
@@ -734,7 +741,23 @@ export async function listAntigravityModels(root: string): Promise<ChatModelOpti
     };
     await launch.trackSession(session.sessionId);
     rememberModels(session.configOptions);
-    return antigravityModelOptions(session.configOptions);
+    const options = antigravityModelOptions(session.configOptions);
+    let effort = readAcpEffortConfig(session.configOptions);
+    if (model && modelConfig(session.configOptions)?.current !== model) {
+      effort = options.some((option) => option.value === model)
+        ? await launch.agent
+            .request("session/set_config_option", {
+              sessionId: session.sessionId,
+              configId: "model",
+              value: model
+            })
+            .then((reply) => readAcpEffortConfig((reply as { configOptions?: unknown } | undefined)?.configOptions))
+            .catch(() => undefined)
+        : undefined;
+    }
+    return options.map((option) =>
+      effort && option.value === (model ?? "") ? { ...option, efforts: effort.efforts } : option
+    );
   } catch (caught) {
     if (launch.signInRequired()) lastRefusal = SIGN_IN_REQUIRED_MESSAGE;
     throw normalizeAntigravityError(caught);
@@ -1061,6 +1084,7 @@ export async function streamAntigravityCompletion(
     lastRefusal = undefined;
     rememberModels(session.configOptions);
 
+    let effortConfig = readAcpEffortConfig(session.configOptions);
     if (options.model) {
       const config = modelConfig(session.configOptions);
       if (config?.current !== options.model) {
@@ -1070,12 +1094,28 @@ export async function streamAntigravityCompletion(
             "connection"
           );
         }
-        await agent.request("session/set_config_option", {
+        const reply = (await agent.request("session/set_config_option", {
           sessionId,
           configId: "model",
           value: options.model
-        });
+        })) as { configOptions?: unknown } | undefined;
+        // The levels on offer change with the model.
+        effortConfig = readAcpEffortConfig(reply?.configOptions);
       }
+    }
+    if (
+      options.effort &&
+      effortConfig?.efforts.includes(options.effort) &&
+      effortConfig.current !== options.effort
+    ) {
+      // A level Antigravity turns down leaves the turn on the model's default.
+      await agent
+        .request("session/set_config_option", {
+          sessionId,
+          configId: effortConfig.configId,
+          value: options.effort
+        })
+        .catch(() => undefined);
     }
     armIdleTimeout();
 

@@ -904,7 +904,8 @@ export interface CorosLinkApi {
   ) => Promise<OpenRouterConnectionTest>;
   openOpenRouterKeys: () => Promise<void>;
   openOpenRouterModels: () => Promise<void>;
-  listChatModels: (provider: ChatProvider) => Promise<ChatModelOption[]>;
+  /** `model` asks OpenCode/Antigravity for that model's effort levels. */
+  listChatModels: (provider: ChatProvider, model?: string) => Promise<ChatModelOption[]>;
   getClaudeCodeStatus: () => Promise<ClaudeCodeStatus>;
   connectClaudeCode: () => Promise<ClaudeCodeStatus>;
   testClaudeCodeConnection: () => Promise<ClaudeCodeConnectionTest>;

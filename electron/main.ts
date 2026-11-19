@@ -2191,8 +2191,8 @@ function registerIpcHandlers(): void {
     shell.openExternal(OPENROUTER_MODELS_URL)
   );
 
-  ipcMain.handle("chat:listModels", (_event, provider: ChatProvider) =>
-    listChatModelOptions(provider)
+  ipcMain.handle("chat:listModels", (_event, provider: ChatProvider, model?: string) =>
+    listChatModelOptions(provider, model)
   );
 
   ipcMain.handle("chat:getClaudeCodeStatus", () =>

@@ -1357,8 +1357,8 @@ const api = {
     ipcRenderer.invoke("chat:openOpenRouterKeys"),
   openOpenRouterModels: (): Promise<void> =>
     ipcRenderer.invoke("chat:openOpenRouterModels"),
-  listChatModels: (provider: ChatProvider): Promise<ChatModelOption[]> =>
-    ipcRenderer.invoke("chat:listModels", provider),
+  listChatModels: (provider: ChatProvider, model?: string): Promise<ChatModelOption[]> =>
+    ipcRenderer.invoke("chat:listModels", provider, model),
   getClaudeCodeStatus: (): Promise<ClaudeCodeStatus> =>
     ipcRenderer.invoke("chat:getClaudeCodeStatus"),
   connectClaudeCode: (): Promise<ClaudeCodeStatus> =>

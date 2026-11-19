@@ -119,6 +119,18 @@ try {
       { id: "mode", category: "mode", currentValue: "build", options: [{ value: "build", name: "Build" }, { value: "plan", name: "Plan" }] }
     ]
   });
+  // The effort option belongs to the current model; its "default" row is not a level.
+  assert.deepEqual(flat.effort, { configId: "effort", efforts: ["high"] });
+  assert.deepEqual(
+    readOpencodeSessionConfig({
+      configOptions: [
+        { id: "effort", category: "thought_level", currentValue: "max", options: [{ value: "low" }, { value: "max" }, { value: "default" }, { value: "No Good" }] }
+      ]
+    }).effort,
+    { configId: "effort", efforts: ["low", "max"], current: "max" }
+  );
+  assert.equal(readOpencodeSessionConfig({ configOptions: [{ id: "mode", category: "mode", currentValue: "build", options: [] }] }).effort, null);
+  assert.equal(readOpencodeSessionConfig({}).effort, undefined);
   assert.equal(flat.currentMode, "build");
   assert.deepEqual(flat.modes, ["build", "plan"]);
   assert.deepEqual(opencodeModelOptions(flat), [

@@ -3279,7 +3279,11 @@ export function ChatView({
         ? { ...chatSettings, claudeCode: { ...chatSettings.claudeCode, effort: nextEffort } }
         : chatSettings.provider === "chatgpt"
           ? { ...chatSettings, chatgpt: { ...chatSettings.chatgpt, effort: nextEffort } }
-          : chatSettings;
+          : chatSettings.provider === "opencode"
+            ? { ...chatSettings, opencode: { ...chatSettings.opencode, effort: nextEffort } }
+            : chatSettings.provider === "antigravity"
+              ? { ...chatSettings, antigravity: { ...chatSettings.antigravity, effort: nextEffort } }
+              : chatSettings;
     if (nextSettings === chatSettings) return;
 
     setChatSettings(nextSettings);
@@ -4045,7 +4049,11 @@ export function ChatView({
             ? chatSettings.claudeCode.effort ?? ""
             : chatSettings.provider === "chatgpt"
               ? chatSettings.chatgpt.effort ?? ""
-              : ""
+              : chatSettings.provider === "opencode"
+                ? chatSettings.opencode?.effort ?? ""
+                : chatSettings.provider === "antigravity"
+                  ? chatSettings.antigravity?.effort ?? ""
+                  : ""
         }
         disabled={savingSettings || isBusy}
         onChange={(effort) => void handleEffortChange(effort)}

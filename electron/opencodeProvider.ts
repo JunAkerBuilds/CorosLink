@@ -9,8 +9,10 @@ import {
   AcpAgent,
   AcpError,
   acpErrorMessage,
+  readAcpEffortConfig,
   startToolBridge,
   truncate,
+  type AcpEffortConfig,
   type ToolBridge
 } from "./acpClient";
 import type { ChatModelOption } from "./chatModels";
@@ -98,6 +100,8 @@ export interface StreamOpencodeOptions extends GeminiCliToolCallbacks {
   timeoutMs?: number;
   /** "provider/model" as OpenCode lists it. Omit for OpenCode's default. */
   model?: string;
+  /** Reasoning effort; sent only when the model in use offers that level. */
+  effort?: string;
 }
 
 // ----- Detection -----
@@ -427,6 +431,8 @@ interface SessionConfig {
   currentModel?: string;
   modes: string[];
   currentMode?: string;
+  /** The current model's effort levels; null once the session says it has none. */
+  effort?: AcpEffortConfig | null;
 }
 
 function flattenSelectOptions(options: unknown): SelectOption[] {
@@ -452,6 +458,7 @@ export function readOpencodeSessionConfig(session: unknown): SessionConfig {
   };
   const config: SessionConfig = { models: [], modes: [] };
   const options = Array.isArray(result.configOptions) ? result.configOptions : [];
+  if (options.length > 0) config.effort = readAcpEffortConfig(options) ?? null;
   for (const entry of options) {
     const option = entry as { id?: unknown; category?: unknown; currentValue?: unknown; options?: unknown };
     const current = typeof option.currentValue === "string" ? option.currentValue : undefined;
@@ -575,7 +582,8 @@ async function startCoachSession(input: StartSessionInput): Promise<{
       models: newer.models.length > 0 ? newer.models : older.models,
       currentModel: newer.currentModel ?? older.currentModel,
       modes: newer.modes.length > 0 ? newer.modes : older.modes,
-      currentMode: newer.currentMode ?? older.currentMode
+      currentMode: newer.currentMode ?? older.currentMode,
+      effort: newer.effort !== undefined ? newer.effort : older.effort
     });
     agent.onNotification = (method, params) => {
       input.onActivity?.();
@@ -671,7 +679,11 @@ interface CatalogCheck {
 }
 
 /** A session that never sends a prompt: it reports the models OpenCode offers. */
-async function runCatalogCheck(executablePath: string, workspaceDir: string): Promise<CatalogCheck> {
+async function runCatalogCheck(
+  executablePath: string,
+  workspaceDir: string,
+  model?: string
+): Promise<CatalogCheck> {
   let agent: AcpAgent | undefined;
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -694,8 +706,20 @@ async function runCatalogCheck(executablePath: string, workspaceDir: string): Pr
     cleanup = started.cleanup;
     const { session } = started;
     rememberCatalog(executablePath, session.config);
+    // Effort levels belong to one model: switch to the selected one to read its own.
+    let effort = session.config.effort ?? undefined;
+    if (model && model !== session.config.currentModel) {
+      effort = await session.agent
+        .request("session/set_config_option", { sessionId: session.sessionId, configId: "model", value: model })
+        .then((reply) => readAcpEffortConfig((reply as { configOptions?: unknown } | undefined)?.configOptions))
+        .catch(() => undefined);
+    }
     await session.discard();
-    return { options: opencodeModelOptions(session.config) };
+    return {
+      options: opencodeModelOptions(session.config).map((option) =>
+        effort && option.value === (model ?? "") ? { ...option, efforts: effort.efforts } : option
+      )
+    };
   } catch (caught) {
     const failure = timedOut
       ? new OpencodeProviderError("OpenCode did not start a session in time.", "timeout")
@@ -716,13 +740,15 @@ let catalogChecks = new Map<string, { at: number; result: Promise<CatalogCheck> 
 function checkCatalog(
   executablePath: string,
   workspaceDir: string,
-  maxAgeMs: number
+  maxAgeMs: number,
+  model?: string
 ): Promise<CatalogCheck> {
-  const cached = catalogChecks.get(executablePath);
+  const key = model ? `${executablePath}\n${model}` : executablePath;
+  const cached = catalogChecks.get(key);
   if (cached && Date.now() - cached.at < maxAgeMs) return cached.result;
   // Pickers and a status check that start together share one launch.
-  const result = runCatalogCheck(executablePath, workspaceDir);
-  catalogChecks.set(executablePath, { at: Date.now(), result });
+  const result = runCatalogCheck(executablePath, workspaceDir, model);
+  catalogChecks.set(key, { at: Date.now(), result });
   return result;
 }
 
@@ -738,9 +764,11 @@ export function resetOpencodeCatalog(): void {
  */
 export async function listOpencodeModels(
   executablePath: string,
-  workspaceDir: string
+  workspaceDir: string,
+  /** The selected model: its row comes back with the effort levels it offers. */
+  model?: string
 ): Promise<ChatModelOption[]> {
-  const check = await checkCatalog(executablePath, workspaceDir, MODELS_CACHE_MS);
+  const check = await checkCatalog(executablePath, workspaceDir, MODELS_CACHE_MS, model);
   if (check.failure && check.options.length === 0) throw check.failure;
   return check.options;
 }
@@ -983,14 +1011,20 @@ export async function streamOpencodeCompletion(
     const { sessionId } = session;
     rememberCatalog(options.executablePath, session.config);
 
+    let effortConfig = session.config.effort ?? undefined;
     if (options.model && options.model !== session.config.currentModel) {
       try {
-        await session.agent.request("session/set_config_option", {
+        const reply = (await session.agent.request("session/set_config_option", {
           sessionId,
           configId: "model",
           value: options.model
-        });
+        })) as { configOptions?: unknown } | undefined;
+        // The levels on offer change with the model.
+        effortConfig = Array.isArray(reply?.configOptions)
+          ? readAcpEffortConfig(reply.configOptions)
+          : undefined;
       } catch (caught) {
+        effortConfig = undefined;
         if (!isUnknownMethod(caught)) throw modelError(caught, options.model);
         // Before OpenCode had config options.
         await session.agent
@@ -999,6 +1033,21 @@ export async function streamOpencodeCompletion(
             throw modelError(legacy, options.model as string);
           });
       }
+    }
+
+    if (
+      options.effort &&
+      effortConfig?.efforts.includes(options.effort) &&
+      effortConfig.current !== options.effort
+    ) {
+      // A level OpenCode turns down leaves the turn on the model's default.
+      await session.agent
+        .request("session/set_config_option", {
+          sessionId,
+          configId: effortConfig.configId,
+          value: options.effort
+        })
+        .catch(() => undefined);
     }
 
     // A 2.x prompt sent before OpenCode has read the bridge's tools goes out without them.

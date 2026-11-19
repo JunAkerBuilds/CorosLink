@@ -11,7 +11,10 @@ import type { CorosLinkApi } from "../coroslink-api";
 import { SelectDropdown, type SelectOption } from "../components/SelectDropdown";
 
 // Last live list per provider, so a remounted picker opens on real versions.
-const liveModelOptions = new Map<ChatProvider, ChatModelOption[]>();
+const liveModelOptions = new Map<string, ChatModelOption[]>();
+
+// These report effort levels for the session's current model only.
+const PER_MODEL_EFFORT_PROVIDERS = new Set<ChatProvider>(["opencode", "antigravity"]);
 
 const LIVE_CATALOG_PROVIDERS = new Set<ChatProvider>([
   "claude-code",
@@ -29,10 +32,20 @@ const LIVE_CATALOG_PROVIDERS = new Set<ChatProvider>([
 export function useChatModelOptions(
   api: CorosLinkApi | undefined,
   provider: ChatProvider,
-  ready = true
+  ready = true,
+  /** For a provider that reports effort levels one model at a time: the selected model. */
+  effortModel?: string
 ): ChatModelOption[] {
+  const perModel = effortModel !== undefined && PER_MODEL_EFFORT_PROVIDERS.has(provider);
+  const cacheKey = perModel && effortModel ? `${provider}\n${effortModel}` : provider;
+  // Until the selected model's own list arrives, its row has no effort levels.
   const initial = () =>
-    liveModelOptions.get(provider) ?? getChatModelOptions(provider);
+    liveModelOptions.get(cacheKey) ??
+    (perModel
+      ? (liveModelOptions.get(provider) ?? getChatModelOptions(provider)).map(
+          ({ efforts: _efforts, defaultEffort: _defaultEffort, ...option }) => option
+        )
+      : (liveModelOptions.get(provider) ?? getChatModelOptions(provider)));
   const [options, setOptions] = useState(initial);
   useEffect(() => {
     setOptions(initial());
@@ -40,11 +53,13 @@ export function useChatModelOptions(
       return;
     }
     let active = true;
-    api
-      .listChatModels(provider)
+    (perModel && effortModel
+      ? api.listChatModels(provider, effortModel)
+      : api.listChatModels(provider)
+    )
       .then((listed) => {
         if (!listed.length) return;
-        liveModelOptions.set(provider, listed);
+        liveModelOptions.set(cacheKey, listed);
         if (active) setOptions(listed);
       })
       .catch(() => undefined);
@@ -52,7 +67,7 @@ export function useChatModelOptions(
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, provider, ready]);
+  }, [api, cacheKey, ready]);
   return options;
 }
 
@@ -208,7 +223,7 @@ export function EffortSwitch({
   onChange: (effort: string) => void;
 }) {
   useLanguage();
-  const modelOptions = useChatModelOptions(api, provider);
+  const modelOptions = useChatModelOptions(api, provider, true, model);
   const selected = modelOptions.find((option) => option.value === model);
   const levels = selected?.efforts ?? [];
   const saved = resolveChatEffort(selected, effort) ?? "";
@@ -267,7 +282,14 @@ export function EffortSwitch({
     : Math.floor((levels.length - 1) / 2);
   const index = isDefault ? restingIndex : levels.indexOf(value);
   const steps = Math.max(1, levels.length - 1);
-  const tone = provider === "claude-code" ? "claude" : "gpt";
+  const tone =
+    provider === "claude-code"
+      ? "claude"
+      : provider === "antigravity"
+        ? "gemini"
+        : provider === "opencode"
+          ? "opencode"
+          : "gpt";
 
   return (
     <div

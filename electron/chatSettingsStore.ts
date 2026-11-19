@@ -28,10 +28,12 @@ export const CHAT_SETTINGS_KEYS = {
   geminiLastConnectionStatus: "chat.geminiCli.lastConnectionStatus",
   geminiLastCheckedAt: "chat.geminiCli.lastCheckedAt",
   antigravityModel: "chat.antigravity.model",
+  antigravityEffort: "chat.antigravity.effort",
   antigravityLastConnectionStatus: "chat.antigravity.lastConnectionStatus",
   antigravityLastCheckedAt: "chat.antigravity.lastCheckedAt",
   opencodeExecutablePath: "chat.opencode.executablePath",
   opencodeModel: "chat.opencode.model",
+  opencodeEffort: "chat.opencode.effort",
   opencodeLastConnectionStatus: "chat.opencode.lastConnectionStatus",
   opencodeLastCheckedAt: "chat.opencode.lastCheckedAt",
   localBaseUrl: "chat.local.baseUrl",
@@ -107,6 +109,7 @@ export function readChatSettingsFromStore(
     },
     antigravity: {
       model: store.get(CHAT_SETTINGS_KEYS.antigravityModel) || undefined,
+      effort: normalizeChatEffort(store.get(CHAT_SETTINGS_KEYS.antigravityEffort)),
       lastConnectionStatus: normalizeAntigravityConnectionStatus(
         store.get(CHAT_SETTINGS_KEYS.antigravityLastConnectionStatus)
       ),
@@ -117,6 +120,7 @@ export function readChatSettingsFromStore(
       executablePath:
         store.get(CHAT_SETTINGS_KEYS.opencodeExecutablePath) || undefined,
       model: store.get(CHAT_SETTINGS_KEYS.opencodeModel) || undefined,
+      effort: normalizeChatEffort(store.get(CHAT_SETTINGS_KEYS.opencodeEffort)),
       lastConnectionStatus: normalizeCliConnectionStatus(
         store.get(CHAT_SETTINGS_KEYS.opencodeLastConnectionStatus)
       ),
@@ -244,6 +248,18 @@ export function saveChatSettingsToStore(
     store.set(CHAT_SETTINGS_KEYS.antigravityModel, antigravityModel);
   } else {
     store.delete([CHAT_SETTINGS_KEYS.antigravityModel]);
+  }
+  const antigravityEffort = normalizeChatEffort(settings.antigravity?.effort);
+  if (antigravityEffort) {
+    store.set(CHAT_SETTINGS_KEYS.antigravityEffort, antigravityEffort);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.antigravityEffort]);
+  }
+  const opencodeEffort = normalizeChatEffort(settings.opencode?.effort);
+  if (opencodeEffort) {
+    store.set(CHAT_SETTINGS_KEYS.opencodeEffort, opencodeEffort);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.opencodeEffort]);
   }
   const opencodeExecutablePath = settings.opencode?.executablePath?.trim();
   if (opencodeExecutablePath) {
