@@ -89,6 +89,15 @@ async function main() {
         await checkLayout(`${theme} ${name}`);
         await shoot(`${theme}-${name}`);
       }
+      // Finding or connecting can be cancelled from beside the button that shows it; an idle menu has no Cancel.
+      await show('offline');
+      assert.equal(await js(`document.querySelector('.watch-menu-cancel-button')`), null, 'no Cancel with nothing under way');
+      await show('connecting');
+      assert.equal(await text('.watch-menu-connect-row .watch-menu-cancel-button'), 'Cancel');
+      await js(`window.mock.calls.length = 0; document.querySelector('.watch-menu-cancel-button').click(); void 0`);
+      await until(`window.mock.calls.includes('cancelConnect')`);
+      await until(`document.querySelector('.watch-menu-cancel-button') === null`);
+      assert.equal(await js(`document.querySelector('.watch-menu-result.is-error')`), null, 'cancelling shows no error');
       // Messages wait until the connection has finished setting up the watch.
       const messageRow = `document.querySelector('.watch-menu-row[data-page=message]').textContent`;
       await show('connected-setting-up');

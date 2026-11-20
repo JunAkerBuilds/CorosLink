@@ -80,6 +80,7 @@ const api = {
   scanCorosNativeBle: async () => { mock.calls.push('scan'); return mock.snapshot; },
   refreshCorosNativeBle: async () => mock.snapshot,
   disconnectCorosNativeBle: async () => { mock.calls.push('disconnect'); return { ...base, phase: 'disconnected' }; },
+  cancelCorosNativeBleConnect: async () => { mock.calls.push('cancelConnect'); return { ...base, phase: 'disconnected' }; },
   syncWatchLocally: () => { mock.calls.push('sync'); return new Promise<WatchSyncProgress>((resolve, reject) => {
     mock.finishSync = result => { mock.lastProgress = undefined; resolve({ ...idle(), state: 'done', ...result }); };
     mock.failSync = message => { mock.lastProgress = undefined; reject(new Error(`Error invoking remote method 'localData:syncWatch': Error: ${message}`)); };

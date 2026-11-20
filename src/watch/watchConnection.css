@@ -209,6 +209,22 @@
   gap: 8px;
 }
 
+/* Cancel sits beside the button that shows the attempt's progress. */
+.watch-menu-connect-row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.watch-menu-connect-row > :first-child { flex: 1 1 0; }
+
+.watch-menu-panel .watch-menu-cancel-button {
+  flex: none;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 16px;
+}
+
 /* Sync sits under Connect (or alone once connected) at the same size. */
 .watch-menu-panel :is(.watch-menu-connect-button, .watch-menu-sync-button) {
   width: 100%;

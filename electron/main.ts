@@ -1396,6 +1396,7 @@ function registerIpcHandlers(): void {
     });
   });
   ipcMain.handle("corosBle:disconnect", () => corosNativeBle.disconnect());
+  ipcMain.handle("corosBle:cancelConnect", () => corosNativeBle.cancelConnect());
   // The QR carries the watch account key itself, so only the main window may ask for it.
   ipcMain.handle("corosBle:phonePairing", event => {
     mainWindowSender(event, "iPhone pairing");

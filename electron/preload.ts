@@ -346,6 +346,7 @@ const api = {
   deleteCorosMusicTrack: (target: import("./corosBleMusicTypes").CorosBleMusicDeleteTarget): Promise<import("./corosBleMusicTypes").CorosBleMusicDeleteResult> => ipcRenderer.invoke("corosBle:deleteMusic", target),
   deleteAllCorosMusic: (inventoryId: string): Promise<import("./corosBleMusicTypes").CorosBleMusicDeleteAllResult> => ipcRenderer.invoke("corosBle:deleteAllMusic", inventoryId),
   disconnectCorosNativeBle: (): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:disconnect"),
+  cancelCorosNativeBleConnect: (): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:cancelConnect"),
   createCorosPhonePairingCode: (): Promise<import("./corosNativeBleTypes").CorosPhonePairingCode> => ipcRenderer.invoke("corosBle:phonePairing"),
   startCorosWatchfacePhoneSend: (input: import("./watchfacePhoneSendTypes").WatchfacePhoneSendInput): Promise<import("./watchfacePhoneSendTypes").WatchfacePhoneSend> => ipcRenderer.invoke("watchfaces:phoneSendStart", input),
   stopCorosWatchfacePhoneSend: (): Promise<void> => ipcRenderer.invoke("watchfaces:phoneSendStop"),

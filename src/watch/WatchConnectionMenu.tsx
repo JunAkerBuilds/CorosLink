@@ -177,7 +177,12 @@ function WatchMenuPanel({
     ? snapshot?.systemBind === "unavailable" || snapshot?.systemBind === "failed" || snapshot?.systemBind === "not_authenticated"
     : watchKeySaved === false;
 
+  // Set by Cancel: the attempt it stopped ends without an error message.
+  const cancelRequested = useRef(false);
+  const [cancelling, setCancelling] = useState(false);
+
   async function run(task: () => Promise<CorosNativeBleSnapshot | void>) {
+    cancelRequested.current = false;
     setBusy(true);
     setMessage(null);
     try {
@@ -185,7 +190,7 @@ function WatchMenuPanel({
       if (next) onSnapshotChange(next);
       if (next?.connected) setChoosing(false);
     } catch (error) {
-      setMessage(apiErrorMessage(error, t("The watch did not respond.")));
+      if (!cancelRequested.current) setMessage(apiErrorMessage(error, t("The watch did not respond.")));
     } finally {
       setBusy(false);
     }
@@ -195,6 +200,8 @@ function WatchMenuPanel({
   async function findWatches(connectSingle: boolean): Promise<CorosNativeBleSnapshot> {
     const found = await api!.scanCorosNativeBle();
     onSnapshotChange(found);
+    // Cancelled between finding the watch and connecting to it.
+    if (cancelRequested.current) throw new Error("cancelled");
     const nearby = found.discoveredDevices ?? [];
     if (!nearby.length) throw new Error(t("No COROS watch found nearby. On the watch, open System → Pair Phone, keep it close, then try again."));
     if (nearby.length === 1 && connectSingle) {
@@ -222,6 +229,21 @@ function WatchMenuPanel({
 
   const connect = () => run(connectWatch);
 
+  /** Stops finding or connecting; the attempt's own call then ends quietly. */
+  async function cancelConnect() {
+    if (typeof api?.cancelCorosNativeBleConnect !== "function") return;
+    cancelRequested.current = true;
+    setCancelling(true);
+    setMessage(null);
+    try {
+      onSnapshotChange(await api.cancelCorosNativeBleConnect());
+    } catch {
+      // The status poll shows where the connection ended up.
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   /** Connects first when needed, then reads activities and health history; the watch stays connected. */
   const sync = () => run(async () => {
     await runWatchSync(api!, connected ? undefined : async () => {
@@ -237,6 +259,11 @@ function WatchMenuPanel({
   // and the Sync button reports finding, connecting, then syncing.
   const phaseLabel = snapshot?.phase === "scanning" ? t("Finding watch…") : snapshot?.phase === "connecting" ? t("Connecting…") : null;
   const connecting = !syncing && (busy || linking);
+  // Finding and connecting can be stopped; a connected watch that is syncing or refreshing is not "connecting".
+  const cancellable = typeof api?.cancelCorosNativeBleConnect === "function" && (linking || (busy && !connected));
+  const cancelButton = (className: string) => (
+    <button className={className} type="button" disabled={cancelling} onClick={() => void cancelConnect()}>{t("Cancel")}</button>
+  );
   const syncLabel = !syncing ? t("Sync watch now")
     : connected ? syncPercent === null ? t("Syncing…") : t("Syncing… {{p0}}%", { p0: syncPercent })
     : phaseLabel ?? t("Connecting…");
@@ -336,11 +363,14 @@ function WatchMenuPanel({
             <span>{watchDisplayName(device.deviceName)}<small>{device.deviceName}</small></span>
           </label>)}
         </fieldset> : null}
-        {offerSync ? syncButton : <button className={`primary-button watch-link-button watch-menu-connect-button${connecting ? " is-busy" : ""}`} type="button"
-          disabled={disabled || (choosing && !selectedDevice)} onClick={() => void connect()}>
-          {connecting ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Bluetooth size={15} aria-hidden="true" />}
-          {connectLabel}
-        </button>}
+        <div className="watch-menu-connect-row">
+          {offerSync ? syncButton : <button className={`primary-button watch-link-button watch-menu-connect-button${connecting ? " is-busy" : ""}`} type="button"
+            disabled={disabled || (choosing && !selectedDevice)} onClick={() => void connect()}>
+            {connecting ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Bluetooth size={15} aria-hidden="true" />}
+            {connectLabel}
+          </button>}
+          {cancellable ? cancelButton("secondary-button watch-link-button watch-menu-cancel-button") : null}
+        </div>
         {waitedSeconds >= 8 ? <p className="watch-menu-hint" role="status">
           {t("Still looking for your watch ·")} {Math.floor(waitedSeconds / 60)}:{String(waitedSeconds % 60).padStart(2, "0")}{t(". Wake it and open System → Pair Phone. CorosLink stops trying after about a minute.")}</p>
           : !pairedBefore ? <p className="watch-menu-hint">
@@ -387,7 +417,8 @@ function WatchMenuPanel({
       </div> : null}
 
       {supported ? <footer className="watch-menu-footer">
-        {connected ? <button className="secondary-button watch-link-button" type="button" disabled={disabled}
+        {/* Linked but still signing in to the watch: Cancel takes Disconnect's place. */}
+        {connected ? cancellable ? cancelButton("secondary-button watch-link-button") : <button className="secondary-button watch-link-button" type="button" disabled={disabled}
           onClick={() => void run(() => api!.disconnectCorosNativeBle())}>
           <Unplug size={15} aria-hidden="true" />  {t("Disconnect")}</button> : <>
           {/* Sync connects first; this connects without syncing (for watch faces or a message). */}

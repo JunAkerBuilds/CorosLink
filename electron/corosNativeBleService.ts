@@ -599,6 +599,7 @@ export class CorosNativeBleService {
         // The remembered watch's identity is checked before anything is signed for or sent (watchIdentity.ts).
         const expected = this.identityToExpect("system", mode, options.confirmIdentity === true, options.device?.deviceId);
         if (expected.refused !== undefined) return await this.refuseIdentity("system", mode, expected.refused, target.deviceName);
+        this.throwIfConnectCancelled();
         this.state = { ...emptyState(), backend, phase: "connecting", available: true };
         this.startWorker(backend);
         try {
@@ -646,6 +647,7 @@ export class CorosNativeBleService {
       const expected = pair ? { confirmed: true } : this.identityToExpect("usb", mode, options.confirmIdentity === true, bondIdentity);
       if ("refused" in expected && expected.refused !== undefined) return await this.refuseIdentity("usb", mode, expected.refused, (bond as { deviceName?: string }).deviceName);
       const usbAuth = await this.loadAuth((bond as { deviceName: string }).deviceName);
+      this.throwIfConnectCancelled();
       this.state = { ...emptyState(), phase: "connecting", available: true };
       this.startWorker(backend);
       const linked = await this.request("connect", { bond, pair, auth: usbAuth, transport: process.env.COROS_BLE_TRANSPORT || "usb:0b05:17cb!" });
@@ -661,6 +663,13 @@ export class CorosNativeBleService {
       }
       return linked;
     } catch (error) {
+      // The user's Cancel stopped the helper: not a failure to show or report.
+      if (this.connectCancelled) {
+        this.state = { ...this.state, phase: "disconnected", connected: false, encrypted: false, error: undefined };
+        this.trace.add("connect cancelled", { backend: this.backendInUse ?? "" });
+        await this.stop();
+        throw connectCancelledError();
+      }
       const message = error instanceof Error ? error.message : "Could not connect the watch.";
       this.state = { ...this.state, phase: "failed", connected: false, encrypted: false, error: message };
       this.trace.add("connect failed", { backend: this.backendInUse ?? "" });
@@ -778,9 +787,10 @@ export class CorosNativeBleService {
       await this.stop();
       if (!this.backends()[0]!.available) throw new Error("System Bluetooth is not available in this build.");
       this.backendInUse = "system";
+      this.throwIfConnectCancelled();
       this.state = { ...emptyState(), backend: "system", phase: "scanning" };
       this.startWorker("system");
-      const found = await this.request("scan");
+      const found = await this.request("scan").catch(error => { throw this.connectCancelled ? connectCancelledError() : error; });
       const pinned = this.pinnedWatch("system");
       if (!pinned || !this.state.discoveredDevices) return found;
       this.state.discoveredDevices = this.state.discoveredDevices.map(device => ({ ...device, remembered: sameIdentity(device.deviceId, pinned.deviceId) }));
@@ -2133,6 +2143,41 @@ export class CorosNativeBleService {
     return this.closing;
   }
 
+  private connectCancelled = false;
+
+  private throwIfConnectCancelled(): void {
+    if (this.connectCancelled) throw connectCancelledError();
+  }
+
+  /**
+   * The watch menu's Cancel while finding or connecting to a watch. The helper is stopped, which ends
+   * the attempt wherever it is; an open connection that is past connecting is left alone.
+   */
+  cancelConnect(): Promise<CorosNativeBleSnapshot> {
+    const attempt = this.connecting ?? this.scanning;
+    // Settings being restored after a Wi-Fi music send finish first, as on Disconnect.
+    if (!attempt || this.wifiMusicTask) return this.status();
+    this.cancelling ??= (async () => {
+      this.connectCancelled = true;
+      this.trace.add("connect cancel");
+      const worker = this.worker;
+      // The Mac helper leaves when its input closes. The Python one reads its input only between
+      // requests, so in the middle of a connect it is told to end instead of waiting out stop().
+      const nudge = setTimeout(() => { if (worker && this.worker === worker) worker.kill(); }, 1_000);
+      try {
+        await this.stop();
+        await attempt.catch(() => undefined);
+      } finally {
+        clearTimeout(nudge);
+        this.connectCancelled = false;
+      }
+      return this.publicState();
+    })().finally(() => { this.cancelling = undefined; });
+    return this.cancelling;
+  }
+
+  private cancelling?: Promise<CorosNativeBleSnapshot>;
+
   /** Closes the link now. Used from inside a task to reset a transfer that failed partway. */
   private async closeLink(): Promise<CorosNativeBleSnapshot> {
     if (this.activityScreenTask) await this.activityScreenTask.catch(() => undefined);
@@ -2166,6 +2211,10 @@ export class CorosNativeBleService {
       worker.once("close", () => { clearTimeout(timer); resolve(); });
     });
   }
+}
+
+function connectCancelledError(): Error {
+  return expectedError(new Error("Connecting was cancelled."));
 }
 
 /** The 12-hour switch (bit 13) in the watch's system switches, or undefined when they can't be read. */

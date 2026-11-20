@@ -321,6 +321,8 @@ export interface CorosLinkApi {
   deleteCorosMusicTrack: (target: import("../electron/corosBleMusicTypes").CorosBleMusicDeleteTarget) => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicDeleteResult>;
   deleteAllCorosMusic?: (inventoryId: string) => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicDeleteAllResult>;
   disconnectCorosNativeBle: () => Promise<CorosNativeBleSnapshot>;
+  /** Stops finding or connecting to a watch that is under way. */
+  cancelCorosNativeBleConnect: () => Promise<CorosNativeBleSnapshot>;
   createCorosPhonePairingCode?: () => Promise<import("../electron/corosNativeBleTypes").CorosPhonePairingCode>;
   startCorosWatchfacePhoneSend?: (input: import("../electron/watchfacePhoneSendTypes").WatchfacePhoneSendInput) => Promise<import("../electron/watchfacePhoneSendTypes").WatchfacePhoneSend>;
   stopCorosWatchfacePhoneSend?: () => Promise<void>;
