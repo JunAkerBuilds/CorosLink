@@ -22,7 +22,7 @@ import {
 } from "../../electron/corosMcpRegions";
 import type {
   CorosMcpAccount,
-  CorosWatchfaceRegion,
+  CorosMcpRegion,
   McpServerConfig,
   McpServerInput,
   McpServerStatus
@@ -440,7 +440,7 @@ function CorosAccountNote({
 }: {
   account: CorosMcpAccount;
   builtin: boolean;
-  serverRegion: CorosWatchfaceRegion;
+  serverRegion: CorosMcpRegion;
 }) {
   useLanguage();
   if (!account.email && !account.region) return null;

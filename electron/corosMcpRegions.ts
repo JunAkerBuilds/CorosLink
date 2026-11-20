@@ -1,15 +1,15 @@
-import type { CorosWatchfaceRegion } from "./types";
+import type { CorosMcpRegion } from "./types";
 
 // COROS runs one MCP deployment per account region, and each hands sign-in to
 // that region's open platform (openus/openeu/opencn.coros.com). mcp.coros.com
 // publishes the US deployment's metadata, so it counts as US.
-const COROS_MCP_URLS: Record<CorosWatchfaceRegion, string> = {
+const COROS_MCP_URLS: Record<CorosMcpRegion, string> = {
   us: "https://mcpus.coros.com/mcp",
   eu: "https://mcpeu.coros.com/mcp",
   cn: "https://mcpcn.coros.com/mcp"
 };
 
-export const COROS_MCP_REGION_LABELS: Record<CorosWatchfaceRegion, string> = {
+export const COROS_MCP_REGION_LABELS: Record<CorosMcpRegion, string> = {
   us: "United States",
   eu: "Europe",
   cn: "Mainland China"
@@ -19,18 +19,18 @@ const COROS_MCP_HOST = /^mcp(us|eu|cn)?\.coros\.com$/;
 const COROS_SIGN_IN_HOST = /^open(?:us|eu|cn)?\.coros\.com$/;
 
 /** Account region a COROS MCP endpoint serves, or null for any other server. */
-export function corosMcpRegion(url: string): CorosWatchfaceRegion | null {
+export function corosMcpRegion(url: string): CorosMcpRegion | null {
   const parsed = parseHttpsUrl(url);
   const match = parsed ? COROS_MCP_HOST.exec(parsed.hostname) : null;
   if (!match) return null;
-  return (match[1] as CorosWatchfaceRegion | undefined) ?? "us";
+  return (match[1] as CorosMcpRegion | undefined) ?? "us";
 }
 
 export function isCorosMcpUrl(url: string): boolean {
   return corosMcpRegion(url) !== null;
 }
 
-export function corosMcpUrl(region: CorosWatchfaceRegion): string {
+export function corosMcpUrl(region: CorosMcpRegion): string {
   return COROS_MCP_URLS[region];
 }
 

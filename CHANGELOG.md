@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Watch sign-in for Asia-Pacific accounts.** Accounts from India, Singapore and the rest of Asia-Pacific live on COROS's Singapore server, which CorosLink didn't know about. Signing in on another server could still work, but it handed back a different watch key, so the watch said the key was wrong even with the right account. The account region list now has **Asia-Pacific (India, Singapore, …)**, it is picked for you in those countries, "China / Asia-Pacific" is now just **China**, and **Check watch key** also asks the Singapore server.
+
 ## [0.1.80] - 2026-11-18
 
 ### Added

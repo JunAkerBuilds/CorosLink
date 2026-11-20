@@ -94,18 +94,22 @@ import { qrCodeDataUrl } from "./qrCode";
 const MOBILE_API_BASE_URLS: Record<CorosWatchfaceRegion, string> = {
   eu: "https://apieu.coros.com/coros",
   us: "https://api.coros.com/coros",
-  cn: "https://apicn.coros.com/coros"
+  cn: "https://apicn.coros.com/coros",
+  // Asia-Pacific accounts (India, Singapore, …). Their watch key comes from here:
+  // another host may sign them in but hands out a key the watch doesn't hold.
+  sg: "https://apisg.coros.com/coros"
 };
 const MOBILE_API_HOSTNAMES: Record<CorosWatchfaceRegion, string> = {
   eu: "apieu.coros.com",
   us: "api.coros.com",
-  cn: "apicn.coros.com"
+  cn: "apicn.coros.com",
+  sg: "apisg.coros.com"
 };
 const DEFAULT_WATCHFACE_REGION: CorosWatchfaceRegion = "us";
 const COROS_CONFIG_DELETE_VALUE = "__COROSLINK_DELETE_CONFIG_KEY__";
 
 function normalizeWatchfaceRegion(value: unknown): CorosWatchfaceRegion {
-  return value === "eu" || value === "us" || value === "cn"
+  return value === "eu" || value === "us" || value === "cn" || value === "sg"
     ? value
     : DEFAULT_WATCHFACE_REGION;
 }
@@ -113,6 +117,11 @@ function normalizeWatchfaceRegion(value: unknown): CorosWatchfaceRegion {
 function mobileApiBaseUrl(region: CorosWatchfaceRegion | undefined): string {
   return MOBILE_API_BASE_URLS[region ?? DEFAULT_WATCHFACE_REGION];
 }
+
+// Countries whose COROS accounts are usually on the Asia-Pacific (Singapore) host.
+const ASIA_PACIFIC_COUNTRIES = new Set([
+  "IN", "BD", "LK", "NP", "PK", "SG", "MY", "TH", "ID", "PH", "VN", "KH", "MM", "LA", "BN"
+]);
 
 /** Best-guess region for the login form, from the Training Hub session or locale. */
 function suggestWatchfaceRegion(): CorosWatchfaceRegion {
@@ -123,6 +132,9 @@ function suggestWatchfaceRegion(): CorosWatchfaceRegion {
   if (trainingHubBaseUrl.includes("teamcnapi")) {
     return "cn";
   }
+  if (trainingHubBaseUrl.includes("teamsgapi")) {
+    return "sg";
+  }
   if (trainingHubBaseUrl.includes("teamapi")) {
     return "us";
   }
@@ -130,6 +142,9 @@ function suggestWatchfaceRegion(): CorosWatchfaceRegion {
     Intl.DateTimeFormat().resolvedOptions().locale.match(/[-_]([A-Z]{2})\b/)?.[1] ?? "";
   if (["CN", "HK", "MO", "TW"].includes(country)) {
     return "cn";
+  }
+  if (ASIA_PACIFIC_COUNTRIES.has(country)) {
+    return "sg";
   }
   if (country && !["US", "CA", "MX"].includes(country)) {
     return "eu";
@@ -463,7 +478,7 @@ export async function checkCorosWatchKey(input: { email?: string; password?: str
     const problem = readWatchKeyCheck(getSetting(COROS_WATCH_KEY_CHECK_SETTING)).problem;
     const watchKeyId = problem?.result === "mismatch" ? problem.watchKeyId : undefined;
     const first = session?.region ?? suggestWatchfaceRegion();
-    const regions = [first, ...(["cn", "us", "eu"] as const).filter(region => region !== first)];
+    const regions = [first, ...(["cn", "us", "eu", "sg"] as const).filter(region => region !== first)];
     const servers: CorosWatchKeyCheckServer[] = [];
     for (const region of regions) {
       const host = MOBILE_API_HOSTNAMES[region];

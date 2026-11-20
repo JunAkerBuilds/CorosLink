@@ -312,7 +312,8 @@ function templateWatchModelForFirmware(firmwareType: string): WatchModelId | "" 
 const REGION_OPTIONS: { value: CorosWatchfaceRegion; label: string }[] = [
   { value: "eu", label: "Europe" },
   { value: "us", label: "United States" },
-  { value: "cn", label: "China / Asia-Pacific" }
+  { value: "sg", label: "Asia-Pacific (India, Singapore, …)" },
+  { value: "cn", label: "China" }
 ];
 
 export function WatchfacesView({

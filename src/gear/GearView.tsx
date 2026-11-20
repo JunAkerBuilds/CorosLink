@@ -39,7 +39,8 @@ const REGION_OPTIONS: ReadonlyArray<{
 }> = [
   { value: "us", label: "United States" },
   { value: "eu", label: "Europe" },
-  { value: "cn", label: "China / Asia-Pacific" }
+  { value: "sg", label: "Asia-Pacific (India, Singapore, …)" },
+  { value: "cn", label: "China" }
 ];
 
 const FALLBACK_SPORTS: Record<CorosGearType, number[]> = {

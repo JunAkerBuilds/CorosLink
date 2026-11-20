@@ -1132,7 +1132,7 @@ export const toolsFrench: Record<string, string> = {
   "On COROS": "Sur COROS",
   "United States": "États-Unis",
   "Europe": "Europe",
-  "China / Asia-Pacific": "Chine / Asie-Pacifique",
+  "Asia-Pacific (India, Singapore, …)": "Asie-Pacifique (Inde, Singapour, …)",
   "Running shoes": "Chaussures de course",
   "Sport {{p0}}": "Sport {{p0}}",
   "COROS mobile account connected.": "Compte mobile COROS connecté.",

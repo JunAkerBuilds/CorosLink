@@ -1,10 +1,10 @@
 import { peekCorosWatchfaceSession } from "./corosWatchfaceService";
 import { getTrainingHubStatus } from "./trainingHubService";
-import type { CorosMcpAccount, CorosWatchfaceRegion } from "./types";
+import type { CorosMcpAccount, CorosMcpRegion } from "./types";
 
 // Training Hub hosts whose account region has its own COROS MCP server.
 // Singapore accounts (teamsgapi) have none, so they keep the current endpoint.
-const TRAINING_HUB_REGIONS: Record<string, CorosWatchfaceRegion> = {
+const TRAINING_HUB_REGIONS: Record<string, CorosMcpRegion> = {
   "teamapi.coros.com": "us",
   "teameuapi.coros.com": "eu",
   "teamcnapi.coros.com": "cn"
@@ -17,15 +17,15 @@ export function getCorosMcpAccount(): CorosMcpAccount {
     trainingHub.authenticated && trainingHub.baseUrl
       ? TRAINING_HUB_REGIONS[hostname(trainingHub.baseUrl)]
       : undefined;
-  // Watch Faces signs "China / Asia-Pacific" accounts in on one host, and COROS
-  // MCP's server for Asia-Pacific accounts is unknown, so only US and Europe
-  // sessions pick a server.
+  // COROS MCP has no server for Asia-Pacific (Singapore) accounts, and a China
+  // Watch Faces session may once have been an Asia-Pacific account signed in on
+  // the China host, so only US and Europe sessions pick a server.
   const watchfaceRegion = peekCorosWatchfaceSession().region;
   return {
     email: trainingHub.email,
     region:
       trainingHubRegion ??
-      (watchfaceRegion === "cn" ? undefined : watchfaceRegion)
+      (watchfaceRegion === "us" || watchfaceRegion === "eu" ? watchfaceRegion : undefined)
   };
 }
 

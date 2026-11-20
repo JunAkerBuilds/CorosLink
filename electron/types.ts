@@ -109,8 +109,14 @@ export interface WatchStatus {
   error?: string;
 }
 
-/** COROS account region, selecting the regional mobile API host. */
-export type CorosWatchfaceRegion = "eu" | "us" | "cn";
+/** Account regions with their own COROS MCP server. */
+export type CorosMcpRegion = "eu" | "us" | "cn";
+
+/**
+ * COROS account region, selecting the regional mobile API host. Asia-Pacific
+ * accounts (India, Singapore, …) live on the Singapore host, which has no MCP server.
+ */
+export type CorosWatchfaceRegion = CorosMcpRegion | "sg";
 
 /**
  * The saved COROS watch key, as the renderer may show it. The key doesn't expire;
@@ -3615,7 +3621,7 @@ export interface CorosMcpAccount {
   /** Saved account email, filled in on COROS's sign-in page. */
   email?: string;
   /** Region of the Training Hub or Watch Faces session; picks the MCP server. */
-  region?: CorosWatchfaceRegion;
+  region?: CorosMcpRegion;
 }
 
 // ----- Configurable MCP server registry -----

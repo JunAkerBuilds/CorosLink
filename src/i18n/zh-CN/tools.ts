@@ -1124,7 +1124,7 @@ export const toolsChinese: Readonly<Record<string, string>> = {
   "On COROS": "已在 COROS",
   "United States": "美国",
   "Europe": "欧洲",
-  "China / Asia-Pacific": "中国/亚太地区",
+  "Asia-Pacific (India, Singapore, …)": "亚太地区（印度、新加坡等）",
   "Running shoes": "跑鞋",
   "Sport {{p0}}": "运动 {{p0}}",
   "COROS mobile account connected.": "COROS 移动账户已连接。",

@@ -316,11 +316,11 @@ console.log("COROS login key decryption, account identity, fresh signing, region
   calls.length = 0;
   const result = await checker.checkCorosWatchKey();
   rejectHosts = new Set();
-  assert.deepEqual(calls.map(call => call.url.hostname), ["apicn.coros.com", "api.coros.com", "apieu.coros.com"], "the signed-in server first, then the others");
+  assert.deepEqual(calls.map(call => call.url.hostname), ["apicn.coros.com", "api.coros.com", "apieu.coros.com", "apisg.coros.com"], "the signed-in server first, then the others");
   assert.ok(calls.every(call => call.url.pathname === "/coros/user/login"), "only sign-in requests");
   assert.equal(result.watchKeyId, otherId); assert.equal(result.savedKeyId, keyId); assert.equal(result.watch, "COROS APEX 4 81D0");
   assert.deepEqual({ ...result.match }, { region: "cn", field: "previousUserKey", keyId: otherId });
-  assert.deepEqual(JSON.parse(JSON.stringify(result.servers.map(server => [server.region, server.signedIn]))), [["cn", true], ["us", false], ["eu", false]]);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.servers.map(server => [server.region, server.signedIn]))), [["cn", true], ["us", false], ["eu", false], ["sg", true]]);
   assert.match(result.servers[1].error, /Account is not registered/);
   assert.equal(settings.get(COROS_BLE_LOGIN_KEY_SETTING), savedKey, "the check never replaces the saved key");
   assert.equal(settings.get(COROS_WATCH_KEY_CHECK_SETTING), mismatch);
@@ -348,7 +348,7 @@ console.log("COROS login key decryption, account identity, fresh signing, region
   settings.delete(COROS_WATCH_KEY_CHECK_SETTING);
   savedCredentials = null;
   responseData = fixture({ keyInfo: { createTime: ISSUED } });
-  console.log("Watch key check: every key in a sign-in answer by ID, the watch's reported ID kept, all three servers, no saved key changed, session kept, no secrets in the report passed.");
+  console.log("Watch key check: every key in a sign-in answer by ID, the watch's reported ID kept, all four servers, no saved key changed, session kept, no secrets in the report passed.");
 }
 
 // ----- Watch key backup: a passphrase-protected .coroswatchkey file, restored on this or another computer -----
