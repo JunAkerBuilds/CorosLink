@@ -2110,4 +2110,11 @@ export const toolsPortuguese: Record<string, string> = {
   "Safe to unplug": "Pode desligar o cabo",
   "After you unplug, the watch shows a loading icon for about a minute while it reads the new files. Music appears on the watch once your headphones are connected.": "Depois de desligar o cabo, o relógio mostra um ícone de carregamento durante cerca de um minuto enquanto lê os ficheiros novos. A Música aparece no relógio quando os auscultadores estiverem ligados.",
   "The COROS app can't reach the watch while CorosLink is connected over Bluetooth, so the approval request won't arrive. Disconnect below, then approve in the COROS app.": "A app COROS não consegue comunicar com o relógio enquanto o CorosLink estiver ligado por Bluetooth, por isso o pedido de aprovação não chega. Desligue abaixo e depois aprove na app COROS.",
+  "Map version": "Versão dos mapas",
+  "Match my watch": "Conforme o meu relógio",
+  "Match my watch (v{{p0}})": "Conforme o meu relógio (v{{p0}})",
+  "COROS lists v{{p0}} maps for your watch. v{{p1}} may not show on it.": "A COROS indica mapas v{{p0}} para o seu relógio. A v{{p1}} pode não aparecer nele.",
+  "Showing v{{p0}}. Connect your watch once so CorosLink can pick its map version; after that you can download with the watch unplugged.": "A mostrar v{{p0}}. Ligue o relógio uma vez para o CorosLink escolher a versão dos mapas; depois pode transferir com o relógio desligado.",
+  "Download again to continue from {{p0}}.": "Transfira novamente para continuar a partir de {{p0}}.",
+  "Resume download": "Retomar transferência",
 };

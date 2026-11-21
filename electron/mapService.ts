@@ -75,7 +75,14 @@ import {
 } from "./unitSystem.js";
 
 const COROS_MAP_HOST = "https://map-oss-us.coros.com";
-const COROS_MAP_MANIFEST_URL = `${COROS_MAP_HOST}/regionMap/v5/regions_v5.json`;
+/** Region-map list generations COROS still publishes; which one a watch reads is per model. */
+export const COROS_MAP_VERSIONS = ["6", "5", "4"] as const;
+export type CorosMapVersion = (typeof COROS_MAP_VERSIONS)[number];
+const DEFAULT_COROS_MAP_VERSION: CorosMapVersion = "5";
+
+function corosMapManifestUrl(version: CorosMapVersion): string {
+  return `${COROS_MAP_HOST}/regionMap/v${version}/regions_v${version}.json`;
+}
 const ORS_API_KEY_SETTING = "maps.openRouteServiceApiKey";
 const CARTO_API_KEY_SETTING = "maps.cartoApiKeyEncrypted";
 const ROUTE_BACKEND_SETTING = "maps.routeBackend";
@@ -230,8 +237,13 @@ interface OrsDirectionsResponse {
   }>;
 }
 
-export async function getCorosMapManifest(): Promise<CorosMapManifest> {
-  const response = await fetch(COROS_MAP_MANIFEST_URL, {
+export async function getCorosMapManifest(
+  requestedVersion?: unknown
+): Promise<CorosMapManifest> {
+  const version = COROS_MAP_VERSIONS.includes(requestedVersion as CorosMapVersion)
+    ? (requestedVersion as CorosMapVersion)
+    : DEFAULT_COROS_MAP_VERSION;
+  const response = await fetch(corosMapManifestUrl(version), {
     signal: AbortSignal.timeout(20_000)
   });
 
@@ -261,8 +273,11 @@ export function parseCorosMapManifest(
       continue;
     }
 
+    // A newer list can still point at an older build (v6 topo is the v5 file), so the id follows
+    // the file's own folder: the same zip keeps one id and one cache entry across list versions.
+    const packageVersion = /\/regionMap\/v(\d+)\//.exec(link)?.[1] ?? version;
     packages.push({
-      id: `${version}:${region}:${type}`,
+      id: `${packageVersion}:${region}:${type}`,
       region,
       parent: item.parent?.trim() || "global",
       title: titleFromMapKey(item.title ?? region),
@@ -270,7 +285,7 @@ export function parseCorosMapManifest(
       sizeBytes,
       link,
       downloadUrl: `${host}${link.startsWith("/") ? "" : "/"}${link}`,
-      version,
+      version: packageVersion,
       bundleVersion: manifest.bundleVersion,
       updatedAt: manifest.updatedAt
     });
@@ -425,6 +440,7 @@ export function clearCorosMapDownloadJob(id: string): CorosMapDownloadJob[] {
 }
 
 export function listCachedCorosMaps(): CachedCorosMapPackage[] {
+  void pruneStaleCorosMapPartials(getCorosMapCacheDirectory());
   const cachedPackages = listStoredCachedCorosMaps();
   const validPackages: CachedCorosMapPackage[] = [];
 
@@ -711,6 +727,60 @@ export async function deleteCachedCorosMap(
   return listCachedCorosMaps();
 }
 
+/** Sidecar next to a region map's `.part`: which file the bytes came from, for a safe resume. */
+interface CorosMapPartialDownload {
+  downloadUrl: string;
+  /** ETag or Last-Modified of the response the bytes came from; sent back as If-Range. */
+  validator: string;
+  totalBytes: number;
+}
+
+const COROS_MAP_PARTIAL_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function readCorosMapPartialDownload(
+  partPath: string,
+  downloadUrl: string
+): Promise<{ bytes: number; meta: CorosMapPartialDownload } | null> {
+  try {
+    const [stats, rawMeta] = await Promise.all([
+      fs.promises.stat(partPath),
+      fs.promises.readFile(`${partPath}.json`, "utf8")
+    ]);
+    const meta = JSON.parse(rawMeta) as Partial<CorosMapPartialDownload>;
+    if (
+      meta.downloadUrl !== downloadUrl ||
+      typeof meta.validator !== "string" ||
+      !meta.validator ||
+      typeof meta.totalBytes !== "number" ||
+      stats.size <= 0 ||
+      stats.size >= meta.totalBytes
+    ) {
+      return null;
+    }
+    return { bytes: stats.size, meta: meta as CorosMapPartialDownload };
+  } catch {
+    return null;
+  }
+}
+
+async function discardCorosMapPartialDownload(partPath: string): Promise<void> {
+  await Promise.all([
+    fs.promises.rm(partPath, { force: true }),
+    fs.promises.rm(`${partPath}.json`, { force: true })
+  ]).catch(() => undefined);
+}
+
+/** `bytes 100-199/2000` → start 100, total 2000. */
+function parseContentRange(header: string | null): { start: number; total: number } | null {
+  const match = /^bytes\s+(\d+)-\d+\/(\d+)$/i.exec(header?.trim() ?? "");
+  return match ? { start: Number(match[1]), total: Number(match[2]) } : null;
+}
+
+/**
+ * Downloads a region map into the cache. These zips run to 15 GB, so the bytes land in a `.part`
+ * kept across failures and cancels: the next download of the same file asks COROS for the rest
+ * (Range + If-Range on the saved ETag) and starts over only if the file changed on the server.
+ */
 export async function downloadCorosMapPackageToCache(
   mapPackage: CorosMapPackage,
   options: CorosMapDownloadOptions = {}
@@ -722,10 +792,34 @@ export async function downloadCorosMapPackageToCache(
 
   const cacheFileName = getCorosMapCacheFileName(mapPackage);
   const filePath = path.join(cacheDirectory, cacheFileName);
+  const partPath = `${filePath}.part`;
 
-  const response = await fetchImpl(mapPackage.downloadUrl, {
-    signal: options.signal
+  const partial = await readCorosMapPartialDownload(partPath, mapPackage.downloadUrl);
+  let response = await fetchImpl(mapPackage.downloadUrl, {
+    signal: options.signal,
+    ...(partial
+      ? { headers: { Range: `bytes=${partial.bytes}-`, "If-Range": partial.meta.validator } }
+      : {})
   });
+
+  let resumeFrom = 0;
+  let totalBytes: number | undefined;
+  if (partial && response.status === 206) {
+    const range = parseContentRange(response.headers.get("content-range"));
+    if (range && range.start === partial.bytes && range.total === partial.meta.totalBytes) {
+      resumeFrom = partial.bytes;
+      totalBytes = range.total;
+    } else {
+      // A range we didn't ask for: drop it and fetch the whole file.
+      await response.body?.cancel().catch(() => undefined);
+      await discardCorosMapPartialDownload(partPath);
+      response = await fetchImpl(mapPackage.downloadUrl, { signal: options.signal });
+    }
+  } else if (partial && response.status === 416) {
+    await response.body?.cancel().catch(() => undefined);
+    await discardCorosMapPartialDownload(partPath);
+    response = await fetchImpl(mapPackage.downloadUrl, { signal: options.signal });
+  }
 
   if (!response.ok || !response.body) {
     throw new Error(
@@ -733,15 +827,30 @@ export async function downloadCorosMapPackageToCache(
     );
   }
 
-  const contentLength = Number(response.headers.get("content-length"));
-  const sizeBytes =
-    Number.isFinite(contentLength) && contentLength > 0
-      ? contentLength
-      : mapPackage.sizeBytes;
-  let receivedBytes = 0;
+  if (resumeFrom === 0) {
+    const contentLength = Number(response.headers.get("content-length"));
+    totalBytes = Number.isFinite(contentLength) && contentLength > 0 ? contentLength : undefined;
+    // A fresh start (no partial, or the server sent the whole file because it changed).
+    await fs.promises.rm(`${partPath}.json`, { force: true }).catch(() => undefined);
+    const validator = response.headers.get("etag") ?? response.headers.get("last-modified");
+    if (validator && totalBytes !== undefined) {
+      const meta: CorosMapPartialDownload = {
+        downloadUrl: mapPackage.downloadUrl,
+        validator,
+        totalBytes
+      };
+      await fs.promises.writeFile(`${partPath}.json`, JSON.stringify(meta));
+    }
+  }
+
+  const sizeBytes = totalBytes ?? mapPackage.sizeBytes;
+  let receivedBytes = resumeFrom;
   let lastProgressAt = 0;
   await downloadResponseToFile(response, filePath, {
     signal: options.signal,
+    append: resumeFrom > 0,
+    keepPartialOnError: true,
+    expectedTotalBytes: totalBytes,
     onBytes: bytes => {
       receivedBytes += bytes;
       const now = Date.now();
@@ -755,6 +864,7 @@ export async function downloadCorosMapPackageToCache(
       }
     }
   });
+  await fs.promises.rm(`${partPath}.json`, { force: true }).catch(() => undefined);
   const finalStats = await fs.promises.stat(filePath);
   options.onProgress?.({
     receivedBytes: finalStats.size,
@@ -768,11 +878,37 @@ export async function downloadCorosMapPackageToCache(
     region: mapPackage.region,
     parent: mapPackage.parent,
     type: mapPackage.type,
-    sizeBytes: sizeBytes > 0 ? sizeBytes : finalStats.size,
+    sizeBytes: finalStats.size,
     downloadUrl: mapPackage.downloadUrl,
     filePath,
     downloadedAt: new Date().toISOString()
   };
+}
+
+/** Removes interrupted region-map downloads nobody resumed for a month (each can be gigabytes). */
+async function pruneStaleCorosMapPartials(cacheDirectory: string): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await fs.promises.readdir(cacheDirectory);
+  } catch {
+    return;
+  }
+  const now = Date.now();
+  await Promise.all(
+    entries
+      .filter((name) => name.endsWith(".zip.part"))
+      .map(async (name) => {
+        const partPath = path.join(cacheDirectory, name);
+        try {
+          const stats = await fs.promises.stat(partPath);
+          if (now - stats.mtimeMs > COROS_MAP_PARTIAL_MAX_AGE_MS) {
+            await discardCorosMapPartialDownload(partPath);
+          }
+        } catch {
+          // Already gone.
+        }
+      })
+  );
 }
 
 export async function inspectCorosMapFolder(
@@ -962,10 +1098,19 @@ export async function installCorosMapFolder(
 /**
  * Streams a response body to `filePath` through `<filePath>.part`, renamed into place only when
  * complete. Write errors (disk full, a locked file) and a body over `maxBytes` reject the
- * promise; the partial file is removed. The caller checks the final size.
+ * promise. The partial file is removed unless `keepPartialOnError` (a region map resumes from
+ * it); `append` continues an existing `.part`, and `expectedTotalBytes` rejects a body that
+ * ended short instead of renaming a truncated file into place.
  */
 async function downloadResponseToFile(response: Response, filePath: string,
-  options: { maxBytes?: number; signal?: AbortSignal; onBytes?: (bytes: number) => void } = {}): Promise<number> {
+  options: {
+    maxBytes?: number;
+    signal?: AbortSignal;
+    onBytes?: (bytes: number) => void;
+    append?: boolean;
+    keepPartialOnError?: boolean;
+    expectedTotalBytes?: number;
+  } = {}): Promise<number> {
   if (!response.body) throw new Error("COROS returned an empty map download.");
   await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
   const partPath = `${filePath}.part`;
@@ -983,12 +1128,20 @@ async function downloadResponseToFile(response: Response, filePath: string,
   });
   try {
     await pipeline(Readable.fromWeb(response.body as WebReadableStream<Uint8Array>), count,
-      fs.createWriteStream(partPath), { signal: options.signal });
+      fs.createWriteStream(partPath, { flags: options.append ? "a" : "w" }), { signal: options.signal });
+    if (options.expectedTotalBytes !== undefined) {
+      const { size } = await fs.promises.stat(partPath);
+      if (size !== options.expectedTotalBytes) {
+        throw new Error(`The download stopped early (${size} of ${options.expectedTotalBytes} bytes). Download it again to continue.`);
+      }
+    }
     await fs.promises.rename(partPath, filePath);
     return received;
   } catch (caught) {
-    // Best effort: on Windows a just-closed file can briefly refuse removal; the next download overwrites it.
-    await fs.promises.rm(partPath, { force: true }).catch(() => undefined);
+    if (!options.keepPartialOnError) {
+      // Best effort: on Windows a just-closed file can briefly refuse removal; the next download overwrites it.
+      await fs.promises.rm(partPath, { force: true }).catch(() => undefined);
+    }
     throw caught;
   }
 }

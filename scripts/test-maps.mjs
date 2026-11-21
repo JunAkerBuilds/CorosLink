@@ -44,6 +44,24 @@ assert.equal(
 );
 assert.equal(manifest.packages[2].title, "North America - 1");
 
+// v6 lists new landscape builds but points topo at the v5 zip: ids follow each file's folder, so a
+// topo already cached from the v5 list keeps matching.
+const manifestV6 = parseCorosMapManifest({
+  v: "6",
+  bundleVersion: "6.0.0",
+  host: "https://map-oss-us.coros.com/",
+  mapData: [
+    { region: "europe", parent: "global", type: "landscape", title: "map.europe", data: { size: 10, link: "/regionMap/v6/europe_landscape_6.0.0.zip" } },
+    { region: "europe", parent: "global", type: "topo", title: "map.europe", data: { size: 20, link: "/regionMap/v5/europe_topo_5.0.3.zip" } }
+  ]
+});
+assert.equal(manifestV6.version, "6");
+assert.deepEqual(
+  manifestV6.packages.map((pkg) => [pkg.id, pkg.version]),
+  [["6:europe:landscape", "6"], ["5:europe:topo", "5"]]
+);
+assert.equal(manifest.packages[1].id, "5:north-america:topo");
+
 const loopBody = buildOrsDirectionsBody(
   {
     startLocation: "Toronto",
@@ -222,6 +240,72 @@ try {
     fetchImpl: async () => new Response(payload, { status: 200, headers: { "content-length": String(payload.length) } })
   }), /EACCES|permission/i);
   await fs.promises.chmod(readOnly, 0o755);
+
+  // An interrupted download keeps its bytes and the next one asks for only the rest.
+  const big = Buffer.from("0123456789abcdefghijklmnopqrstuvwxyz");
+  const bigPkg = { ...manifest.packages[1], sizeBytes: big.length };
+  const etag = '"map-etag-1"';
+  const brokenStream = () => new ReadableStream({
+    start(controller) {
+      controller.enqueue(big.subarray(0, 10));
+      // The connection drops after the first chunk has reached the disk.
+      setTimeout(() => controller.error(new Error("connection reset")), 50);
+    }
+  });
+  await assert.rejects(() => downloadCorosMapPackageToCache(bigPkg, {
+    cacheDirectory: cacheRoot,
+    fetchImpl: async (_input, init) => {
+      assert.equal(init?.headers, undefined);
+      return new Response(brokenStream(), { status: 200, headers: { "content-length": String(big.length), etag } });
+    }
+  }), /connection reset/);
+  const partFiles = (await fs.promises.readdir(cacheRoot)).filter((name) => name.endsWith(".zip.part"));
+  assert.equal(partFiles.length, 1);
+  assert.equal(fs.statSync(path.join(cacheRoot, partFiles[0])).size, 10);
+
+  const requests = [];
+  const resumedProgress = [];
+  const resumed = await downloadCorosMapPackageToCache(bigPkg, {
+    cacheDirectory: cacheRoot,
+    fetchImpl: async (_input, init) => {
+      requests.push(init?.headers);
+      return new Response(big.subarray(10), {
+        status: 206,
+        headers: { "content-range": `bytes 10-${big.length - 1}/${big.length}`, "content-length": String(big.length - 10), etag }
+      });
+    },
+    onProgress: (progress) => resumedProgress.push(progress)
+  });
+  assert.deepEqual(requests, [{ Range: "bytes=10-", "If-Range": etag }]);
+  assert.equal(fs.readFileSync(resumed.filePath, "utf8"), big.toString());
+  assert.equal(resumed.sizeBytes, big.length);
+  assert.equal(resumedProgress.at(-1)?.receivedBytes, big.length);
+  assert.deepEqual((await fs.promises.readdir(cacheRoot)).filter((name) => name.includes(".part")), []);
+
+  // The file changed on COROS's side: If-Range makes the server send all of it, which replaces the
+  // stale partial instead of being appended to it.
+  await fs.promises.rm(resumed.filePath);
+  await assert.rejects(() => downloadCorosMapPackageToCache(bigPkg, {
+    cacheDirectory: cacheRoot,
+    fetchImpl: async () => new Response(brokenStream(), { status: 200, headers: { "content-length": String(big.length), etag } })
+  }), /connection reset/);
+  const fresh = Buffer.from("ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210");
+  const replaced = await downloadCorosMapPackageToCache(bigPkg, {
+    cacheDirectory: cacheRoot,
+    fetchImpl: async (_input, init) => {
+      assert.equal(init?.headers?.Range, "bytes=10-");
+      return new Response(fresh, { status: 200, headers: { "content-length": String(fresh.length), etag: '"map-etag-2"' } });
+    }
+  });
+  assert.equal(fs.readFileSync(replaced.filePath, "utf8"), fresh.toString());
+
+  // A body that ends short without an error is not renamed into place as a finished map.
+  await fs.promises.rm(replaced.filePath);
+  await assert.rejects(() => downloadCorosMapPackageToCache(bigPkg, {
+    cacheDirectory: cacheRoot,
+    fetchImpl: async () => new Response(big.subarray(0, 5), { status: 200, headers: { "content-length": String(big.length), etag } })
+  }), /stopped early/);
+  assert.equal(fs.existsSync(replaced.filePath), false);
 } finally {
   await fs.promises.rm(cacheRoot, { recursive: true, force: true });
 }

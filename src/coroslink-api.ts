@@ -821,7 +821,8 @@ export interface CorosLinkApi {
   addManualActivityToCoros: (
     input: ManualActivityInput
   ) => Promise<{ importId: string }>;
-  getCorosMapManifest: () => Promise<CorosMapManifest>;
+  /** `version` is a COROS region-map list generation ("6", "5", "4"); omitted = v5. */
+  getCorosMapManifest: (version?: string) => Promise<CorosMapManifest>;
   openCorosMapDownload: (downloadUrl: string) => Promise<void>;
   downloadCorosMapPackage: (
     pkg: CorosMapPackage

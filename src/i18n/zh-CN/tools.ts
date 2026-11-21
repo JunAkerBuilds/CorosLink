@@ -2112,4 +2112,11 @@ export const toolsChinese: Readonly<Record<string, string>> = {
   "Safe to unplug": "可以安全拔下",
   "After you unplug, the watch shows a loading icon for about a minute while it reads the new files. Music appears on the watch once your headphones are connected.": "拔下后，手表会显示约一分钟的加载图标，用于读取新文件。连接耳机后，手表上才会出现“音乐”。",
   "The COROS app can't reach the watch while CorosLink is connected over Bluetooth, so the approval request won't arrive. Disconnect below, then approve in the COROS app.": "CorosLink 通过蓝牙连接手表时，COROS 应用无法与手表通信，因此不会收到批准请求。请先在下方断开连接，再到 COROS 应用中批准。",
+  "Map version": "地图版本",
+  "Match my watch": "匹配我的手表",
+  "Match my watch (v{{p0}})": "匹配我的手表 (v{{p0}})",
+  "COROS lists v{{p0}} maps for your watch. v{{p1}} may not show on it.": "COROS 为你的手表提供 v{{p0}} 地图，v{{p1}} 可能无法在手表上显示。",
+  "Showing v{{p0}}. Connect your watch once so CorosLink can pick its map version; after that you can download with the watch unplugged.": "当前显示 v{{p0}}。连接一次手表，CorosLink 即可选择对应的地图版本；之后无需连接手表也能下载。",
+  "Download again to continue from {{p0}}.": "再次下载即可从 {{p0}} 处继续。",
+  "Resume download": "继续下载",
 };

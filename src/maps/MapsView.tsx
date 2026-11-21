@@ -16,6 +16,7 @@ import {
   type ReactNode,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from "react";
 import type {
@@ -32,6 +33,13 @@ import { formatBytes } from "../media/libraryUtils";
 import { RouteStudio } from "./routes/RouteStudio";
 import { CorosWifiMapsPanel } from "./CorosWifiMapsPanel";
 import { MapInstallProgressPanel } from "./MapInstallProgressPanel";
+import {
+  COROS_MAP_VERSIONS,
+  FALLBACK_COROS_MAP_VERSION,
+  isCorosMapVersion,
+  recommendedCorosMapVersion,
+  type CorosMapVersion
+} from "./corosMapVersions";
 import {
   defineSelectionPreference,
   selectionIsBoolean,
@@ -66,6 +74,29 @@ const COROS_MAP_FILTER_PREFERENCE =
         selectionIsBoolean(candidate.topo)
       );
     }
+  });
+
+type CorosMapVersionChoice = "auto" | CorosMapVersion;
+
+/** "auto" follows the watch; a pinned version is for overriding COROS's per-watch list. */
+const COROS_MAP_VERSION_PREFERENCE =
+  defineSelectionPreference<CorosMapVersionChoice>({
+    key: "maps.corosMapVersion",
+    defaultValue: "auto",
+    validate: (value): value is CorosMapVersionChoice =>
+      value === "auto" || isCorosMapVersion(value)
+  });
+
+/**
+ * The version COROS lists for the last watch CorosLink saw, kept so maps can be fetched for it
+ * while it is unplugged and off Bluetooth (big regions take hours).
+ */
+const LAST_WATCH_MAP_VERSION_PREFERENCE =
+  defineSelectionPreference<CorosMapVersion | null>({
+    key: "maps.lastWatchMapVersion",
+    defaultValue: null,
+    validate: (value): value is CorosMapVersion | null =>
+      value === null || isCorosMapVersion(value)
   });
 
 interface MapPackageGroup {
@@ -171,6 +202,7 @@ function CorosMapsTab({
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const mapVersionRef = useRef<CorosMapVersion>(FALLBACK_COROS_MAP_VERSION);
   const [filters, setFilters] = useSelectionPreference(
     COROS_MAP_FILTER_PREFERENCE
   );
@@ -179,6 +211,19 @@ function CorosMapsTab({
     landscape: showLandscape,
     topo: showTopo
   } = filters;
+  const [versionChoice, setVersionChoice] = useSelectionPreference(
+    COROS_MAP_VERSION_PREFERENCE
+  );
+  const [lastWatchMapVersion, setLastWatchMapVersion] = useSelectionPreference(
+    LAST_WATCH_MAP_VERSION_PREFERENCE
+  );
+  const connectedWatchMapVersion = recommendedCorosMapVersion(watchStatus?.model);
+  const watchMapVersion = connectedWatchMapVersion ?? lastWatchMapVersion ?? undefined;
+  const mapVersion: CorosMapVersion =
+    versionChoice === "auto"
+      ? watchMapVersion ?? FALLBACK_COROS_MAP_VERSION
+      : versionChoice;
+  mapVersionRef.current = mapVersion;
   const [downloadJobs, setDownloadJobs] = useState<CorosMapDownloadJob[]>([]);
   const [installProgress, setInstallProgress] =
     useState<CorosMapInstallProgress | null>(null);
@@ -236,7 +281,18 @@ function CorosMapsTab({
   const selectedCount = selectedCachedIds.size;
 
   useEffect(() => {
+    if (connectedWatchMapVersion && connectedWatchMapVersion !== lastWatchMapVersion) {
+      setLastWatchMapVersion(connectedWatchMapVersion);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectedWatchMapVersion]);
+
+  useEffect(() => {
     void loadManifest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapVersion]);
+
+  useEffect(() => {
     void loadMapCacheState();
     const unsubscribeDownloads = api.onCorosMapDownloadJobsUpdate((jobs) => {
       setDownloadJobs(jobs);
@@ -258,7 +314,11 @@ function CorosMapsTab({
     setLoading(true);
     onError(null);
     try {
-      setManifest(await api.getCorosMapManifest());
+      const requested = mapVersion;
+      const next = await api.getCorosMapManifest(requested);
+      if (requested === mapVersionRef.current) {
+        setManifest(next);
+      }
     } catch (caught) {
       onError(toErrorMessage(caught));
     } finally {
@@ -428,6 +488,36 @@ function CorosMapsTab({
       left[1].localeCompare(right[1], undefined, { numeric: true })
     );
   }, [manifest, language]);
+
+  const versionOptions = useMemo(
+    () => [
+      {
+        value: "auto" as const,
+        label: watchMapVersion
+          ? t("Match my watch (v{{p0}})", { p0: watchMapVersion })
+          : t("Match my watch"),
+        translate: false
+      },
+      ...COROS_MAP_VERSIONS.map((version) => ({
+        value: version,
+        label: `v${version}`,
+        translate: false
+      }))
+    ],
+    [watchMapVersion, language]
+  );
+
+  const versionHint =
+    versionChoice !== "auto" && watchMapVersion && versionChoice !== watchMapVersion
+      ? t("COROS lists v{{p0}} maps for your watch. v{{p1}} may not show on it.", {
+          p0: watchMapVersion,
+          p1: versionChoice
+        })
+      : !watchMapVersion
+        ? t("Showing v{{p0}}. Connect your watch once so CorosLink can pick its map version; after that you can download with the watch unplugged.", {
+            p0: mapVersion
+          })
+        : null;
 
   const regionFilterOptions = useMemo(
     () => [
@@ -676,6 +766,14 @@ function CorosMapsTab({
             }
           />
 
+          <SelectDropdown translateLabel={t}
+            className="app-select--maps"
+            label={t("Map version")}
+            value={versionChoice}
+            options={versionOptions}
+            onChange={setVersionChoice}
+          />
+
           <label className="check-row maps-check">
             <input
               type="checkbox"
@@ -701,6 +799,7 @@ function CorosMapsTab({
             />
             {t("Topo")}</label>
         </div>
+        {versionHint ? <small className="map-version-hint">{versionHint}</small> : null}
 
         <div className="map-package-list">
           {loading && !manifest ? (
@@ -1007,10 +1106,16 @@ function MapPackageCell({
             </span>
           </div>
         ) : failedOrCancelled ? (
-          <small className="map-download-error">
+          <small
+            className="map-download-error"
+            title={job.receivedBytes > 0 ? t("Download again to continue from {{p0}}.", { p0: formatBytes(job.receivedBytes) }) : undefined}
+          >
             {job.status === "failed"
               ? job.error || t("Download failed.")
               : t("Download cancelled.")}
+            {job.receivedBytes > 0
+              ? ` ${t("Download again to continue from {{p0}}.", { p0: formatBytes(job.receivedBytes) })}`
+              : null}
           </small>
         ) : null}
 
@@ -1066,8 +1171,8 @@ function MapPackageCell({
               <button
                 type="button"
                 className="icon-button"
-                title={t("Download package")}
-                aria-label={t("Download package")}
+                title={failedOrCancelled && (job?.receivedBytes ?? 0) > 0 ? t("Resume download") : t("Download package")}
+                aria-label={failedOrCancelled && (job?.receivedBytes ?? 0) > 0 ? t("Resume download") : t("Download package")}
                 onClick={() => onDownload(pkg)}
                 disabled={busy === `download:${pkg.id}`}
               >

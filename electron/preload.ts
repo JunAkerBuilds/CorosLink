@@ -1198,8 +1198,8 @@ const api = {
     input: ManualActivityInput
   ): Promise<{ importId: string }> =>
     ipcRenderer.invoke("coros:addManualActivity", input),
-  getCorosMapManifest: (): Promise<CorosMapManifest> =>
-    ipcRenderer.invoke("maps:getCorosManifest"),
+  getCorosMapManifest: (version?: string): Promise<CorosMapManifest> =>
+    ipcRenderer.invoke("maps:getCorosManifest", version),
   openCorosMapDownload: (downloadUrl: string): Promise<void> =>
     ipcRenderer.invoke("maps:openCorosDownload", downloadUrl),
   downloadCorosMapPackage: (

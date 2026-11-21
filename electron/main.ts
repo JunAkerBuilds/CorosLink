@@ -3247,7 +3247,7 @@ function registerIpcHandlers(): void {
     }
   );
 
-  ipcMain.handle("maps:getCorosManifest", () => getCorosMapManifest());
+  ipcMain.handle("maps:getCorosManifest", (_event, version?: unknown) => getCorosMapManifest(version));
 
   ipcMain.handle("maps:openCorosDownload", (_event, downloadUrl: string) =>
     openCorosMapDownload(downloadUrl)
