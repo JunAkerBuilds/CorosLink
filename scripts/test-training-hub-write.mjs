@@ -134,4 +134,28 @@ assert.equal(linked[0]?.volume, "8.00km");
 assert.deepEqual(linked[0]?.corosActivity, { activityId: "480757304470307016", startTime: 1790957363, completeRate: 0.85 });
 assert.equal(linked[1]?.corosActivity, undefined);
 
+// #175: on a COROS library plan, planProgramId points at the template's
+// workout and can equal a *different* program's idInPlan. Pairing must follow
+// idInPlan, or workouts swap days.
+const libraryPlan = parseScheduledWorkoutEntries({
+  entities: [
+    { happenDay: 20261127, planId: "plan-3", idInPlan: "1", planProgramId: "2" },
+    { happenDay: 20261128, planId: "plan-3", idInPlan: "2", planProgramId: "1" },
+    { happenDay: 20261129, planId: "plan-3", idInPlan: "3", planProgramId: "1" }
+  ],
+  programs: [
+    { id: "prog-a", planId: "plan-3", idInPlan: "1", name: "Endurance Z2" },
+    { id: "prog-b", planId: "plan-3", idInPlan: "2", name: "CIRCUIT P2" },
+    { id: "prog-c", planId: "plan-3", idInPlan: "3", name: "Long Ride" }
+  ]
+});
+assert.deepEqual(
+  libraryPlan.map((entry) => [entry.happenDay, entry.name]),
+  [
+    ["20261127", "Endurance Z2"],
+    ["20261128", "CIRCUIT P2"],
+    ["20261129", "Long Ride"]
+  ]
+);
+
 console.log("training hub write response tests passed");

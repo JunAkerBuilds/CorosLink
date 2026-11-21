@@ -3921,15 +3921,19 @@ function resolveScheduledProgram(
   const planProgramId = String(entity.planProgramId ?? "");
   const idInPlan = String(entity.idInPlan ?? "");
 
+  // The map is keyed by each program's own idInPlan, so the entity's idInPlan
+  // is the matching key. planProgramId points at the plan template's workout
+  // (COROS library plans) and can equal a *different* program's idInPlan, so
+  // it is only a fallback (#175).
   return (
-    (planId && planProgramId
-      ? programsByIdInPlan.get(`${planId}|${planProgramId}`)
-      : undefined) ??
     (planId && idInPlan
       ? programsByIdInPlan.get(`${planId}|${idInPlan}`)
       : undefined) ??
-    (planProgramId ? programsByIdInPlan.get(planProgramId) : undefined) ??
     (idInPlan ? programsByIdInPlan.get(idInPlan) : undefined) ??
+    (planId && planProgramId
+      ? programsByIdInPlan.get(`${planId}|${planProgramId}`)
+      : undefined) ??
+    (planProgramId ? programsByIdInPlan.get(planProgramId) : undefined) ??
     (planProgramId ? programsById.get(planProgramId) : undefined) ??
     (programs[index] && typeof programs[index] === "object"
       ? programs[index]
