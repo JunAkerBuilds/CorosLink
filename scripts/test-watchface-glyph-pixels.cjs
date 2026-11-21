@@ -328,6 +328,24 @@ async function verifyPixels() {
   const generated = await studio.buildMetricSpriteReplacements(details, styles, '', load);
   const metrics = await Promise.all(generated.map((entry) => inspect(entry.dataUrl)));
   check(metrics.length === 10 && metrics.every((entry) => entry.width === 26 && entry.height === 30), 'Metric export must store spacing in each digit advance cell');
+  // The fixed battery's "%" is its own image (battery_level_percent_icon): a
+  // font on the digits must redraw it too, or it keeps the template lettering.
+  const batteryDetails = { archiveId: 'battery-percent-fixture', resolutions: [{ directory: '416', width: 416, height: 416,
+    config: { battery_level_font: 'battery_font', battery_level_rect: '{100,100,160,130}', battery_level_percent_icon: 'icon\\percent.png' },
+    icons: [{ path: '416/icon/percent.png', width: 18, height: 30 }],
+    spriteFolders: [{ folder: 'battery_font', kind: 'digits', files: [...Array(10)].map((_, d) => ({ path: `416/battery_font/${String(d).padStart(2, '0')}.png`, width: 20, height: 30 })) }] }] };
+  const batteryLoad = async (paths) => paths.map((path) => ({ path, dataUrl: png(20, 30, 2, 2, 16, 26), width: 20, height: 30 }));
+  const isRed = (entry) => entry.ink.length > 0 && entry.ink[0] > 200 && entry.ink[1] < 60 && entry.ink[2] < 60;
+  const batteryOut = await studio.buildMetricSpriteReplacements(batteryDetails, { battery: { scale: 1, fontFamily: 'sans-serif', color: '#ff0000' } }, '', batteryLoad);
+  const percentOut = batteryOut.find((entry) => entry.path === '416/icon/percent.png');
+  const percentInk = percentOut && await inspect(percentOut.dataUrl);
+  check(percentOut?.allowDimensionOverride === true && percentInk.height === 30 && isRed(percentInk) && percentInk.ink.length / 4 < percentInk.width * percentInk.height * 0.8,
+    'A battery font must redraw the "%" image in that font and color');
+  const faceOut = await studio.buildStudioReplacements(batteryDetails, { fontFamily: 'sans-serif', digitColor: '#ff0000', accentColor: '#ffffff', tintIcons: false, tintLabels: false }, batteryLoad);
+  const facePercent = faceOut.find((entry) => entry.path === '416/icon/percent.png');
+  check(facePercent && isRed(await inspect(facePercent.dataUrl)), 'A face font must redraw the battery "%" image as well');
+  const keptOut = await studio.buildStudioReplacements(batteryDetails, { fontFamily: '', digitColor: '#ff0000', accentColor: '#ffffff', tintIcons: false, tintLabels: false }, batteryLoad);
+  check(!keptOut.some((entry) => entry.path === '416/icon/percent.png'), 'Keeping the template font keeps the template "%" image');
   const previewCanvas = document.createElement('canvas'); previewCanvas.width=416; previewCanvas.height=416;
   await studio.drawStudioPreview(previewCanvas, sources.get(`${root}/background.png`).dataUrl, details, { fontFamily:'', digitColor:'#ffffff', accentColor:'#ffffff', tintIcons:false, tintLabels:false, metricStyles:styles }, load);
   const ampmDetails = { archiveId: 'ampm-fixture', resolutions: [{ directory: '416', width: 416, height: 416,
@@ -340,7 +358,7 @@ async function verifyPixels() {
     loadedLabels.push(...paths); return paths.map(path => ({ path, dataUrl: pm }));
   });
   check(labelOutput.length === 2 && loadedLabels.length === 1 && loadedLabels[0].endsWith('/pm.png'), 'An incomplete raster label uses the original PM image without breaking export');
-  return { dataUrl: output.dataUrl, checks: output.checks, tests: 54 };
+  return { dataUrl: output.dataUrl, checks: output.checks, tests: 57 };
 }
 
 (async () => {
@@ -353,7 +371,7 @@ async function verifyPixels() {
     window = new BrowserWindow({ show:false, webPreferences:{ contextIsolation:true, sandbox:true } });
     await window.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/__glyph_test`);
     const results = await window.webContents.executeJavaScript(`(${verifyPixels.toString()})()`);
-    assert.equal(results.tests,54);
+    assert.equal(results.tests,57);
     await fs.writeFile('/tmp/coroslink-export-pixel-test.png', Buffer.from(results.dataUrl.split(',')[1], 'base64'));
     console.log('Watchface glyph and compiled pixel tests passed', results.checks);
   } catch(error) { console.error(error); exitCode=1; }

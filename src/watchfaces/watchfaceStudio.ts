@@ -4125,6 +4125,20 @@ export async function buildStudioReplacements(
             )
           });
         }
+        // The fixed battery's "%" is a separate image; draw it in the same font.
+        const percent = batteryPercentFile(resolution);
+        const firstDigit = folder.files[0];
+        if (
+          percent && firstDigit &&
+          findSpriteFolder(resolution, resolution.config.battery_level_font)?.folder === folder.folder &&
+          shouldRenderWatchfaceText("%", options.fontFamily, options)
+        ) {
+          replacements.push({
+            path: percent.path,
+            dataUrl: await renderPercentGlyph(percent, firstDigit, options.fontFamily, color, options),
+            allowDimensionOverride: true
+          });
+        }
       } else if (folder.kind === "week") {
         const color = folder.aod
           ? dimHexColor(labelColor, AOD_DIM_FACTOR)
@@ -6931,6 +6945,71 @@ export function fixedMetricCurrentFontSize(
 }
 
 /**
+ * COROS keeps a value's "%" as its own image (`battery_level_percent_icon`)
+ * beside the digit font, so a font change must redraw it too or it keeps the
+ * template's lettering. The glyph takes the digits' cell height and font size
+ * and its own inked width; PNG fonts and fonts that cannot be measured keep
+ * the template image's proportions.
+ */
+export function percentGlyphCanvas(
+  percent: Pick<CorosWatchfaceSpriteFile, "width" | "height">,
+  digitCell: { width: number; height: number; fontSize?: number },
+  fontFamily: string,
+  typography: WatchfaceTypography = {}
+): { width: number; height: number; fontSize?: number } {
+  const height = Math.max(1, Math.round(digitCell.height));
+  if (fontFamily && typeof document !== "undefined") {
+    const fontSize = digitCell.fontSize ??
+      fixedMetricCurrentFontSize(digitCell, undefined, undefined, fontFamily, typography);
+    digitMeasureContext ??= document.createElement("canvas").getContext("2d");
+    const context = digitMeasureContext;
+    if (context) {
+      const weight = normalizeFontWeight(typography.fontWeight);
+      const fontStyle = typography.fontStyle === "italic" ? "italic" : "normal";
+      setWatchfaceCanvasFont(
+        context,
+        { family: fontFamily, size: fontSize, weight, style: fontStyle },
+        `${fontStyle} ${weight} ${fontSize}px ${quoteFontFamily(fontFamily)}`
+      );
+      const ink = textInkMetrics(measureWatchfaceText(context, "%"));
+      if (ink.width > 0) {
+        return { width: Math.max(1, Math.ceil(ink.width / 0.96) + 2), height, fontSize };
+      }
+    }
+  }
+  const raster = fontFamily ? null : rasterFontNativeSpriteSize(typography.rasterFont, "%");
+  const aspect = raster?.width && raster.height
+    ? raster.width / raster.height
+    : percent.width / Math.max(1, percent.height);
+  return { width: Math.max(1, Math.round(height * aspect)), height };
+}
+
+/** Draws the "%" image in the digits' font; see {@link percentGlyphCanvas}. */
+export async function renderPercentGlyph(
+  percent: Pick<CorosWatchfaceSpriteFile, "width" | "height">,
+  digitCell: { width: number; height: number; fontSize?: number },
+  fontFamily: string,
+  color: string,
+  typography: WatchfaceTypography = {}
+): Promise<string> {
+  const canvas = percentGlyphCanvas(percent, digitCell, fontFamily, typography);
+  const rendered = await renderWatchfaceTextSprite(
+    "%", canvas.width, canvas.height, fontFamily, color, typography, canvas.fontSize
+  );
+  return spaceWatchfaceGlyph(rendered, typography.letterSpacing);
+}
+
+/** The template's fixed-battery "%" image, when it has one. */
+function batteryPercentFile(
+  resolution: CorosWatchfaceResolutionDetails
+): CorosWatchfaceSpriteFile | undefined {
+  const value = resolution.config.battery_level_percent_icon?.replace(/\\/g, "/").replace(/^\.\//, "");
+  return value
+    ? resolution.icons.find((file) => file.path === `${resolution.directory}/${value}`)
+    : undefined;
+}
+
+/**
  * The digit canvas a fixed metric exports in one resolution tree. Without a
  * font size it is the template cell times `scale`. With one, a desktop font
  * draws at exactly that size in a cell measured from its own digits (the
@@ -7561,6 +7640,9 @@ export async function buildMetricSpriteReplacements(
     typography: WatchfaceTypography;
     rasterized: boolean;
     create: boolean;
+    /** Draws this text instead of `digit` (the battery's "%"). */
+    text?: string;
+    allowDimensionOverride?: boolean;
   }[] = [];
   const masterWidth = pickPreviewResolution(details)?.width;
   for (const resolution of details.resolutions) {
@@ -7613,6 +7695,43 @@ export async function buildMetricSpriteReplacements(
           create: !existsInTemplate
         });
       });
+      // The battery's "%" is its own template image: redraw it in the digits'
+      // font, size and color, or it keeps the template lettering on the watch.
+      const percent = metric.id === "battery" ? batteryPercentFile(resolution) : undefined;
+      const firstDigit = source.files[0];
+      if (percent && firstDigit) {
+        const rasterized =
+          shouldRenderWatchfaceText("0", metricFontFamily, metricTypography) &&
+          shouldRenderWatchfaceText("%", metricFontFamily, metricTypography);
+        const digitCell = fixedMetricDigitCanvas(
+          firstDigit, style, fontSize, rasterized ? metricFontFamily : "", metricTypography, nativeScale
+        );
+        // A PNG "%" scales with the digits it sits beside.
+        const pngScale = digitCell.height / Math.max(1, firstDigit.height);
+        const canvas = rasterized
+          ? percentGlyphCanvas(percent, digitCell, metricFontFamily, metricTypography)
+          : {
+              width: Math.max(1, Math.round(percent.width * pngScale)),
+              height: Math.max(1, Math.round(percent.height * pngScale)),
+              fontSize: undefined
+            };
+        jobs.push({
+          source: percent,
+          path: percent.path,
+          digit: 0,
+          text: "%",
+          width: canvas.width,
+          height: canvas.height,
+          color: style.color,
+          rotation: style.rotation,
+          fontFamily: metricFontFamily,
+          fontSize: canvas.fontSize,
+          typography: metricTypography,
+          rasterized,
+          create: false,
+          allowDimensionOverride: true
+        });
+      }
     }
   }
   const sourceAssets = await loadAssets([
@@ -7625,7 +7744,7 @@ export async function buildMetricSpriteReplacements(
   for (const job of jobs) {
     const rendered = job.rasterized
       ? await renderWatchfaceTextSprite(
-          String(job.digit),
+          job.text ?? String(job.digit),
           job.width,
           job.height,
           job.fontFamily,
@@ -7648,7 +7767,12 @@ export async function buildMetricSpriteReplacements(
       job.height,
       job.rotation
     );
-    replacements.push({ path: job.path, dataUrl: await spaceWatchfaceGlyph(dataUrl, job.typography.letterSpacing), create: job.create });
+    replacements.push({
+      path: job.path,
+      dataUrl: await spaceWatchfaceGlyph(dataUrl, job.typography.letterSpacing),
+      create: job.create,
+      ...(job.allowDimensionOverride ? { allowDimensionOverride: true } : {})
+    });
   }
   return replacements;
 }
@@ -11358,12 +11482,15 @@ export async function drawStudioPreview(
       file: CorosWatchfaceSpriteFile;
       image: HTMLImageElement;
     }[] = [];
+    // The digit cell (before letter spacing) a font-drawn "%" sizes from.
+    let percentCell: { width: number; height: number; fontSize?: number } | undefined;
     for (const digit of plan.value) {
       const file = plan.source.files[Number(digit)];
       if (!file) {
         continue;
       }
       if (!timeStyle && !metricStyle && !dateStyle && !complicationStyle && !componentColor) {
+        percentCell ??= { width: file.width, height: file.height };
         const image = digitSprites.get(file.path) ?? loaded.get(file.path);
         if (image) {
           glyphs.push({ file, image });
@@ -11440,6 +11567,7 @@ export async function drawStudioPreview(
           metricCanvas?.height ??
           Math.max(1, Math.round(file.height * glyphScale))
       };
+      percentCell ??= { width: styledFile.width, height: styledFile.height, fontSize: metricCanvas?.fontSize };
       const glyphColor =
         timeStyle?.color ??
         metricStyle?.color ??
@@ -11641,10 +11769,31 @@ export async function drawStudioPreview(
     }
     // COROS stores the percent image separately from the numeric rectangle.
     // Keep it attached to the value.
-    const suffixImage = plan.suffix
-      ? await configuredAssetImage(plan.suffix.configKey, plan.suffix.file,
-          componentColor ?? metricStyle?.color ?? (options.tintLabels ? options.digitColor : null))
-      : undefined;
+    // With a font on the digits the export redraws the battery "%" in it
+    // (unless the image was replaced), so the preview does too.
+    const suffixInFont = Boolean(
+      plan.suffix && plan.metricId === "battery" && percentCell &&
+        !options.configAssetOverrides?.[
+          watchfaceConfigAssetId(options.configAssetScope ?? "config", plan.suffix.configKey)
+        ] &&
+        shouldRenderWatchfaceText("0", glyphFontFamily, glyphTypography) &&
+        shouldRenderWatchfaceText("%", glyphFontFamily, glyphTypography)
+    );
+    let suffixImage: HTMLImageElement | undefined;
+    if (plan.suffix && suffixInFont && percentCell) {
+      const color = metricStyle?.color ?? componentColor ?? options.digitColor;
+      const key = `%|${plan.suffix.file.path}|${glyphFontFamily}|${color}|${percentCell.width}x${percentCell.height}|${percentCell.fontSize ?? ""}|${glyphTypography.fontWeight ?? 400}|${glyphTypography.fontStyle ?? "normal"}|${glyphTypography.letterSpacing ?? 0}`;
+      suffixImage = styledMetricGlyphs.get(key);
+      if (!suffixImage) {
+        suffixImage = await loadStudioImage(
+          await renderPercentGlyph(plan.suffix.file, percentCell, glyphFontFamily, color, glyphTypography)
+        );
+        styledMetricGlyphs.set(key, suffixImage);
+      }
+    } else if (plan.suffix) {
+      suffixImage = await configuredAssetImage(plan.suffix.configKey, plan.suffix.file,
+        componentColor ?? metricStyle?.color ?? (options.tintLabels ? options.digitColor : null));
+    }
     if (suffixImage) drawStudioLayerImage(
       context, suffixImage, x * scale, Math.round(glyphY(suffixImage.naturalHeight)) * scale,
       suffixImage.naturalWidth * scale, suffixImage.naturalHeight * scale, scale, options, layerId
