@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Send to COROS works for faces made on the phone.** A face from the C-LINK phone app (a remix of a gallery face, say) carries only its own watch's layout. Studio could edit it, but **Send to COROS** and **Export** on a PACE 4 stopped with "requires 390×390 and 800×800 exports". Studio now builds such a face from its own layout for every action, as Convert already did, and adds the 800 px master the watch needs.
+
 ## [0.1.82] - 2026-11-21
 
 ### Added

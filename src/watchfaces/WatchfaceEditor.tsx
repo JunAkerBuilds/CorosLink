@@ -8642,7 +8642,11 @@ export function WatchfaceEditor({
         previewDataUrl: exportPreview,
         ...(buildFirmwareType ? { firmwareType: buildFirmwareType } : {}),
         ...(buildWatchModel ? { watchModel: buildWatchModel } : {}),
-        ...(action === "convert" && destination && convertsFromNativeLayout ? { convertNativeLayout: true } : {}),
+        // A face with no 800px master is built from its own layout for every
+        // action, not only Convert: a PACE 4 needs 390 and 800, so Send/Export
+        // of a phone remix would otherwise be refused. The service only takes
+        // this path when the watch's layouts are incomplete.
+        ...(convertsFromNativeLayout && buildFirmwareType ? { convertNativeLayout: true } : {}),
         ...(designSnapshot.archiveWatchFaceVersion !== undefined
           ? { watchFaceVersion: designSnapshot.archiveWatchFaceVersion }
           : {}),
