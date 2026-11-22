@@ -1,4 +1,4 @@
-import { batteryReplacementStateCount, batteryScalesFromArtwork, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates";
+import { batteryIconRotation, batteryReplacementStateCount, rotatedBatteryFrame, batteryScalesFromArtwork, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates";
 import { NATIVE_DATA_BY_ID, nativeDataBounds } from "./nativeData";
 import type {
   CorosWatchfaceDesignState,
@@ -366,11 +366,12 @@ export function deriveEditorLayers(
               height: templateState?.height ?? box.y1 - box.y0
             };
         // The selection represents the full exported bitmap canvas, including
-        // its intentional transparent/black padding.
+        // its intentional transparent/black padding, after any quarter turn.
+        const turned = rotatedBatteryFrame(canvas, batteryIconRotation(batteryOverride));
         boundsById.set(box.id, {
           ...box,
-          x1: box.x0 + canvas.width,
-          y1: box.y0 + canvas.height
+          x1: box.x0 + turned.width,
+          y1: box.y0 + turned.height
         });
       } else {
         boundsById.set(box.id, box);

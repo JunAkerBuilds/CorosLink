@@ -1,6 +1,7 @@
 import { buildAnimationOverrides, buildAnimationSpriteReplacements } from "./watchfaceAnimation";
 import { composeNativeData, finalizeNativeControlOverrides } from "./nativeData";
 import { buildWatchThemeOverrides } from "./watchfaceThemeColor";
+import { batteryIconRotation } from "./watchfaceBatteryStates";
 import type {
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigOverride,
@@ -45,6 +46,7 @@ import {
   getAmPmCapability,
   isControlComplicationEnabled,
   loadStudioImage,
+  rotateSpriteQuarterTurns,
   mergeAssetReplacements,
   mergeConfigOverrides,
   pickPreviewResolution,
@@ -220,7 +222,7 @@ async function buildBatteryIconEffectSources(
   configOverrides: CorosWatchfaceConfigOverride[];
 }> {
   const batteryOverride = design.configAssetOverrides?.["config:battery_icon"];
-  if (!hasLayerBitmapTransform(design, "batteryIcon")) {
+  if (!batteryIconBitmapsProcessed(design)) {
     return { replacements: [], configOverrides: [] };
   }
   if (
@@ -268,7 +270,7 @@ function isolateBatteryIconEffectPaths(
   design: CorosWatchfaceDesignState,
   replacements: CorosWatchfaceAssetReplacement[]
 ): CorosWatchfaceAssetReplacement[] {
-  if (!hasLayerBitmapTransform(design, "batteryIcon")) return replacements;
+  if (!batteryIconBitmapsProcessed(design)) return replacements;
   return replacements.map((replacement) => {
     const resolution = details.resolutions.find((candidate) =>
       replacement.path.startsWith(`${candidate.directory}/`)
@@ -284,6 +286,36 @@ function isolateBatteryIconEffectPaths(
       allowDimensionOverride: true
     };
   });
+}
+
+/**
+ * Effects, opacity and rotation all rewrite the fixed battery's state PNGs,
+ * so they work on a Studio-owned copy (`cl_battery_icon`): a template folder
+ * shared with the selectable battery must stay untouched.
+ */
+function batteryIconBitmapsProcessed(design: CorosWatchfaceDesignState): boolean {
+  return (
+    hasLayerBitmapTransform(design, "batteryIcon") ||
+    batteryIconRotation(design.configAssetOverrides?.["config:battery_icon"]) !== 0
+  );
+}
+
+/** Bakes the fixed battery's quarter-turn rotation into its isolated state PNGs. */
+async function rotateBatteryIconFrames(
+  design: CorosWatchfaceDesignState,
+  replacements: CorosWatchfaceAssetReplacement[]
+): Promise<CorosWatchfaceAssetReplacement[]> {
+  const rotation = batteryIconRotation(design.configAssetOverrides?.["config:battery_icon"]);
+  if (rotation === 0) return replacements;
+  return Promise.all(replacements.map(async (replacement) =>
+    /\/cl_battery_icon\/[^/]+\.png$/i.test(replacement.path)
+      ? {
+          ...replacement,
+          dataUrl: await rotateSpriteQuarterTurns(replacement.dataUrl, rotation),
+          allowDimensionOverride: true
+        }
+      : replacement
+  ));
 }
 
 async function applyFirmwareEffects(
@@ -907,7 +939,10 @@ export async function composeWatchfaceReplacements(
   const effectedAssets = await applyFirmwareEffects(
     details,
     design,
-    isolateBatteryIconEffectPaths(details, design, baseAssetReplacements)
+    await rotateBatteryIconFrames(
+      design,
+      isolateBatteryIconEffectPaths(details, design, baseAssetReplacements)
+    )
   );
   const mergedConfigOverrides = mergeConfigOverrides(
       metricOverrides,

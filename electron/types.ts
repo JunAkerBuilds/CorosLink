@@ -793,6 +793,12 @@ export interface CorosWatchfaceConfigAssetOverride {
    * projects whose scale was set against the template frame.
    */
   ownSize?: boolean;
+  /**
+   * Fixed battery only: clockwise quarter turns (0, 90, 180 or 270 degrees)
+   * baked into every state PNG. The firmware has no rotation of its own; the
+   * frame keeps its top-left `battery_icon_pos`, like scaling.
+   */
+  rotation?: number;
   /** One source PNG is resized independently for every device resolution. */
   replacement?: CorosWatchfaceArtwork;
   /** Per-state PNGs for a stateful sprite folder such as the battery indicator. */

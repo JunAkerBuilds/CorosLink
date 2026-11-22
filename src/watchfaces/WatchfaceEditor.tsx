@@ -1,6 +1,6 @@
 import { t, useLanguage, getLocale, midSentence } from "../i18n/watchfaces";
 import { createCollapsedWatchfaceLayerSections, watchfaceLayerMatchesSearch } from "./watchfaceLayerSearch";
-import { batteryScalesFromArtwork, batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
+import { batteryIconRotation, batteryScalesFromArtwork, batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { announceStudioEditor } from "./studioEditorPresence";
 import { watchfaceLayerSampleValue } from "./watchfaceLayerValues";
 import { WatchfaceHint } from "./WatchfaceHint";
@@ -6603,6 +6603,21 @@ export function WatchfaceEditor({
         }
       }
     }));
+  }
+
+  /** Fixed battery only: clockwise quarter turns baked into every state PNG. */
+  function setBatteryIconRotation(rotation: number) {
+    setDesign((prev) => {
+      const { rotation: _previous, ...current } = prev.configAssetOverrides?.["config:battery_icon"] ?? {};
+      const next = batteryIconRotation({ rotation });
+      return {
+        ...prev,
+        configAssetOverrides: {
+          ...(prev.configAssetOverrides ?? {}),
+          "config:battery_icon": next === 0 ? current : { ...current, enabled: true, rotation: next }
+        }
+      };
+    });
   }
 
   function setControlComplicationEnabled(
@@ -14168,6 +14183,11 @@ export function WatchfaceEditor({
                 {stateCount > 0 ? <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => restoreBatteryIcon()}><RotateCcw size={15} />{" "}{t("Restore template")}</button> : null}
               </div>
               <label className="watchface-inspector-field"><span>{t("Icon scale")}</span><EditableNumberInput min="0.1" step="0.01" value={iconScale} fallback={1} onValueChange={setBatteryIconScale} /></label>
+              <label className="watchface-inspector-field"><span>{t("Rotation")}</span>
+                <select value={batteryIconRotation(design.configAssetOverrides?.["config:battery_icon"])} onChange={(event) => setBatteryIconRotation(Number(event.target.value))}>
+                  {[0, 90, 180, 270].map((degrees) => <option key={degrees} value={degrees}>{`${degrees}°`}</option>)}
+                </select>
+              </label>
               <p className="watchface-studio-summary">{t("Import PNGs by state index. Standard COROS sets:")}{" "}{COROS_BATTERY_STATE_ORDER}{" "}{t("Preserve the existing order for other template sizes.")}</p>
             </div>,
             { disabled: isPositionLocked(layer.id) }

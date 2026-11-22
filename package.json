@@ -192,6 +192,7 @@
     "test:watchface-automation-e2e": "npm run build:electron && electron scripts/test-watchface-automation-e2e.cjs",
     "test:watchface-automation-tools": "npm run build:electron && electron scripts/test-watchface-automation-e2e.cjs --tools-only",
     "test:watchface-glyph-pixels": "electron scripts/test-watchface-glyph-pixels.cjs",
+    "test:watchface-battery-rotation": "electron scripts/test-watchface-battery-rotation.cjs",
     "test:watchface-solar-preview": "electron scripts/test-watchface-solar-preview.cjs",
     "test:watchface-strokes": "electron scripts/test-watchface-strokes.cjs",
     "test:coros-watchface-creator": "npm run build:electron && electron scripts/test-coros-watchface-creator.cjs",

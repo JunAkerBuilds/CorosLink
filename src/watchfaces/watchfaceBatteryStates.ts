@@ -93,3 +93,18 @@ export function batteryScalesFromArtwork(
   const scale = override?.scale ?? 1;
   return !Number.isFinite(scale) || scale === 1;
 }
+
+/** The fixed battery's rotation as clockwise quarter turns: 0, 90, 180 or 270. */
+export function batteryIconRotation(override: { rotation?: number } | undefined): 0 | 90 | 180 | 270 {
+  const raw = Number(override?.rotation ?? 0);
+  if (!Number.isFinite(raw)) return 0;
+  const quarter = ((Math.round(raw / 90) % 4) + 4) % 4;
+  return (quarter * 90) as 0 | 90 | 180 | 270;
+}
+
+/** A frame's size after the battery rotation: a quarter turn swaps its sides. */
+export function rotatedBatteryFrame<T extends BatteryFrameSize>(frame: T, rotation: number): BatteryFrameSize {
+  return rotation === 90 || rotation === 270
+    ? { width: frame.height, height: frame.width }
+    : { width: frame.width, height: frame.height };
+}

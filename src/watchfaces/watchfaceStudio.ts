@@ -1,4 +1,4 @@
-import { artworkMatchesFrame, batteryPreviewStateIndex, batteryReplacementStateCount, batteryScalesFromArtwork, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates.ts";
+import { artworkMatchesFrame, batteryIconRotation, batteryPreviewStateIndex, batteryReplacementStateCount, batteryScalesFromArtwork, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates.ts";
 export { batteryPreviewStateIndex } from "./watchfaceBatteryStates.ts";
 import { drawSpritePreservingCore, renderAlignedRasterGlyph, spaceWatchfaceGlyph } from "./watchfaceGlyphLayout.ts";
 import { getWatchfaceTarget } from "../../electron/watchfaceTargets.ts";
@@ -3856,6 +3856,32 @@ export async function rotateSpriteInCanvas(
     canvas.height
   );
   context.restore();
+  return canvas.toDataURL("image/png");
+}
+
+/**
+ * Turns a sprite clockwise by a whole number of quarter turns without
+ * resampling, so pixel art stays crisp; 90 and 270 swap its width and height.
+ */
+export async function rotateSpriteQuarterTurns(
+  dataUrl: string,
+  rotation: number
+): Promise<string> {
+  const turn = ((Math.round(rotation / 90) % 4) + 4) % 4;
+  if (turn === 0) return dataUrl;
+  const image = await loadStudioImage(dataUrl);
+  const width = image.naturalWidth, height = image.naturalHeight;
+  const canvas = document.createElement("canvas");
+  canvas.width = turn % 2 ? height : width;
+  canvas.height = turn % 2 ? width : height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Sprite rotation is unavailable in this window.");
+  }
+  context.imageSmoothingEnabled = false;
+  context.translate(canvas.width / 2, canvas.height / 2);
+  context.rotate((turn * Math.PI) / 2);
+  context.drawImage(image, -width / 2, -height / 2);
   return canvas.toDataURL("image/png");
 }
 
@@ -10899,7 +10925,19 @@ export async function drawStudioPreview(
           )
         )
       : await configuredAssetImage("battery_icon", batteryFile);
-    if (image) {
+    // Matches the export, which bakes the quarter turn into each state PNG.
+    const batteryRotation = batteryIconRotation(batteryOverride);
+    const rotatedBattery = image && batteryRotation !== 0
+      ? await (async () => {
+          const flat = document.createElement("canvas");
+          flat.width = image.naturalWidth;
+          flat.height = image.naturalHeight;
+          flat.getContext("2d")?.drawImage(image, 0, 0);
+          return loadStudioImage(await rotateSpriteQuarterTurns(flat.toDataURL("image/png"), batteryRotation));
+        })()
+      : image;
+    if (rotatedBattery) {
+      const image = rotatedBattery;
       drawStudioLayerImage(
         context,
         image,
