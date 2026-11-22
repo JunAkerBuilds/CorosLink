@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.82] - 2026-11-21
+
+### Added
+
+- **Pick the map version in COROS Maps.** COROS makes region maps in generations: v6 for PACE 4 Pro and DURA 2 SOLAR, v5 for APEX 4, PACE 4, NOMAD and PACE Pro, and v4 for older watches. The COROS Maps tab now has a **Map version** picker. **Match my watch** uses the version for your watch, and you can choose another one, such as v6 Landscape on a NOMAD. A note tells you when the version you chose isn't the one COROS lists for your watch.
+- **Download maps with the watch unplugged.** CorosLink remembers your watch's map version, so you can download a whole region without the watch connected and plug it in only to copy the map over.
+- **Rotate the battery icon in Studio.** The battery icon has a new **Rotation** setting that turns it 90°, 180° or 270°, with the same result in the preview and on the watch. Your own imported battery art rotates too.
+
+### Fixed
+
+- **Large region maps no longer start over.** Region maps can be many gigabytes. If a download failed, was cancelled or the app was closed, it used to restart from zero. It now continues where it stopped, and starts fresh only if COROS has changed the file since.
+- **Battery "%" in your font.** The "%" after the battery level now uses the font you chose for the digits, both in the preview and on the watch. It used to keep the template's own "%".
+- **Plan workouts on the right day.** Some COROS plans, such as plans added from the COROS library, could show a workout on the wrong day in the calendar, for example a ride on a strength day. Workouts now match their own day. (#175)
+
 ## [0.1.81] - 2026-11-20
 
 ### Added
