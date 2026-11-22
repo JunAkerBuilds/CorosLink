@@ -140,6 +140,23 @@ for (const [system, id] of Object.entries(codec.CLIMB_SYSTEM_IDS)) {
   const encoded = codec.encodeCorosIntensity({ type: "climbGrade", system, relativeToOnsight: 0 });
   assert.equal(encoded.gradeSystem, id, system);
 }
+// Issue #176: COROS keeps a strength weight in grams whichever unit it shows.
+const trainingHubWeight = { intensityType: 1, intensityCustom: 0, intensityValue: 45000, intensityValueExtend: 45000, intensityDisplayUnit: 6 };
+assert.deepEqual(codec.decodeCorosIntensity(trainingHubWeight).intensity, { type: "weight", mode: "weight", value: 45, unit: "kg" });
+assert.equal(codec.validateWorkoutIntensity("strength", codec.decodeCorosIntensity(trainingHubWeight).intensity), undefined);
+const metricWeight = codec.encodeCorosIntensity({ type: "weight", mode: "weight", value: 45, unit: "kg" });
+assert.equal(metricWeight.intensityValue, 45000);
+assert.equal(metricWeight.intensityValueExtend, 45000);
+const poundWeight = codec.encodeCorosIntensity({ type: "weight", mode: "weight", value: 26, unit: "lb" });
+assert.equal(poundWeight.intensityValue, 11793);
+assert.deepEqual(codec.decodeCorosIntensity(poundWeight).intensity, { type: "weight", mode: "weight", value: 26, unit: "lb" });
+assert.equal(codec.decodeCorosIntensity(codec.encodeCorosIntensity({ type: "weight", mode: "weight", value: 22.5, unit: "kg" })).intensity.value, 22.5);
+// CorosLink wrote plain kg before the fix: values under COROS's smallest step still read as kg.
+assert.equal(codec.decodeCorosIntensity({ ...trainingHubWeight, intensityValue: 60, intensityValueExtend: 60 }).intensity.value, 60);
+assert.equal(codec.corosWeightKg({ intensityValue: 11.79, intensityDisplayUnit: 7 }), 11.79);
+assert.equal(codec.corosWeightKg({ intensityValue: 500, intensityDisplayUnit: 6 }), 0.5);
+assert.equal(codec.corosWeightKg({ intensityValue: 0 }), 0);
+
 const metricSpeed = codec.encodeCorosIntensity({ type: "speed", low: 8, high: 12, unit: "km/h" });
 assert.equal(metricSpeed.intensityValue, 800);
 assert.equal(metricSpeed.intensityValueExtend, 1200);

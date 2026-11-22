@@ -165,7 +165,7 @@ const imperialStrength = buildWorkoutPayload(
   undefined,
   imperialContext
 );
-assert.equal(imperialStrength.exercises[0].intensityValue, 10);
+assert.equal(imperialStrength.exercises[0].intensityValue, 10000);
 assert.equal(imperialStrength.exercises[0].intensityDisplayUnit, 7);
 
 const imperialSwim = buildWorkoutPayload(

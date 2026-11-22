@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { z } from "zod/v4";
 import { corosProgramToWorkoutDraft, parseWorkoutEditorContext, type WorkoutEditSource } from "./corosWorkoutEditor";
-import { encodeCorosIntensity, decodeCorosIntensity } from "./workoutCapabilities";
+import { encodeCorosIntensity, decodeCorosIntensity, corosWeightKg } from "./workoutCapabilities";
 import type { StrengthStepPatch, StrengthEditItemPreview } from "./workoutEditTypes";
 
 export const loadSchema = z.discriminatedUnion("mode", [
@@ -28,8 +28,13 @@ export function stableJson(value: unknown): string {
 export function sourceRevision(source: WorkoutEditSource): string {
   return crypto.createHash("sha256").update(stableJson(source)).digest("hex");
 }
-export function weightKg(value: number, unit: "kg" | "lb"): number {
-  return Number((unit === "lb" ? value / 2.2046226218 : value).toFixed(2));
+/** A load in grams, as COROS keeps it in `intensityValue`. */
+export function weightGrams(value: number, unit: "kg" | "lb"): number {
+  return Math.round((unit === "lb" ? value / 2.2046226218 : value) * 1_000);
+}
+/** Whether a COROS exercise already carries this load (grams, or a legacy plain-kg value). */
+export function hasCorosWeight(exercise: Record<string, unknown>, value: number, unit: "kg" | "lb"): boolean {
+  return Math.round(corosWeightKg(exercise) * 1_000) === weightGrams(value, unit);
 }
 export function strengthSteps(program: Record<string, unknown>) {
   return corosProgramToWorkoutDraft(program).nodes.flatMap(n => n.nodeType === "repeat" ? n.steps : [n]);
@@ -103,7 +108,7 @@ export function patchStrengthProgram(source: Record<string, unknown>, input: Str
     }
     if (patch.load !== undefined) {
       const old = step.intensity;
-      const same = old.type === "weight" && (old.mode === "bodyweight" && patch.load.mode === "bodyweight" || old.mode === "weight" && patch.load.mode === "weight" && Number(raw.intensityValue) === weightKg(patch.load.value, patch.load.unit));
+      const same = old.type === "weight" && (old.mode === "bodyweight" && patch.load.mode === "bodyweight" || old.mode === "weight" && patch.load.mode === "weight" && hasCorosWeight(raw, patch.load.value, patch.load.unit));
       if (!same) {
         const encoded = encodeCorosIntensity({ type: "weight", ...patch.load }, parseWorkoutEditorContext({}, "metric"));
         // Only strength-load fields; do not reset unrelated intensity metadata.

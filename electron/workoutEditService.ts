@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 import type { WorkoutEditRef, CorosMcpTool } from "./types";
 import type { WorkoutEditSource } from "./corosWorkoutEditor";
 import type { StrengthEditPreview, StrengthStepPatch } from "./workoutEditTypes";
-import { strengthPatchSchema, patchStrengthProgram, sourceRevision, strengthSteps, weightKg, stableJson, prescriptionMatches, calculationPreservesProgram } from "./strengthWorkoutPatch";
+import { strengthPatchSchema, patchStrengthProgram, sourceRevision, strengthSteps, hasCorosWeight, stableJson, prescriptionMatches, calculationPreservesProgram } from "./strengthWorkoutPatch";
 
 const MAX_BATCH = 25;
 const MAX_DISCOVERY = 200;
@@ -187,7 +187,7 @@ export class WorkoutEditService {
       for (const handle of input.documents) {
         const document = this.document(handle.documentId, handle.revision, origin);
         const raws = document.source.program.exercises as Record<string, unknown>[];
-        const patches = strengthSteps(document.source.program).filter(s => s.exerciseId && input.exerciseIds.includes(s.exerciseId) && s.editable && s.kind === "training" && s.intensity.type === "weight" && s.intensity.mode === "weight" && raws.some(r => String(r.id) === s.sourceExerciseId && Number(r.intensityValue) === weightKg(input.oldLoad.value, input.oldLoad.unit))).map(s => ({ stepId: s.id, load: { mode: "weight" as const, ...input.newLoad } }));
+        const patches = strengthSteps(document.source.program).filter(s => s.exerciseId && input.exerciseIds.includes(s.exerciseId) && s.editable && s.kind === "training" && s.intensity.type === "weight" && s.intensity.mode === "weight" && raws.some(r => String(r.id) === s.sourceExerciseId && hasCorosWeight(r, input.oldLoad.value, input.oldLoad.unit))).map(s => ({ stepId: s.id, load: { mode: "weight" as const, ...input.newLoad } }));
         if (patches.length) edits.push({ document, patches });
         else exclusions.push(`${String(document.source.program.name)}: no exact exercise/load matches.`);
       }

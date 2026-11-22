@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { WorkoutEditService, requireStrengthEligibility, workoutEditSchemas } from '../dist-electron/workoutEditService.js';
-import { patchStrengthProgram, weightKg, sourceRevision } from '../dist-electron/strengthWorkoutPatch.js';
+import { patchStrengthProgram, weightGrams, sourceRevision } from '../dist-electron/strengthWorkoutPatch.js';
 
 import { program } from './fixtures/strength-workout.mjs';
 
@@ -26,7 +26,7 @@ const loadPatch = [{stepId:'step-10',load:{mode:'weight',value:36,unit:'lb'}}];
 
 test('patch changes only requested raw fields and preserves unknown data and other exercises', () => {
   const source=program(); const {program: next, changes}=patchStrengthProgram(source,loadPatch);
-  assert.equal(next.exercises[0].intensityValue,weightKg(36,'lb'));
+  assert.equal(next.exercises[0].intensityValue,weightGrams(36,'lb'));
   const restored=structuredClone(next); restored.exercises[0].intensityValue=source.exercises[0].intensityValue; restored.exercises[0].intensityValueExtend=source.exercises[0].intensityValueExtend;
   assert.deepEqual(restored,source); assert.equal(changes.length,1); assert.match(changes[0].after,/36 lb/);
 });
@@ -37,7 +37,7 @@ test('sets, reps/time/open, timed rest and bodyweight retain unrelated fields',(
 });
 test('precision-aware no-op; 12 kg is not an approximate match for 26 lb',()=>{
   assert.equal(patchStrengthProgram(program(),[{stepId:'step-10',load:{mode:'weight',value:26,unit:'lb'}}]).changes.length,0);
-  assert.notEqual(weightKg(26,'lb'),12);
+  assert.notEqual(weightGrams(26,'lb'),12000);
 });
 test('invalid patches, ambiguous IDs, unknown fields and unsupported rest rejected',()=>{
   for (const patch of [{stepId:'step-10',sets:0},{stepId:'step-10',sets:2.5},{stepId:'step-10',load:{mode:'weight',value:Infinity,unit:'kg'}},{stepId:'step-10',name:'overwrite'},{stepId:'missing',sets:3}]) assert.throws(()=>patchStrengthProgram(program(),[patch]));
@@ -58,7 +58,7 @@ test('bulk requires exact exercise and old load; deduplicates targets by rejecti
   const h=harness(2);const docs=await Promise.all([h.read('1'),h.read('2')]);
   const args={documents:docs.map(d=>({documentId:d.documentId,revision:d.revision})),exerciseIds:['kb-swing'],oldLoad:{value:26,unit:'lb'},newLoad:{value:36,unit:'lb'}};
   const p=await h.service.tool('prepare_exercise_load_update',args);assert.equal(p.items.length,2);assert.equal(p.items[0].changes.length,1);
-  await h.service.confirm(p.proposalId,p.reviewHash,[p.items[0].id]);assert.equal(h.writes,1);assert.equal(h.sources.get('2').program.exercises[0].intensityValue,weightKg(26,'lb'));
+  await h.service.confirm(p.proposalId,p.reviewHash,[p.items[0].id]);assert.equal(h.writes,1);assert.equal(h.sources.get('2').program.exercises[0].intensityValue,weightGrams(26,'lb'));
   const h2=harness();const d=await h2.read();await assert.rejects(()=>h2.service.tool('prepare_exercise_load_update',{...args,documents:[d,d].map(x=>({documentId:x.documentId,revision:x.revision}))}),/more than once/);
 });
 test('preflight stale batch writes nothing',async()=>{

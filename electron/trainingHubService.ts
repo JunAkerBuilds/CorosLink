@@ -1,4 +1,4 @@
-import { decodeCorosIntensity, formatWorkoutIntensity } from "./workoutCapabilities";
+import { corosWeightKg, decodeCorosIntensity, formatWorkoutIntensity } from "./workoutCapabilities";
 import { programDescription, type ScheduledProgram } from "./remote/scheduledSteps";
 import { buildScheduledWorkoutEditRequest } from "./corosWorkoutEditor";
 import { annotateDiagnosticRequest } from "./diagnosticsLog";
@@ -6597,7 +6597,7 @@ export function parseScheduledExercises(
       toOptionalNumber(exercise.weight) ??
       toOptionalNumber(exercise.weightValue) ??
       (toOptionalNumber(exercise.intensityType) === 1 && toOptionalNumber(exercise.intensityCustom) !== 1
-        ? toOptionalNumber(exercise.intensityValue) : undefined);
+        ? corosWeightKg(exercise) : undefined);
     const targetLabel = formatScheduledExerciseTarget(exercise, targetType);
 
     parsed.push({

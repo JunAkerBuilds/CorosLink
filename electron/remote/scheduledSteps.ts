@@ -11,7 +11,7 @@
 // A workout with any step C-LINK can't show exactly gets `steps: null`, never
 // a step with its target left out.
 
-import { decodeCorosPercent, paceDivisor, SWIM_STROKE_IDS, workoutExerciseName } from "../workoutCapabilities";
+import { corosWeightKg, decodeCorosPercent, paceDivisor, SWIM_STROKE_IDS, workoutExerciseName } from "../workoutCapabilities";
 
 export interface ScheduledProgram {
   /** YYYYMMDD */
@@ -90,7 +90,7 @@ function exerciseNote(exercise: Record<string, unknown>, sportType: number): str
   const name = EXERCISE_SPORTS.has(sportType) ? workoutExerciseName(exercise) : "";
   const named = name && !/^[TS]\d+$/i.test(name) && !/^sid_/i.test(name) ? name.slice(0, 200) : stepNote(exercise);
   if (num(exercise.intensityType) !== 1 || num(exercise.intensityCustom) === 1) return named;
-  const kg = num(exercise.intensityValue);
+  const kg = corosWeightKg(exercise);
   if (kg <= 0) return named;
   const pounds = num(exercise.intensityDisplayUnit) === 7;
   const weight = `${Number((pounds ? kg * 2.2046226218 : kg).toFixed(1))} ${pounds ? "lb" : "kg"}`;

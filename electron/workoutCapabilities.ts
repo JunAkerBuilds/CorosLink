@@ -648,6 +648,19 @@ function setPercentFields(
   }
 }
 
+const POUNDS_PER_KG = 2.2046226218;
+
+/**
+ * A strength step's weight in kg. COROS keeps `intensityValue` in grams whichever unit it
+ * shows (issue #176: 45 kg is 45000). CorosLink wrote plain kg until v0.1.83, so a value
+ * under COROS's smallest step (0.5 kg, or 0.5 lb ≈ 226 g) is one of those and reads as kg.
+ */
+export function corosWeightKg(exercise: Record<string, unknown>): number {
+  const value = finiteNumber(exercise.intensityValue) ?? 0;
+  const smallest = finiteNumber(exercise.intensityDisplayUnit) === 7 ? 226 : 500;
+  return value > 0 && value < smallest ? value : value / 1_000;
+}
+
 export function encodeCorosIntensity(
   intensity: WorkoutIntensityInput,
   context?: WorkoutEditorContext
@@ -804,13 +817,13 @@ export function encodeCorosIntensity(
     if (intensity.mode === "bodyweight") {
       return { ...result, intensityType: 1, intensityCustom: 1 };
     }
-    const kg = intensity.unit === "lb" ? intensity.value / 2.2046226218 : intensity.value;
+    const grams = Math.round((intensity.unit === "lb" ? intensity.value / POUNDS_PER_KG : intensity.value) * 1_000);
     return {
       ...result,
       intensityType: 1,
       intensityCustom: 0,
-      intensityValue: Number(kg.toFixed(2)),
-      intensityValueExtend: Number(kg.toFixed(2)),
+      intensityValue: grams,
+      intensityValueExtend: grams,
       intensityDisplayUnit: intensity.unit === "lb" ? 7 : 6
     };
   }
@@ -869,11 +882,12 @@ export function decodeCorosIntensity(
   if (type === 1) {
     if (custom === 1) return { intensity: { type: "weight", mode: "bodyweight" } };
     const pounds = finiteNumber(exercise.intensityDisplayUnit) === 7;
+    const kg = corosWeightKg(exercise);
     return {
       intensity: {
         type: "weight",
         mode: "weight",
-        value: Number((pounds ? value * 2.2046226218 : value).toFixed(2)),
+        value: Number((pounds ? kg * POUNDS_PER_KG : kg).toFixed(2)),
         unit: pounds ? "lb" : "kg"
       }
     };
