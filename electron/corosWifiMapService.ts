@@ -21,9 +21,9 @@ export function normalizeWifiMapTiles(input: unknown): CorosWifiMapTile[] {
   return [...tiles.values()].sort((a, b) => a.x - b.x || a.y - b.y);
 }
 
-async function text(url: string, init?: RequestInit): Promise<string> {
+async function text(url: string, init?: RequestInit, acceptNotFound = false): Promise<string> {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(25_000), redirect: "error" });
-  if (!response.ok) throw new Error(`COROS map service request failed (${response.status}).`);
+  if (!response.ok && !(acceptNotFound && response.status === 404)) throw new Error(`COROS map service request failed (${response.status}).`);
   const reader = response.body?.getReader();
   if (!reader) throw new Error("COROS map service returned an empty response.");
   const chunks: Uint8Array[] = [];
@@ -48,7 +48,9 @@ export function readPublishedMapConfiguration(source: string): ClientConfigurati
 async function loadConfiguration(): Promise<ClientConfiguration> {
   // The public COROS web client publishes its request-signing configuration.
   // Read it as data: never execute remote JavaScript or send it to the renderer.
-  const html = await text(HOST + "/");
+  // The page is a single-page app: since Nov 2026 its root answers 404 with the full page,
+  // so the status alone says nothing. The asset reference below is what counts.
+  const html = await text(HOST + "/", undefined, true);
   const main = /window\.__assetsPath\("(public\/main-[A-Za-z0-9_-]+\.js)"\)/.exec(html)?.[1];
   if (!main) throw new Error("COROS changed its map service configuration. Update CorosLink and try again.");
   const source = await text(ASSETS + main);
