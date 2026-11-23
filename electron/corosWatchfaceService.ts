@@ -2750,8 +2750,9 @@ export async function createCorosWatchfaceArchive(
   const requestedFirmwareType = normalizeOptionalFirmwareType(input.firmwareType);
   // A face with no 800px master (a phone-made face has only its watch's own
   // layout) converts like a recovered one when asked: built as is, then scaled
-  // from that layout for the other watch. The editor asks only on Convert,
-  // which never offers the face's own watch; a starter that names its watch is
+  // from that layout for the other watch. The editor asks on every build
+  // (Convert, Send, Export), so the checks below decide: another watch, or the
+  // face's own watch with incomplete layouts. A starter that names its watch is
   // also checked here. (MIP watches share 240/260/280, so folder sizes can't
   // tell two watches apart.) The phone's export also asks for the face's own
   // watch when that watch's layouts are incomplete (PACE 4 needs 390 and 800),
