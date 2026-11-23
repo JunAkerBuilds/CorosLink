@@ -2,6 +2,8 @@
 export const coreFrench: Record<string, string> = {
   "Loading": "Chargement",
   "Training Library could not render": "Impossible d’afficher la bibliothèque d’entraînement",
+  "This page could not be displayed": "Impossible d’afficher cette page",
+  "CorosLink could not be displayed": "Impossible d’afficher CorosLink",
   "Try again": "Réessayer",
   "Could not download the update.": "Impossible de télécharger la mise à jour.",
   "YouTube Music connected.": "YouTube Music connecté.",

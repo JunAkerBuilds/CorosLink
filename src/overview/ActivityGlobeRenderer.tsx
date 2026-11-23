@@ -25,6 +25,7 @@ import {
 import type { GeoHeatBucket, GlobePoint } from "./activityVisitHeatmap";
 import { Globe } from "./Globe";
 import { isWindowCovered, subscribeWindowCover } from "../hooks/windowCover";
+import { isWebGLAvailable } from "../webglSupport";
 
 interface ActivityGlobeRendererProps {
   frameKey: string;
@@ -229,6 +230,9 @@ const ActivityGlobeRendererComponent = forwardRef<
   const streetRequestedRef = useRef(false);
   const idleTimerRef = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
+  // Without WebGL, three.js throws while building the globe; show the card's
+  // "could not be rendered" note instead of mounting it.
+  const [webglAvailable] = useState(isWebGLAvailable);
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [paperTheme, setPaperTheme] = useState(
     () => document.documentElement.dataset.theme === "paper",
@@ -371,6 +375,12 @@ const ActivityGlobeRendererComponent = forwardRef<
     () => ({ resetView, zoomToLocation }),
     [resetView, zoomToLocation],
   );
+
+  useEffect(() => {
+    if (!webglAvailable) onError(true);
+  }, [onError, webglAvailable]);
+
+  const handleInitError = useCallback(() => onError(true), [onError]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -695,96 +705,99 @@ const ActivityGlobeRendererComponent = forwardRef<
       onPointerEnter={stopIdleRotation}
       onPointerLeave={scheduleIdleRotation}
     >
-      <Globe
-        ref={globeRef}
-        width={size.width}
-        height={size.height}
-        backgroundColor="rgba(0, 0, 0, 0)"
-        rendererConfig={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
-        animateIn={false}
-        // Keep waitForGlobeReady at its default. With false, three-globe runs
-        // its ready step inside its constructor, before onGlobeReady is set,
-        // so handleReady (and everything gated on `ready`) never ran.
-        globeOffset={[0, 8]}
-        globeMaterial={globeMaterial}
-        globeCurvatureResolution={3}
-        showAtmosphere
-        // The atmosphere shell is alpha-blended, so on the light well a dark
-        // grey-green reads as a soft contact shade rather than a glow.
-        atmosphereColor={paperTheme ? "#4c5d53" : "#73b4e2"}
-        atmosphereAltitude={0.08}
-        customLayerData={landLayerData}
-        customThreeObject={customThreeObject}
-        pointsData={activityPoints}
-        pointLat={(point) => (point as ActivityPoint).lat}
-        pointLng={(point) => (point as ActivityPoint).lon}
-        pointAltitude={(point) =>
-          (point as ActivityPoint).key === selectedLocation?.key ? 0.008 : 0.0035
-        }
-        pointRadius={(point) => {
-          const activity = point as ActivityPoint;
-          return activity.key === selectedLocation?.key
-            ? 0.28
-            : 0.1 + activity.intensity * 0.1;
-        }}
-        pointColor={(point) => {
-          const activity = point as ActivityPoint;
-          if (activity.key === selectedLocation?.key) {
-            return paperTheme ? "#087b5b" : "#83f3ce";
+      {webglAvailable ? (
+        <Globe
+          ref={globeRef}
+          onInitError={handleInitError}
+          width={size.width}
+          height={size.height}
+          backgroundColor="rgba(0, 0, 0, 0)"
+          rendererConfig={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+          animateIn={false}
+          // Keep waitForGlobeReady at its default. With false, three-globe runs
+          // its ready step inside its constructor, before onGlobeReady is set,
+          // so handleReady (and everything gated on `ready`) never ran.
+          globeOffset={[0, 8]}
+          globeMaterial={globeMaterial}
+          globeCurvatureResolution={3}
+          showAtmosphere
+          // The atmosphere shell is alpha-blended, so on the light well a dark
+          // grey-green reads as a soft contact shade rather than a glow.
+          atmosphereColor={paperTheme ? "#4c5d53" : "#73b4e2"}
+          atmosphereAltitude={0.08}
+          customLayerData={landLayerData}
+          customThreeObject={customThreeObject}
+          pointsData={activityPoints}
+          pointLat={(point) => (point as ActivityPoint).lat}
+          pointLng={(point) => (point as ActivityPoint).lon}
+          pointAltitude={(point) =>
+            (point as ActivityPoint).key === selectedLocation?.key ? 0.008 : 0.0035
           }
-          return paperTheme
-            ? "rgba(8, 123, 91, 0.76)"
-            : "rgba(66, 214, 165, 0.55)";
-        }}
-        pointResolution={12}
-        pointsMerge={false}
-        pointsTransitionDuration={0}
-        pointLabel={() => ""}
-        onPointClick={handlePointClick}
-        onPointHover={handlePointHover}
-        pathsData={pathsData}
-        pathPoints={(path) => (path as RouteLayerData).points}
-        pathPointLat={(point) => (point as GlobePoint).lat}
-        pathPointLng={(point) => (point as GlobePoint).lon}
-        pathPointAlt={0.006}
-        pathResolution={0.7}
-        pathColor={() => (paperTheme ? "#087b5b" : "#83f3ce")}
-        pathStroke={0.13}
-        pathTransitionDuration={0}
-        ringsData={ringData}
-        ringLat={(point) => (point as GeoHeatBucket).lat}
-        ringLng={(point) => (point as GeoHeatBucket).lon}
-        ringAltitude={0.007}
-        ringColor={() =>
-          paperTheme
-            ? [
-                "rgba(8, 123, 91, 0.62)",
-                "rgba(8, 123, 91, 0.22)",
-                "rgba(8, 123, 91, 0)",
-              ]
-            : [
-                "rgba(131, 243, 206, 0.7)",
-                "rgba(73, 207, 163, 0.24)",
-                "rgba(73, 207, 163, 0)",
-              ]
-        }
-        ringMaxRadius={2.8}
-        ringPropagationSpeed={2.3}
-        ringRepeatPeriod={820}
-        ringResolution={64}
-        htmlElementsData={selectedData}
-        htmlLat={(point) => (point as GeoHeatBucket).lat}
-        htmlLng={(point) => (point as GeoHeatBucket).lon}
-        htmlAltitude={0.012}
-        htmlElement={makeHtmlLabel}
-        htmlElementVisibilityModifier={modifyHtmlLabelVisibility}
-        htmlTransitionDuration={0}
-        enablePointerInteraction
-        pointerEventsFilter={pointerEventsFilter}
-        showPointerCursor={(type) => type === "point"}
-        onZoom={handleZoom}
-        onGlobeReady={handleReady}
-      />
+          pointRadius={(point) => {
+            const activity = point as ActivityPoint;
+            return activity.key === selectedLocation?.key
+              ? 0.28
+              : 0.1 + activity.intensity * 0.1;
+          }}
+          pointColor={(point) => {
+            const activity = point as ActivityPoint;
+            if (activity.key === selectedLocation?.key) {
+              return paperTheme ? "#087b5b" : "#83f3ce";
+            }
+            return paperTheme
+              ? "rgba(8, 123, 91, 0.76)"
+              : "rgba(66, 214, 165, 0.55)";
+          }}
+          pointResolution={12}
+          pointsMerge={false}
+          pointsTransitionDuration={0}
+          pointLabel={() => ""}
+          onPointClick={handlePointClick}
+          onPointHover={handlePointHover}
+          pathsData={pathsData}
+          pathPoints={(path) => (path as RouteLayerData).points}
+          pathPointLat={(point) => (point as GlobePoint).lat}
+          pathPointLng={(point) => (point as GlobePoint).lon}
+          pathPointAlt={0.006}
+          pathResolution={0.7}
+          pathColor={() => (paperTheme ? "#087b5b" : "#83f3ce")}
+          pathStroke={0.13}
+          pathTransitionDuration={0}
+          ringsData={ringData}
+          ringLat={(point) => (point as GeoHeatBucket).lat}
+          ringLng={(point) => (point as GeoHeatBucket).lon}
+          ringAltitude={0.007}
+          ringColor={() =>
+            paperTheme
+              ? [
+                  "rgba(8, 123, 91, 0.62)",
+                  "rgba(8, 123, 91, 0.22)",
+                  "rgba(8, 123, 91, 0)",
+                ]
+              : [
+                  "rgba(131, 243, 206, 0.7)",
+                  "rgba(73, 207, 163, 0.24)",
+                  "rgba(73, 207, 163, 0)",
+                ]
+          }
+          ringMaxRadius={2.8}
+          ringPropagationSpeed={2.3}
+          ringRepeatPeriod={820}
+          ringResolution={64}
+          htmlElementsData={selectedData}
+          htmlLat={(point) => (point as GeoHeatBucket).lat}
+          htmlLng={(point) => (point as GeoHeatBucket).lon}
+          htmlAltitude={0.012}
+          htmlElement={makeHtmlLabel}
+          htmlElementVisibilityModifier={modifyHtmlLabelVisibility}
+          htmlTransitionDuration={0}
+          enablePointerInteraction
+          pointerEventsFilter={pointerEventsFilter}
+          showPointerCursor={(type) => type === "point"}
+          onZoom={handleZoom}
+          onGlobeReady={handleReady}
+        />
+      ) : null}
     </div>
   );
 });

@@ -1,4 +1,5 @@
 import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getDateTimeFormat, formatNumber } from "./i18n";
+import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { setLocalOnlyView } from "./privacy/localOnlyView";
 import {
   AlertCircle,
@@ -38,8 +39,6 @@ import {
 } from "lucide-react";
 import type { DataModeStatus } from "../electron/privacy/dataModeTypes";
 import {
-  Component,
-  type ErrorInfo,
   type FormEvent,
   type ReactNode,
   lazy,
@@ -252,40 +251,6 @@ function DeferredSurfaceFallback({ label }: { label: string }) {
       <span>{t("Loading")} {t(label)}…</span>
     </div>
   );
-}
-
-class TrainingLibraryErrorBoundary extends Component<
-  { children: ReactNode },
-  { error: Error | null }
-> {
-  state = { error: null as Error | null };
-
-  static getDerivedStateFromError(error: Error) {
-    return { error };
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("Training Library render failed", error, info);
-  }
-
-  render() {
-    if (!this.state.error) return this.props.children;
-    // Uses the global .empty-state: the library's own stylesheet ships with the
-    // lazy chunk, which may be exactly what failed to load.
-    return (
-      <section className="empty-state" role="alert">
-        <AlertCircle size={28} aria-hidden="true" />
-        <strong>{t("Training Library could not render")}</strong>
-        <span>{this.state.error.message}</span>
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => this.setState({ error: null })}
-        >
-          {t("Try again")} </button>
-      </section>
-    );
-  }
 }
 
 function getLatestReleasePreview(changelog: string): {
@@ -2857,7 +2822,9 @@ export default function App() {
         {!api ? (
           <BridgeMissing />
         ) : (
-          <>
+          // One view failing to render (a 3D card without WebGL, say) keeps the
+          // sidebar and the other views; opening another view clears it.
+          <RenderErrorBoundary title="This page could not be displayed" resetKey={activeView}>
             {accountSetupView === activeView ? (
               <button
                 type="button"
@@ -3116,7 +3083,7 @@ export default function App() {
               </Suspense>
             ) : null}
             {activeView === "library" ? (
-              <TrainingLibraryErrorBoundary>
+              <RenderErrorBoundary title="Training Library could not render">
                 <Suspense fallback={<DeferredSurfaceFallback label={t("Training Library")} />}>
                   <LazyTrainingLibraryView
                     api={api}
@@ -3132,7 +3099,7 @@ export default function App() {
                     onError={setError}
                   />
                 </Suspense>
-              </TrainingLibraryErrorBoundary>
+              </RenderErrorBoundary>
             ) : null}
             {activeView === "strength" ? (
               <Suspense fallback={<DeferredSurfaceFallback label={t("strength")} />}>
@@ -3221,7 +3188,7 @@ export default function App() {
                 </Suspense>
               </div>
             ) : null}
-          </>
+          </RenderErrorBoundary>
         )}
       </main>
       </div>

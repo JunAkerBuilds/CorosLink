@@ -45,11 +45,19 @@ function member(instance: GlobeComp, name: string): KapsuleMember {
  * requestAnimationFrame loops until reload. Creating the instance in an effect
  * lets StrictMode's mount → unmount → mount check destroy the first one.
  */
-export const Globe = forwardRef<GlobeMethods | undefined, GlobeProps>(
-  function Globe(props, ref) {
+export const Globe = forwardRef<
+  GlobeMethods | undefined,
+  GlobeProps & {
+    /** three.js could not create the WebGL renderer; the globe stays empty. */
+    onInitError?: (error: unknown) => void;
+  }
+>(
+  function Globe({ onInitError, ...props }, ref) {
     const elementRef = useRef<HTMLDivElement>(null);
     const instanceRef = useRef<GlobeComp | null>(null);
     const appliedRef = useRef(new Map<string, unknown>());
+    // A failed start is not retried on every render; remounting tries again.
+    const failedRef = useRef(false);
 
     // Declared first so the ref is live before the globe can fire onGlobeReady.
     useImperativeHandle(
@@ -70,35 +78,50 @@ export const Globe = forwardRef<GlobeMethods | undefined, GlobeProps>(
     // Create on first commit, then forward only the props that changed.
     useLayoutEffect(() => {
       const element = elementRef.current;
-      if (!element) {
+      if (!element || failedRef.current) {
         return;
       }
       const applied = appliedRef.current;
       let instance = instanceRef.current;
       const created = !instance;
-      if (!instance) {
-        const config = Object.fromEntries(
-          INIT_PROP_NAMES.filter((name) => name in props).map((name) => [
-            name,
-            props[name as keyof GlobeProps],
-          ]),
-        );
-        instance = createGlobe(config);
-        instanceRef.current = instance;
-        applied.clear();
-      }
-      for (const [name, value] of Object.entries(props)) {
-        if (
-          INIT_PROP_NAMES.includes(name) ||
-          (applied.has(name) && applied.get(name) === value)
-        ) {
-          continue;
+      try {
+        if (!instance) {
+          const config = Object.fromEntries(
+            INIT_PROP_NAMES.filter((name) => name in props).map((name) => [
+              name,
+              props[name as keyof GlobeProps],
+            ]),
+          );
+          instance = createGlobe(config);
+          instanceRef.current = instance;
+          applied.clear();
         }
-        applied.set(name, value);
-        member(instance, name)?.call(instance, value);
-      }
-      if (created) {
-        instance(element);
+        for (const [name, value] of Object.entries(props)) {
+          if (
+            INIT_PROP_NAMES.includes(name) ||
+            (applied.has(name) && applied.get(name) === value)
+          ) {
+            continue;
+          }
+          applied.set(name, value);
+          member(instance, name)?.call(instance, value);
+        }
+        if (created) {
+          // Builds the three.js WebGLRenderer, which throws without a WebGL context.
+          instance(element);
+        }
+      } catch (error) {
+        // Thrown from a layout effect, this would unmount the whole app (a blank window).
+        failedRef.current = true;
+        try {
+          instanceRef.current?._destructor();
+        } catch {
+          // A half-built globe may not tear down cleanly; it is dropped either way.
+        }
+        instanceRef.current = null;
+        applied.clear();
+        element.replaceChildren();
+        onInitError?.(error);
       }
     });
 

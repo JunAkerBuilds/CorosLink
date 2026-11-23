@@ -2,6 +2,8 @@
 export const coreChinese: Readonly<Record<string, string>> = {
   "Loading": "加载中",
   "Training Library could not render": "训练库无法渲染",
+  "This page could not be displayed": "无法显示此页面",
+  "CorosLink could not be displayed": "无法显示 CorosLink",
   "Try again": "重试",
   "Could not download the update.": "无法下载更新。",
   "YouTube Music connected.": "YouTube Music 已连接。",

@@ -1,7 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { installRendererDiagnostics } from "./diagnostics";
+import { installRendererDiagnostics, reportCaughtRenderError } from "./diagnostics";
+import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { applyTheme, readStoredTheme } from "./theme/theme";
 import { applySportColors, readStoredSportColors } from "./training/sportColors";
@@ -28,11 +29,20 @@ applyTheme(readStoredTheme());
 applySportColors(readStoredSportColors());
 
 void languageReady.finally(() => {
-  ReactDOM.createRoot(document.getElementById("root")!).render(
+  ReactDOM.createRoot(document.getElementById("root")!, {
+    // Errors a boundary catches never reach window "error"; keep them in Diagnostics.
+    onCaughtError: (error, info) => {
+      console.error(error, info.componentStack);
+      reportCaughtRenderError(error);
+    }
+  }).render(
     <React.StrictMode>
       <ThemeProvider>
         <UnitSystemProvider>
-          <App />
+          {/* Last resort: an error outside the views still shows something, not a blank window. */}
+          <RenderErrorBoundary title="CorosLink could not be displayed" reload>
+            <App />
+          </RenderErrorBoundary>
         </UnitSystemProvider>
       </ThemeProvider>
     </React.StrictMode>

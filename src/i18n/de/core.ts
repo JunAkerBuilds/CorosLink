@@ -2,6 +2,8 @@
 export const coreGerman: Record<string, string> = {
   "Loading": "Wird geladen",
   "Training Library could not render": "Trainingsbibliothek konnte nicht angezeigt werden",
+  "This page could not be displayed": "Diese Seite konnte nicht angezeigt werden",
+  "CorosLink could not be displayed": "CorosLink konnte nicht angezeigt werden",
   "Try again": "Erneut versuchen",
   "Could not download the update.": "Update konnte nicht heruntergeladen werden.",
   "YouTube Music connected.": "Mit YouTube Music verbunden.",
