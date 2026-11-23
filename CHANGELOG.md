@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.83] - 2026-11-23
+
 ### Fixed
 
+- **Overview no longer leaves a blank window on some Macs.** Since 0.1.79, some older Macs (an iMac whose graphics card Electron 45 can't use for 3D) opened CorosLink to an empty window whenever the Overview was the start page, because the training globe couldn't start and took the whole app down with it. The Overview now loads normally there and the globe card says it can't be shown on this device. If any page fails to show, the rest of the app keeps working and that page offers **Try again**.
+- **Strength weights from COROS Training Hub.** COROS stores a strength exercise's weight in grams. Workouts made in Training Hub opened in CorosLink as "45000 kg" and couldn't be saved, and weights CorosLink saved reached COROS a thousand times too light (45 kg became 45 g). CorosLink now reads and writes grams. Workouts saved by older versions still open with the weight you entered; change the weight once to correct it on COROS and the watch. (#176)
+- **COROS Maps loads again.** COROS changed its map website, and the COROS Maps tab stopped with "COROS map service request failed (404)".
 - **Send to COROS works for faces made on the phone.** A face from the C-LINK phone app (a remix of a gallery face, say) carries only its own watch's layout. Studio could edit it, but **Send to COROS** and **Export** on a PACE 4 stopped with "requires 390×390 and 800×800 exports". Studio now builds such a face from its own layout for every action, as Convert already did, and adds the 800 px master the watch needs.
 
 ## [0.1.82] - 2026-11-21
