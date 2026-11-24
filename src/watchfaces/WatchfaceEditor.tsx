@@ -681,7 +681,7 @@ interface WatchfaceEditorProps {
   onBack: () => void;
   backRequestId?: number;
   onBackCancelled?: () => void;
-  onPublish: (archive: CorosWatchfaceArchive, name: string, options?: { sendNow?: boolean }) => void;
+  onPublish: (archive: CorosWatchfaceArchive, name: string) => void;
   onArchiveCreated?: (archive: CorosWatchfaceArchive) => void;
   onProjectSaved?: (project: CorosWatchfaceProject) => void;
   onConvertTarget: (
@@ -12214,7 +12214,7 @@ export function WatchfaceEditor({
           onClose={closeExportPreview}
           onPublish={(archive, name) => {
             onArchiveCreated?.(archive);
-            onPublish(archive, name, { sendNow: true });
+            onPublish(archive, name);
           }} />
       ) : null}
 

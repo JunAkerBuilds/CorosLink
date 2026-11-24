@@ -164,6 +164,7 @@ async function main() {
   };
   await service.loginCorosWatchfaces("test@example.test", "test", "us", false);
   const requests = [];
+  const published = [];
   const handlers = {
     "app:setLanguage": () => undefined,
     "watchfaceAi:listChats": () => [],
@@ -180,6 +181,18 @@ async function main() {
     "watchfaces:queryPairedDevices": () => [],
     "watchfaces:saveProject": (_, input) => service.saveCorosWatchfaceProject(input),
     "watchfaces:createArchive": (_, input) => service.createCorosWatchfaceArchive(input),
+    "watchfaces:convertArchive": (_, input) => ({
+      archive: { ...input, archiveId: `converted-${input.watchModel}` }
+    }),
+    "watchfaces:publish": (_, input) => {
+      published.push(input);
+      const id = 481974656824344779n + BigInt(published.length);
+      return {
+        url: `https://faq.coros.com/share/watchface?id=${id}&region=2&lang=en-US&type=2`,
+        qrDataUrl: "data:image/png;base64,iVBORw0KGgo=",
+        expiresAt: new Date(Date.now() + 60_000).toISOString()
+      };
+    },
     "watchfaces:loadProject": (_, id) => service.loadCorosWatchfaceProject(id),
     "watchfaces:cacheProjectPreview": (_, id, png) => service.cacheCorosWatchfaceProjectPreview(id, png)
   };
@@ -233,6 +246,30 @@ async function main() {
     assert.deepEqual(chineseDoc.design, doc.design, 'artwork, custom labels and native values stay literal');
     await js(`import('/src/i18n/locale.ts').then(module => module.setLanguage('en'))`);
     await until(`document.documentElement.lang === 'en'`);
+    await js(`document.querySelector('.wf-send-button').click()`);
+    await until(`Boolean(document.querySelector('#wf-compiled-preview'))`);
+    await until(`Boolean(document.querySelector('#wf-compiled-preview .wf-send-actions .primary-button:not(:disabled)'))`);
+    await js(`document.querySelector('#wf-compiled-preview .wf-send-actions .primary-button').click()`);
+    await until(`Boolean(document.querySelector('.watchface-publish-form'))`);
+    assert.equal(
+      await js(`document.querySelector('.watchface-publish-form fieldset legend').textContent`),
+      "Watch model",
+      "The normal Send to COROS path opens the multi-model chooser"
+    );
+    assert.equal(await js(`document.querySelectorAll('.watchface-publish-form input[type="checkbox"]').length`), 13);
+    await js(`document.querySelectorAll('.watchface-publish-form input[type="checkbox"]')[1].click()`);
+    await until(`document.querySelectorAll('.watchface-publish-form input[type="checkbox"]:checked').length === 2`);
+    await js(`document.querySelector('.watchface-publish-submit').click()`);
+    await until(`document.querySelectorAll('.watchface-publish-dialog > div > section').length === 2`);
+    await until(`[...document.querySelectorAll('.watchface-publish-dialog section')].filter(section => section.textContent.includes('Published')).length === 2`);
+    assert.deepEqual(published.map(input => input.firmwareType), ["COROS W332", "COROS W337"]);
+    await js(`Object.defineProperty(navigator.clipboard,'writeText',{configurable:true,value:async text=>{window.copiedWatchfaceLinks=text}})`);
+    await js(`[...document.querySelectorAll('.watchface-publish-dialog button')].find(button => button.textContent.trim() === 'Copy all model links').click()`);
+    assert.equal(await js(`window.copiedWatchfaceLinks`),
+      "PACE Pro: https://faq.coros.com/share/watchface?id=481974656824344780&region=2&lang=en-US&type=2\n" +
+      "PACE 4 Pro: https://faq.coros.com/share/watchface?id=481974656824344781&region=2&lang=en-US&type=2");
+    await js(`document.querySelector('.watchface-publish-dialog .watchface-modal-close').click()`);
+    await until(`!document.querySelector('.watchface-publish-dialog')`);
     assert(doc.capabilities.layers.some(layer => layer.id === "hours"), "Recovered clock is editable, not a flattened thumbnail");
     const request = (method, params) => js(`import('/src/watchfaces/watchfaceAutomation.ts').then(m=>m.getWatchfaceAutomationEditor().request(${JSON.stringify(method)},${JSON.stringify(params)}))`);
     const faceId = source.readUInt32LE(4);

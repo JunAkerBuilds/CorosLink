@@ -1291,12 +1291,7 @@ export function WatchfacesView({
     }
   }
 
-  /**
-   * `sendNow` comes from the Studio Send panel, where the name was already
-   * confirmed: upload straight away and let the dialog show the share link
-   * (or sign-in first, when the account is not connected).
-   */
-  function openPublish(archive: CorosWatchfaceArchive, currentName: string, options?: { sendNow?: boolean }) {
+  function openPublish(archive: CorosWatchfaceArchive, currentName: string) {
     const name = currentName.trim() || studioSession?.initialName || t("Untitled watch face");
     setBuiltArchive(archive);
     if (archive.firmwareType) {
@@ -1307,12 +1302,6 @@ export function WatchfacesView({
     setPublishResults([]);
     setPublishOpen(true);
     clearMessages();
-    if (options?.sendNow && connected) {
-      const target = getWatchfaceTarget(archive.firmwareType || firmwareType);
-      if (target) {
-        void publishArchive(archive, name, archive.firmwareType || firmwareType, [target.model]);
-      }
-    }
   }
 
   async function handlePublish(event: FormEvent<HTMLFormElement>, models: WatchModelId[]) {
@@ -4422,10 +4411,12 @@ interface PublishDialogProps extends WatchfaceSignInFormProps {
 
 function PublishDialog(props: PublishDialogProps) {
   useLanguage();
-  const initialTarget = getWatchfaceTarget(props.archive?.firmwareType ?? props.firmwareType);
   const [selectedModels, setSelectedModels] = useState<WatchModelId[]>(
-    initialTarget ? [initialTarget.model] : [WATCHFACE_TARGETS[0].model]
+    WATCHFACE_TARGETS.map(target => target.model)
   );
+  const finishedCount = props.results.filter(result =>
+    result.status === "success" || result.status === "error"
+  ).length;
   const statusLabel = (status: PublishTargetResult["status"]) => {
     if (status === "converting") return t("Converting…");
     if (status === "publishing") return t("Send to COROS");
@@ -4461,6 +4452,24 @@ function PublishDialog(props: PublishDialogProps) {
               </span>
               <h2 id="watchface-publish-title">{props.name}</h2>
               <p>{t("Scan with the phone that has your COROS app.")}</p>
+            </div>
+            <div className="watchface-copy-all-bar">
+              <button
+                className="primary-button"
+                type="button"
+                disabled={props.busy || !props.results.some(result => result.shareLink)}
+                onClick={() => props.onCopy(props.results.flatMap(result =>
+                  result.shareLink ? [`${t(result.label)}: ${result.shareLink.url}`] : []
+                ).join("\n"))}
+              >
+                <Clipboard size={16} aria-hidden="true" />{" "}
+                {props.busy
+                  ? t("Generating {{done}} of {{total}}…", {
+                      done: String(finishedCount),
+                      total: String(props.results.length)
+                    })
+                  : t("Copy all model links")}
+              </button>
             </div>
             <div style={{ display: "grid", gap: 12, marginTop: 22 }}>
               {props.results.map((result) => (

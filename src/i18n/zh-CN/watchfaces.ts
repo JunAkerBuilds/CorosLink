@@ -1162,6 +1162,8 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "In COROS, save this face and send it to the watch paired with your phone.": "在 COROS 应用中保存此表盘，并将其发送到与您的手机配对的手表。",
   "Link expires": "链接过期",
   "Copy link": "复制链接",
+  "Copy all model links": "一键复制全部型号链接",
+  "Generating {{done}} of {{total}}…": "正在生成 {{done}}/{{total}}…",
   "Open link": "打开链接",
   "Official COROS share link": "官方COROS分享链接",
   "Connect your COROS account to send this watch face.": "连接您的 COROS 账户以发送此 COROS 表盘。",
