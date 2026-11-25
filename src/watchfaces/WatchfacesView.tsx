@@ -294,7 +294,8 @@ const COMMUNITY_MODEL_BY_WATCH: Partial<Record<WatchModelId, string>> = {
   "apex-2-pro": "APEX 2 Pro",
   "vertix": "VERTIX",
   "vertix-2": "VERTIX 2",
-  "vertix-2s": "VERTIX 2S"
+  "vertix-2s": "VERTIX 2S",
+  "vertix-4": "VERTIX 4"
 };
 
 const TEMPLATE_WATCH_OPTIONS = WATCHFACE_TARGETS;

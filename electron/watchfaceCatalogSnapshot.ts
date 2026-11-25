@@ -2455,6 +2455,56 @@ export const WATCHFACE_TEMPLATE_SNAPSHOT: Record<string, CorosWatchfaceThemeCach
       }
     ]
   },
+  "COROS W706": {
+    "savedAt": "2026-11-25T20:45:59.554Z",
+    "themes": [
+      {
+        "id": "2609197",
+        "name": "POINTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202610/1792481567S37AEFTKOSZS0H2UYKW8.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202610/1792481567OX2DW2S9PRPGESYM5S0K.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "141114",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202609/17902442082GY3X1AUNDPJZF4C059I.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202609/1790244208B3C6XHYKV1IO6R7ICNY8.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2609185",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202609/17902436438NQITKYUX59VJUFSRL98.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202609/1790243643AY2NWX9FXXU9Q8E64MQW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2609183",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202609/1790178894X2SB2VFXW1WBK8YYSK7P.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202609/1790178894JRY6KAPQAMDVDHHRKERL.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2607305",
+        "name": "SIMPLE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202609/17897102381PT3ZH5793HIU779PBXP.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202609/1789710238Z4YVUIGKY1575RDK3VP3.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      }
+    ]
+  },
   "COROS B19S": {
     "savedAt": "2026-10-19T15:51:26.733Z",
     "themes": [
