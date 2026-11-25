@@ -100,7 +100,8 @@ export function RecoveryRing({ summary, local = false, now = Date.now }: Recover
             />
           </svg>
           <div className="storage-ring-label">
-            <strong>{watch ? watch.value : hasData ? `${Math.round(percent)}%` : "–"}</strong>
+            {/* "Recovered" is a word, not a figure: it's set smaller so it stays inside the ring (and in every language). */}
+            <strong className={watch && hoursLeft === 0 ? "is-word" : undefined}>{watch ? watch.value : hasData ? `${Math.round(percent)}%` : "–"}</strong>
             {!watch && label ? <span>{t(label)}</span> : null}
           </div>
         </div>
