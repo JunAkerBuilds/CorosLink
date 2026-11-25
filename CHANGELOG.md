@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.84] - 2026-11-25
+
 ### Added
 
 - **Try the new C-LINK desktop app (beta, macOS).** C-LINK is the rebuilt CorosLink. On a Mac, CorosLink now offers it once at launch: **Switch to C-LINK** moves this Mac to the C-LINK beta, which downloads like an update and installs when you restart, replacing CorosLink and bringing over your watch, plans, Coach chats and settings (CorosLink's data is kept as a copy). **Not now** is remembered and the offer won't open by itself again. You can still switch any time from **Updates → Try the new C-LINK (beta)**, and **Stay on CorosLink** there goes back to normal CorosLink updates until C-LINK has installed. Nothing changes unless you choose it; Windows and Linux keep getting CorosLink updates.
