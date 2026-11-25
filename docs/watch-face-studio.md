@@ -29,6 +29,7 @@ the editor and the topic pages say so.
 | --- | --- | ---: | --- |
 | PACE Pro | AMOLED | 416 × 416 | Separate AOD layout |
 | PACE 4 Pro (W337) | AMOLED | 466 × 466 | Separate AOD layout |
+| VERTIX 4 (W706) | AMOLED | 466 × 466 | Separate AOD layout (not yet checked on a watch) |
 | PACE 4 (W336) | AMOLED | 390 × 390 | Separate AOD layout |
 | PACE 3 | MIP | 240 × 240 | The Current face stays on |
 | NOMAD | MIP | 260 × 260 | The Current face stays on |

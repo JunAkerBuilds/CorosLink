@@ -56,7 +56,7 @@ for (const name of ["4TB-HDD", "Backup", "COROS Backup", "APEX archives", "COROS
   await assert.rejects(service.deleteWatchTrack("track.mp3"), /No COROS watch/);
 }
 
-for (const name of ["COROS PACE 4 PRO", "PACE4PRO", "PACE-4-PRO", "COROS_PACE_4_PRO", "COROS", "COROS WATCH", "COROS PACE", "COROS PACE PRO", "PACE3", "pace-3", "COROS_NOMAD", "VERTIX 2S", "COROS APEX 2 PRO", "Apex 4", "APEX4", "COROS APEX 4 42MM", "COROS APEX 4 46 mm", "APEX4 46"]) {
+for (const name of ["COROS PACE 4 PRO", "PACE4PRO", "PACE-4-PRO", "COROS_PACE_4_PRO", "COROS", "COROS WATCH", "COROS PACE", "COROS PACE PRO", "PACE3", "pace-3", "COROS_NOMAD", "VERTIX 2S", "COROS VERTIX 4", "VERTIX4", "COROS APEX 2 PRO", "Apex 4", "APEX4", "COROS APEX 4 42MM", "COROS APEX 4 46 mm", "APEX4 46"]) {
   for (const folders of [[], ["Music"], ["map"], ["Map"], ["Music", "map"]]) {
     const { service, reads } = loadService([hdd, { name, root: "E:\\", folders }]);
     const status = await service.getWatchStatus();

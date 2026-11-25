@@ -25,6 +25,7 @@ export const PACE_4_BYTES = 4 * 1024 * 1024 * 1024;
 export const PACE_3_BYTES = PACE_4_BYTES;
 export const PACE_2_BYTES = PACE_4_BYTES;
 export const NOMAD_BYTES = PACE_PRO_BYTES;
+export const VERTIX_4_BYTES = 64 * 1024 * 1024 * 1024;
 
 export type WatchPresentationState =
   | "disconnected"
@@ -229,6 +230,22 @@ const MODEL_PRESENTATION: Record<
       { icon: "display", label: "1.4\" Sapphire Touchscreen" },
       { icon: "weight", label: "Titanium Bezel Build" },
       { icon: "battery", label: "118 Hours Full GPS" },
+    ],
+  },
+  "vertix-4": {
+    state: "connected-known",
+    model: "vertix-4",
+    displayName: "COROS Vertix 4",
+    productName: "Vertix 4",
+    tagline: "Built for Expeditions",
+    companion: "Your Vertix 4 companion",
+    connectHint: "",
+    capacityLabel: "64 GB Vertix 4 capacity fallback",
+    fallbackBytes: VERTIX_4_BYTES,
+    features: [
+      { icon: "display", label: '1.47" AMOLED Display' },
+      { icon: "weight", label: "Sapphire Glass" },
+      { icon: "battery", label: "105 Hours Full GPS" },
     ],
   },
   "apex-4": {

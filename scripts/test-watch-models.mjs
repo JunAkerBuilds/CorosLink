@@ -46,6 +46,10 @@ const nameCases = [
   ["COROS-VERTIX-2", "vertix-2"],
   ["VERTIX 2S", "vertix-2s"],
   ["COROS VERTIX 2S", "vertix-2s"],
+  ["COROS VERTIX 4", "vertix-4"],
+  ["VERTIX 4", "vertix-4"],
+  ["VERTIX4", "vertix-4"],
+  ["COROS_VERTIX_4", "vertix-4"],
   ["COROS VERTIX", "vertix"],
   ["VERTIX", "vertix"],
   ["COROS APEX 2 PRO", "apex-2-pro"],
@@ -143,4 +147,8 @@ assert.equal(fallbackBytesForModel("vertix"), THIRTY_TWO_GB);
 assert.deepEqual(getWatchfaceDeviceProfile("pace-4-pro"), { firmwareType: "COROS W337" });
 assert.deepEqual(getWatchfaceDeviceProfileByFirmware(" coros w337 "), { firmwareType: "COROS W337" });
 assert.equal(fallbackBytesForModel("pace-4-pro"), THIRTY_TWO_GB);
+
+assert.deepEqual(getWatchfaceDeviceProfile("vertix-4"), { firmwareType: "COROS W706" });
+assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros w706"), { firmwareType: "COROS W706" });
+assert.equal(fallbackBytesForModel("vertix-4"), 64 * 1024 * 1024 * 1024);
 console.log("Watch model resolution tests passed.");

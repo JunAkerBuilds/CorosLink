@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **VERTIX 4 (W706).** CorosLink recognizes the VERTIX 4 over Bluetooth and USB, shows it on the dashboard, and Studio builds faces for its 466 × 466 AMOLED screen (the same faces as the PACE 4 Pro). Local sync, satellite data and per-area maps stay off until its firmware has been checked. Not yet tried on a watch.
+
 ## [0.1.83] - 2026-11-23
 
 ### Fixed

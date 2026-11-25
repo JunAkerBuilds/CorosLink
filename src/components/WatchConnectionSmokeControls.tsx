@@ -16,6 +16,7 @@ const WATCH_SMOKE_OPTIONS: SelectOption<WatchConnectionSmokeOptionId>[] = [
   { value: "vertix", label: "Vertix" },
   { value: "vertix-2", label: "Vertix 2" },
   { value: "vertix-2s", label: "Vertix 2S" },
+  { value: "vertix-4", label: "Vertix 4" },
   { value: "apex-4", label: "Apex 4" },
   { value: "apex-2-pro", label: "Apex 2 Pro" },
   { value: "apex-2", label: "Apex 2" },

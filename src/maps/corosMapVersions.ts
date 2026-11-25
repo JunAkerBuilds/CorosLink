@@ -14,6 +14,8 @@ export const FALLBACK_COROS_MAP_VERSION: CorosMapVersion = "5";
  */
 const COROS_MAP_VERSION_BY_MODEL: Partial<Record<WatchModelId, CorosMapVersion>> = {
   "pace-4-pro": "6",
+  // Not on COROS's list yet (read 2026-11-25); assumed v6 like the PACE 4 Pro, the other 2026 AMOLED.
+  "vertix-4": "6",
   "apex-4": "5",
   "pace-4": "5",
   nomad: "5",

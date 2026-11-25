@@ -5446,6 +5446,11 @@ function assertFirmwareResolutionCompatibility(
           label: "PACE 4 Pro",
           required: ["watchface_466x466", "watchface_800x800"]
         }
+      : normalizedFirmwareType === "COROS W706" || watchModel === "vertix-4"
+      ? {
+          label: "VERTIX 4",
+          required: ["watchface_466x466", "watchface_800x800"]
+        }
       : normalizedFirmwareType === "COROS W336" || watchModel === "pace-4"
         ? {
             label: "PACE 4",

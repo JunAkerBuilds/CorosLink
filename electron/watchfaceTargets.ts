@@ -8,6 +8,7 @@ export const WATCHFACE_TARGETS = [
   { model: "pace-3", label: "PACE 3", firmwareType: "COROS W331", display: "mip", previewSize: 240, sizes: [240, 260, 280, 800] },
   { model: "nomad", label: "NOMAD", firmwareType: "COROS W942", display: "mip", previewSize: 260, sizes: [240, 260, 280, 800] },
   { model: "vertix-2", label: "VERTIX 2", firmwareType: "COROS B19", display: "mip", previewSize: 280, sizes: [240, 260, 280, 800] },
+  { model: "vertix-4", label: "VERTIX 4", firmwareType: "COROS W706", display: "amoled", previewSize: 466, sizes: [466, 800] },
   { model: "vertix-2s", label: "VERTIX 2S", firmwareType: "COROS B19S", display: "mip", previewSize: 280, sizes: [240, 260, 280, 800] },
   { model: "apex-4", label: "APEX 4", firmwareType: "COROS W541", display: "mip", previewSize: 260, sizes: [240, 260, 280, 800] },
   { model: "pace-2", label: "PACE 2", firmwareType: "COROS B18", display: "mip", previewSize: 240, sizes: [240, 260, 280, 800] },
@@ -100,7 +101,7 @@ export function watchfaceBinTarget(target: WatchfaceTarget): WatchfaceBinTarget 
   };
 }
 
-/** The targets a compiled BIN's magic fits; same-screen watches (APEX 4, NOMAD and APEX 2 Pro) share one BIN. */
+/** The targets a compiled BIN's magic fits; same-screen watches (APEX 4, NOMAD and APEX 2 Pro; PACE 4 Pro and VERTIX 4) share one BIN. */
 export function watchfaceTargetsForMagic(magic: string): WatchfaceTarget[] {
   return WATCHFACE_TARGETS.filter(target => watchfaceBinTarget(target).magic === magic);
 }
