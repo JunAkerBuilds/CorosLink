@@ -104,6 +104,7 @@ import { AppUpdateControls } from "./components/AppUpdateControls";
 import { DonateButton } from "./components/DonateButton";
 import { UpdateAvailablePrompt } from "./components/UpdateAvailablePrompt";
 import { RestartUnsavedPrompt } from "./components/RestartUnsavedPrompt";
+import { ClinkSwitchPrompt } from "./components/ClinkSwitchPrompt";
 import { listUnsavedWork, releaseUnsavedWorkForRestart } from "./unsavedWork";
 import {
   AppSidebar,
@@ -576,10 +577,17 @@ export default function App() {
       status: "idle",
       autoCheck: true,
       autoDownload: true,
+      track: "legacy",
+      clinkOfferAnswered: false,
     },
   );
   const installAcceptedVersionRef = useRef<string | null>(null);
   const [restartUnsavedOpen, setRestartUnsavedOpen] = useState(false);
+  // The C-LINK beta offer: "auto" is the one-time launch pop-up, "manual" was
+  // opened from the updates popover, "preview" is the development toggle.
+  const [clinkPrompt, setClinkPrompt] = useState<"auto" | "manual" | "preview" | null>(null);
+  const clinkPromptShownRef = useRef(false);
+  const clinkTrackAvailable = api?.platform === "darwin";
 
   useEffect(() => {
     if (!api) return;
@@ -597,6 +605,34 @@ export default function App() {
     void api.getAppUpdateStatus().then(setAppUpdateSnapshot);
     return api.onAppUpdateStatus(setAppUpdateSnapshot);
   }, [api]);
+
+  // Offer C-LINK once on launch to installed macOS copies still on CorosLink
+  // releases. Wait for the startup check, and let a CorosLink update that was
+  // found go first: its own prompt is already on screen.
+  useEffect(() => {
+    if (clinkPromptShownRef.current || !clinkTrackAvailable) return;
+    const snapshot = appUpdateSnapshot;
+    if (!snapshot.supported || snapshot.track !== "legacy" || snapshot.clinkOfferAnswered) {
+      return;
+    }
+    const checkSettled =
+      !snapshot.autoCheck ||
+      (snapshot.status !== "idle" && snapshot.status !== "checking");
+    const updatePending =
+      snapshot.status === "available" ||
+      snapshot.status === "downloading" ||
+      snapshot.status === "downloaded";
+    if (!checkSettled || updatePending) return;
+    clinkPromptShownRef.current = true;
+    setClinkPrompt("auto");
+  }, [
+    appUpdateSnapshot.autoCheck,
+    appUpdateSnapshot.clinkOfferAnswered,
+    appUpdateSnapshot.status,
+    appUpdateSnapshot.supported,
+    appUpdateSnapshot.track,
+    clinkTrackAvailable,
+  ]);
 
   useEffect(() => {
     if (!api) return;
@@ -1540,6 +1576,8 @@ export default function App() {
       releaseNotes: DEV_UPDATE_PREVIEW.releaseNotes,
       autoCheck: current.autoCheck,
       autoDownload: false,
+      track: current.track,
+      clinkOfferAnswered: current.clinkOfferAnswered,
     }));
   }
 
@@ -1570,6 +1608,57 @@ export default function App() {
     try {
       const snapshot = await api.setUpdatePreferences(prefs);
       setAppUpdateSnapshot(snapshot);
+    } catch (caught) {
+      setError(localizedText(() => toErrorMessage(caught)));
+    }
+  }
+
+  async function handleSwitchToClink() {
+    const mode = clinkPrompt;
+    setClinkPrompt(null);
+    if (!api || mode === "preview") {
+      return;
+    }
+
+    setError(null);
+    try {
+      const snapshot = await api.setAppUpdateTrack("clink");
+      setAppUpdateSnapshot(snapshot);
+      if (snapshot.status === "error") {
+        setError(localizedText(() => snapshot.error ?? t("Could not check for updates.")));
+      } else if (!snapshot.supported) {
+        setMessage(localizedText(() => t("C-LINK will arrive as an update in the installed app.")));
+      }
+    } catch (caught) {
+      setError(localizedText(() => toErrorMessage(caught)));
+    }
+  }
+
+  function handleDeclineClink() {
+    const mode = clinkPrompt;
+    setClinkPrompt(null);
+    if (!api || mode === "preview" || appUpdateSnapshot.clinkOfferAnswered) {
+      return;
+    }
+    void api.dismissClinkOffer().then(setAppUpdateSnapshot).catch(() => undefined);
+  }
+
+  async function handleStayOnCorosLink() {
+    if (!api) {
+      return;
+    }
+
+    // An accepted C-LINK download must not restart the app once it lands.
+    installAcceptedVersionRef.current = null;
+    setError(null);
+    try {
+      const snapshot = await api.setAppUpdateTrack("legacy");
+      setAppUpdateSnapshot(snapshot);
+      if (snapshot.status === "error") {
+        setError(localizedText(() => snapshot.error ?? t("Could not check for updates.")));
+      } else {
+        setMessage(localizedText(() => t("You'll keep getting CorosLink updates.")));
+      }
     } catch (caught) {
       setError(localizedText(() => toErrorMessage(caught)));
     }
@@ -2733,6 +2822,15 @@ export default function App() {
                         <Sparkles size={13} aria-hidden="true" />
                         {t("Test update")} </button>
                       <button
+                        className="app-dev-view-toggle app-dev-clink-test"
+                        type="button"
+                        title={t("Preview the C-LINK beta offer")}
+                        onClick={() => setClinkPrompt("preview")}
+                      >
+                        <Sparkles size={13} aria-hidden="true" />
+                        {t("Test C-LINK switch")}
+                      </button>
+                      <button
                         className="app-dev-view-toggle app-dev-onboarding-test"
                         type="button"
                         title={t("Preview the first-run tour")}
@@ -2806,6 +2904,9 @@ export default function App() {
               onDownload={() => void handleDownloadUpdate()}
               onInstall={handleInstallUpdate}
               onPreferencesChange={handleUpdatePreferencesChange}
+              clinkTrackAvailable={clinkTrackAvailable}
+              onTryClink={() => setClinkPrompt("manual")}
+              onStayOnCorosLink={() => void handleStayOnCorosLink()}
             />
           }
         />
@@ -3218,6 +3319,12 @@ export default function App() {
           previewKey={devUpdatePreviewKey}
         />
       )}
+      {clinkPrompt ? (
+        <ClinkSwitchPrompt
+          onSwitch={() => void handleSwitchToClink()}
+          onDecline={handleDeclineClink}
+        />
+      ) : null}
       {restartUnsavedOpen ? (
         <RestartUnsavedPrompt
           onRestart={installUpdate}

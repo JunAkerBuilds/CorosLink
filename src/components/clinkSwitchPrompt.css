@@ -1,0 +1,5 @@
+/* The C-LINK beta offer. The shell is the update prompt's (styles.css), the list the restart prompt's. */
+
+.clink-switch-prompt .update-prompt-footer {
+  padding-top: 22px;
+}

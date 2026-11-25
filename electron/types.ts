@@ -3184,7 +3184,16 @@ export interface AppUpdateSnapshot {
   autoCheck: boolean;
   /** When false, available updates are not downloaded until the user asks. */
   autoDownload: boolean;
+  /**
+   * Which releases this install follows: "legacy" gets normal CorosLink
+   * releases, "clink" (macOS only) gets the C-LINK beta prereleases.
+   */
+  track: AppUpdateTrack;
+  /** The one-time "C-LINK is here" offer was answered (switched or Not now). */
+  clinkOfferAnswered: boolean;
 }
+
+export type AppUpdateTrack = "legacy" | "clink";
 
 export interface AppStorageLocation {
   id: string;

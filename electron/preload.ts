@@ -107,6 +107,7 @@ import type {
   TransferResult,
   AppInfo,
   AppUpdateSnapshot,
+  AppUpdateTrack,
   WatchConnectionSmokeOptionId,
   WatchStatus,
   WatchTransferProgress,
@@ -1322,6 +1323,10 @@ const api = {
     autoDownload?: boolean;
   }): Promise<AppUpdateSnapshot> =>
     ipcRenderer.invoke("app:setUpdatePreferences", prefs),
+  setAppUpdateTrack: (track: AppUpdateTrack): Promise<AppUpdateSnapshot> =>
+    ipcRenderer.invoke("app:setUpdateTrack", track),
+  dismissClinkOffer: (): Promise<AppUpdateSnapshot> =>
+    ipcRenderer.invoke("app:dismissClinkOffer"),
   quitAndInstallUpdate: (): Promise<void> =>
     ipcRenderer.invoke("app:quitAndInstallUpdate"),
   onAppUpdateStatus: (

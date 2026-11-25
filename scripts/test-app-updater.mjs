@@ -8,14 +8,43 @@ const require = createRequire(import.meta.url);
 const { CancellationToken, CancellationError } = require("builder-util-runtime");
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-function loadUpdater({ autoCheck = false, setTimeout: scheduleTimer = setTimeout, clearTimeout: cancelTimer = clearTimeout } = {}) {
+/** Mirrors electron-updater's AppUpdater: setting channel turns allowDowngrade on, and a set channel can't be cleared. */
+function createUpdaterMock() {
   const updater = new EventEmitter();
+  let channel = null;
+  updater.allowPrerelease = false;
+  updater.allowDowngrade = false;
+  updater.channelWrites = [];
+  Object.defineProperty(updater, "channel", {
+    get: () => channel,
+    set(value) {
+      if (channel != null && (typeof value !== "string" || value.length === 0)) {
+        throw new Error(`Channel must be a string, but got: ${value}`);
+      }
+      channel = value;
+      updater.channelWrites.push(value);
+      updater.allowDowngrade = true;
+    }
+  });
+  return updater;
+}
+
+function loadUpdater({
+  autoCheck = false,
+  setTimeout: scheduleTimer = setTimeout,
+  clearTimeout: cancelTimer = clearTimeout,
+  platform = "darwin",
+  isPackaged = true,
+  extraSettings = []
+} = {}) {
+  const updater = createUpdaterMock();
   const requests = [];
   updater.downloadUpdate = (token) =>
     new Promise((resolve, reject) => requests.push({ token, resolve, reject }));
   const settings = new Map([
     ["updater.autoCheck", String(autoCheck)],
-    ["updater.autoDownload", "true"]
+    ["updater.autoDownload", "true"],
+    ...extraSettings
   ]);
   const module = { exports: {} };
   vm.runInNewContext(
@@ -23,13 +52,13 @@ function loadUpdater({ autoCheck = false, setTimeout: scheduleTimer = setTimeout
     {
       module,
       exports: module.exports,
-      process: { env: {}, platform: "darwin", execPath: process.execPath },
+      process: { env: {}, platform, execPath: process.execPath },
       setTimeout: scheduleTimer,
       clearTimeout: cancelTimer,
       setImmediate,
       require(name) {
         if (name === "electron") return {
-          app: { isPackaged: true, getVersion: () => "0.1.49", getPath: () => "/unused" }
+          app: { isPackaged, getVersion: () => "0.1.49", getPath: () => "/unused" }
         };
         if (name === "electron-updater") return { autoUpdater: updater, CancellationToken };
         if (name === "./database") return {
@@ -48,7 +77,7 @@ function loadUpdater({ autoCheck = false, setTimeout: scheduleTimer = setTimeout
   );
   const api = module.exports;
   api.initializeAppUpdater({ isDestroyed: () => false, webContents: { send() {} } });
-  return { api, updater, requests };
+  return { api, updater, requests, settings };
 }
 
 function createUpdater() {
@@ -212,4 +241,127 @@ function loadFailingChecks(clock, responses) {
   assert.equal(state.checks, 2);
 }
 
+{
+  // Legacy (the default) leaves electron-updater exactly as it starts:
+  // no channel, no prereleases, so /releases/latest and latest-mac.yml.
+  for (const platform of ["darwin", "win32", "linux"]) {
+    const { api, updater } = loadUpdater({ platform });
+    assert.equal(updater.channel, null, `${platform}: legacy sets no channel`);
+    assert.deepEqual(updater.channelWrites, []);
+    assert.equal(updater.allowPrerelease, false);
+    assert.equal(updater.allowDowngrade, false);
+    assert.equal(api.getAppUpdateSnapshot().track, "legacy");
+    assert.equal(api.getAppUpdateSnapshot().clinkOfferAnswered, false);
+  }
+}
+
+{
+  // A saved "clink" track on macOS follows the C-LINK beta prereleases from startup.
+  const { api, updater } = loadUpdater({ extraSettings: [["updater.track", "clink"]] });
+  assert.equal(updater.channel, "clink");
+  assert.equal(updater.allowPrerelease, true);
+  assert.equal(updater.allowDowngrade, false, "set after channel, which turns it on");
+  assert.equal(api.getAppUpdateSnapshot().track, "clink");
+}
+
+{
+  // C-LINK doesn't ship on Windows or Linux yet: a saved "clink" is ignored there.
+  for (const platform of ["win32", "linux"]) {
+    const { api, updater, settings } = loadUpdater({ platform, extraSettings: [["updater.track", "clink"]] });
+    assert.equal(updater.channel, null, `${platform}: no channel`);
+    assert.equal(updater.allowPrerelease, false);
+    assert.equal(api.getAppUpdateSnapshot().track, "legacy");
+    updater.checkForUpdates = async () => assert.fail("no check for an ignored switch");
+    const snapshot = await api.setUpdateTrack("clink");
+    assert.equal(snapshot.track, "legacy");
+    assert.equal(settings.get("updater.track"), "legacy");
+    assert.equal(updater.channel, null);
+  }
+}
+
+{
+  // Switching to C-LINK saves the track, answers the offer and checks the beta at once;
+  // a beta found there downloads through the usual flow.
+  const { api, updater, requests, settings } = loadUpdater();
+  let checks = 0;
+  let channelAtCheck;
+  updater.checkForUpdates = async () => {
+    checks += 1;
+    channelAtCheck = [updater.channel, updater.allowPrerelease, updater.allowDowngrade];
+    updater.emit("update-available", { version: "0.2.0-clink.1", releaseNotes: "" });
+    return null;
+  };
+  const snapshot = await api.setUpdateTrack("clink");
+  assert.equal(checks, 1);
+  assert.deepEqual(channelAtCheck, ["clink", true, false]);
+  assert.equal(settings.get("updater.track"), "clink");
+  assert.equal(settings.get("updater.clinkOfferAnswered"), "true");
+  assert.equal(snapshot.track, "clink");
+  assert.equal(snapshot.clinkOfferAnswered, true);
+  assert.equal(snapshot.availableVersion, "0.2.0-clink.1");
+  assert.equal(requests.length, 1, "auto-download fetches the beta");
+  updater.emit("update-downloaded", { version: "0.2.0-clink.1" });
+  requests[0].resolve([]);
+  await flush();
+  assert.equal(api.getAppUpdateSnapshot().status, "downloaded");
+
+  // Stay on CorosLink before it installs: back to /releases/latest and latest-mac.yml.
+  updater.checkForUpdates = async () => {
+    checks += 1;
+    updater.emit("update-not-available", { version: "0.1.49" });
+    return null;
+  };
+  const back = await api.setUpdateTrack("legacy");
+  assert.equal(checks, 2);
+  assert.equal(updater.channel, "latest", "electron-updater's default channel name");
+  assert.equal(updater.allowPrerelease, false);
+  assert.equal(updater.allowDowngrade, false);
+  assert.equal(settings.get("updater.track"), "legacy");
+  assert.equal(back.track, "legacy");
+  assert.equal(back.status, "not-available", "the downloaded beta is no longer offered");
+}
+
+{
+  // Switching cancels a CorosLink download still under way.
+  const { api, updater, requests } = createUpdater();
+  updater.checkForUpdates = async () => null;
+  const switching = api.setUpdateTrack("clink");
+  assert.equal(requests[0].token.cancelled, true);
+  requests[0].reject(new CancellationError());
+  await switching;
+  assert.equal(api.getAppUpdateSnapshot().availableVersion, undefined);
+}
+
+{
+  // No C-LINK beta published yet: a plain message instead of electron-updater's.
+  const { api, updater } = loadUpdater();
+  updater.checkForUpdates = async () => {
+    throw Object.assign(new Error("No published versions on GitHub"), { code: "ERR_UPDATER_NO_PUBLISHED_VERSIONS" });
+  };
+  const snapshot = await api.setUpdateTrack("clink");
+  assert.equal(snapshot.status, "error");
+  assert.match(snapshot.error, /C-LINK beta isn't out yet/);
+}
+
+{
+  // "Not now" is remembered.
+  const { api, settings } = loadUpdater();
+  assert.equal(api.dismissClinkOffer().clinkOfferAnswered, true);
+  assert.equal(settings.get("updater.clinkOfferAnswered"), "true");
+  assert.equal(settings.get("updater.track"), undefined, "the track stays legacy");
+  const reloaded = loadUpdater({ extraSettings: [["updater.clinkOfferAnswered", "true"]] });
+  assert.equal(reloaded.api.getAppUpdateSnapshot().clinkOfferAnswered, true);
+}
+
+{
+  // Development builds remember the choice but never touch electron-updater.
+  const { api, updater, settings } = loadUpdater({ isPackaged: false });
+  updater.checkForUpdates = async () => assert.fail("no check in development");
+  const snapshot = await api.setUpdateTrack("clink");
+  assert.equal(snapshot.track, "clink");
+  assert.equal(settings.get("updater.track"), "clink");
+  assert.equal(updater.channel, null);
+}
+
+console.log("App updater track (legacy/C-LINK beta) passed.");
 console.log("App updater cancellation, queued requests, manual downloads and feed failures passed.");
