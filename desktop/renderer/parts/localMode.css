@@ -1,0 +1,122 @@
+/* Local mode on the Watch page and in Settings (parts/LocalMode.tsx). Design: "Local mode" row on the C-LINK design canvas. */
+/* The switch row in the Watch hero, under the sync line. */
+.lm-toggle {
+  display: flex; align-items: center; gap: 14px; max-width: 460px; padding: 12px 14px; border-radius: 16px;
+  border: 1px solid var(--line); background: rgba(var(--fg-rgb), 0.03);
+}
+.lm-toggle-icon { flex: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 12px; background: rgba(83, 203, 161, 0.16); color: var(--h-mint-ink); }
+.lm-toggle-icon svg, .lm-ico svg { stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.lm-toggle-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lm-toggle-text strong { font-size: 14px; }
+.lm-toggle-text span { font-size: 12px; color: var(--muted); }
+
+/* Status chip in the hero once the watch is paired here. */
+.lm-mode { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--h-mint) 16%, transparent); color: var(--h-mint-ink); font-size: 12px; font-weight: 700; }
+.lm-mode svg { stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.lm-link { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--soft); }
+.lm-link b { color: var(--fg); font-weight: 700; }
+.lm-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.lm-bars i { width: 3px; border-radius: 2px; background: var(--h-mint); }
+.lm-bars i:nth-child(1) { height: 4px; } .lm-bars i:nth-child(2) { height: 7px; } .lm-bars i:nth-child(3) { height: 10px; } .lm-bars i:nth-child(4) { height: 12px; }
+.lm-bars i[data-off] { background: rgba(var(--fg-rgb), 0.16); }
+.lm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.lm-sync { position: relative; overflow: hidden; min-width: 150px; justify-content: center; }
+.lm-sync-meter { position: absolute; left: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, 0.75); }
+.lm-select { height: 40px; }
+.lm-quiet { font-size: 13px; color: var(--muted); }
+/* Paired here: one status line + one row of actions. The page's phone sync line and empty queue say nothing new, so hide them. */
+.lm-linked { display: flex; flex-direction: column; gap: 14px; margin-top: 2px; }
+.lm-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; color: var(--soft); }
+.lm-status b { color: var(--fg); font-weight: 700; }
+.lm-status .lm-dot { color: var(--muted); }
+.lm-status .lm-mode { margin-left: 4px; }
+.lm-linked .lm-auto { margin-left: 4px; font-size: 13px; color: var(--muted); }
+.wa-id:has(.lm-linked) .wa-synced,
+.wa-id:has(.lm-linked) .wa-queue:not(:has(.wa-count, p)) { display: none; }
+
+/* Cards new on the Watch page in Local mode. */
+.lm-rows { display: flex; flex-direction: column; }
+.lm-row { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 8px 0; }
+.lm-row + .lm-row { border-top: 1px solid var(--line); }
+.lm-ico { flex: none; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 11px; background: rgba(var(--fg-rgb), 0.05); color: var(--soft); }
+.lm-ico[data-hue="mint"] { background: rgba(83, 203, 161, 0.16); color: var(--h-mint-ink); }
+.lm-ico[data-hue="violet"] { background: color-mix(in srgb, var(--h-violet) 14%, transparent); color: var(--h-violet-ink); }
+.lm-ico[data-hue="blue"] { background: color-mix(in srgb, var(--h-blue) 14%, transparent); color: var(--h-blue-ink); }
+.lm-ico[data-hue="gold"] { background: rgba(216, 155, 34, 0.16); color: var(--h-gold-ink); }
+.lm-ico[data-hue="rose"] { background: color-mix(in srgb, var(--h-rose) 12%, transparent); color: var(--h-rose-ink); }
+.lm-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lm-row-text strong { font-size: 14px; font-weight: 600; }
+.lm-row-text span { font-size: 12px; color: var(--muted); }
+.lm-row-end { flex: none; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.lm-row-end b { color: var(--fg); font-size: 14px; }
+.lm-tick { color: var(--h-mint-ink); }
+.lm-step-bar { width: 120px; height: 6px; border-radius: 999px; background: rgba(var(--fg-rgb), 0.1); overflow: hidden; }
+.lm-step-bar i { display: block; height: 100%; border-radius: inherit; background: var(--h-mint); }
+.lm-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; border-radius: 14px; background: rgba(216, 155, 34, 0.12); }
+.lm-ask p { flex: 1 1 260px; margin: 0; font-size: 13px; line-height: 19px; color: var(--soft); }
+.lm-ask p b { color: var(--fg); }
+.lm-done { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--h-mint-ink); }
+.lm-w12 { grid-column: span 12; }
+.lm-split { display: flex; flex-wrap: wrap; gap: 14px; }
+.lm-split > .set-figures { flex: 1 1 360px; }
+.lm-figure-sub { font-size: 12px; color: var(--muted); }
+
+/* The dialogs: one scrim over the whole window. */
+.lm-scrim { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; background: rgba(15, 21, 20, 0.32); backdrop-filter: blur(6px); -webkit-app-region: no-drag; }
+.lm-dialog { max-height: calc(100vh - 48px); overflow-y: auto; }
+[data-theme="dark"] .lm-scrim { background: rgba(0, 0, 0, 0.55); }
+.lm-dialog {
+  width: 560px; max-width: 100%; display: flex; flex-direction: column; gap: 18px; padding: 26px 28px 24px; border-radius: 26px;
+  background: var(--card-bg); border: 1px solid var(--line); box-shadow: var(--shadow-popover);
+}
+[data-theme="dark"] .lm-dialog { background: #151a19; }
+.lm-dialog h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.lm-dialog > p { margin: -8px 0 0; font-size: 14px; line-height: 21px; color: var(--soft); }
+.lm-pair-art { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 18px 0 6px; color: var(--muted); }
+.lm-mini-watch { position: relative; width: 58px; height: 58px; border-radius: 999px; background: var(--wa-bezel); box-shadow: var(--wa-case-shadow); }
+.lm-mini-watch::after { content: ""; position: absolute; inset: 5px; border-radius: 999px; background: #0b0e0d; }
+.lm-mini-mac { width: 76px; height: 50px; border-radius: 8px; border: 4px solid rgba(var(--fg-rgb), 0.55); background: rgba(83, 203, 161, 0.14); }
+.lm-dots { display: flex; gap: 5px; }
+.lm-dots i { width: 6px; height: 6px; border-radius: 999px; background: var(--h-mint); opacity: 0.35; animation: lm-dot 1.2s infinite; }
+.lm-dots i:nth-child(2) { animation-delay: 0.2s; } .lm-dots i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes lm-dot { 40% { opacity: 1; } }
+.lm-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.lm-list li { display: flex; align-items: flex-start; gap: 12px; padding: 8px 0; font-size: 14px; line-height: 20px; }
+.lm-list li .lm-ico { width: 30px; height: 30px; border-radius: 10px; }
+.lm-list li span { padding-top: 5px; }
+.lm-option { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 14px; background: rgba(var(--fg-rgb), 0.04); }
+.lm-option .lm-row-text strong { font-size: 13px; }
+.lm-key { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--soft); }
+.lm-key b { color: var(--fg); }
+.lm-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+
+/* Pairing: three steps, then nearby watches. */
+.lm-steps { display: flex; gap: 6px; }
+.lm-steps span { flex: 1; display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.lm-steps span::before { content: ""; height: 4px; border-radius: 999px; background: rgba(var(--fg-rgb), 0.1); }
+.lm-steps span[data-on]::before { background: var(--h-mint); }
+.lm-steps span[data-on] { color: var(--fg); }
+.lm-near { display: flex; flex-direction: column; gap: 8px; }
+.lm-near-row { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--line); }
+.lm-near-row[data-best] { border-color: rgba(83, 203, 161, 0.5); background: rgba(83, 203, 161, 0.07); }
+.lm-near-face { flex: none; width: 40px; height: 40px; border-radius: 999px; background: #0b0e0d; box-shadow: 0 0 0 3px rgba(var(--fg-rgb), 0.12); }
+.lm-search { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); }
+.lm-progress { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 16px; background: rgba(var(--fg-rgb), 0.04); }
+.lm-progress-head { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 600; }
+.lm-progress .lm-step-bar { width: 100%; height: 8px; }
+
+/* Settings, Local mode on */
+.lm-paired { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 14px; background: rgba(var(--fg-rgb), 0.04); }
+.lm-danger { color: var(--h-rose-ink); }
+.btn.lm-danger { color: var(--h-rose-ink); }
+
+.lm-auto { display: inline-flex; align-items: center; gap: 8px; }
+.lm-auto .select { height: 40px; }
+.lm-problem { margin: 0; font-size: 13px; line-height: 19px; color: var(--h-rose-ink); }
+.lm-form { display: flex; flex-direction: column; gap: 12px; }
+.lm-form .field, .lm-form .select { width: 100%; height: 40px; }
+.lm-ask-note { margin: 0; padding: 10px 12px; border-radius: 12px; background: rgba(216, 155, 34, 0.12); font-size: 13px; line-height: 19px; color: var(--soft); }
+.lm-indeterminate { width: 40% !important; animation: lm-slide 1.2s ease-in-out infinite; }
+@keyframes lm-slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+.lm-search .lm-dots { display: inline-flex; margin-right: 6px; }
+@media (prefers-reduced-motion: reduce) { .lm-dots i, .lm-indeterminate { animation: none; } }

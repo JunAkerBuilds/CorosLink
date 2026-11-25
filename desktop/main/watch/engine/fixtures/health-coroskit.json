@@ -1,0 +1,1440 @@
+{
+  "battery" : [
+    {
+      "offset" : 0,
+      "percent" : 64,
+      "time" : 1793462400
+    }
+  ],
+  "empty" : {
+    "insights" : {
+      "activities" : [
+
+      ],
+      "activityListCut" : false,
+      "days" : [
+
+      ],
+      "fetchedAt" : -63114076800,
+      "healthChecks" : [
+
+      ],
+      "nights" : [
+
+      ],
+      "stressSamples" : [
+
+      ]
+    },
+    "syncedAt" : -63114076800
+  },
+  "one" : {
+    "insights" : {
+      "activities" : [
+
+      ],
+      "activityListCut" : false,
+      "days" : [
+        {
+          "averageHR" : 65,
+          "calories" : 12,
+          "day" : {
+            "day" : 1,
+            "month" : 1,
+            "year" : 2026
+          },
+          "exerciseMinutes" : 1,
+          "steps" : 160,
+          "stress" : 52
+        },
+        {
+          "averageHR" : 65,
+          "calories" : 386,
+          "day" : {
+            "day" : 2,
+            "month" : 1,
+            "year" : 2026
+          },
+          "exerciseMinutes" : 54,
+          "hrv" : 35,
+          "restingHR" : 63,
+          "sleepMinutes" : 474,
+          "sleepScore" : 62,
+          "steps" : 8412
+        }
+      ],
+      "fetchedAt" : 789032800,
+      "fitness" : {
+        "ftp" : 250,
+        "maxHR" : 196,
+        "predictions" : [
+
+        ],
+        "thresholdHR" : 171
+      },
+      "healthChecks" : [
+        {
+          "heartRate" : 72,
+          "hrv" : 40,
+          "respiratoryRate" : 13,
+          "spo2" : 97,
+          "stress" : 31,
+          "time" : 789013833
+        }
+      ],
+      "nights" : [
+        {
+          "averageHR" : 64,
+          "awakeMinutes" : 19,
+          "bedtime" : 788976000,
+          "day" : {
+            "day" : 2,
+            "month" : 1,
+            "year" : 2026
+          },
+          "deepMinutes" : 50,
+          "lightMinutes" : 404,
+          "nightScore" : 62,
+          "remMinutes" : 20,
+          "score" : 62,
+          "stages" : [
+            {
+              "end" : 788976240,
+              "stage" : "awake",
+              "start" : 788976000
+            },
+            {
+              "end" : 788980200,
+              "stage" : "light",
+              "start" : 788976240
+            },
+            {
+              "end" : 788983200,
+              "stage" : "deep",
+              "start" : 788980200
+            },
+            {
+              "end" : 788984400,
+              "stage" : "rem",
+              "start" : 788983200
+            },
+            {
+              "end" : 788984580,
+              "stage" : "awake",
+              "start" : 788984400
+            },
+            {
+              "end" : 789003000,
+              "stage" : "light",
+              "start" : 788984580
+            },
+            {
+              "end" : 789003780,
+              "stage" : "awake",
+              "start" : 789003000
+            },
+            {
+              "end" : 789005580,
+              "stage" : "light",
+              "start" : 789003780
+            }
+          ],
+          "totalMinutes" : 474,
+          "wakeTime" : 789005580
+        }
+      ],
+      "stressSamples" : [
+        {
+          "time" : 788958000,
+          "value" : 42
+        },
+        {
+          "time" : 788958300,
+          "value" : 61
+        }
+      ]
+    },
+    "sleepProfile" : {
+      "weightKg" : 60
+    },
+    "syncedAt" : 789032800,
+    "today" : {
+      "activeSeconds" : 3240,
+      "calories" : 386,
+      "day" : {
+        "day" : 2,
+        "month" : 1,
+        "year" : 2026
+      },
+      "distanceMeters" : 6123,
+      "readAt" : 789012800,
+      "steps" : 8412
+    }
+  },
+  "oneItems" : [
+    {
+      "body" : "{\"averageHR\":65,\"calories\":12,\"day\":{\"day\":1,\"month\":1,\"year\":2026},\"exerciseMinutes\":1,\"steps\":160,\"stress\":52}",
+      "collection" : "health.day",
+      "id" : "2026-01-01"
+    },
+    {
+      "body" : "{\"averageHR\":65,\"calories\":386,\"day\":{\"day\":2,\"month\":1,\"year\":2026},\"exerciseMinutes\":54,\"hrv\":35,\"restingHR\":63,\"sleepMinutes\":474,\"sleepScore\":62,\"steps\":8412}",
+      "collection" : "health.day",
+      "id" : "2026-01-02"
+    },
+    {
+      "body" : "{\"averageHR\":64,\"awakeMinutes\":19,\"bedtime\":788976000,\"day\":{\"day\":2,\"month\":1,\"year\":2026},\"deepMinutes\":50,\"lightMinutes\":404,\"nightScore\":62,\"remMinutes\":20,\"score\":62,\"stages\":[{\"end\":788976240,\"stage\":\"awake\",\"start\":788976000},{\"end\":788980200,\"stage\":\"light\",\"start\":788976240},{\"end\":788983200,\"stage\":\"deep\",\"start\":788980200},{\"end\":788984400,\"stage\":\"rem\",\"start\":788983200},{\"end\":788984580,\"stage\":\"awake\",\"start\":788984400},{\"end\":789003000,\"stage\":\"light\",\"start\":788984580},{\"end\":789003780,\"stage\":\"awake\",\"start\":789003000},{\"end\":789005580,\"stage\":\"light\",\"start\":789003780}],\"totalMinutes\":474,\"wakeTime\":789005580}",
+      "collection" : "health.night",
+      "id" : "2026-01-02"
+    }
+  ],
+  "two" : {
+    "insights" : {
+      "activities" : [
+
+      ],
+      "activityListCut" : false,
+      "days" : [
+        {
+          "averageHR" : 54,
+          "day" : {
+            "day" : 30,
+            "month" : 10,
+            "year" : 2026
+          },
+          "stress" : 37
+        },
+        {
+          "averageHR" : 54,
+          "calories" : 12,
+          "day" : {
+            "day" : 31,
+            "month" : 10,
+            "year" : 2026
+          },
+          "exerciseMinutes" : 5,
+          "hrv" : 44,
+          "restingHR" : 53,
+          "sleepMinutes" : 430,
+          "sleepScore" : 83,
+          "steps" : 300,
+          "stress" : 40
+        }
+      ],
+      "fetchedAt" : 815155800,
+      "healthChecks" : [
+        {
+          "heartRate" : 60,
+          "respiratoryRate" : 15,
+          "spo2" : 98,
+          "stress" : 20,
+          "time" : 815122200
+        }
+      ],
+      "nights" : [
+        {
+          "averageHR" : 54,
+          "awakeMinutes" : 20,
+          "bedtime" : 815094000,
+          "day" : {
+            "day" : 31,
+            "month" : 10,
+            "year" : 2026
+          },
+          "deepMinutes" : 120,
+          "lightMinutes" : 120,
+          "napMinutes" : 140,
+          "naps" : [
+            {
+              "asleepMinutes" : 40,
+              "end" : 815136000,
+              "points" : 5,
+              "stages" : [
+                {
+                  "end" : 815136000,
+                  "stage" : "light",
+                  "start" : 815133600
+                }
+              ],
+              "start" : 815133600
+            },
+            {
+              "asleepMinutes" : 100,
+              "end" : 815154600,
+              "points" : 2,
+              "stages" : [
+                {
+                  "end" : 815151600,
+                  "stage" : "light",
+                  "start" : 815148600
+                },
+                {
+                  "end" : 815154600,
+                  "stage" : "rem",
+                  "start" : 815151600
+                }
+              ],
+              "start" : 815148600
+            }
+          ],
+          "nightScore" : 76,
+          "remMinutes" : 190,
+          "score" : 83,
+          "stages" : [
+            {
+              "end" : 815101200,
+              "stage" : "light",
+              "start" : 815094000
+            },
+            {
+              "end" : 815108400,
+              "stage" : "deep",
+              "start" : 815101200
+            },
+            {
+              "end" : 815109600,
+              "stage" : "awake",
+              "start" : 815108400
+            },
+            {
+              "end" : 815121000,
+              "stage" : "rem",
+              "start" : 815109600
+            }
+          ],
+          "stress" : {
+            "average" : 40,
+            "deep" : 39,
+            "levels" : [
+              18,
+              40,
+              28,
+              0
+            ],
+            "light" : 42,
+            "peak" : 68,
+            "peakTime" : 815095490,
+            "readings" : [
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33
+            ],
+            "rem" : 39,
+            "start" : 815094290
+          },
+          "totalMinutes" : 430,
+          "wakeTime" : 815121000
+        }
+      ],
+      "stressSamples" : [
+        {
+          "time" : 815093090,
+          "value" : 12
+        },
+        {
+          "time" : 815093390,
+          "value" : 19
+        },
+        {
+          "time" : 815093690,
+          "value" : 26
+        },
+        {
+          "time" : 815093990,
+          "value" : 33
+        },
+        {
+          "time" : 815094290,
+          "value" : 40
+        },
+        {
+          "time" : 815094590,
+          "value" : 47
+        },
+        {
+          "time" : 815094890,
+          "value" : 54
+        },
+        {
+          "time" : 815095190,
+          "value" : 61
+        },
+        {
+          "time" : 815095490,
+          "value" : 68
+        },
+        {
+          "time" : 815095790,
+          "value" : 12
+        },
+        {
+          "time" : 815096090,
+          "value" : 19
+        },
+        {
+          "time" : 815096390,
+          "value" : 26
+        },
+        {
+          "time" : 815096690,
+          "value" : 33
+        },
+        {
+          "time" : 815096990,
+          "value" : 40
+        },
+        {
+          "time" : 815097290,
+          "value" : 47
+        },
+        {
+          "time" : 815097590,
+          "value" : 54
+        },
+        {
+          "time" : 815097890,
+          "value" : 61
+        },
+        {
+          "time" : 815098190,
+          "value" : 68
+        },
+        {
+          "time" : 815098490,
+          "value" : 12
+        },
+        {
+          "time" : 815098790,
+          "value" : 19
+        },
+        {
+          "time" : 815099090,
+          "value" : 26
+        },
+        {
+          "time" : 815099390,
+          "value" : 33
+        },
+        {
+          "time" : 815099690,
+          "value" : 40
+        },
+        {
+          "time" : 815099990,
+          "value" : 47
+        },
+        {
+          "time" : 815100290,
+          "value" : 54
+        },
+        {
+          "time" : 815100590,
+          "value" : 61
+        },
+        {
+          "time" : 815100890,
+          "value" : 68
+        },
+        {
+          "time" : 815101190,
+          "value" : 12
+        },
+        {
+          "time" : 815101490,
+          "value" : 19
+        },
+        {
+          "time" : 815101790,
+          "value" : 26
+        },
+        {
+          "time" : 815102090,
+          "value" : 33
+        },
+        {
+          "time" : 815102390,
+          "value" : 40
+        },
+        {
+          "time" : 815102690,
+          "value" : 47
+        },
+        {
+          "time" : 815102990,
+          "value" : 54
+        },
+        {
+          "time" : 815103290,
+          "value" : 61
+        },
+        {
+          "time" : 815103590,
+          "value" : 68
+        },
+        {
+          "time" : 815103890,
+          "value" : 12
+        },
+        {
+          "time" : 815104190,
+          "value" : 19
+        },
+        {
+          "time" : 815104490,
+          "value" : 26
+        },
+        {
+          "time" : 815104790,
+          "value" : 33
+        },
+        {
+          "time" : 815105090,
+          "value" : 40
+        },
+        {
+          "time" : 815105390,
+          "value" : 47
+        },
+        {
+          "time" : 815105690,
+          "value" : 54
+        },
+        {
+          "time" : 815105990,
+          "value" : 61
+        },
+        {
+          "time" : 815106290,
+          "value" : 68
+        },
+        {
+          "time" : 815106590,
+          "value" : 12
+        },
+        {
+          "time" : 815106890,
+          "value" : 19
+        },
+        {
+          "time" : 815107190,
+          "value" : 26
+        },
+        {
+          "time" : 815107490,
+          "value" : 33
+        },
+        {
+          "time" : 815107790,
+          "value" : 40
+        },
+        {
+          "time" : 815108090,
+          "value" : 47
+        },
+        {
+          "time" : 815108390,
+          "value" : 54
+        },
+        {
+          "time" : 815108690,
+          "value" : 61
+        },
+        {
+          "time" : 815108990,
+          "value" : 68
+        },
+        {
+          "time" : 815109290,
+          "value" : 12
+        },
+        {
+          "time" : 815109590,
+          "value" : 19
+        },
+        {
+          "time" : 815109890,
+          "value" : 26
+        },
+        {
+          "time" : 815110190,
+          "value" : 33
+        },
+        {
+          "time" : 815110490,
+          "value" : 40
+        },
+        {
+          "time" : 815110790,
+          "value" : 47
+        },
+        {
+          "time" : 815111090,
+          "value" : 54
+        },
+        {
+          "time" : 815111390,
+          "value" : 61
+        },
+        {
+          "time" : 815111690,
+          "value" : 68
+        },
+        {
+          "time" : 815111990,
+          "value" : 12
+        },
+        {
+          "time" : 815112290,
+          "value" : 19
+        },
+        {
+          "time" : 815112590,
+          "value" : 26
+        },
+        {
+          "time" : 815112890,
+          "value" : 33
+        },
+        {
+          "time" : 815113190,
+          "value" : 40
+        },
+        {
+          "time" : 815113490,
+          "value" : 47
+        },
+        {
+          "time" : 815113790,
+          "value" : 54
+        },
+        {
+          "time" : 815114090,
+          "value" : 61
+        },
+        {
+          "time" : 815114390,
+          "value" : 68
+        },
+        {
+          "time" : 815114690,
+          "value" : 12
+        },
+        {
+          "time" : 815114990,
+          "value" : 19
+        },
+        {
+          "time" : 815115290,
+          "value" : 26
+        },
+        {
+          "time" : 815115590,
+          "value" : 33
+        },
+        {
+          "time" : 815115890,
+          "value" : 40
+        },
+        {
+          "time" : 815116190,
+          "value" : 47
+        },
+        {
+          "time" : 815116490,
+          "value" : 54
+        },
+        {
+          "time" : 815116790,
+          "value" : 61
+        },
+        {
+          "time" : 815117090,
+          "value" : 68
+        },
+        {
+          "time" : 815117390,
+          "value" : 12
+        },
+        {
+          "time" : 815117690,
+          "value" : 19
+        },
+        {
+          "time" : 815117990,
+          "value" : 26
+        },
+        {
+          "time" : 815118290,
+          "value" : 33
+        },
+        {
+          "time" : 815118590,
+          "value" : 40
+        },
+        {
+          "time" : 815118890,
+          "value" : 47
+        },
+        {
+          "time" : 815119190,
+          "value" : 54
+        },
+        {
+          "time" : 815119490,
+          "value" : 61
+        },
+        {
+          "time" : 815119790,
+          "value" : 68
+        },
+        {
+          "time" : 815120090,
+          "value" : 12
+        },
+        {
+          "time" : 815120390,
+          "value" : 19
+        },
+        {
+          "time" : 815120690,
+          "value" : 26
+        },
+        {
+          "time" : 815120990,
+          "value" : 33
+        },
+        {
+          "time" : 815121290,
+          "value" : 40
+        },
+        {
+          "time" : 815121590,
+          "value" : 47
+        },
+        {
+          "time" : 815121890,
+          "value" : 54
+        },
+        {
+          "time" : 815122190,
+          "value" : 61
+        },
+        {
+          "time" : 815122490,
+          "value" : 68
+        },
+        {
+          "time" : 815122790,
+          "value" : 12
+        }
+      ]
+    },
+    "sleepProfile" : {
+      "weightKg" : 60
+    },
+    "syncedAt" : 815155800
+  },
+  "twoAfterNight" : {
+    "insights" : {
+      "activities" : [
+
+      ],
+      "activityListCut" : false,
+      "days" : [
+        {
+          "averageHR" : 54,
+          "day" : {
+            "day" : 30,
+            "month" : 10,
+            "year" : 2026
+          },
+          "stress" : 37
+        },
+        {
+          "averageHR" : 54,
+          "calories" : 12,
+          "day" : {
+            "day" : 31,
+            "month" : 10,
+            "year" : 2026
+          },
+          "exerciseMinutes" : 5,
+          "hrv" : 44,
+          "restingHR" : 53,
+          "sleepMinutes" : 430,
+          "sleepScore" : 76,
+          "steps" : 300,
+          "stress" : 40
+        }
+      ],
+      "fetchedAt" : 815122800,
+      "healthChecks" : [
+        {
+          "heartRate" : 60,
+          "respiratoryRate" : 15,
+          "spo2" : 98,
+          "stress" : 20,
+          "time" : 815122200
+        }
+      ],
+      "nights" : [
+        {
+          "averageHR" : 54,
+          "awakeMinutes" : 20,
+          "bedtime" : 815094000,
+          "day" : {
+            "day" : 31,
+            "month" : 10,
+            "year" : 2026
+          },
+          "deepMinutes" : 120,
+          "lightMinutes" : 120,
+          "nightScore" : 76,
+          "remMinutes" : 190,
+          "score" : 76,
+          "stages" : [
+            {
+              "end" : 815101200,
+              "stage" : "light",
+              "start" : 815094000
+            },
+            {
+              "end" : 815108400,
+              "stage" : "deep",
+              "start" : 815101200
+            },
+            {
+              "end" : 815109600,
+              "stage" : "awake",
+              "start" : 815108400
+            },
+            {
+              "end" : 815121000,
+              "stage" : "rem",
+              "start" : 815109600
+            }
+          ],
+          "stress" : {
+            "average" : 40,
+            "deep" : 39,
+            "levels" : [
+              18,
+              40,
+              28,
+              0
+            ],
+            "light" : 42,
+            "peak" : 68,
+            "peakTime" : 815095490,
+            "readings" : [
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33,
+              40,
+              47,
+              54,
+              61,
+              68,
+              12,
+              19,
+              26,
+              33
+            ],
+            "rem" : 39,
+            "start" : 815094290
+          },
+          "totalMinutes" : 430,
+          "wakeTime" : 815121000
+        }
+      ],
+      "stressSamples" : [
+        {
+          "time" : 815093090,
+          "value" : 12
+        },
+        {
+          "time" : 815093390,
+          "value" : 19
+        },
+        {
+          "time" : 815093690,
+          "value" : 26
+        },
+        {
+          "time" : 815093990,
+          "value" : 33
+        },
+        {
+          "time" : 815094290,
+          "value" : 40
+        },
+        {
+          "time" : 815094590,
+          "value" : 47
+        },
+        {
+          "time" : 815094890,
+          "value" : 54
+        },
+        {
+          "time" : 815095190,
+          "value" : 61
+        },
+        {
+          "time" : 815095490,
+          "value" : 68
+        },
+        {
+          "time" : 815095790,
+          "value" : 12
+        },
+        {
+          "time" : 815096090,
+          "value" : 19
+        },
+        {
+          "time" : 815096390,
+          "value" : 26
+        },
+        {
+          "time" : 815096690,
+          "value" : 33
+        },
+        {
+          "time" : 815096990,
+          "value" : 40
+        },
+        {
+          "time" : 815097290,
+          "value" : 47
+        },
+        {
+          "time" : 815097590,
+          "value" : 54
+        },
+        {
+          "time" : 815097890,
+          "value" : 61
+        },
+        {
+          "time" : 815098190,
+          "value" : 68
+        },
+        {
+          "time" : 815098490,
+          "value" : 12
+        },
+        {
+          "time" : 815098790,
+          "value" : 19
+        },
+        {
+          "time" : 815099090,
+          "value" : 26
+        },
+        {
+          "time" : 815099390,
+          "value" : 33
+        },
+        {
+          "time" : 815099690,
+          "value" : 40
+        },
+        {
+          "time" : 815099990,
+          "value" : 47
+        },
+        {
+          "time" : 815100290,
+          "value" : 54
+        },
+        {
+          "time" : 815100590,
+          "value" : 61
+        },
+        {
+          "time" : 815100890,
+          "value" : 68
+        },
+        {
+          "time" : 815101190,
+          "value" : 12
+        },
+        {
+          "time" : 815101490,
+          "value" : 19
+        },
+        {
+          "time" : 815101790,
+          "value" : 26
+        },
+        {
+          "time" : 815102090,
+          "value" : 33
+        },
+        {
+          "time" : 815102390,
+          "value" : 40
+        },
+        {
+          "time" : 815102690,
+          "value" : 47
+        },
+        {
+          "time" : 815102990,
+          "value" : 54
+        },
+        {
+          "time" : 815103290,
+          "value" : 61
+        },
+        {
+          "time" : 815103590,
+          "value" : 68
+        },
+        {
+          "time" : 815103890,
+          "value" : 12
+        },
+        {
+          "time" : 815104190,
+          "value" : 19
+        },
+        {
+          "time" : 815104490,
+          "value" : 26
+        },
+        {
+          "time" : 815104790,
+          "value" : 33
+        },
+        {
+          "time" : 815105090,
+          "value" : 40
+        },
+        {
+          "time" : 815105390,
+          "value" : 47
+        },
+        {
+          "time" : 815105690,
+          "value" : 54
+        },
+        {
+          "time" : 815105990,
+          "value" : 61
+        },
+        {
+          "time" : 815106290,
+          "value" : 68
+        },
+        {
+          "time" : 815106590,
+          "value" : 12
+        },
+        {
+          "time" : 815106890,
+          "value" : 19
+        },
+        {
+          "time" : 815107190,
+          "value" : 26
+        },
+        {
+          "time" : 815107490,
+          "value" : 33
+        },
+        {
+          "time" : 815107790,
+          "value" : 40
+        },
+        {
+          "time" : 815108090,
+          "value" : 47
+        },
+        {
+          "time" : 815108390,
+          "value" : 54
+        },
+        {
+          "time" : 815108690,
+          "value" : 61
+        },
+        {
+          "time" : 815108990,
+          "value" : 68
+        },
+        {
+          "time" : 815109290,
+          "value" : 12
+        },
+        {
+          "time" : 815109590,
+          "value" : 19
+        },
+        {
+          "time" : 815109890,
+          "value" : 26
+        },
+        {
+          "time" : 815110190,
+          "value" : 33
+        },
+        {
+          "time" : 815110490,
+          "value" : 40
+        },
+        {
+          "time" : 815110790,
+          "value" : 47
+        },
+        {
+          "time" : 815111090,
+          "value" : 54
+        },
+        {
+          "time" : 815111390,
+          "value" : 61
+        },
+        {
+          "time" : 815111690,
+          "value" : 68
+        },
+        {
+          "time" : 815111990,
+          "value" : 12
+        },
+        {
+          "time" : 815112290,
+          "value" : 19
+        },
+        {
+          "time" : 815112590,
+          "value" : 26
+        },
+        {
+          "time" : 815112890,
+          "value" : 33
+        },
+        {
+          "time" : 815113190,
+          "value" : 40
+        },
+        {
+          "time" : 815113490,
+          "value" : 47
+        },
+        {
+          "time" : 815113790,
+          "value" : 54
+        },
+        {
+          "time" : 815114090,
+          "value" : 61
+        },
+        {
+          "time" : 815114390,
+          "value" : 68
+        },
+        {
+          "time" : 815114690,
+          "value" : 12
+        },
+        {
+          "time" : 815114990,
+          "value" : 19
+        },
+        {
+          "time" : 815115290,
+          "value" : 26
+        },
+        {
+          "time" : 815115590,
+          "value" : 33
+        },
+        {
+          "time" : 815115890,
+          "value" : 40
+        },
+        {
+          "time" : 815116190,
+          "value" : 47
+        },
+        {
+          "time" : 815116490,
+          "value" : 54
+        },
+        {
+          "time" : 815116790,
+          "value" : 61
+        },
+        {
+          "time" : 815117090,
+          "value" : 68
+        },
+        {
+          "time" : 815117390,
+          "value" : 12
+        },
+        {
+          "time" : 815117690,
+          "value" : 19
+        },
+        {
+          "time" : 815117990,
+          "value" : 26
+        },
+        {
+          "time" : 815118290,
+          "value" : 33
+        },
+        {
+          "time" : 815118590,
+          "value" : 40
+        },
+        {
+          "time" : 815118890,
+          "value" : 47
+        },
+        {
+          "time" : 815119190,
+          "value" : 54
+        },
+        {
+          "time" : 815119490,
+          "value" : 61
+        },
+        {
+          "time" : 815119790,
+          "value" : 68
+        },
+        {
+          "time" : 815120090,
+          "value" : 12
+        },
+        {
+          "time" : 815120390,
+          "value" : 19
+        },
+        {
+          "time" : 815120690,
+          "value" : 26
+        },
+        {
+          "time" : 815120990,
+          "value" : 33
+        },
+        {
+          "time" : 815121290,
+          "value" : 40
+        },
+        {
+          "time" : 815121590,
+          "value" : 47
+        },
+        {
+          "time" : 815121890,
+          "value" : 54
+        },
+        {
+          "time" : 815122190,
+          "value" : 61
+        },
+        {
+          "time" : 815122490,
+          "value" : 68
+        },
+        {
+          "time" : 815122790,
+          "value" : 12
+        }
+      ]
+    },
+    "sleepProfile" : {
+      "weightKg" : 60
+    },
+    "syncedAt" : 815122800
+  },
+  "twoItems" : [
+    {
+      "body" : "{\"averageHR\":54,\"day\":{\"day\":30,\"month\":10,\"year\":2026},\"stress\":37}",
+      "collection" : "health.day",
+      "id" : "2026-10-30"
+    },
+    {
+      "body" : "{\"averageHR\":54,\"calories\":12,\"day\":{\"day\":31,\"month\":10,\"year\":2026},\"exerciseMinutes\":5,\"hrv\":44,\"restingHR\":53,\"sleepMinutes\":430,\"sleepScore\":83,\"steps\":300,\"stress\":40}",
+      "collection" : "health.day",
+      "id" : "2026-10-31"
+    },
+    {
+      "body" : "{\"averageHR\":54,\"awakeMinutes\":20,\"bedtime\":815094000,\"day\":{\"day\":31,\"month\":10,\"year\":2026},\"deepMinutes\":120,\"lightMinutes\":120,\"napMinutes\":140,\"naps\":[{\"asleepMinutes\":40,\"end\":815136000,\"points\":5,\"stages\":[{\"end\":815136000,\"stage\":\"light\",\"start\":815133600}],\"start\":815133600},{\"asleepMinutes\":100,\"end\":815154600,\"points\":2,\"stages\":[{\"end\":815151600,\"stage\":\"light\",\"start\":815148600},{\"end\":815154600,\"stage\":\"rem\",\"start\":815151600}],\"start\":815148600}],\"nightScore\":76,\"remMinutes\":190,\"score\":83,\"stages\":[{\"end\":815101200,\"stage\":\"light\",\"start\":815094000},{\"end\":815108400,\"stage\":\"deep\",\"start\":815101200},{\"end\":815109600,\"stage\":\"awake\",\"start\":815108400},{\"end\":815121000,\"stage\":\"rem\",\"start\":815109600}],\"stress\":{\"average\":40,\"deep\":39,\"levels\":[18,40,28,0],\"light\":42,\"peak\":68,\"peakTime\":815095490,\"readings\":[40,47,54,61,68,12,19,26,33,40,47,54,61,68,12,19,26,33,40,47,54,61,68,12,19,26,33,40,47,54,61,68,12,19,26,33,40,47,54,61,68,12,19,26,33,40,47,54,61,68,12,19,26,33,40,47,54,61,68,12,19,26,33,40,47,54,61,68,12,19,26,33,40,47,54,61,68,12,19,26,33,40,47,54,61,68,12,19,26,33],\"rem\":39,\"start\":815094290},\"totalMinutes\":430,\"wakeTime\":815121000}",
+      "collection" : "health.night",
+      "id" : "2026-10-31"
+    }
+  ]
+}

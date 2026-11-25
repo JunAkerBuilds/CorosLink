@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+desktop/main/apiRoutes.gen.ts
+*.tsbuildinfo
+.DS_Store
+docs/design/
+# yt-dlp and ffmpeg, put here by npm run binaries:prepare (pinned in scripts/binaries.lock.json)
+/bin/*
+!/bin/README.md

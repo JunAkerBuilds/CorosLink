@@ -1,0 +1,483 @@
+import type {
+  CorosWatchfaceDesignState,
+  CorosWatchfaceExerciseSeparatorStyle
+} from "../types";
+import {
+  loadStudioImage,
+  resizeAndTintSprite,
+  type WatchfaceAmPmStyle,
+  type WatchfaceStaticSeparators
+} from "./watchfaceStudio";
+import { drawBackgroundElements } from "./watchfaceBackgroundElements";
+import {
+  resolveWatchfaceLayerEffects
+} from "./watchfaceEditorEffects";
+import {
+  renderWatchfaceCanvasDecorationsWithOpacity,
+  resolveWatchfaceLayerStrokes
+} from "./watchfaceEditorStrokes";
+import { watchfaceBitmapCache } from "./watchfaceBitmapCache";
+import {
+  normalizeWatchfaceCrop,
+  normalizeWatchfaceOpacity,
+  normalizeWatchfaceSkew
+} from "./watchfaceSpriteTransform";
+import { resolveWatchfaceArtworkLayerOrder } from "./watchfaceArtworkLayers";
+import { resolveWatchfaceLayerOpacity } from "./watchfaceLayerOpacity";
+import {
+  copyWatchfaceCanvasFont,
+  fillWatchfaceText,
+  setWatchfaceCanvasFont
+} from "./watchfaceFontSnapshots";
+
+export const CREATOR_CANVAS_SIZE = 800;
+export const MAX_DESIGN_SPRITES = 12;
+
+export const DEFAULT_STATIC_SEPARATORS: WatchfaceStaticSeparators = {
+  colon: { enabled: false, x: 400, y: 320, size: 64, color: "#ffffff" },
+  dateSlash: { enabled: false, x: 400, y: 240, size: 48, color: "#ffffff" }
+};
+
+export const DEFAULT_AMPM_STYLE: WatchfaceAmPmStyle = {
+  enabled: false,
+  x: 480,
+  y: 360,
+  scale: 1
+};
+
+async function drawExerciseSeparator(
+  context: CanvasRenderingContext2D,
+  design: CorosWatchfaceDesignState,
+  separator: CorosWatchfaceExerciseSeparatorStyle,
+  canvasSize: number,
+  coordinateScale: number
+): Promise<void> {
+  if (
+    !separator.enabled ||
+    design.metricChanges?.exercise === false ||
+    design.layerVisibility?.exercise === false
+  ) {
+    return;
+  }
+  const offset = design.layoutOffsets?.exercise ?? { dx: 0, dy: 0 };
+  const centerX = (separator.x + offset.dx) * coordinateScale;
+  const centerY = (separator.y + offset.dy) * coordinateScale;
+  const height = Math.max(1, separator.size * separator.scale * coordinateScale);
+  const layer = document.createElement("canvas");
+  layer.width = canvasSize;
+  layer.height = canvasSize;
+  const layerContext = layer.getContext("2d", { colorSpace: "display-p3" });
+  if (!layerContext) return;
+  layerContext.imageSmoothingEnabled = true;
+  layerContext.imageSmoothingQuality = "high";
+
+  if (separator.artwork) {
+    const image = await watchfaceBitmapCache.decode(
+      `exercise-separator:${separator.artwork.dataUrl.length}:${separator.artwork.dataUrl.slice(-32)}`,
+      separator.artwork.dataUrl
+    ) ?? await loadStudioImage(separator.artwork.dataUrl).catch(() => undefined);
+    if (!image) return;
+    const sourceWidth = "naturalWidth" in image ? image.naturalWidth : image.width;
+    const sourceHeight = "naturalHeight" in image ? image.naturalHeight : image.height;
+    const width = height * (sourceWidth / Math.max(1, sourceHeight));
+    layerContext.drawImage(
+      image,
+      centerX - width / 2,
+      centerY - height / 2,
+      width,
+      height
+    );
+    layerContext.globalCompositeOperation = "source-in";
+    layerContext.fillStyle = separator.color;
+    layerContext.fillRect(0, 0, canvasSize, canvasSize);
+  } else {
+    const separatorFont = design.metricStyles?.exercise?.fontFamily || design.fontFamily;
+    const family = separatorFont
+      ? `"${separatorFont.replace(/["\\]/g, "")}"`
+      : "system-ui, sans-serif";
+    layerContext.textAlign = "center";
+    layerContext.textBaseline = "middle";
+    const fontWeight = separator.fontWeight ?? 700;
+    const fontStyle = separator.fontStyle ?? "normal";
+    setWatchfaceCanvasFont(
+      layerContext,
+      { family: separatorFont, size: Math.round(height), weight: fontWeight, style: fontStyle },
+      `${fontStyle} ${fontWeight} ${Math.round(height)}px ${family}`
+    );
+    layerContext.fillStyle = separator.color;
+    fillWatchfaceText(layerContext, ":", centerX, centerY);
+  }
+
+  const effects = resolveWatchfaceLayerEffects(design, "exercise");
+  const strokes = resolveWatchfaceLayerStrokes(design, "exercise");
+  const opacity = resolveWatchfaceLayerOpacity(design, "exercise");
+  if (effects.length > 0 || strokes.length > 0) {
+    context.drawImage(
+      renderWatchfaceCanvasDecorationsWithOpacity(
+        layer,
+        strokes,
+        effects,
+        opacity
+      ).canvas,
+      0,
+      0
+    );
+  } else {
+    context.save();
+    context.globalAlpha = opacity;
+    context.drawImage(layer, 0, 0);
+    context.restore();
+  }
+}
+
+/** A blank design used when the editor opens without a saved project. */
+export function makeDefaultDesign(): CorosWatchfaceDesignState {
+  return {
+    version: 1,
+    backgroundColor: "#000000",
+    accentColor: "#51e0b5",
+    artwork: null,
+    artworkVisible: true,
+    zoom: 1,
+    fontFamily: "",
+    fontWeight: 400,
+    fontStyle: "normal",
+    letterSpacing: 0,
+    digitColor: "#ffffff",
+    tintLabels: false,
+    tintIcons: false,
+    previewComplication: "heartRate",
+    metricChanges: {},
+    metricStyles: {},
+    controlComplicationEnabled: {},
+    controlIconOffsets: {},
+    separateAutoTime: false,
+    timeStyles: {},
+    dateStyles: {},
+    staticSeparators: {
+      colon: { ...DEFAULT_STATIC_SEPARATORS.colon },
+      dateSlash: { ...DEFAULT_STATIC_SEPARATORS.dateSlash }
+    },
+    ampmIndicator: { ...DEFAULT_AMPM_STYLE },
+    weatherIndicator: undefined,
+    nativeData: {},
+    layoutOffsets: {},
+    linkedLayerGroups: [],
+    editorGroups: [],
+    editorGuides: [],
+    lockedLayerIds: [],
+    removedLayerIds: [],
+    effectStyles: [],
+    layerEffects: {},
+    layerStrokes: {},
+    layerVisibility: {},
+    layerOpacities: {},
+    layerColors: {},
+    configAssetOverrides: {},
+    designSprites: [],
+    artworkLayerOrder: []
+  };
+}
+
+async function drawDesignSprite(
+  context: CanvasRenderingContext2D,
+  design: CorosWatchfaceDesignState,
+  sprite: NonNullable<CorosWatchfaceDesignState["designSprites"]>[number],
+  canvasSize: number,
+  coordinateScale: number
+): Promise<void> {
+  if (sprite.visible === false) return;
+  const spriteDataUrl = sprite.tintColor
+    ? await resizeAndTintSprite(
+        sprite.dataUrl,
+        sprite.sourceWidth,
+        sprite.sourceHeight,
+        sprite.tintColor
+      ).catch(() => sprite.dataUrl)
+    : sprite.dataUrl;
+  const spriteImage = await watchfaceBitmapCache.decode(
+    `sprite:${sprite.id}:${sprite.tintColor ?? "none"}:${spriteDataUrl.length}:${spriteDataUrl.slice(-32)}`,
+    spriteDataUrl
+  ) ?? await loadStudioImage(spriteDataUrl).catch(() => undefined);
+  if (!spriteImage) return;
+  const sourceWidth = "naturalWidth" in spriteImage
+    ? spriteImage.naturalWidth
+    : spriteImage.width;
+  const sourceHeight = "naturalHeight" in spriteImage
+    ? spriteImage.naturalHeight
+    : spriteImage.height;
+  const width = sprite.width * sprite.scale * coordinateScale;
+  const height = sprite.height * sprite.scale * coordinateScale;
+  const crop = normalizeWatchfaceCrop(sprite.crop);
+  const layer = document.createElement("canvas");
+  layer.width = canvasSize;
+  layer.height = canvasSize;
+  const layerContext = layer.getContext("2d", { colorSpace: "display-p3" });
+  if (!layerContext) return;
+  layerContext.imageSmoothingEnabled = true;
+  layerContext.imageSmoothingQuality = "high";
+  layerContext.save();
+  layerContext.translate(sprite.x * coordinateScale, sprite.y * coordinateScale);
+  layerContext.rotate((sprite.rotation * Math.PI) / 180);
+  layerContext.transform(
+    1,
+    Math.tan((normalizeWatchfaceSkew(sprite.skewY) * Math.PI) / 180),
+    Math.tan((normalizeWatchfaceSkew(sprite.skewX) * Math.PI) / 180),
+    1,
+    0,
+    0
+  );
+  layerContext.scale(sprite.flipX ? -1 : 1, sprite.flipY ? -1 : 1);
+  layerContext.drawImage(
+    spriteImage,
+    crop.x * sourceWidth,
+    crop.y * sourceHeight,
+    crop.width * sourceWidth,
+    crop.height * sourceHeight,
+    -width / 2,
+    -height / 2,
+    width,
+    height
+  );
+  layerContext.restore();
+  const effects = resolveWatchfaceLayerEffects(design, `sprite:${sprite.id}`);
+  const strokes = resolveWatchfaceLayerStrokes(design, `sprite:${sprite.id}`);
+  const opacity = normalizeWatchfaceOpacity(sprite.opacity);
+  if (effects.length > 0 || strokes.length > 0) {
+    context.drawImage(
+      renderWatchfaceCanvasDecorationsWithOpacity(
+        layer,
+        strokes,
+        effects,
+        opacity
+      ).canvas,
+      0,
+      0
+    );
+  } else {
+    context.save();
+    context.globalAlpha = opacity;
+    context.drawImage(layer, 0, 0);
+    context.restore();
+  }
+}
+
+/**
+ * Whether the design still shows the template's own background exactly as it
+ * ships: its artwork is `templateBackgroundDataUrl`, nothing is drawn on it,
+ * and it is neither zoomed, faded, recolored behind nor decorated. Export then
+ * keeps the template's background files as they are instead of the 800 px
+ * render scaled back down, which on memory-in-pixel watches knocks the
+ * picture off the screen's four levels and gets it photo-treated a second
+ * time (thin, darkened divider lines on MONO).
+ */
+export function isTemplateBackgroundUntouched(
+  design: CorosWatchfaceDesignState,
+  templateBackgroundDataUrl: string | undefined
+): boolean {
+  if (!templateBackgroundDataUrl || design.artworkVisible === false) return false;
+  if (design.configAssetOverrides?.["config:background_icon"]?.replacement) return false;
+  if (design.artwork?.dataUrl !== templateBackgroundDataUrl || design.zoom !== 1) return false;
+  const fill = (design.backgroundColor ?? "#000000").toLowerCase();
+  if (fill !== "transparent" && fill !== "#000000" && fill !== "#000") return false;
+  if (resolveWatchfaceLayerOpacity(design, "background") !== 1) return false;
+  if (resolveWatchfaceLayerEffects(design, "background").length || resolveWatchfaceLayerStrokes(design, "background").length) return false;
+  if ((design.backgroundElements ?? []).some((element) => element.visible !== false)) return false;
+  if ((design.designSprites ?? []).some((sprite) => sprite.visible !== false)) return false;
+  if (design.exerciseSeparator?.enabled) return false;
+  return !design.staticSeparators.colon?.enabled && !design.staticSeparators.dateSlash?.enabled;
+}
+
+/**
+ * Paints the watch-face background for both preview and export: artwork,
+ * imported sprites, and static separators —
+ * and returns the 800×800 PNG data URL used as the archive background.
+ */
+export async function renderDesignBackground(
+  design: CorosWatchfaceDesignState,
+  previewWidth: number
+): Promise<string> {
+  const canvas = document.createElement("canvas");
+  canvas.width = CREATOR_CANVAS_SIZE;
+  canvas.height = CREATOR_CANVAS_SIZE;
+  // Wide-gamut canvas: an sRGB canvas clamps Display P3 artwork colors to the
+  // smaller sRGB gamut, visibly darkening saturated tones on P3 screens.
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+  if (!context) {
+    throw new Error("Background rendering is unavailable in this window.");
+  }
+  const size = CREATOR_CANVAS_SIZE;
+
+  if (design.backgroundColor !== "transparent") {
+    context.fillStyle = design.backgroundColor ?? "#000000";
+    context.fillRect(0, 0, size, size);
+  }
+
+  const backgroundOverride = design.configAssetOverrides?.["config:background_icon"];
+  const backgroundArtwork = design.artworkVisible === false
+    ? null
+    : backgroundOverride?.replacement ?? design.artwork;
+
+  if (backgroundArtwork) {
+    const image = await loadStudioImage(backgroundArtwork.dataUrl).catch(() => undefined);
+    if (image) {
+      const scale =
+        Math.max(size / image.naturalWidth, size / image.naturalHeight) * design.zoom;
+      const width = image.naturalWidth * scale;
+      const height = image.naturalHeight * scale;
+      const effects = resolveWatchfaceLayerEffects(design, "background");
+      const strokes = resolveWatchfaceLayerStrokes(design, "background");
+      const opacity = resolveWatchfaceLayerOpacity(design, "background");
+      if (effects.length === 0 && strokes.length === 0) {
+        context.save();
+        context.globalAlpha = opacity;
+        context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+        context.restore();
+      } else {
+        const layer = document.createElement("canvas");
+        layer.width = size;
+        layer.height = size;
+        const layerContext = layer.getContext("2d", { colorSpace: "display-p3" });
+        if (layerContext) {
+          layerContext.imageSmoothingEnabled = true;
+          layerContext.imageSmoothingQuality = "high";
+          layerContext.drawImage(
+            image,
+            (size - width) / 2,
+            (size - height) / 2,
+            width,
+            height
+          );
+          context.drawImage(
+            renderWatchfaceCanvasDecorationsWithOpacity(
+              layer,
+              strokes,
+              effects,
+              opacity
+            ).canvas,
+            0,
+            0
+          );
+        }
+      }
+    }
+  }
+
+  const separatorScale = size / (previewWidth || size);
+  const elementsById = new Map(
+    (design.backgroundElements ?? []).map((element) => [
+      `bgel:${element.id}`,
+      element
+    ])
+  );
+  const spritesById = new Map(
+    (design.designSprites ?? []).map((sprite) => [
+      `sprite:${sprite.id}`,
+      sprite
+    ])
+  );
+  for (const id of resolveWatchfaceArtworkLayerOrder(design)) {
+    const element = elementsById.get(id);
+    if (element) {
+      drawBackgroundElements(
+        context,
+        [element],
+        (layerId) => resolveWatchfaceLayerEffects(design, layerId),
+        (layerId) => resolveWatchfaceLayerStrokes(design, layerId)
+      );
+      continue;
+    }
+    const sprite = spritesById.get(id);
+    if (sprite) {
+      await drawDesignSprite(
+        context,
+        design,
+        sprite,
+        size,
+        separatorScale
+      );
+    }
+  }
+
+  if (design.exerciseSeparator) {
+    await drawExerciseSeparator(
+      context,
+      design,
+      design.exerciseSeparator,
+      size,
+      separatorScale
+    );
+  }
+
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  for (const [separatorId, text] of [
+    ["colon", ":"],
+    ["dateSlash", "/"]
+  ] as const) {
+    const separator = design.staticSeparators[separatorId];
+    if (!separator?.enabled) {
+      continue;
+    }
+    const separatorFont = separator.fontFamily ?? design.fontFamily;
+    const family = separatorFont
+      ? `"${separatorFont.replace(/["\\]/g, "")}"`
+      : "system-ui, sans-serif";
+    const fontSize = Math.round(separator.size * separatorScale);
+    // Separators are bold unless their layer picks another weight.
+    const fontWeight = separator.fontWeight ?? 700;
+    const fontStyle = separator.fontStyle ?? "normal";
+    setWatchfaceCanvasFont(
+      context,
+      { family: separatorFont, size: fontSize, weight: fontWeight, style: fontStyle },
+      `${fontStyle} ${fontWeight} ${fontSize}px ${family}`
+    );
+    context.fillStyle = separator.color;
+    const effects = resolveWatchfaceLayerEffects(
+      design,
+      separatorId === "colon" ? "staticColon" : "staticDateSlash"
+    );
+    const strokes = resolveWatchfaceLayerStrokes(
+      design,
+      separatorId === "colon" ? "staticColon" : "staticDateSlash"
+    );
+    const layerId = separatorId === "colon" ? "staticColon" : "staticDateSlash";
+    const opacity = resolveWatchfaceLayerOpacity(design, layerId);
+    if (effects.length === 0 && strokes.length === 0) {
+      context.save();
+      context.globalAlpha = opacity;
+      fillWatchfaceText(context, text, separator.x * separatorScale, separator.y * separatorScale);
+      context.restore();
+    } else {
+      const layer = document.createElement("canvas");
+      layer.width = size;
+      layer.height = size;
+      const layerContext = layer.getContext("2d", { colorSpace: "display-p3" });
+      if (!layerContext) continue;
+      layerContext.textAlign = "center";
+      layerContext.textBaseline = "middle";
+      copyWatchfaceCanvasFont(context, layerContext);
+      layerContext.fillStyle = separator.color;
+      fillWatchfaceText(
+        layerContext,
+        text,
+        separator.x * separatorScale,
+        separator.y * separatorScale
+      );
+      context.drawImage(
+        renderWatchfaceCanvasDecorationsWithOpacity(
+          layer,
+          strokes,
+          effects,
+          opacity
+        ).canvas,
+        0,
+        0
+      );
+    }
+  }
+  context.textAlign = "start";
+  context.textBaseline = "alphabetic";
+
+  return canvas.toDataURL("image/png");
+}

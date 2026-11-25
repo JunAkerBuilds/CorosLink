@@ -1,0 +1,19 @@
+/* A modal dialog for the desk-logging forms on Fuel and Body. */
+.dlg {
+  width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; overflow: auto;
+  border: 1px solid var(--tip-border); border-radius: 22px;
+  background: var(--tip-bg); box-shadow: var(--tip-shadow); color: var(--fg);
+}
+.dlg::backdrop { background: rgba(21, 21, 21, 0.55); backdrop-filter: blur(4px); }
+.dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px 0; }
+.dlg-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.dlg-x {
+  width: 36px; height: 36px; flex: none; border: 0; border-radius: 999px;
+  background: rgba(var(--fg-rgb), 0.07); color: var(--fg); font-size: 18px; line-height: 1;
+}
+.dlg-body { display: flex; flex-direction: column; gap: 14px; padding: 14px 18px 18px; }
+.dlg-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.dlg-label { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.dlg-label .field, .dlg-label .select { width: 100%; }
+.dlg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+.dlg-error { margin: 0; font-size: 13px; font-weight: 600; color: var(--h-rose-ink); }

@@ -1,0 +1,291 @@
+/* Training plans: the Plans index, Generate a plan and the plan editor. Colours come from the tokens in globals.css. */
+
+.pl-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.pl-crumb a, .pl-crumb button { padding: 0; border: 0; background: none; color: var(--link); font: inherit; font-weight: 600; text-decoration: none; }
+.pl-crumb a:hover, .pl-crumb button:hover { color: var(--link-hover); }
+.pl-h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+.pl-card { box-sizing: border-box; min-width: 0; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.pl-label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.pl-label > span > span, .pl-opt { font-weight: 500; }
+.pl-help { margin: 0; font-size: 13px; line-height: 19px; color: var(--muted); }
+.pl-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pl-warn { color: var(--h-amber-soft-ink); }
+.pl-bad { color: var(--h-rose-ink); }
+.pl-good { color: var(--h-mint-ink); }
+.pl-load { color: var(--h-pink-ink); }
+
+/* The colour of a training phase, for bars, ribbons and dots. */
+[data-phase] { --ph: rgba(var(--fg-rgb), 0.4); }
+[data-phase="base"] { --ph: var(--h-blue); }
+[data-phase="build"] { --ph: var(--h-coral); }
+[data-phase="peak"] { --ph: var(--h-pink-ink); }
+[data-phase="taper"] { --ph: var(--h-mint-ink); }
+[data-phase="recovery"] { --ph: var(--h-cyan); }
+
+@keyframes pl-grow { from { transform: scaleY(0); } }
+.pl-bars { display: flex; align-items: flex-end; gap: 4px; height: 56px; }
+.pl-bars > span {
+  flex: 1 1 0; min-width: 0; min-height: 2px; border-radius: 4px 4px 2px 2px; background: var(--ph);
+  transform-origin: center bottom; animation: pl-grow 0.9s cubic-bezier(0.3, 0.7, 0.2, 1) 0.35s both;
+}
+.pl-ribbon { display: flex; gap: 4px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.pl-ribbon > span { min-width: 0; padding-top: 5px; border-top: 3px solid var(--ph); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-dot { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 999px; background: var(--ph, rgba(var(--fg-rgb), 0.4)); }
+
+/* Plans index */
+.pl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 20px; }
+.pl-name { font-size: 17px; font-weight: 700; text-decoration: none; color: var(--fg); overflow-wrap: anywhere; }
+.pl-name:hover { color: var(--fg); text-decoration: underline; }
+.pl-badge { height: 22px; padding: 0 9px; border-radius: 999px; background: rgba(var(--fg-rgb), 0.08); color: var(--soft); font-size: 11px; font-weight: 700; line-height: 22px; }
+.pl-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; padding: 0;
+  border: 0; border-radius: 10px; background: transparent; color: var(--muted);
+}
+.pl-icon:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
+.pl-icon[aria-pressed="true"] { color: var(--h-rose-ink); }
+.pl-icon:disabled, .pl-card .btn:disabled, .pe-row .btn:disabled { opacity: 0.5; }
+.pl-figs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.pl-fig { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pl-fig > span:first-child { font-size: 12px; color: var(--muted); }
+.pl-fig > span:last-child { font-size: 20px; font-weight: 700; }
+.pl-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.pl-foot .btn { height: 32px; }
+.pl-round { width: 32px; padding: 0; }
+
+/* Dialogs: calendar install, delete, discard */
+.pl-scrim {
+  position: fixed; inset: 0; z-index: 80; background: var(--scrim); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.pl-dialog {
+  box-sizing: border-box; width: 100%; max-width: 460px; max-height: calc(100vh - 32px); overflow-y: auto; padding: 20px; border-radius: 22px;
+  display: flex; flex-direction: column; gap: 12px;
+  background: var(--tip-bg); border: 1px solid var(--tip-border); box-shadow: var(--tip-shadow);
+}
+.pl-dialog h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.pl-dialog p { margin: 0; font-size: 14px; line-height: 20px; color: var(--soft); }
+.pl-meter { height: 6px; border-radius: 999px; background: rgba(var(--fg-rgb), 0.1); overflow: hidden; }
+.pl-meter > span { display: block; height: 100%; border-radius: 999px; background: var(--h-mint); transition: width 0.2s; }
+
+/* Generate a plan */
+.pl-goal { height: 44px; padding: 0 12px; font-size: 16px; }
+.pl-diffs { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.pl-diff {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 14px;
+  border: 1px solid rgba(var(--fg-rgb), 0.1); background: transparent; color: var(--fg); font-size: 14px; font-weight: 700; text-align: left;
+}
+.pl-diff > span { font-size: 12px; font-weight: 500; color: var(--muted); }
+.pl-diff:hover { border-color: rgba(var(--fg-rgb), 0.28); }
+.pl-diff[aria-pressed="true"] { border-color: color-mix(in srgb, var(--h-mint-ink) 50%, transparent); background: rgba(83, 203, 161, 0.16); color: var(--h-mint-ink); }
+.pl-stepper { display: flex; align-items: center; gap: 6px; }
+.pl-stepper .btn { width: 36px; height: 40px; padding: 0; border-radius: 12px; font-size: 16px; font-weight: 700; }
+.pl-stepper .btn:disabled { opacity: 0.5; }
+.pl-stepper output { min-width: 44px; text-align: center; font-size: 18px; font-weight: 700; color: var(--fg); }
+.pl-snap > div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.pl-snap > div > span:first-child { color: var(--muted); }
+.pl-snap > div > span:last-child { font-weight: 600; text-align: right; }
+
+/* Plan editor */
+/* The plan's name reads as its title: a hint of a box on hover says it can be typed in, the box itself only while typing. */
+.pe-name { flex: 1 1 260px; max-width: 520px; min-width: 0; height: 44px; padding: 0 12px; margin-left: -12px; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; text-overflow: ellipsis; cursor: text; transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
+.pe-name.field:not(:focus) { border-color: transparent; background: transparent; box-shadow: none; }
+.pe-name.field:not(:focus):hover { background: rgba(var(--fg-rgb), 0.05); }
+.pe-name.field[aria-invalid="true"]:not(:focus) { border-color: color-mix(in srgb, var(--h-rose-ink) 60%, transparent); }
+.pe-pill { height: 26px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 26px; white-space: nowrap; }
+.pe-pill[data-tone="dirty"] { background: rgba(216, 155, 34, 0.12); color: var(--h-amber-soft-ink); }
+.pe-pill[data-tone="bad"] { background: rgba(255, 107, 129, 0.12); color: var(--h-rose-ink); }
+.pe-lib {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 46px; padding: 6px 0;
+  border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--fg); font: inherit; text-align: left; cursor: grab;
+}
+.pe-lib:hover { background: var(--hover); }
+.pe-lib small { display: block; font-size: 12px; color: var(--muted); }
+.pe-seg { display: flex; padding: 3px; border-radius: 12px; background: rgba(var(--fg-rgb), 0.08); }
+.pe-seg button { flex: 1 1 0; height: 32px; padding: 0 4px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; }
+.pe-seg button[aria-pressed="true"] { background: var(--glass-bg); box-shadow: var(--glass-shadow); color: var(--fg); }
+/* One phase per row: dot, kind, first – last week, remove. */
+.pe-phase { display: grid; grid-template-columns: 8px minmax(0, 1fr) 40px 10px 40px 30px; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.pe-phase .select { width: 100%; min-width: 0; height: 34px; }
+.pe-phase input { width: 40px; height: 34px; box-sizing: border-box; padding: 0 4px; text-align: center; }
+.pe-phase > span:not(.pl-dot) { font-size: 13px; color: var(--muted); text-align: center; }
+.pe-phase .pl-icon { width: 30px; height: 30px; }
+.pe-over { height: 84px; }
+.pe-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); }
+.pe-facts .pl-fig > span:last-child { font-size: 17px; }
+.pe-hold { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 14px; border: 1px dashed rgba(var(--fg-rgb), 0.24); border-radius: 12px; }
+.pe-hold[data-over="true"], .pe-day[data-over="true"] { outline: 2px solid var(--h-mint); outline-offset: 2px; border-radius: 10px; }
+.pe-grid { display: grid; grid-template-columns: 118px repeat(7, minmax(0, 1fr)) 32px; gap: 8px; }
+.pe-days { padding: 0 10px 0 14px; font-size: 12px; font-weight: 600; color: var(--muted); text-align: center; }
+/* A week, on the app's card surface (glass in the dark, white in the light). */
+.pe-row { border: 1px solid var(--line); border-radius: 18px; background: var(--card-bg); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+.pe-row > .pe-grid { align-items: stretch; padding: 10px 10px 10px 14px; }
+.pe-row[data-now="true"] { border-color: color-mix(in srgb, var(--h-mint-ink) 50%, transparent); }
+.pe-side { display: flex; flex-direction: column; gap: 4px; justify-content: center; min-width: 0; }
+.pe-side > span:nth-child(2) { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--soft); }
+.pe-side > span:nth-child(3) { font-size: 11px; color: var(--muted); }
+.pe-day {
+  position: relative; display: flex; flex-direction: column; justify-content: flex-start; gap: 4px; min-width: 0; min-height: 60px; box-sizing: border-box;
+  padding: 4px; border-radius: 12px; border: 1px solid rgba(var(--fg-rgb), 0.05); background: rgba(var(--fg-rgb), 0.03);
+}
+.pe-day:hover { border-color: rgba(var(--fg-rgb), 0.16); }
+.pe-day:has(> .pe-rest) { background: transparent; border-style: dashed; }
+.pe-rest { display: flex; align-items: center; justify-content: space-between; gap: 2px; flex: 1 1 auto; padding: 0 4px; font-size: 12px; color: var(--muted); }
+/* A session, on the app's glass (like its buttons): a soft highlight on top and a faint wash of its kind's colour. */
+.pe-entry {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid rgba(var(--fg-rgb), 0.08); border-radius: 12px;
+  background: radial-gradient(130% 110% at 0% 0%, color-mix(in srgb, var(--wt, transparent) 16%, transparent), transparent 62%), var(--glass-bg);
+  box-shadow: var(--glass-shadow); color: var(--fg); font: inherit; text-align: left; cursor: grab; min-width: 0;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.pe-entry:hover { transform: translateY(-1px); }
+.pe-entry:hover { border-color: rgba(var(--fg-rgb), 0.28); }
+.pe-entry[aria-pressed="true"] { border-color: var(--h-mint-ink); box-shadow: 0 0 0 1px var(--h-mint-ink); }
+.pe-entry[data-dragging="true"] { opacity: 0.45; }
+/* Each kind of session (lib/workoutType.ts) as the design draws a session: a neutral card, its kind as a coloured
+   dot and small label over the title. */
+.pe-type { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; line-height: 12px; color: var(--muted); }
+.pe-type::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 999px; background: var(--wt, var(--muted)); }
+.pe-entry > span:nth-child(2) { min-width: 0; font-size: 12px; font-weight: 600; line-height: 15px; overflow-wrap: anywhere; }
+.pe-entry > span:last-child { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-compact .pe-entry > span:last-child { display: none; }
+.pe-compact .pe-day { min-height: 36px; }
+.pe-mini {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 24px; padding: 0;
+  border: 0; border-radius: 6px; background: transparent; color: var(--muted);
+}
+.pe-mini:hover { background: var(--hover); color: var(--fg); }
+/* An empty day's controls stay out of the way until the day is pointed at or reached by keyboard. */
+.pe-day > .pe-mini { align-self: flex-start; opacity: 0; }
+.pe-day:hover > .pe-mini, .pe-day > .pe-mini:focus-visible, .pe-place .pe-day > .pe-mini { opacity: 1; }
+@media (hover: none) { .pe-day > .pe-mini { opacity: 1; } }
+.pe-here { height: 28px; padding: 0 8px; border: 1px dashed var(--h-mint-ink); border-radius: 8px; background: rgba(83, 203, 161, 0.1); color: var(--h-mint-ink); font-size: 12px; font-weight: 600; }
+.pe-dots { align-self: center; width: 32px; height: 32px; border: 0; padding: 0; border-radius: 8px; background: transparent; color: var(--muted); }
+.pe-dots:hover, .pe-dots[aria-expanded="true"] { background: var(--hover); color: var(--fg); }
+.pe-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 10px 10px 14px; }
+.pe-tools .btn, .pe-bar .btn { height: 32px; }
+.pe-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--h-mint-ink) 50%, transparent); background: rgba(83, 203, 161, 0.1); font-size: 13px;
+}
+.pe-check { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+
+@media (max-width: 760px) {
+  .pe-rail { max-width: none !important; }
+}
+
+/* Workout Library tabs (Workouts, Plans) */
+.lib-tab { display: inline-flex; align-items: center; text-decoration: none; }
+.lib-tab[aria-current="page"] { border-color: color-mix(in srgb, var(--h-mint-ink) 50%, transparent); background: rgba(83, 203, 161, 0.16); color: var(--h-mint-ink); }
+
+/* Workouts tab */
+.wl-grid { grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
+.wl-shape { display: flex; align-items: flex-end; height: 44px; padding: 8px 10px; border-radius: 12px; background: rgba(var(--fg-rgb), 0.04); }
+.pl-fig > span.wl-total, .pl-fig > span.wl-used { font-size: 15px; line-height: 20px; overflow-wrap: anywhere; }
+.wl-date .field { height: 32px; padding: 0 10px; font-size: 13px; font-weight: 500; }
+
+/* Generating: the plan's calendar fills in while Coach writes it (generate/PlanForming.tsx). */
+.pf { display: flex; flex-direction: column; gap: 16px; }
+.pf-cal {
+  position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; padding: 12px; border-radius: 14px;
+  background: rgba(var(--fg-rgb), 0.03); border: 1px solid var(--line); overflow: hidden;
+}
+.pf-head { text-align: center; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); padding-bottom: 2px; }
+.pf-cell { height: clamp(8px, calc(180px / var(--pf-rows)), 18px); border-radius: 5px; background: rgba(var(--fg-rgb), 0.04); }
+.pf-slot { position: relative; background: rgba(var(--fg-rgb), 0.07); }
+.pf-slot::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--pf-tone);
+  opacity: 0; transform: scale(0.4); animation: pf-fill 3.6s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; animation-delay: calc(var(--pf-i) * 2.4s);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--pf-tone) 55%, transparent);
+}
+@keyframes pf-fill {
+  0% { opacity: 0; transform: scale(0.4); }
+  12% { opacity: 1; transform: scale(1.12); }
+  20% { opacity: 0.9; transform: scale(1); }
+  70% { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.85); }
+}
+.pf-sweep {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--h-mint) 14%, transparent) 50%, transparent 100%);
+  background-size: 100% 40%; background-repeat: no-repeat; animation: pf-sweep 3.6s ease-in-out infinite;
+}
+@keyframes pf-sweep { from { background-position: 0 -60%; } to { background-position: 0 160%; } }
+.pf-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pf-steps li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); animation: pf-in 260ms ease-out both; }
+.pf-steps li[data-now] { color: var(--fg); font-weight: 600; }
+.pf-mark { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: var(--h-mint-ink); background: color-mix(in srgb, var(--h-mint) 16%, transparent); }
+.pf-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--h-mint); animation: pf-pulse 1.2s ease-in-out infinite; }
+@keyframes pf-pulse { 0%, 100% { transform: scale(0.7); box-shadow: 0 0 0 0 color-mix(in srgb, var(--h-mint) 60%, transparent); } 50% { transform: scale(1); box-shadow: 0 0 0 5px transparent; } }
+.pf-ell::after { content: "…"; display: inline-block; width: 1.2em; animation: pf-ell 1.2s steps(4) infinite; overflow: hidden; vertical-align: bottom; }
+@keyframes pf-ell { from { width: 0; } to { width: 1.2em; } }
+@keyframes pf-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.pf-time { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) {
+  .pf-slot::after { animation: none; opacity: 0.5; transform: none; }
+  .pf-sweep, .pf-dot, .pf-ell::after, .pf-steps li { animation: none; }
+}
+
+/* Plan editor overview (PlanOverviewChart), as the canvas board draws it: flat phase-coloured bars, weeks under. */
+[data-phase="none"] { --ph: var(--h-mint); }
+.pe-chart { display: flex; flex-direction: column; gap: 8px; }
+.pe-bars { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
+.pe-bars > button {
+  flex: 1 1 0; min-width: 0; padding: 0; border: 0; border-radius: 4px 4px 2px 2px; background: var(--ph); cursor: pointer;
+  transform-origin: center bottom; animation: pe-grow 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.pe-bars > button:hover { filter: brightness(1.12); }
+.pe-weeks { display: flex; gap: 4px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.pe-weeks > span { flex: 1 1 0; min-width: 0; text-align: center; white-space: nowrap; }
+.pe-weeks > span[data-peak] { color: var(--fg); font-weight: 700; }
+@keyframes pe-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .pe-bars > button { animation: none; } }
+.pe-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.pe-legend > span { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.pe-legend > span > i { width: 10px; height: 10px; border-radius: 3px; background: var(--wt); }
+
+/* The running mascot and a title with a line under it (generate/PlanForming.tsx, CoachDock). */
+.pc-run { flex: none; display: block; width: 52px; height: 52px; overflow: hidden; }
+.pc-run img { display: block; height: 100%; width: auto; max-width: none; animation: pc-strip 0.59s steps(16) infinite; }
+@keyframes pc-strip { to { transform: translateX(-100%); } }
+.pc-words { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pc-words > span { font-size: 13px; line-height: 18px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .pc-run img { animation: none; } }
+.pe-text { box-sizing: border-box; width: 100%; padding: 10px 12px; font-size: 14px; line-height: 20px; resize: vertical; min-height: 96px; field-sizing: content; max-height: 320px; }
+.pf-head-row { display: flex; align-items: center; gap: 12px; }
+.pf-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* A plan tile's chart opens the editor too. */
+.pl-open { display: flex; flex-direction: column; gap: 6px; margin: -6px; padding: 6px; border-radius: 12px; color: inherit; text-decoration: none; }
+.pl-open:hover { background: rgba(var(--fg-rgb), 0.04); }
+
+/* Week rows: the week's facts on a header line, the seven days across the full width under it. */
+.pe-week7 { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.pe-days.pe-week7 { padding: 0 11px; }
+.pe-row > .pe-week7 { padding: 0 10px 10px; align-items: stretch; }
+.pe-weekhead { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 6px 8px 14px; font-size: 12px; }
+.pe-weekhead > strong { font-size: 14px; }
+.pe-phase-tag { display: inline-flex; align-items: center; gap: 6px; color: var(--soft); font-weight: 600; }
+.pe-weekfacts { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; color: var(--muted); }
+.pe-weekbar { display: block; width: 72px; height: 6px; border-radius: 999px; background: rgba(var(--fg-rgb), 0.07); overflow: hidden; }
+.pe-weekbar > i { display: block; height: 100%; border-radius: inherit; background: var(--ph); }
+.pe-weekhead .pe-dots { width: 28px; height: 28px; }
+/* A day's workout fills its box. */
+.pe-day > .pe-entry { flex: 1 1 auto; justify-content: flex-start; gap: 3px; padding: 9px 10px; border-radius: 12px; }
+.pe-day:has(> .pe-entry) { padding: 0; border-color: transparent; background: transparent; }
+.pe-day:has(> .pe-entry) > .pe-entry + .pe-entry { margin-top: 4px; }
+/* The rest-day button floats in the corner, so a workout keeps the whole box. */
+.pe-day > .pe-mini { position: absolute; right: 4px; bottom: 4px; z-index: 1; }
+.pe-day { min-height: 72px; }
+.pe-compact .pe-day { min-height: 40px; }
+.pe-compact .pe-weekhead { padding-top: 6px; padding-bottom: 6px; }
+
+/* Empty library / plans: one centred card that takes the rest of the page. */
+.pl-card.pl-empty {
+  flex: 1 1 auto;
+  min-height: max(320px, 58vh);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}

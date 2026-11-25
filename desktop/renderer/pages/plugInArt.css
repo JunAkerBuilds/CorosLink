@@ -1,0 +1,86 @@
+/* PlugInArt: one 4.2 s loop. Plug slides in (0–30%), connected (30–82%), lets go (82–100%). */
+.pia { display: block; overflow: hidden; color: var(--muted); --pia-t: 4.2s; }
+.pia * { transform-box: view-box; }
+
+.pia-case { fill: rgba(var(--fg-rgb), 0.06); stroke: currentColor; stroke-opacity: 0.55; stroke-width: 2; }
+.pia-port { fill: currentColor; opacity: 0.55; }
+.pia-screen { fill: rgba(var(--fg-rgb), 0.05); animation: pia-screen var(--pia-t) ease-in-out infinite; }
+.pia-ring-track { fill: none; stroke: rgba(var(--fg-rgb), 0.08); stroke-width: 2.5; }
+.pia-ring {
+  fill: none; stroke: var(--h-mint); stroke-width: 2.5; stroke-linecap: round;
+  stroke-dasharray: 100; stroke-dashoffset: 100;
+  animation: pia-ring var(--pia-t) cubic-bezier(.45, 0, .25, 1) infinite;
+}
+.pia-bolt {
+  fill: currentColor; stroke: none;
+  animation: pia-bolt var(--pia-t) ease-in-out infinite;
+}
+.pia-halo { opacity: 0; animation: pia-halo var(--pia-t) ease-in-out infinite; }
+
+.pia-plug { animation: pia-plug var(--pia-t) infinite; }
+.pia-cable { fill: none; stroke: currentColor; stroke-opacity: 0.45; stroke-width: 4; stroke-linecap: round; }
+.pia-data {
+  fill: none; stroke: var(--h-mint); stroke-width: 2; stroke-linecap: round;
+  stroke-dasharray: 1.5 9; opacity: 0;
+  animation: pia-flow 0.9s linear infinite, pia-data var(--pia-t) ease-in-out infinite;
+}
+.pia-tip { fill: currentColor; opacity: 0.7; }
+.pia-body { fill: var(--page, #1a1f1e); stroke: currentColor; stroke-opacity: 0.6; stroke-width: 2; }
+.pia-grip { fill: currentColor; opacity: 0.3; }
+
+.pia-spark { fill: none; stroke: var(--h-mint); stroke-width: 2; stroke-linecap: round; opacity: 0; transform-origin: 100px 60px; animation: pia-spark var(--pia-t) ease-out infinite; }
+
+@keyframes pia-plug {
+  0%       { transform: translateX(64px); opacity: 0; animation-timing-function: ease-out; }
+  8%       { transform: translateX(52px); opacity: 1; animation-timing-function: cubic-bezier(.3, 0, .2, 1); }
+  27%      { transform: translateX(-1.5px); animation-timing-function: ease-out; }
+  30%, 82% { transform: translateX(0); opacity: 1; animation-timing-function: cubic-bezier(.5, 0, .7, .4); }
+  88%      { transform: translateX(10px); opacity: 1; animation-timing-function: ease-in; }
+  100%     { transform: translateX(64px); opacity: 0; }
+}
+@keyframes pia-spark {
+  0%, 27%  { opacity: 0; transform: scale(.6); }
+  30%      { opacity: 1; transform: scale(1); }
+  40%, 100% { opacity: 0; transform: scale(1.35); }
+}
+@keyframes pia-screen {
+  0%, 29%, 90%, 100% { fill: rgba(var(--fg-rgb), 0.05); }
+  36%, 82% { fill: rgba(var(--fg-rgb), 0.11); }
+}
+@keyframes pia-halo {
+  0%, 29%, 92%, 100% { opacity: 0; }
+  38%, 80% { opacity: 1; }
+}
+@keyframes pia-bolt {
+  0%, 29%, 88%, 100% { fill: currentColor; opacity: 0.55; }
+  36%, 82% { fill: var(--h-mint); opacity: 1; }
+}
+@keyframes pia-ring {
+  0%, 30% { stroke-dashoffset: 100; opacity: 0; }
+  33%     { stroke-dashoffset: 100; opacity: 1; }
+  76%     { stroke-dashoffset: 0; opacity: 1; }
+  84%     { stroke-dashoffset: 0; opacity: 0; }
+  100%    { stroke-dashoffset: 100; opacity: 0; }
+}
+@keyframes pia-data {
+  0%, 32%, 84%, 100% { opacity: 0; }
+  38%, 78% { opacity: 1; }
+}
+@keyframes pia-flow { to { stroke-dashoffset: 10.5; } }
+
+/* Watch is there but not a drive yet: plug stays in, ring breathes. */
+.pia[data-held] .pia-plug, .pia[data-held] .pia-spark, .pia[data-held] .pia-ring { animation: none; }
+.pia[data-held] .pia-plug { transform: none; opacity: 1; }
+.pia[data-held] .pia-ring { stroke-dashoffset: 75; animation: pia-spin 1.4s linear infinite; transform-origin: 70px 60px; }
+.pia[data-held] .pia-halo { animation: pia-breathe 2.4s ease-in-out infinite; }
+.pia[data-held] .pia-data, .pia[data-held] .pia-screen, .pia[data-held] .pia-bolt { animation: none; opacity: 0; }
+.pia[data-held] .pia-bolt { opacity: 0.6; }
+@keyframes pia-spin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
+@keyframes pia-breathe { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.8; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pia *, .pia[data-held] * { animation: none !important; }
+  .pia .pia-plug { transform: none; opacity: 1; }
+  .pia .pia-halo { opacity: 0.5; }
+  .pia .pia-ring { stroke-dashoffset: 100; }
+}

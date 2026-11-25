@@ -1,0 +1,1064 @@
+{
+  "about": "Shared test vectors for docs/sync-contract.md. iOS (CorosKit/Tests/CorosKitTests/SyncBodiesTests.swift) and Android build each body from the listed input and must get exactly `body`; both decode every `watchChanges` entry and encode it back to the same JSON. Times are seconds since 2001-01-01T00:00:00Z. Extend this file rather than keeping platform copies.",
+  "canonical": {
+    "about": "Canonical JSON: keys sorted by UTF-16 code unit, no whitespace, JSON.stringify string escapes, numbers as ECMAScript Number-to-string (no trailing .0, shortest round-trip digits). sha256 is of the UTF-8 text, lowercase hex.",
+    "vectors": [
+      {
+        "value": {
+          "b": 1.0,
+          "a": [
+            true,
+            null,
+            "x"
+          ]
+        },
+        "canonical": "{\"a\":[true,null,\"x\"],\"b\":1}",
+        "sha256": "54a65415ad370228851a1da4b31b6fd42dc58b19a50d35cae759325f7388ce64"
+      },
+      {
+        "value": {
+          "n": [
+            1.0,
+            0.1,
+            308.31,
+            785312345.678901,
+            -0.5,
+            1e+21,
+            1e-06,
+            1e-07,
+            100
+          ]
+        },
+        "canonical": "{\"n\":[1,0.1,308.31,785312345.678901,-0.5,1e+21,0.000001,1e-7,100]}",
+        "sha256": "f938a249581df49cc954d9363e7115e2546e30637f31e40432d485b71260d628"
+      },
+      {
+        "value": {
+          "s": "a\"b\\c/\né跑",
+          "Z": 1,
+          "a": 2,
+          "_": 3
+        },
+        "canonical": "{\"Z\":1,\"_\":3,\"a\":2,\"s\":\"a\\\"b\\\\c/\\né跑\"}",
+        "sha256": "ae2f78d3f308d875e9acfb338f1779fa14c883948dca39d0322a24355da11c66"
+      },
+      {
+        "value": {
+          "id": "9F1C2D3E-4A5B-4C6D-8E7F-0A1B2C3D4E5F",
+          "day": {
+            "year": 2026,
+            "month": 11,
+            "day": 20
+          }
+        },
+        "canonical": "{\"day\":{\"day\":20,\"month\":11,\"year\":2026},\"id\":\"9F1C2D3E-4A5B-4C6D-8E7F-0A1B2C3D4E5F\"}",
+        "sha256": "6c533468ad7d9ae590c979d632eaed7af8b23ecd7ae7ebcb808a593af37bd441"
+      }
+    ]
+  },
+  "activityDetail": {
+    "about": "A run (cadence is doubled from FIT's one-foot count; other sports are not), threshold heart rate 160, no COROS lap table so the FIT lap is used. Zone bounds are 81/90/94/100 % of threshold; a sample counts the time since the one before, at most 10 s.",
+    "input": {
+      "sport": "run",
+      "thresholdHr": 160,
+      "samples": [
+        {
+          "elapsed": 0,
+          "distance": 0,
+          "latitude": 45.5017,
+          "longitude": -73.5673,
+          "altitude": 88.0,
+          "heartRate": 120,
+          "speed": 3.0,
+          "cadence": 85
+        },
+        {
+          "elapsed": 5,
+          "distance": 15,
+          "latitude": 45.50181,
+          "longitude": -73.56719,
+          "altitude": 88.2,
+          "heartRate": 150,
+          "speed": 3.1,
+          "cadence": 86
+        },
+        {
+          "elapsed": 10,
+          "distance": 30.5,
+          "latitude": 45.50192,
+          "longitude": -73.56708,
+          "altitude": 88.4,
+          "heartRate": 155,
+          "speed": 3.1,
+          "cadence": 86
+        },
+        {
+          "elapsed": 15,
+          "distance": 46,
+          "latitude": 45.50203,
+          "longitude": -73.56697,
+          "altitude": 88.3,
+          "heartRate": 162,
+          "speed": 3.2,
+          "cadence": 87
+        },
+        {
+          "elapsed": 20,
+          "distance": 62,
+          "latitude": 45.50214,
+          "longitude": -73.56686,
+          "altitude": 88.1,
+          "heartRate": 170,
+          "speed": 3.2,
+          "cadence": 88
+        }
+      ],
+      "laps": [
+        {
+          "start": 0,
+          "seconds": 20.31,
+          "meters": 62,
+          "averageHR": 151,
+          "maxHR": 170,
+          "averageCadence": 86.5,
+          "ascent": 0.4
+        }
+      ]
+    },
+    "body": {
+      "laps": [
+        {
+          "n": 1,
+          "distanceM": 62,
+          "durationS": 20.31,
+          "avgHr": 151,
+          "maxHr": 170,
+          "cadence": 173,
+          "elevationM": 0.4
+        }
+      ],
+      "streams": {
+        "axis": "distance",
+        "x": [
+          0,
+          15,
+          30.5,
+          46,
+          62
+        ],
+        "speedMps": [
+          3,
+          3.1,
+          3.1,
+          3.2,
+          3.2
+        ],
+        "hr": [
+          120,
+          150,
+          155,
+          162,
+          170
+        ],
+        "elevationM": [
+          88,
+          88.2,
+          88.4,
+          88.3,
+          88.1
+        ],
+        "cadence": [
+          170,
+          172,
+          172,
+          174,
+          176
+        ]
+      },
+      "route": [
+        [
+          45.5017,
+          -73.5673
+        ],
+        [
+          45.50181,
+          -73.56719
+        ],
+        [
+          45.50192,
+          -73.56708
+        ],
+        [
+          45.50203,
+          -73.56697
+        ],
+        [
+          45.50214,
+          -73.56686
+        ]
+      ],
+      "zones": [
+        {
+          "zone": 1,
+          "fromBpm": null,
+          "toBpm": 129,
+          "seconds": 0
+        },
+        {
+          "zone": 2,
+          "fromBpm": 130,
+          "toBpm": 143,
+          "seconds": 0
+        },
+        {
+          "zone": 3,
+          "fromBpm": 144,
+          "toBpm": 149,
+          "seconds": 5
+        },
+        {
+          "zone": 4,
+          "fromBpm": 150,
+          "toBpm": 159,
+          "seconds": 5
+        },
+        {
+          "zone": 5,
+          "fromBpm": 160,
+          "toBpm": null,
+          "seconds": 10
+        }
+      ]
+    }
+  },
+  "energyDay": {
+    "about": "Day 2026-11-20 with local midnight at 816825600 (UTC in the tests). Input times are that midnight plus the minutes shown; levels are rounded to whole points, changes to a tenth.",
+    "input": {
+      "day": "2026-11-20",
+      "midnight": 816825600,
+      "isToday": true
+    },
+    "body": {
+      "points": [
+        {
+          "minute": 0,
+          "level": 62
+        },
+        {
+          "minute": 5,
+          "level": 62
+        }
+      ],
+      "events": [
+        {
+          "kind": "sleep",
+          "startMinute": -62,
+          "endMinute": 402,
+          "change": 41.5,
+          "sleepScore": 84
+        },
+        {
+          "kind": "workout",
+          "startMinute": 420,
+          "endMinute": 470,
+          "change": -12.3,
+          "workoutName": "Morning tempo"
+        },
+        {
+          "kind": "stress",
+          "startMinute": 600,
+          "endMinute": 660,
+          "change": -6,
+          "averageStress": 61
+        },
+        {
+          "kind": "awake",
+          "startMinute": 402,
+          "endMinute": 912,
+          "change": -18.2
+        }
+      ],
+      "bedtime": {
+        "minute": -62,
+        "level": 38
+      },
+      "woke": {
+        "minute": 402,
+        "level": 88
+      },
+      "now": {
+        "minute": 912,
+        "level": 57
+      },
+      "trend": "usingSlowly",
+      "projection": [
+        {
+          "minute": 930,
+          "level": 56
+        },
+        {
+          "minute": 960,
+          "level": 54
+        }
+      ],
+      "learning": false
+    }
+  },
+  "watchState": {
+    "about": "The second alarm rings once (no days). gpsModes lists only what the phone can set on this model.",
+    "body": {
+      "name": "COROS PACE Pro 2F1A6C",
+      "model": "PACE Pro",
+      "firmware": "3.2108.0",
+      "syncedAt": 816870000,
+      "battery": {
+        "percent": 71,
+        "readAt": 816870000
+      },
+      "storage": {
+        "usedBytes": 5368709120,
+        "totalBytes": 32000000000
+      },
+      "goals": {
+        "calories": 600,
+        "exerciseMinutes": 45,
+        "steps": 10000
+      },
+      "today": {
+        "calories": 520,
+        "exerciseMinutes": 38,
+        "steps": 7412
+      },
+      "alarms": [
+        {
+          "slot": 0,
+          "enabled": true,
+          "hour": 6,
+          "minute": 30,
+          "days": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "slot": 1,
+          "enabled": false,
+          "hour": 8,
+          "minute": 0,
+          "days": []
+        }
+      ],
+      "alarmsReadAt": 816869000,
+      "gpsMode": "all",
+      "gpsModes": [
+        "all",
+        "dual"
+      ],
+      "batteryHistory": [
+        {
+          "at": 816783600,
+          "percent": 80
+        },
+        {
+          "at": 816870000,
+          "percent": 71
+        }
+      ],
+      "refused": [
+        {
+          "key": "gpsMode",
+          "at": 816860000
+        }
+      ]
+    }
+  },
+  "alarmDays": {
+    "about": "Contract days (0 = Sunday ... 6 = Saturday) against the watch's repeat byte (bit 0 Monday ... bit 6 Sunday, bit 7 set when any day is).",
+    "vectors": [
+      {
+        "days": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "repeatByte": 159
+      },
+      {
+        "days": [
+          0
+        ],
+        "repeatByte": 192
+      },
+      {
+        "days": [],
+        "repeatByte": 0
+      },
+      {
+        "days": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "repeatByte": 255
+      },
+      {
+        "days": [
+          6
+        ],
+        "repeatByte": 160
+      }
+    ]
+  },
+  "viewTraining": {
+    "body": {
+      "fitness": {
+        "start": "2026-11-18",
+        "fitness": [
+          41.2,
+          41.5,
+          42
+        ],
+        "fatigue": [
+          50.1,
+          48.7,
+          52.3
+        ]
+      },
+      "load": {
+        "acute": 310,
+        "chronic": 282,
+        "ratio": 1.1,
+        "status": "Optimized",
+        "weekTotal": 420
+      },
+      "vo2max": 55,
+      "thresholdPaceSecPerKm": 245,
+      "thresholdHr": 168,
+      "maxHr": 189,
+      "ftp": 250,
+      "predictions": [
+        {
+          "name": "5K",
+          "meters": 5000,
+          "seconds": 1180
+        },
+        {
+          "name": "Half marathon",
+          "meters": 21097.5,
+          "seconds": 5400.5
+        }
+      ],
+      "bests": [
+        {
+          "name": "5K",
+          "meters": 5000,
+          "seconds": 1171.44,
+          "at": 800000000,
+          "sport": "run",
+          "activityId": "478812345678901201"
+        }
+      ],
+      "weeklyGoalMinutes": 300,
+      "readiness": {
+        "score": 78,
+        "status": "ready"
+      },
+      "hrZones": {
+        "basis": "threshold",
+        "zones": [
+          {
+            "zone": 1,
+            "fromBpm": null,
+            "toBpm": 139
+          },
+          {
+            "zone": 2,
+            "fromBpm": 140,
+            "toBpm": 158
+          },
+          {
+            "zone": 3,
+            "fromBpm": 159,
+            "toBpm": 166
+          },
+          {
+            "zone": 4,
+            "fromBpm": 167,
+            "toBpm": 179
+          },
+          {
+            "zone": 5,
+            "fromBpm": 180,
+            "toBpm": 186
+          },
+          {
+            "zone": 6,
+            "fromBpm": 187,
+            "toBpm": null
+          }
+        ]
+      },
+      "goalRaces": [
+        {
+          "name": "Spring Half",
+          "day": "2027-04-11",
+          "distanceMeters": 21097.5,
+          "goalSeconds": 5880
+        },
+        {
+          "name": "Autumn 10K",
+          "day": "2027-09-19",
+          "distanceMeters": 10000
+        }
+      ],
+      "computedAt": 816870000
+    }
+  },
+  "viewStrength": {
+    "body": {
+      "muscles": [
+        {
+          "name": "Chest",
+          "state": "recovering",
+          "fatigue": 42,
+          "readyAt": 816900000,
+          "lastTrainedAt": 816800000
+        },
+        {
+          "name": "Quads",
+          "state": "ready",
+          "fatigue": 0,
+          "lastTrainedAt": 816500000
+        }
+      ],
+      "suggestion": {
+        "title": "Pull day",
+        "exercises": [
+          {
+            "name": "Barbell row",
+            "sets": 4,
+            "reps": 8,
+            "weightKg": 60
+          },
+          {
+            "name": "Plank",
+            "sets": 3
+          }
+        ]
+      },
+      "exerciseNames": {
+        "barbell-row": "Barbell row"
+      },
+      "computedAt": 816870000
+    },
+    "about": "`state` is the app's own verdict per muscle: ready, recovering or overdue (contract §5.6)."
+  },
+  "viewBody": {
+    "body": {
+      "bodyAge": {
+        "value": 27.4,
+        "at": 816870000
+      },
+      "restingKcal": 1640,
+      "weightKg": 68.4,
+      "weightAt": 816866400,
+      "weightSource": "watch",
+      "computedAt": 816870000
+    }
+  },
+  "gymMeta": {
+    "about": "muscleShares is an object keyed by muscle (Android's native shape). Swift's default encoding is a flat [key, value, ...] list; iOS converts both ways.",
+    "body": {
+      "folders": [
+        "Push",
+        "Pull"
+      ],
+      "customExercises": [
+        {
+          "id": "custom-1",
+          "name": "Cable Y raise",
+          "equipment": "cable",
+          "kind": "weightReps",
+          "family": 14,
+          "muscleShares": {
+            "shoulders": 1,
+            "traps": 0.5
+          },
+          "isCustom": true
+        }
+      ]
+    }
+  },
+  "bodyGoals": {
+    "about": "`start` is the reading the goal was set at. On a phone that reading comes from Apple Health / Health Connect, so the phone leaves `start` out unless the web supplied it.",
+    "stored": {
+      "weight": {
+        "target": 66,
+        "start": 70.2,
+        "startDate": 816006000,
+        "byDate": 825510000
+      },
+      "bodyFat": {
+        "target": 14,
+        "start": 17.5,
+        "startDate": 816006000
+      }
+    },
+    "webStarts": {
+      "bodyFat": 17.5
+    },
+    "body": {
+      "goals": {
+        "weight": {
+          "target": 66,
+          "startDate": 816006000,
+          "byDate": 825510000
+        },
+        "bodyFat": {
+          "target": 14,
+          "start": 17.5,
+          "startDate": 816006000
+        }
+      }
+    }
+  },
+  "watchChanges": [
+    {
+      "id": "goal.calories",
+      "body": {
+        "value": 650,
+        "at": 816870000,
+        "from": "web"
+      }
+    },
+    {
+      "id": "goal.exerciseMinutes",
+      "body": {
+        "value": 45,
+        "at": 816870000,
+        "from": "web"
+      }
+    },
+    {
+      "id": "goal.steps",
+      "body": {
+        "value": 12000,
+        "at": 816870000,
+        "from": "web"
+      }
+    },
+    {
+      "id": "gpsMode",
+      "body": {
+        "value": "dual",
+        "at": 816870000,
+        "from": "web"
+      }
+    },
+    {
+      "id": "alarms",
+      "body": {
+        "value": [
+          {
+            "slot": 0,
+            "enabled": true,
+            "hour": 6,
+            "minute": 30,
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          },
+          {
+            "enabled": true,
+            "hour": 9,
+            "minute": 15,
+            "days": []
+          }
+        ],
+        "at": 816870000,
+        "from": "web"
+      }
+    }
+  ],
+  "watchChangesInvalid": [
+    {
+      "id": "goal.calories",
+      "body": {
+        "value": "650",
+        "at": 816870000,
+        "from": "web"
+      }
+    },
+    {
+      "id": "goal.steps",
+      "body": {
+        "value": -1,
+        "at": 816870000,
+        "from": "web"
+      }
+    },
+    {
+      "id": "volume",
+      "body": {
+        "value": 3,
+        "at": 816870000,
+        "from": "web"
+      }
+    },
+    {
+      "id": "gpsMode",
+      "body": {
+        "value": 2,
+        "at": 816870000,
+        "from": "web"
+      }
+    },
+    {
+      "id": "alarms",
+      "body": {
+        "value": [
+          {
+            "enabled": true,
+            "hour": 25,
+            "minute": 0,
+            "days": []
+          }
+        ],
+        "at": 816870000,
+        "from": "web"
+      }
+    }
+  ],
+  "alarmPlans": {
+    "about": "Added by Android. What a phone writes so the watch's alarms become `wanted` (the `alarms` watch.change), given the alarms the watch lists now (`current`) and its slot count. `write` is each wanted alarm that differs from the watch's, a new one in the lowest slot that is neither named in `wanted` nor on the watch now; `clear` is the slots of listed alarms that aren't wanted. `fits` false: refused (more alarms than slots, no free slot, a slot out of range or named twice).",
+    "vectors": [
+      {
+        "name": "nothing changes",
+        "slots": 10,
+        "current": [
+          {
+            "slot": 0,
+            "enabled": true,
+            "hour": 6,
+            "minute": 30,
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          }
+        ],
+        "wanted": [
+          {
+            "slot": 0,
+            "enabled": true,
+            "hour": 6,
+            "minute": 30,
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          }
+        ],
+        "fits": true,
+        "write": [],
+        "clear": []
+      },
+      {
+        "name": "one edited, one new, one removed",
+        "slots": 10,
+        "current": [
+          {
+            "slot": 0,
+            "enabled": true,
+            "hour": 6,
+            "minute": 30,
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          },
+          {
+            "slot": 1,
+            "enabled": true,
+            "hour": 8,
+            "minute": 0,
+            "days": []
+          },
+          {
+            "slot": 4,
+            "enabled": false,
+            "hour": 9,
+            "minute": 15,
+            "days": [
+              0,
+              6
+            ]
+          }
+        ],
+        "wanted": [
+          {
+            "slot": 0,
+            "enabled": false,
+            "hour": 6,
+            "minute": 30,
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          },
+          {
+            "enabled": true,
+            "hour": 21,
+            "minute": 45,
+            "days": [
+              0
+            ]
+          },
+          {
+            "slot": 4,
+            "enabled": false,
+            "hour": 9,
+            "minute": 15,
+            "days": [
+              0,
+              6
+            ]
+          }
+        ],
+        "fits": true,
+        "write": [
+          {
+            "slot": 0,
+            "enabled": false,
+            "hour": 6,
+            "minute": 30,
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          },
+          {
+            "slot": 2,
+            "enabled": true,
+            "hour": 21,
+            "minute": 45,
+            "days": [
+              0
+            ]
+          }
+        ],
+        "clear": [
+          1
+        ]
+      },
+      {
+        "name": "clear all",
+        "slots": 10,
+        "current": [
+          {
+            "slot": 2,
+            "enabled": true,
+            "hour": 7,
+            "minute": 0,
+            "days": []
+          }
+        ],
+        "wanted": [],
+        "fits": true,
+        "write": [],
+        "clear": [
+          2
+        ]
+      },
+      {
+        "name": "a new alarm never takes a slot being cleared",
+        "slots": 2,
+        "current": [
+          {
+            "slot": 0,
+            "enabled": true,
+            "hour": 7,
+            "minute": 0,
+            "days": []
+          },
+          {
+            "slot": 1,
+            "enabled": true,
+            "hour": 8,
+            "minute": 0,
+            "days": []
+          }
+        ],
+        "wanted": [
+          {
+            "slot": 0,
+            "enabled": true,
+            "hour": 7,
+            "minute": 0,
+            "days": []
+          },
+          {
+            "enabled": true,
+            "hour": 9,
+            "minute": 0,
+            "days": []
+          }
+        ],
+        "fits": false
+      },
+      {
+        "name": "slot named twice",
+        "slots": 10,
+        "current": [],
+        "wanted": [
+          {
+            "slot": 1,
+            "enabled": true,
+            "hour": 7,
+            "minute": 0,
+            "days": []
+          },
+          {
+            "slot": 1,
+            "enabled": true,
+            "hour": 8,
+            "minute": 0,
+            "days": []
+          }
+        ],
+        "fits": false
+      },
+      {
+        "name": "slot out of range",
+        "slots": 10,
+        "current": [],
+        "wanted": [
+          {
+            "slot": 10,
+            "enabled": true,
+            "hour": 7,
+            "minute": 0,
+            "days": []
+          }
+        ],
+        "fits": false
+      }
+    ]
+  },
+  "bestNames": {
+    "about": "Added by Android. view.training `bests[].name` for each standard best-effort distance in metres.",
+    "vectors": [
+      [
+        400,
+        "400 m"
+      ],
+      [
+        804.672,
+        "1/2 mile"
+      ],
+      [
+        1000,
+        "1K"
+      ],
+      [
+        1609.344,
+        "1 mile"
+      ],
+      [
+        3218.688,
+        "2 mile"
+      ],
+      [
+        5000,
+        "5K"
+      ],
+      [
+        10000,
+        "10K"
+      ],
+      [
+        15000,
+        "15K"
+      ],
+      [
+        16093.44,
+        "10 mile"
+      ],
+      [
+        20000,
+        "20K"
+      ],
+      [
+        21097.5,
+        "Half marathon"
+      ],
+      [
+        30000,
+        "30K"
+      ],
+      [
+        42195,
+        "Marathon"
+      ],
+      [
+        50000,
+        "50K"
+      ]
+    ]
+  },
+  "fuelFromWeb": {
+    "about": "Added by iOS. Fuel items made on the web: food ids the phones never make (`web:<slug>`, also `quick:<UUID>` and `custom:<UUID>`), source `search`, an empty servings list. A phone must apply the entry as it is and send back the same body (so nothing echoes).",
+    "entry": {
+      "id": "0B1C2D3E-4A5B-4C6D-8E7F-0A1B2C3D4E5F",
+      "time": 816870000,
+      "meal": "lunch",
+      "grams": 150,
+      "source": "search",
+      "version": 1,
+      "item": {
+        "id": "web:greek-yogurt",
+        "name": "Greek yogurt",
+        "servings": [],
+        "per100g": {
+          "kcal": 97,
+          "proteinG": 9,
+          "carbsG": 3.9,
+          "fatG": 5,
+          "fiberG": 0,
+          "sugarG": 3.9,
+          "saturatedFatG": 3.2,
+          "sodiumMg": 36,
+          "cholesterolMg": 13
+        }
+      }
+    }
+  }
+}

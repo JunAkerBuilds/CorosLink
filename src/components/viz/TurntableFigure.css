@@ -1,0 +1,19 @@
+/* A strip of views shown one at a time. The dark or light strip is picked by the theme, in CSS only. */
+.tt {
+  position: relative;
+  overflow: hidden;
+  cursor: ew-resize;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  flex: none;
+}
+.tt-strip {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-size: calc(var(--tt-frames) * 100%) 100%;
+}
+.tt-strip[data-look="dark"] { display: none; }
+[data-theme="dark"] .tt-strip[data-look="dark"], .night .tt-strip[data-look="dark"] { display: block; }
+[data-theme="dark"] .tt-strip[data-look="light"], .night .tt-strip[data-look="light"] { display: none; }

@@ -1,0 +1,389 @@
+{
+ "about": "From C-LINK docs/sync-fixtures.json (the vectors iOS and Android both build and read): the watch.change parts.",
+ "now": 816870000,
+ "watchChanges": [
+  {
+   "id": "goal.calories",
+   "body": {
+    "value": 650,
+    "at": 816870000,
+    "from": "web"
+   }
+  },
+  {
+   "id": "goal.exerciseMinutes",
+   "body": {
+    "value": 45,
+    "at": 816870000,
+    "from": "web"
+   }
+  },
+  {
+   "id": "goal.steps",
+   "body": {
+    "value": 12000,
+    "at": 816870000,
+    "from": "web"
+   }
+  },
+  {
+   "id": "gpsMode",
+   "body": {
+    "value": "dual",
+    "at": 816870000,
+    "from": "web"
+   }
+  },
+  {
+   "id": "alarms",
+   "body": {
+    "value": [
+     {
+      "slot": 0,
+      "enabled": true,
+      "hour": 6,
+      "minute": 30,
+      "days": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "enabled": true,
+      "hour": 9,
+      "minute": 15,
+      "days": []
+     }
+    ],
+    "at": 816870000,
+    "from": "web"
+   }
+  }
+ ],
+ "watchChangesInvalid": [
+  {
+   "id": "goal.calories",
+   "body": {
+    "value": "650",
+    "at": 816870000,
+    "from": "web"
+   }
+  },
+  {
+   "id": "goal.steps",
+   "body": {
+    "value": -1,
+    "at": 816870000,
+    "from": "web"
+   }
+  },
+  {
+   "id": "volume",
+   "body": {
+    "value": 3,
+    "at": 816870000,
+    "from": "web"
+   }
+  },
+  {
+   "id": "gpsMode",
+   "body": {
+    "value": 2,
+    "at": 816870000,
+    "from": "web"
+   }
+  },
+  {
+   "id": "alarms",
+   "body": {
+    "value": [
+     {
+      "enabled": true,
+      "hour": 25,
+      "minute": 0,
+      "days": []
+     }
+    ],
+    "at": 816870000,
+    "from": "web"
+   }
+  }
+ ],
+ "alarmPlans": {
+  "about": "Added by Android. What a phone writes so the watch's alarms become `wanted` (the `alarms` watch.change), given the alarms the watch lists now (`current`) and its slot count. `write` is each wanted alarm that differs from the watch's, a new one in the lowest slot that is neither named in `wanted` nor on the watch now; `clear` is the slots of listed alarms that aren't wanted. `fits` false: refused (more alarms than slots, no free slot, a slot out of range or named twice).",
+  "vectors": [
+   {
+    "name": "nothing changes",
+    "slots": 10,
+    "current": [
+     {
+      "slot": 0,
+      "enabled": true,
+      "hour": 6,
+      "minute": 30,
+      "days": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     }
+    ],
+    "wanted": [
+     {
+      "slot": 0,
+      "enabled": true,
+      "hour": 6,
+      "minute": 30,
+      "days": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     }
+    ],
+    "fits": true,
+    "write": [],
+    "clear": []
+   },
+   {
+    "name": "one edited, one new, one removed",
+    "slots": 10,
+    "current": [
+     {
+      "slot": 0,
+      "enabled": true,
+      "hour": 6,
+      "minute": 30,
+      "days": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "slot": 1,
+      "enabled": true,
+      "hour": 8,
+      "minute": 0,
+      "days": []
+     },
+     {
+      "slot": 4,
+      "enabled": false,
+      "hour": 9,
+      "minute": 15,
+      "days": [
+       0,
+       6
+      ]
+     }
+    ],
+    "wanted": [
+     {
+      "slot": 0,
+      "enabled": false,
+      "hour": 6,
+      "minute": 30,
+      "days": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "enabled": true,
+      "hour": 21,
+      "minute": 45,
+      "days": [
+       0
+      ]
+     },
+     {
+      "slot": 4,
+      "enabled": false,
+      "hour": 9,
+      "minute": 15,
+      "days": [
+       0,
+       6
+      ]
+     }
+    ],
+    "fits": true,
+    "write": [
+     {
+      "slot": 0,
+      "enabled": false,
+      "hour": 6,
+      "minute": 30,
+      "days": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "slot": 2,
+      "enabled": true,
+      "hour": 21,
+      "minute": 45,
+      "days": [
+       0
+      ]
+     }
+    ],
+    "clear": [
+     1
+    ]
+   },
+   {
+    "name": "clear all",
+    "slots": 10,
+    "current": [
+     {
+      "slot": 2,
+      "enabled": true,
+      "hour": 7,
+      "minute": 0,
+      "days": []
+     }
+    ],
+    "wanted": [],
+    "fits": true,
+    "write": [],
+    "clear": [
+     2
+    ]
+   },
+   {
+    "name": "a new alarm never takes a slot being cleared",
+    "slots": 2,
+    "current": [
+     {
+      "slot": 0,
+      "enabled": true,
+      "hour": 7,
+      "minute": 0,
+      "days": []
+     },
+     {
+      "slot": 1,
+      "enabled": true,
+      "hour": 8,
+      "minute": 0,
+      "days": []
+     }
+    ],
+    "wanted": [
+     {
+      "slot": 0,
+      "enabled": true,
+      "hour": 7,
+      "minute": 0,
+      "days": []
+     },
+     {
+      "enabled": true,
+      "hour": 9,
+      "minute": 0,
+      "days": []
+     }
+    ],
+    "fits": false
+   },
+   {
+    "name": "slot named twice",
+    "slots": 10,
+    "current": [],
+    "wanted": [
+     {
+      "slot": 1,
+      "enabled": true,
+      "hour": 7,
+      "minute": 0,
+      "days": []
+     },
+     {
+      "slot": 1,
+      "enabled": true,
+      "hour": 8,
+      "minute": 0,
+      "days": []
+     }
+    ],
+    "fits": false
+   },
+   {
+    "name": "slot out of range",
+    "slots": 10,
+    "current": [],
+    "wanted": [
+     {
+      "slot": 10,
+      "enabled": true,
+      "hour": 7,
+      "minute": 0,
+      "days": []
+     }
+    ],
+    "fits": false
+   }
+  ]
+ },
+ "alarmDays": {
+  "about": "Contract days (0 = Sunday ... 6 = Saturday) against the watch's repeat byte (bit 0 Monday ... bit 6 Sunday, bit 7 set when any day is).",
+  "vectors": [
+   {
+    "days": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ],
+    "repeatByte": 159
+   },
+   {
+    "days": [
+     0
+    ],
+    "repeatByte": 192
+   },
+   {
+    "days": [],
+    "repeatByte": 0
+   },
+   {
+    "days": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "repeatByte": 255
+   },
+   {
+    "days": [
+     6
+    ],
+    "repeatByte": 160
+   }
+  ]
+ }
+}

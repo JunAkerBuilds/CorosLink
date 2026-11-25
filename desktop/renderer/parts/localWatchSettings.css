@@ -1,0 +1,68 @@
+/* The watch's own settings in Local mode (parts/LocalWatchSettings.tsx). */
+.ws-card { gap: 18px; }
+.ws-quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.ws-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-height: 76px; padding: 14px; border-radius: 16px;
+  border: 1px solid var(--line); background: rgba(var(--fg-rgb), 0.03); color: var(--fg); font: inherit; text-align: left; cursor: pointer;
+}
+.ws-tile:hover:not(:disabled) { background: rgba(var(--fg-rgb), 0.06); }
+.ws-tile:disabled { cursor: default; opacity: 0.7; }
+.ws-tile[aria-pressed="true"] { border-color: color-mix(in srgb, var(--h-mint) 55%, transparent); background: rgba(83, 203, 161, 0.12); }
+.ws-tile-name { font-size: 13px; font-weight: 600; line-height: 17px; }
+.ws-tile-state { margin-top: auto; font-size: 12px; font-weight: 700; color: var(--muted); }
+.ws-tile[aria-pressed="true"] .ws-tile-state { color: var(--h-mint-ink); }
+
+/* Groups flow down columns, so short groups (Barometer, Sleep schedule) fill in under longer ones without gaps. */
+.ws-groups { columns: 3 320px; column-gap: 14px; }
+.ws-groups > .ws-group { break-inside: avoid; margin-bottom: 14px; }
+.ws-group { display: flex; flex-direction: column; min-width: 0; padding: 4px 18px 6px; border: 1px solid var(--line); border-radius: 18px; background: rgba(var(--fg-rgb), 0.035); }
+.ws-group h3 { margin: 0 -18px 2px; padding: 12px 18px 10px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.ws-group-ro { background: transparent; border-style: dashed; }
+.ws-group-ro h3 { border-bottom: 0; }
+.ws-h3-note { font-weight: 500; text-transform: none; letter-spacing: 0; }
+.ws-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; min-height: 48px; padding: 6px 0; border-top: 1px solid var(--line); }
+.ws-group h3 + .ws-row { border-top: 0; }
+.ws-row-name { display: flex; flex-direction: column; gap: 2px; font-size: 14px; font-weight: 600; }
+.ws-row-name small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.ws-row-end { display: flex; align-items: center; gap: 10px; }
+.ws-value { font-size: 14px; }
+.ws-select { width: auto; min-width: 150px; height: 34px; }
+.ws-times { flex-wrap: wrap; }
+.ws-times input { width: 136px; height: 36px; }
+.ws-readonly { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0 24px; }
+.ws-ro { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.ws-ro span { color: var(--muted); }
+.ws-ro b { font-weight: 600; text-align: right; }
+
+.ws-profile { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.ws-num { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.ws-num-box { position: relative; display: flex; align-items: center; }
+.ws-num-box input { width: 100%; height: 42px; padding-right: 48px; font-size: 16px; font-weight: 700; color: var(--fg); }
+.ws-num-box small { position: absolute; right: 12px; font-size: 12px; color: var(--muted); }
+.ws-zones { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.ws-zone { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 12px; font-size: 13px; font-weight: 600; background: color-mix(in srgb, var(--zone) 14%, transparent); }
+.ws-zone b { font-size: 11px; color: var(--zone); }
+.ws-zone[data-zone="1"] { --zone: var(--h-blue-ink); }
+.ws-zone[data-zone="2"] { --zone: var(--h-mint-ink); }
+.ws-zone[data-zone="3"] { --zone: var(--h-gold-ink); }
+.ws-zone[data-zone="4"] { --zone: var(--h-coral, #e8814d); }
+.ws-zone[data-zone="5"] { --zone: var(--h-rose-ink); }
+.ws-zone[data-zone="6"] { --zone: var(--h-violet-ink); }
+@media (max-width: 720px) { .ws-zones { grid-template-columns: repeat(3, 1fr); } }
+
+.ws-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.ws-slot { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 8px; border-radius: 16px; border: 1px solid var(--line); background: rgba(var(--fg-rgb), 0.04); }
+.ws-slot[data-empty] { border-style: dashed; background: transparent; }
+.ws-slot[data-on] { border-color: color-mix(in srgb, var(--h-mint) 55%, transparent); background: rgba(83, 203, 161, 0.12); }
+.ws-slot-num { font-size: 18px; font-weight: 800; }
+.ws-slot-state { font-size: 12px; color: var(--muted); }
+.ws-slot[data-on] .ws-slot-state { color: var(--h-mint-ink); font-weight: 700; }
+.ws-weather { align-items: flex-start; }
+.ws-place { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.ws-place input { flex: 1 1 200px; height: 36px; }
+.ws-found { display: flex; flex-direction: column; margin-top: 6px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.ws-found-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 12px; border: 0; background: transparent; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.ws-found-row + .ws-found-row { border-top: 1px solid var(--line); }
+.ws-found-row:hover { background: rgba(var(--fg-rgb), 0.05); }
+.ws-found-row b { font-size: 13px; }
+.ws-found-row small { font-size: 12px; color: var(--muted); }

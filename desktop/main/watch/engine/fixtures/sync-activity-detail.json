@@ -1,0 +1,175 @@
+{
+ "about": "From C-LINK docs/sync-fixtures.json (activityDetail), the vector iOS and Android build. A run (cadence is doubled from FIT's one-foot count; other sports are not), threshold heart rate 160, no COROS lap table so the FIT lap is used. Zone bounds are 81/90/94/100 % of threshold; a sample counts the time since the one before, at most 10 s.",
+ "input": {
+  "sport": "run",
+  "thresholdHr": 160,
+  "samples": [
+   {
+    "elapsed": 0,
+    "distance": 0,
+    "latitude": 45.5017,
+    "longitude": -73.5673,
+    "altitude": 88.0,
+    "heartRate": 120,
+    "speed": 3.0,
+    "cadence": 85
+   },
+   {
+    "elapsed": 5,
+    "distance": 15,
+    "latitude": 45.50181,
+    "longitude": -73.56719,
+    "altitude": 88.2,
+    "heartRate": 150,
+    "speed": 3.1,
+    "cadence": 86
+   },
+   {
+    "elapsed": 10,
+    "distance": 30.5,
+    "latitude": 45.50192,
+    "longitude": -73.56708,
+    "altitude": 88.4,
+    "heartRate": 155,
+    "speed": 3.1,
+    "cadence": 86
+   },
+   {
+    "elapsed": 15,
+    "distance": 46,
+    "latitude": 45.50203,
+    "longitude": -73.56697,
+    "altitude": 88.3,
+    "heartRate": 162,
+    "speed": 3.2,
+    "cadence": 87
+   },
+   {
+    "elapsed": 20,
+    "distance": 62,
+    "latitude": 45.50214,
+    "longitude": -73.56686,
+    "altitude": 88.1,
+    "heartRate": 170,
+    "speed": 3.2,
+    "cadence": 88
+   }
+  ],
+  "laps": [
+   {
+    "start": 0,
+    "seconds": 20.31,
+    "meters": 62,
+    "averageHR": 151,
+    "maxHR": 170,
+    "averageCadence": 86.5,
+    "ascent": 0.4
+   }
+  ]
+ },
+ "body": {
+  "laps": [
+   {
+    "n": 1,
+    "distanceM": 62,
+    "durationS": 20.31,
+    "avgHr": 151,
+    "maxHr": 170,
+    "cadence": 173,
+    "elevationM": 0.4
+   }
+  ],
+  "streams": {
+   "axis": "distance",
+   "x": [
+    0,
+    15,
+    30.5,
+    46,
+    62
+   ],
+   "speedMps": [
+    3,
+    3.1,
+    3.1,
+    3.2,
+    3.2
+   ],
+   "hr": [
+    120,
+    150,
+    155,
+    162,
+    170
+   ],
+   "elevationM": [
+    88,
+    88.2,
+    88.4,
+    88.3,
+    88.1
+   ],
+   "cadence": [
+    170,
+    172,
+    172,
+    174,
+    176
+   ]
+  },
+  "route": [
+   [
+    45.5017,
+    -73.5673
+   ],
+   [
+    45.50181,
+    -73.56719
+   ],
+   [
+    45.50192,
+    -73.56708
+   ],
+   [
+    45.50203,
+    -73.56697
+   ],
+   [
+    45.50214,
+    -73.56686
+   ]
+  ],
+  "zones": [
+   {
+    "zone": 1,
+    "fromBpm": null,
+    "toBpm": 129,
+    "seconds": 0
+   },
+   {
+    "zone": 2,
+    "fromBpm": 130,
+    "toBpm": 143,
+    "seconds": 0
+   },
+   {
+    "zone": 3,
+    "fromBpm": 144,
+    "toBpm": 149,
+    "seconds": 5
+   },
+   {
+    "zone": 4,
+    "fromBpm": 150,
+    "toBpm": 159,
+    "seconds": 5
+   },
+   {
+    "zone": 5,
+    "fromBpm": 160,
+    "toBpm": null,
+    "seconds": 10
+   }
+  ]
+ }
+}

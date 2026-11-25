@@ -1,0 +1,26 @@
+/* The selectable data slot's panel (parts/StudioSlot.tsx). Rows and notes reuse the chart panel's (.st-ch-*). */
+.st-sl-count { font-size: 11.5px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
+.st-sl-head { display: flex; align-items: center; gap: 2px; }
+.st-sl-head .st-label { flex: 1 1 auto; }
+.st-sl-head .st-icon-btn { width: 26px; height: 26px; }
+.st-sl-row { gap: 6px; }
+.st-sl-row .st-ch-pg-main { height: auto; min-height: 40px; padding: 3px 6px; }
+.st-sl-row .st-ch-pg-main:disabled { cursor: default; }
+.st-sl-thumb { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: #0b100f; color: #8aa39b; overflow: hidden; }
+.st-sl-thumb img { max-width: 22px; max-height: 22px; object-fit: contain; }
+.st-sl-thumb[data-empty] { background: none; border: 1px dashed rgba(var(--fg-rgb), 0.25); color: var(--dim); }
+.st-sl-row:not([data-on]) .st-sl-thumb { opacity: 0.55; }
+.st-sl-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.st-sl-copy small { font-size: 11px; font-weight: 500; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-sl-copy small[data-warn] { color: var(--h-amber-ink, #9a4d00); }
+.st-sl-sample { font-size: 12px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.st-sl-row[data-on] .st-sl-sample { color: var(--muted); }
+.st-sl-why .st-link { margin-left: 4px; white-space: nowrap; }
+.st-sl-pieces { display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; }
+.st-sl-pieces .st-ch-ro { padding-left: 6px; }
+.st-sl-pieces .st-sl-thumb { width: 32px; height: 32px; }
+.st-sl-pieces .st-sl-thumb img { max-width: 26px; max-height: 26px; }
+.st-sl-offset { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px; gap: 8px; align-items: center; }
+.st-sl-tint { display: flex; align-items: center; gap: 8px; }
+.st-sl-tint .st-dots { flex: 1 1 auto; }
+.st-sim-value { width: 84px; height: 32px; font-variant-numeric: tabular-nums; }

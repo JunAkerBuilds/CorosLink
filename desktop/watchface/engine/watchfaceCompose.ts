@@ -1,0 +1,1043 @@
+import { buildAnimationOverrides, buildAnimationSpriteReplacements } from "./watchfaceAnimation";
+import { composeNativeData, finalizeNativeControlOverrides } from "./nativeData";
+import { buildWatchThemeOverrides } from "./watchfaceThemeColor";
+import { batteryIconRotation } from "./watchfaceBatteryStates";
+import type {
+  CorosWatchfaceAssetReplacement,
+  CorosWatchfaceConfigOverride,
+  CorosWatchfaceDesignState,
+  CorosWatchfaceTemplateDetails
+} from "../types";
+import {
+  applyConfigOverridesToDetails,
+  applyLayoutToDetails,
+  barometerDisplayModeForConfig,
+  buildAmPmOverrides,
+  buildAmPmSpriteReplacements,
+  buildBarometerIconReplacements,
+  buildControlTemperatureOverrides,
+  buildControlTemperatureSpriteReplacements,
+  buildControlComplicationConfigurationOverrides,
+  buildDisabledControlComplicationOverrides,
+  buildSelectableMetricSpriteComposition,
+  buildSelectableMetricStyleOverrides,
+  buildControlIconPositionOverrides,
+  buildWatchfaceConfigAssetOverrides,
+  buildWatchfaceConfigAssetReplacements,
+  buildDateSpriteComposition,
+  buildDateStyleOverrides,
+  buildLayerVisibilityOverrides,
+  buildLayerColorOverrides,
+  buildLayerColorSpriteReplacements,
+  buildLayoutOverrides,
+  buildExerciseProgressOverrides,
+  buildKcalProgressOverrides,
+  buildMetricOverrides,
+  buildMetricSpriteReplacements,
+  buildMetricStyleOverrides,
+  buildAddedDateOverrides,
+  buildAddedSecondsOverrides,
+  buildSeparateTimeOverrides,
+  buildStaticSeparatorOverrides,
+  buildStudioReplacements,
+  buildTimeSpriteReplacements,
+  buildTimeTrackingOverrides,
+  buildTimeStyleOverrides,
+  getAmPmCapability,
+  isControlComplicationEnabled,
+  loadStudioImage,
+  rotateSpriteQuarterTurns,
+  mergeAssetReplacements,
+  mergeConfigOverrides,
+  pickPreviewResolution,
+  rasterFontSupportsText,
+  rebaseNegativeControlChildren,
+  renderWatchfaceAodSafeSprite,
+  renderWatchfaceSolidFontSprite,
+  type WatchfaceAssetLoader,
+  type WatchfaceDateStyles,
+  resolveAddedDateStyles,
+  type WatchfaceMetricStyles,
+  type WatchfaceStudioOptions,
+  type WatchfaceTimeStyles
+} from "./watchfaceStudio";
+import {
+  hasWatchfaceLayerOpacity,
+  resolveWatchfaceLayerOpacity
+} from "./watchfaceLayerOpacity";
+import {
+  resolveWatchfaceLayerEffects,
+  type WatchfaceEffectPadding
+} from "./watchfaceEditorEffects";
+import {
+  renderWatchfaceDataUrlDecorations,
+  resolveWatchfaceLayerStrokes
+} from "./watchfaceEditorStrokes";
+import {
+  buildWatchfaceEffectPaddingOverrides,
+  watchfaceLayerRequiresFixedSpriteBounds
+} from "./watchfaceEffectPadding";
+import {
+  buildWeatherOverrides,
+  buildWeatherSpriteReplacements
+} from "./weatherAssets";
+
+/**
+ * The template details at each stage of the design pipeline. The editor's
+ * canvas draws from `previewDetails`; layout offsets are applied on top of the
+ * metric-toggle and component-style overrides so element bounds move correctly.
+ */
+export interface DesignDetails {
+  timeFormatOverrides: CorosWatchfaceConfigOverride[];
+  metricOverrides: CorosWatchfaceConfigOverride[];
+  metricDetails: CorosWatchfaceTemplateDetails;
+  styledMetricDetails: CorosWatchfaceTemplateDetails;
+  previewDetails: CorosWatchfaceTemplateDetails;
+}
+
+export interface WatchfaceComposeResult {
+  assetReplacements: CorosWatchfaceAssetReplacement[];
+  configOverrides: CorosWatchfaceConfigOverride[];
+  /**
+   * Minimum info.json `o_wf_ver` this design needs the exported archive to
+   * declare. Weather and temperature are only compiled onto the watch when the
+   * template announces a high-enough version, so those features raise it to 4.
+   */
+  minWatchFaceVersion?: number;
+}
+
+/**
+ * Cleans dynamic AOD sprites after every style/effect pass. Background art is
+ * intentionally excluded because it is a flattened canvas rather than a
+ * firmware-tinted glyph mask.
+ */
+export async function buildAodSafeSpriteReplacements(
+  replacements: CorosWatchfaceAssetReplacement[]
+): Promise<CorosWatchfaceAssetReplacement[]> {
+  return Promise.all(
+    replacements.map(async ({ aodKeepCutoff, ...replacement }) =>
+      /\/studio\/aod_background(?:[\/_])/i.test(replacement.path)
+        ? replacement
+        : {
+            ...replacement,
+            dataUrl: await renderWatchfaceAodSafeSprite(replacement.dataUrl, aodKeepCutoff === true)
+          }
+    )
+  );
+}
+
+/** Builds the flattened authored AOD background at every native resolution. */
+export async function buildAodBackgroundComposition(
+  aodDetails: CorosWatchfaceTemplateDetails,
+  backgroundDataUrl: string
+): Promise<Pick<WatchfaceComposeResult, "assetReplacements" | "configOverrides">> {
+  const image = await loadStudioImage(backgroundDataUrl, false);
+  const assetReplacements: CorosWatchfaceAssetReplacement[] = [];
+  const configOverrides: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of aodDetails.resolutions) {
+    const canvas = document.createElement("canvas");
+    canvas.width = resolution.width;
+    canvas.height = resolution.height;
+    const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+    if (!context) {
+      throw new Error("Could not render the always-on background.");
+    }
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    assetReplacements.push({
+      path: `${resolution.directory}/studio/aod_background/00.png`,
+      dataUrl: canvas.toDataURL("image/png"),
+      create: true,
+      allowDimensionOverride: true
+    });
+    configOverrides.push({
+      path: `${resolution.directory}/AODconfig.txt`,
+      values: {
+        background_icon_pos: "{0,0}",
+        background_icon: "studio\\aod_background\\00.png"
+      }
+    });
+  }
+  return { assetReplacements, configOverrides };
+}
+
+/** Official weather-bearing COROS faces ship this watchface version. */
+const MODERN_CONTROL_WATCHFACE_VERSION = 4;
+
+const EFFECT_FOLDER_LAYER: Array<[RegExp, string]> = [
+  [/\/cl_battery\//, "battery"],
+  [/\/cl_battery_icon\//, "batteryIcon"],
+  [/\/cl_control_battery_icon\//, "controlBatteryIcon"],
+  [/\/cl_hr\//, "heartRate"],
+  [/\/cl_steps\//, "steps"],
+  [/\/cl_kcal\//, "calories"],
+  [/\/cl_exercise\//, "exercise"],
+  [/\/cl_elev\//, "elevation"],
+  [/\/cl_ftemp\//, "temperature"],
+  [/\/cl_(?:hh|hl)\//, "hours"],
+  [/\/cl_(?:mh|ml)\//, "minutes"],
+  [/\/cl_(?:sh|sl)\//, "seconds"],
+  [/\/cl_auto_time\//, "autoTime"],
+  [/\/cl_weekday\//, "weekday"],
+  [/\/cl_date_month\//, "dateMonth"],
+  [/\/cl_date_day\//, "dateDay"],
+  [/\/cl_control\//, "complication"],
+  [/\/studio\/ampm\//, "ampm"],
+  [/\/weather2?\//, "weather"]
+];
+
+function effectLayerForReplacement(path: string): string | null {
+  return EFFECT_FOLDER_LAYER.find(([pattern]) => pattern.test(path))?.[1] ?? null;
+}
+
+/** Opt-in per component: preserve ordinary alpha and artwork on other layers. */
+export async function buildSolidFontSpriteReplacements(
+  design: CorosWatchfaceDesignState,
+  replacements: CorosWatchfaceAssetReplacement[]
+): Promise<CorosWatchfaceAssetReplacement[]> {
+  return Promise.all(replacements.map(async (replacement) => {
+    const layerId = effectLayerForReplacement(replacement.path);
+    const style = layerId === "complication"
+      ? design.selectableMetricStyle
+      : layerId
+        ? design.metricStyles?.[layerId] ?? design.timeStyles?.[layerId] ?? design.dateStyles?.[layerId]
+        : undefined;
+    if (!style?.solidAlpha || !/\/\d{2}\.png$/i.test(replacement.path)) return replacement;
+    return { ...replacement, dataUrl: await renderWatchfaceSolidFontSprite(replacement.dataUrl) };
+  }));
+}
+
+interface EffectedReplacementResult {
+  replacements: CorosWatchfaceAssetReplacement[];
+  padding: Map<string, Map<string, WatchfaceEffectPadding>>;
+}
+
+async function buildBatteryIconEffectSources(
+  details: CorosWatchfaceTemplateDetails,
+  design: CorosWatchfaceDesignState,
+  loadAssets: WatchfaceAssetLoader
+): Promise<{
+  replacements: CorosWatchfaceAssetReplacement[];
+  configOverrides: CorosWatchfaceConfigOverride[];
+}> {
+  const batteryOverride = design.configAssetOverrides?.["config:battery_icon"];
+  if (!batteryIconBitmapsProcessed(design)) {
+    return { replacements: [], configOverrides: [] };
+  }
+  if (
+    batteryOverride?.replacement ||
+    Object.keys(batteryOverride?.stateReplacements ?? {}).length > 0
+  ) {
+    return {
+      replacements: [],
+      configOverrides: details.resolutions
+        .filter((resolution) => Boolean(resolution.config.battery_icon_dir))
+        .map((resolution) => ({
+          path: `${resolution.directory}/config.txt`,
+          values: { battery_icon_dir: "cl_battery_icon" }
+        }))
+    };
+  }
+  const replacements: CorosWatchfaceAssetReplacement[] = [];
+  const configOverrides: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of details.resolutions) {
+    const configured = resolution.config.battery_icon_dir?.replace(/\\/g, "/");
+    if (!configured) continue;
+    const folder = resolution.spriteFolders.find(
+      (candidate) => candidate.folder.replace(/^a\//, "") === configured.replace(/^a\//, "")
+    );
+    if (!folder || folder.files.length === 0) continue;
+    const assets = await loadAssets(folder.files.map((file) => file.path));
+    for (const asset of assets) {
+      replacements.push({
+        path: `${resolution.directory}/cl_battery_icon/${asset.path.split("/").at(-1)}`,
+        dataUrl: asset.dataUrl,
+        create: true,
+        allowDimensionOverride: true
+      });
+    }
+    configOverrides.push({
+      path: `${resolution.directory}/config.txt`,
+      values: { battery_icon_dir: "cl_battery_icon" }
+    });
+  }
+  return { replacements, configOverrides };
+}
+
+function isolateBatteryIconEffectPaths(
+  details: CorosWatchfaceTemplateDetails,
+  design: CorosWatchfaceDesignState,
+  replacements: CorosWatchfaceAssetReplacement[]
+): CorosWatchfaceAssetReplacement[] {
+  if (!batteryIconBitmapsProcessed(design)) return replacements;
+  return replacements.map((replacement) => {
+    const resolution = details.resolutions.find((candidate) =>
+      replacement.path.startsWith(`${candidate.directory}/`)
+    );
+    const configured = resolution?.config.battery_icon_dir?.replace(/\\/g, "/");
+    if (!resolution || !configured) return replacement;
+    const prefix = `${resolution.directory}/${configured.replace(/^\.\//, "")}/`;
+    if (!replacement.path.startsWith(prefix)) return replacement;
+    return {
+      ...replacement,
+      path: `${resolution.directory}/cl_battery_icon/${replacement.path.split("/").at(-1)}`,
+      create: true,
+      allowDimensionOverride: true
+    };
+  });
+}
+
+/**
+ * Effects, opacity and rotation all rewrite the fixed battery's state PNGs,
+ * so they work on a Studio-owned copy (`cl_battery_icon`): a template folder
+ * shared with the selectable battery must stay untouched.
+ */
+function batteryIconBitmapsProcessed(design: CorosWatchfaceDesignState): boolean {
+  return (
+    hasLayerBitmapTransform(design, "batteryIcon") ||
+    batteryIconRotation(design.configAssetOverrides?.["config:battery_icon"]) !== 0
+  );
+}
+
+/** Bakes the fixed battery's quarter-turn rotation into its isolated state PNGs. */
+async function rotateBatteryIconFrames(
+  design: CorosWatchfaceDesignState,
+  replacements: CorosWatchfaceAssetReplacement[]
+): Promise<CorosWatchfaceAssetReplacement[]> {
+  const rotation = batteryIconRotation(design.configAssetOverrides?.["config:battery_icon"]);
+  if (rotation === 0) return replacements;
+  return Promise.all(replacements.map(async (replacement) =>
+    /\/cl_battery_icon\/[^/]+\.png$/i.test(replacement.path)
+      ? {
+          ...replacement,
+          dataUrl: await rotateSpriteQuarterTurns(replacement.dataUrl, rotation),
+          allowDimensionOverride: true
+        }
+      : replacement
+  ));
+}
+
+async function applyFirmwareEffects(
+  details: CorosWatchfaceTemplateDetails,
+  design: CorosWatchfaceDesignState,
+  replacements: CorosWatchfaceAssetReplacement[]
+): Promise<EffectedReplacementResult> {
+  const master = pickPreviewResolution(details);
+  const padding = new Map<string, Map<string, WatchfaceEffectPadding>>();
+  const effected: CorosWatchfaceAssetReplacement[] = [];
+  for (const replacement of replacements) {
+    const layerId = effectLayerForReplacement(replacement.path);
+    const effects = layerId
+      ? resolveWatchfaceLayerEffects(design, layerId).filter(
+          (effect) => effect.enabled && effect.opacity > 0
+        )
+      : [];
+    const strokes = layerId
+      ? resolveWatchfaceLayerStrokes(design, layerId).filter(
+          (stroke) => stroke.enabled && stroke.opacity > 0
+        )
+      : [];
+    const opacity = resolveWatchfaceLayerOpacity(design, layerId ?? undefined);
+    if (
+      !layerId ||
+      (effects.length === 0 && strokes.length === 0 && opacity === 1)
+    ) {
+      effected.push(replacement);
+      continue;
+    }
+    const directory = replacement.path.split("/", 1)[0]!;
+    const resolution = details.resolutions.find(
+      (candidate) => candidate.directory === directory
+    );
+    const scale = resolution && master ? resolution.width / master.width : 1;
+    const rendered = await renderWatchfaceDataUrlDecorations(
+      replacement.dataUrl,
+      strokes,
+      effects,
+      scale,
+      opacity,
+      !watchfaceLayerRequiresFixedSpriteBounds(layerId)
+    );
+    const byLayer = padding.get(directory) ?? new Map<string, WatchfaceEffectPadding>();
+    const existing = byLayer.get(layerId);
+    byLayer.set(layerId, existing
+      ? {
+          left: Math.max(existing.left, rendered.padding.left),
+          top: Math.max(existing.top, rendered.padding.top),
+          right: Math.max(existing.right, rendered.padding.right),
+          bottom: Math.max(existing.bottom, rendered.padding.bottom)
+        }
+      : rendered.padding);
+    padding.set(directory, byLayer);
+    effected.push({
+      ...replacement,
+      dataUrl: rendered.dataUrl,
+      // Weather can replace an existing firmware state folder in place.
+      // Preserve an explicit false so archive validation does not treat that
+      // replacement as a colliding newly-created entry.
+      create: replacement.create === false ? false : true,
+      allowDimensionOverride: true,
+      aodKeepCutoff: true
+    });
+  }
+  return { replacements: effected, padding };
+}
+
+function buildEffectPaddingOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  paddingByResolution: Map<string, Map<string, WatchfaceEffectPadding>>
+): CorosWatchfaceConfigOverride[] {
+  return buildWatchfaceEffectPaddingOverrides(details, paddingByResolution);
+}
+
+function metricStylesOf(design: CorosWatchfaceDesignState): WatchfaceMetricStyles {
+  return (design.metricStyles ?? {}) as WatchfaceMetricStyles;
+}
+
+function timeStylesOf(design: CorosWatchfaceDesignState): WatchfaceTimeStyles {
+  const styles = {
+    ...((design.timeStyles ?? {}) as WatchfaceTimeStyles)
+  };
+  if (rasterFontSupportsText(design.rasterFont, "0123456789")) {
+    for (const partId of [
+      "hours",
+      "minutes",
+      "seconds",
+      "autoTime"
+    ] as const) {
+      styles[partId] ??= {
+        scale: 1,
+        rasterFont: design.rasterFont
+      };
+    }
+  }
+  return styles;
+}
+
+function dateStylesOf(design: CorosWatchfaceDesignState): WatchfaceDateStyles {
+  return resolveAddedDateStyles(
+    (design.dateStyles ?? {}) as WatchfaceDateStyles,
+    design,
+    design.fontFamily
+  );
+}
+
+/** Preview options keep Studio rendering aligned with archive composition. */
+export function toStudioOptions(
+  design: CorosWatchfaceDesignState
+): WatchfaceStudioOptions {
+  return {
+    // A design-driven preview shows its own animation still, never the template's.
+    animationStill: design.animation?.enabled && design.animation.frames[0]
+      ? { dataUrl: design.animation.frames[0], x: design.animation.x, y: design.animation.y }
+      : design.animation ? null : undefined,
+    fontFamily: design.fontFamily,
+    fontWeight: design.fontWeight,
+    fontStyle: design.fontStyle,
+    letterSpacing: design.letterSpacing,
+    rasterFont: design.rasterFont,
+    digitColor: design.digitColor,
+    accentColor: design.accentColor,
+    tintLabels: design.tintLabels,
+    tintIcons: design.tintIcons,
+    previewComplication: design.previewComplication as WatchfaceStudioOptions["previewComplication"],
+    metricStyles: metricStylesOf(design),
+    kcalProgressPreviewPercent: design.kcalProgress?.previewPercent,
+    exerciseProgressPreviewPercent: design.exerciseProgress?.previewPercent,
+    kcalProgressStyle: design.kcalProgress,
+    exerciseProgressStyle: design.exerciseProgress,
+    complicationStyle: design.selectableMetricStyle,
+    timeStyles: timeStylesOf(design),
+    dateStyles: dateStylesOf(design),
+    layerColors: design.layerColors ?? {},
+    layerOpacities: design.layerOpacities ?? {},
+    effectStyles: design.effectStyles ?? [],
+    layerEffects: design.layerEffects ?? {},
+    layerStrokes: design.layerStrokes ?? {},
+    configAssetOverrides: design.configAssetOverrides ?? {},
+    ampmStyle: design.ampmIndicator
+  };
+}
+
+/**
+ * Builds the Studio's derived-details chain as a pure function:
+ * metric toggles → component styles → layout offsets.
+ */
+export function deriveDesignDetails(
+  details: CorosWatchfaceTemplateDetails,
+  design: CorosWatchfaceDesignState
+): DesignDetails {
+  const separateTimeOverrides = buildSeparateTimeOverrides(
+    details,
+    design.separateAutoTime === true
+  );
+  // Seconds are placed under the minutes, so they follow separated time.
+  const separatedDetails = applyConfigOverridesToDetails(details, separateTimeOverrides);
+  const timeFormatOverrides = mergeConfigOverrides(
+    separateTimeOverrides,
+    buildAddedSecondsOverrides(separatedDetails, design.addSeconds === true),
+    buildAddedDateOverrides(separatedDetails, design)
+  );
+  const timeFormatDetails = applyConfigOverridesToDetails(
+    details,
+    timeFormatOverrides
+  );
+  const metricOverrides = mergeConfigOverrides(
+    buildMetricOverrides(timeFormatDetails, design.metricChanges ?? {}),
+    buildKcalProgressOverrides(timeFormatDetails, design.kcalProgress),
+    buildExerciseProgressOverrides(timeFormatDetails, design.exerciseProgress)
+  );
+  const metricDetails = applyConfigOverridesToDetails(
+    timeFormatDetails,
+    metricOverrides
+  );
+  const controlComplicationOverrides =
+    buildControlComplicationConfigurationOverrides(metricDetails, design);
+  const controlMetricDetails = applyConfigOverridesToDetails(
+    metricDetails,
+    controlComplicationOverrides
+  );
+  const controlTemperatureStyle = metricStylesOf(design).temperature ?? {
+    color: design.digitColor,
+    scale: 1
+  };
+  const controlTemperatureOverrides =
+    isControlComplicationEnabled(details, design, "temperature")
+      ? buildControlTemperatureOverrides(
+          controlMetricDetails,
+          controlTemperatureStyle
+        )
+      : [];
+  const selectableMetricDetails = applyConfigOverridesToDetails(
+    controlMetricDetails,
+    controlTemperatureOverrides
+  );
+  const selectableAssetOverrides = buildWatchfaceConfigAssetOverrides(
+    selectableMetricDetails,
+    design.configAssetOverrides ?? {}
+  );
+  const selectableAssetDetails = applyConfigOverridesToDetails(
+    selectableMetricDetails,
+    selectableAssetOverrides
+  );
+  const componentStyleOverrides = mergeConfigOverrides(
+    buildMetricStyleOverrides(
+      metricDetails,
+      metricStylesOf(design),
+      false,
+      design.fontFamily,
+      toStudioOptions(design)
+    ),
+    controlComplicationOverrides,
+    controlTemperatureOverrides,
+    design.selectableMetricStyle
+      ? buildSelectableMetricStyleOverrides(
+          selectableMetricDetails,
+          design.selectableMetricStyle
+        )
+      : [],
+    buildTimeStyleOverrides(
+      metricDetails,
+      timeStylesOf(design),
+      false,
+      toStudioOptions(design)
+    ),
+    buildDateStyleOverrides(metricDetails, dateStylesOf(design)),
+    buildLayerColorOverrides(metricDetails, design.layerColors ?? {}),
+    // A synthesized icon must establish its base path/position before the
+    // user's per-component movement is applied. Reversing these two entries
+    // makes the generated fallback position overwrite every drag.
+    selectableAssetOverrides,
+    buildControlIconPositionOverrides(
+      selectableAssetDetails,
+      design.controlIconOffsets ?? {}
+    ),
+    buildStaticSeparatorOverrides(details, design.staticSeparators, design.configAssetOverrides),
+    buildDisabledControlComplicationOverrides(details, design)
+  );
+  const styledMetricDetails = applyConfigOverridesToDetails(
+    controlMetricDetails,
+    componentStyleOverrides
+  );
+  const laidOutDetails = applyLayoutToDetails(
+    styledMetricDetails,
+    design.layoutOffsets ?? {}
+  );
+  const previewDetails = applyConfigOverridesToDetails(
+    laidOutDetails,
+    mergeConfigOverrides(
+      buildLayerVisibilityOverrides(laidOutDetails, design.layerVisibility ?? {})
+    )
+  );
+  return {
+    timeFormatOverrides,
+    metricOverrides,
+    metricDetails,
+    styledMetricDetails,
+    previewDetails
+  };
+}
+
+function hasEntries(record: Record<string, unknown> | undefined): boolean {
+  return Boolean(record) && Object.keys(record!).length > 0;
+}
+
+function layoutIsActive(design: CorosWatchfaceDesignState): boolean {
+  return Object.values(design.layoutOffsets ?? {}).some(
+    (offset) => offset.dx !== 0 || offset.dy !== 0
+  );
+}
+
+function hasLayerDecorations(
+  design: CorosWatchfaceDesignState,
+  layerId: string
+): boolean {
+  return (
+    resolveWatchfaceLayerEffects(design, layerId).some(
+      (effect) => effect.enabled && effect.opacity > 0
+    ) ||
+    resolveWatchfaceLayerStrokes(design, layerId).some(
+      (stroke) => stroke.enabled && stroke.opacity > 0
+    )
+  );
+}
+
+function hasLayerBitmapTransform(
+  design: CorosWatchfaceDesignState,
+  layerId: string
+): boolean {
+  return (
+    hasLayerDecorations(design, layerId) ||
+    hasWatchfaceLayerOpacity(design, layerId)
+  );
+}
+
+/**
+ * Builds the exact sprite-replacement and config-override sets that
+ * Studio sends to createCorosWatchfaceArchive, driven purely by a
+ * design state so the new editor produces byte-identical archives.
+ */
+/**
+ * A weekday still drawn from the template's own sprites has a translated
+ * label set per watch language. Languages chosen in the Send panel instead
+ * show the English weekday exactly as designed: its final font folder, rect
+ * and color. Custom weekday styles are handled by applyWeekdayLanguageOverrides.
+ */
+export function buildTemplateWeekdayLanguageOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  design: CorosWatchfaceDesignState,
+  overrides: CorosWatchfaceConfigOverride[]
+): CorosWatchfaceConfigOverride[] {
+  const languages = design.watchLanguages;
+  if (design.dateStyles?.weekday || !languages || languages === "english") return [];
+  const chosen = languages === "all" ? null : new Set(languages);
+  const result: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of details.resolutions) {
+    const path = `${resolution.directory}/config.txt`;
+    const final: Record<string, string> = { ...resolution.config };
+    for (const override of overrides) {
+      if (override.path === path) Object.assign(final, override.values);
+    }
+    const font = final.english_date_week_font;
+    if (!font) continue;
+    const values: Record<string, string> = {};
+    for (const key of Object.keys(resolution.config)) {
+      const language = /^([a-z_]+)_date_week_font$/.exec(key)?.[1];
+      if (!language || language === "english" || language.startsWith("control_")) continue;
+      if (chosen && !chosen.has(language)) continue;
+      values[key] = font;
+      for (const field of ["rect", "font_color"]) {
+        const source = final[`english_date_week_${field}`];
+        const target = `${language}_date_week_${field}`;
+        if (source !== undefined && target in resolution.config) values[target] = source;
+      }
+    }
+    if (Object.keys(values).length) result.push({ path, values });
+  }
+  return result;
+}
+
+export async function composeWatchfaceReplacements(
+  details: CorosWatchfaceTemplateDetails,
+  design: CorosWatchfaceDesignState,
+  loadAssets: WatchfaceAssetLoader
+): Promise<WatchfaceComposeResult> {
+  const {
+    timeFormatOverrides,
+    metricOverrides,
+    metricDetails,
+    styledMetricDetails
+  } =
+    deriveDesignDetails(details, design);
+  const metricStyles = { ...metricStylesOf(design) };
+  for (const layerId of [
+    "battery",
+    "heartRate",
+    "steps",
+    "calories",
+    "exercise",
+    "elevation",
+    "temperature"
+  ] as const) {
+    if (!metricStyles[layerId] && hasLayerBitmapTransform(design, layerId)) {
+      metricStyles[layerId] = { scale: 1 };
+    }
+  }
+  const timeStyles = { ...timeStylesOf(design) };
+  for (const layerId of ["hours", "minutes", "seconds", "autoTime"] as const) {
+    if (!timeStyles[layerId] && hasLayerBitmapTransform(design, layerId)) {
+      timeStyles[layerId] = { scale: 1 };
+    }
+  }
+  const dateStyles = { ...dateStylesOf(design) };
+  for (const layerId of ["weekday", "dateMonth", "dateDay"] as const) {
+    if (!dateStyles[layerId] && hasLayerBitmapTransform(design, layerId)) {
+      dateStyles[layerId] = { scale: 1 };
+    }
+  }
+
+  const rasterFontActive = rasterFontSupportsText(design.rasterFont, "0123456789");
+  const studioActive =
+    Boolean(design.fontFamily) || rasterFontActive || design.tintLabels || design.tintIcons;
+  const metricStyleActive = hasEntries(metricStyles);
+  const selectableMetricStyle = design.selectableMetricStyle ??
+    (hasLayerBitmapTransform(design, "complication") ? { scale: 1 } : undefined);
+  const selectableMetricStyleActive = Boolean(selectableMetricStyle);
+  const timeStyleActive = hasEntries(timeStyles);
+  const dateStyleActive = hasEntries(dateStyles);
+  const layerColorActive = hasEntries(design.layerColors);
+  const typographyActive =
+    Boolean(design.fontFamily) ||
+    rasterFontActive ||
+    Object.values(timeStyles).some(
+      (style) => Boolean(style?.fontFamily) || style?.letterSpacing !== undefined
+    );
+  const ampmStyle = design.ampmIndicator;
+  const ampmSupported = Boolean(getAmPmCapability(details) && ampmStyle);
+  const ampmActive = Boolean(ampmSupported && ampmStyle?.enabled);
+  // A disabled indicator must clear every resolution, even when the master
+  // template lacks AM/PM support or a smaller AOD tree has dangling paths.
+  const ampmOverrides = ampmStyle && (!ampmStyle.enabled || ampmSupported)
+    ? buildAmPmOverrides(details, ampmStyle)
+    : [];
+  const weatherStyle = design.weatherIndicator;
+  const nativeDataComposition = await composeNativeData(details, design.nativeData, weatherStyle?.enabled, design.chartPageModes);
+  const controlTemperatureActive = isControlComplicationEnabled(
+    details,
+    design,
+    "temperature"
+  );
+  const controlBarometerActive = isControlComplicationEnabled(
+    details,
+    design,
+    "barometer"
+  );
+  const controlBarometerMode = design.controlBarometerMode ??
+    barometerDisplayModeForConfig(
+      pickPreviewResolution(details)?.config ?? {}
+    );
+  const controlTemperatureStyle = metricStyles.temperature ?? {
+    color: design.digitColor,
+    scale: 1
+  };
+  const controlTemperatureRasterActive = Boolean(
+    controlTemperatureStyle.fontFamily ||
+    design.fontFamily ||
+    rasterFontActive ||
+    rasterFontSupportsText(controlTemperatureStyle.rasterFont, "0123456789") ||
+    controlTemperatureStyle.scale !== 1
+  );
+  const controlComplicationOverrides =
+    buildControlComplicationConfigurationOverrides(metricDetails, design);
+  const controlMetricDetails = applyConfigOverridesToDetails(
+    metricDetails,
+    controlComplicationOverrides
+  );
+  const exportedControlTemperatureOverrides = controlTemperatureActive
+    ? buildControlTemperatureOverrides(
+        controlMetricDetails,
+        controlTemperatureStyle,
+        controlTemperatureRasterActive
+      )
+    : [];
+  const selectableConfigDetails = applyConfigOverridesToDetails(
+    controlMetricDetails,
+    exportedControlTemperatureOverrides
+  );
+  const selectableAssetOverrides = buildWatchfaceConfigAssetOverrides(
+    selectableConfigDetails,
+    design.configAssetOverrides ?? {}
+  );
+  const selectableAssetDetails = applyConfigOverridesToDetails(
+    selectableConfigDetails,
+    selectableAssetOverrides
+  );
+  const batteryIconEffectSources = await buildBatteryIconEffectSources(
+    details,
+    design,
+    loadAssets
+  );
+  // metricDetails carries date parts Studio added to templates without them.
+  const dateSpriteComposition = dateStyleActive
+    ? await buildDateSpriteComposition(
+        applyLayoutToDetails(metricDetails, design.layoutOffsets ?? {}),
+        dateStyles,
+        { ...toStudioOptions(design), watchLanguages: design.watchLanguages },
+        loadAssets
+      )
+    : { replacements: [], configOverrides: [] };
+  const selectableMetricComposition = selectableMetricStyleActive
+    ? await buildSelectableMetricSpriteComposition(
+        applyLayoutToDetails(
+          selectableConfigDetails,
+          design.layoutOffsets ?? {}
+        ),
+        selectableMetricStyle!,
+        design.fontFamily,
+        loadAssets,
+        toStudioOptions(design)
+      )
+    : { replacements: [], configOverrides: [] };
+
+  const baseAssetReplacements = mergeAssetReplacements(
+    studioActive
+      ? await buildStudioReplacements(details, toStudioOptions(design), loadAssets)
+      : [],
+    metricStyleActive
+      ? await buildMetricSpriteReplacements(
+          metricDetails,
+          metricStyles,
+          design.fontFamily,
+          loadAssets,
+          toStudioOptions(design)
+        )
+      : [],
+    controlTemperatureActive && controlTemperatureRasterActive
+      ? await buildControlTemperatureSpriteReplacements(
+          controlMetricDetails,
+          controlTemperatureStyle,
+          design.fontFamily,
+          loadAssets,
+          toStudioOptions(design),
+          // Only a color set on the temperature itself tints its PNG font.
+          metricStyles.temperature?.color
+        )
+      : [],
+    selectableMetricComposition.replacements,
+    buildBarometerIconReplacements(
+      selectableConfigDetails,
+      design.layerColors?.complication ?? design.digitColor
+    ),
+    timeStyleActive
+      ? await buildTimeSpriteReplacements(
+          metricDetails,
+          timeStyles,
+          design.fontFamily,
+          loadAssets,
+          toStudioOptions(design)
+        )
+      : [],
+    dateSpriteComposition.replacements,
+    layerColorActive
+      ? await buildLayerColorSpriteReplacements(
+          details,
+          design.layerColors ?? {},
+          loadAssets,
+          design.layerOpacities ?? {}
+        )
+      : hasWatchfaceLayerOpacity(design, "separators") ||
+          hasWatchfaceLayerOpacity(design, "arcCut") ||
+          hasWatchfaceLayerOpacity(design, "complication")
+        ? await buildLayerColorSpriteReplacements(
+            details,
+            {},
+            loadAssets,
+            design.layerOpacities ?? {}
+          )
+      : [],
+    await buildWatchfaceConfigAssetReplacements(
+      details,
+      design.configAssetOverrides ?? {},
+      {
+        loadAssets,
+        layerOpacities: design.layerOpacities ?? {},
+        effectStyles: design.effectStyles ?? [],
+        layerEffects: design.layerEffects ?? {},
+        layerStrokes: design.layerStrokes ?? {},
+        layoutDetails: styledMetricDetails,
+        tintIcons: design.tintIcons,
+        accentColor: design.accentColor,
+        layerColors: design.layerColors
+      }
+    ),
+    batteryIconEffectSources.replacements,
+    ampmActive ? await buildAmPmSpriteReplacements(details, ampmStyle!, loadAssets) : [],
+    weatherStyle?.enabled
+      ? await buildWeatherSpriteReplacements(details, weatherStyle)
+      : [],
+    nativeDataComposition.assetReplacements
+  );
+  // Frames bypass the sprite effect passes: the compiler stores them verbatim.
+  const animationReplacements = await buildAnimationSpriteReplacements(details, design.animation);
+
+  const timeStyleOverrides = timeStyleActive
+    ? buildTimeStyleOverrides(
+        metricDetails,
+        timeStyles,
+        true,
+        toStudioOptions(design)
+      )
+    : [];
+  const timePositionDetails = applyConfigOverridesToDetails(
+    styledMetricDetails,
+    timeStyleActive
+      ? buildTimeStyleOverrides(
+          details,
+          timeStyles,
+          false,
+          toStudioOptions(design)
+        )
+      : []
+  );
+  const timeTrackingOverrides = typographyActive
+    ? buildTimeTrackingOverrides(
+        timePositionDetails,
+        design.letterSpacing ?? 0,
+        timeStyles,
+        toStudioOptions(design)
+      )
+    : [];
+  const trackedDetails = applyConfigOverridesToDetails(
+    timePositionDetails,
+    timeTrackingOverrides
+  );
+  const layoutConfigAssetOverrides = buildWatchfaceConfigAssetOverrides(
+    trackedDetails,
+    design.configAssetOverrides ?? {}
+  );
+  const layoutDetails = applyConfigOverridesToDetails(
+    trackedDetails,
+    layoutConfigAssetOverrides
+  );
+  const layoutOverrides = layoutIsActive(design)
+    ? buildLayoutOverrides(layoutDetails, design.layoutOffsets ?? {})
+    : [];
+  // Config-asset overrides are resolved against the positioned layout so any
+  // direct firmware coordinates remain exactly those shown in Studio.
+  const configAssetPositionDetails = applyConfigOverridesToDetails(
+    layoutDetails,
+    layoutOverrides
+  );
+  const decorationPositionDetails = applyConfigOverridesToDetails(
+    configAssetPositionDetails,
+    mergeConfigOverrides(
+      ampmOverrides,
+      weatherStyle ? buildWeatherOverrides(details, weatherStyle) : []
+    )
+  );
+  const effectedAssets = await applyFirmwareEffects(
+    details,
+    design,
+    await rotateBatteryIconFrames(
+      design,
+      isolateBatteryIconEffectPaths(details, design, baseAssetReplacements)
+    )
+  );
+  const mergedConfigOverrides = mergeConfigOverrides(
+      metricOverrides,
+      timeFormatOverrides,
+      controlComplicationOverrides,
+      metricStyleActive
+        ? buildMetricStyleOverrides(
+            metricDetails,
+            metricStyles,
+            true,
+            design.fontFamily,
+            toStudioOptions(design)
+          )
+        : [],
+      exportedControlTemperatureOverrides,
+      selectableMetricStyleActive
+        ? buildSelectableMetricStyleOverrides(
+            selectableConfigDetails,
+            selectableMetricStyle!,
+            true
+          )
+        : [],
+      timeStyleOverrides,
+      dateStyleActive ? buildDateStyleOverrides(metricDetails, dateStyles, true) : [],
+      timeTrackingOverrides,
+      buildLayerColorOverrides(details, design.layerColors ?? {}),
+      // Preserve the generated path and base position for selectable icons
+      // that were not present in the imported template.
+      selectableAssetOverrides,
+      buildControlIconPositionOverrides(
+        selectableAssetDetails,
+        design.controlIconOffsets ?? {}
+      ),
+      ampmOverrides,
+      weatherStyle ? buildWeatherOverrides(details, weatherStyle) : [],
+      // Retain synthesized fixed-asset keys (notably battery_icon_dir/pos).
+      // The final positioned pass sees those keys in its intermediate details
+      // and therefore correctly avoids emitting them a second time.
+      layoutConfigAssetOverrides,
+      layoutOverrides,
+      dateSpriteComposition.configOverrides,
+      selectableMetricComposition.configOverrides,
+      buildEffectPaddingOverrides(
+        decorationPositionDetails,
+        effectedAssets.padding
+      ),
+      // Hiding must also blank keys Studio added (seconds, date parts).
+      buildLayerVisibilityOverrides(metricDetails, design.layerVisibility ?? {}),
+      batteryIconEffectSources.configOverrides,
+      buildWatchfaceConfigAssetOverrides(
+        configAssetPositionDetails,
+        design.configAssetOverrides ?? {},
+        true
+      ),
+      buildDisabledControlComplicationOverrides(details, design),
+      nativeDataComposition.configOverrides,
+      buildWatchThemeOverrides(details, design),
+      buildAnimationOverrides(details, design.animation),
+      // Apply after asset replacements so they cannot resurrect a hidden colon.
+      buildStaticSeparatorOverrides(details, design.staticSeparators, design.configAssetOverrides)
+  );
+  const configOverrides = rebaseNegativeControlChildren(
+    details,
+    finalizeNativeControlOverrides(
+      details,
+      mergeConfigOverrides(
+        mergedConfigOverrides,
+        buildTemplateWeekdayLanguageOverrides(details, design, mergedConfigOverrides)
+      ),
+      design.nativeData,
+      design.layerVisibility?.complication === false
+    )
+  );
+
+  const requiresModernControlVersion =
+    controlTemperatureActive ||
+    controlBarometerActive;
+  const controlMinimumWatchFaceVersion =
+    controlBarometerActive && controlBarometerMode === "static"
+      ? MODERN_CONTROL_WATCHFACE_VERSION
+      : requiresModernControlVersion
+        ? MODERN_CONTROL_WATCHFACE_VERSION
+        : undefined;
+
+  const minimumWatchFaceVersion = Math.max(controlMinimumWatchFaceVersion ?? 0, nativeDataComposition.minWatchFaceVersion) || undefined;
+
+  return {
+    // Keep this after all scaling, rotation, opacity, and decoration passes.
+    assetReplacements: mergeAssetReplacements(
+      await buildSolidFontSpriteReplacements(design, effectedAssets.replacements),
+      animationReplacements
+    ),
+    configOverrides,
+    ...(minimumWatchFaceVersion !== undefined
+      ? { minWatchFaceVersion: minimumWatchFaceVersion }
+      : {})
+  };
+}

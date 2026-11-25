@@ -1,0 +1,319 @@
+{
+  "format": "coros-weather-sprite-set",
+  "stateCount": 41,
+  "ordering": "row-major: atlas rows 0-4 plus row 5 columns 0-5",
+  "blankSourceCell": {
+    "row": 5,
+    "column": 6,
+    "gridIndex": 41
+  },
+  "sourceAtlas": "weather-atlas-transparent.png",
+  "variants": {
+    "master": {
+      "size": [
+        128,
+        128
+      ],
+      "directory": "master"
+    },
+    "watchface_416x416": {
+      "size": [
+        64,
+        64
+      ],
+      "directory": "416"
+    },
+    "watchface_800x800": {
+      "size": [
+        123,
+        123
+      ],
+      "directory": "800"
+    }
+  },
+  "states": [
+    {
+      "index": 0,
+      "sourceGridIndex": 0,
+      "file": "00.png",
+      "label": "sunny"
+    },
+    {
+      "index": 1,
+      "sourceGridIndex": 1,
+      "file": "01.png",
+      "label": "clear-night"
+    },
+    {
+      "index": 2,
+      "sourceGridIndex": 2,
+      "file": "02.png",
+      "label": "partly-cloudy-day"
+    },
+    {
+      "index": 3,
+      "sourceGridIndex": 3,
+      "file": "03.png",
+      "label": "mostly-cloudy-day"
+    },
+    {
+      "index": 4,
+      "sourceGridIndex": 4,
+      "file": "04.png",
+      "label": "partly-cloudy-night"
+    },
+    {
+      "index": 5,
+      "sourceGridIndex": 5,
+      "file": "05.png",
+      "label": "cloudy"
+    },
+    {
+      "index": 6,
+      "sourceGridIndex": 6,
+      "file": "06.png",
+      "label": "overcast"
+    },
+    {
+      "index": 7,
+      "sourceGridIndex": 7,
+      "file": "07.png",
+      "label": "wind"
+    },
+    {
+      "index": 8,
+      "sourceGridIndex": 8,
+      "file": "08.png",
+      "label": "wind-leaves"
+    },
+    {
+      "index": 9,
+      "sourceGridIndex": 9,
+      "file": "09.png",
+      "label": "haze"
+    },
+    {
+      "index": 10,
+      "sourceGridIndex": 10,
+      "file": "10.png",
+      "label": "sand-dust"
+    },
+    {
+      "index": 11,
+      "sourceGridIndex": 11,
+      "file": "11.png",
+      "label": "fog"
+    },
+    {
+      "index": 12,
+      "sourceGridIndex": 12,
+      "file": "12.png",
+      "label": "mountain-fog"
+    },
+    {
+      "index": 13,
+      "sourceGridIndex": 13,
+      "file": "13.png",
+      "label": "city-fog"
+    },
+    {
+      "index": 14,
+      "sourceGridIndex": 14,
+      "file": "14.png",
+      "label": "light-rain"
+    },
+    {
+      "index": 15,
+      "sourceGridIndex": 15,
+      "file": "15.png",
+      "label": "drizzle"
+    },
+    {
+      "index": 16,
+      "sourceGridIndex": 16,
+      "file": "16.png",
+      "label": "rain"
+    },
+    {
+      "index": 17,
+      "sourceGridIndex": 17,
+      "file": "17.png",
+      "label": "showers"
+    },
+    {
+      "index": 18,
+      "sourceGridIndex": 18,
+      "file": "18.png",
+      "label": "heavy-showers"
+    },
+    {
+      "index": 19,
+      "sourceGridIndex": 19,
+      "file": "19.png",
+      "label": "slanted-rain"
+    },
+    {
+      "index": 20,
+      "sourceGridIndex": 20,
+      "file": "20.png",
+      "label": "heavy-rain"
+    },
+    {
+      "index": 21,
+      "sourceGridIndex": 21,
+      "file": "21.png",
+      "label": "thunder-rain"
+    },
+    {
+      "index": 22,
+      "sourceGridIndex": 22,
+      "file": "22.png",
+      "label": "thunderstorm-rain"
+    },
+    {
+      "index": 23,
+      "sourceGridIndex": 23,
+      "file": "23.png",
+      "label": "sun-thunder-shower"
+    },
+    {
+      "index": 24,
+      "sourceGridIndex": 24,
+      "file": "24.png",
+      "label": "thunderstorm"
+    },
+    {
+      "index": 25,
+      "sourceGridIndex": 25,
+      "file": "25.png",
+      "label": "severe-thunderstorm"
+    },
+    {
+      "index": 26,
+      "sourceGridIndex": 26,
+      "file": "26.png",
+      "label": "night-thunder-rain"
+    },
+    {
+      "index": 27,
+      "sourceGridIndex": 27,
+      "file": "27.png",
+      "label": "night-thunderstorm"
+    },
+    {
+      "index": 28,
+      "sourceGridIndex": 28,
+      "file": "28.png",
+      "label": "light-snow"
+    },
+    {
+      "index": 29,
+      "sourceGridIndex": 29,
+      "file": "29.png",
+      "label": "snow-showers"
+    },
+    {
+      "index": 30,
+      "sourceGridIndex": 30,
+      "file": "30.png",
+      "label": "snow"
+    },
+    {
+      "index": 31,
+      "sourceGridIndex": 31,
+      "file": "31.png",
+      "label": "heavy-snow"
+    },
+    {
+      "index": 32,
+      "sourceGridIndex": 32,
+      "file": "32.png",
+      "label": "snow-grains"
+    },
+    {
+      "index": 33,
+      "sourceGridIndex": 33,
+      "file": "33.png",
+      "label": "snow-wind"
+    },
+    {
+      "index": 34,
+      "sourceGridIndex": 34,
+      "file": "34.png",
+      "label": "dark-snow-wind"
+    },
+    {
+      "index": 35,
+      "sourceGridIndex": 35,
+      "file": "35.png",
+      "label": "rain-snow-mix"
+    },
+    {
+      "index": 36,
+      "sourceGridIndex": 36,
+      "file": "36.png",
+      "label": "sleet-pellets"
+    },
+    {
+      "index": 37,
+      "sourceGridIndex": 37,
+      "file": "37.png",
+      "label": "cold-rain"
+    },
+    {
+      "index": 38,
+      "sourceGridIndex": 38,
+      "file": "38.png",
+      "label": "freezing-rain"
+    },
+    {
+      "index": 39,
+      "sourceGridIndex": 39,
+      "file": "39.png",
+      "label": "hail"
+    },
+    {
+      "index": 40,
+      "sourceGridIndex": 40,
+      "file": "40.png",
+      "label": "rain-wind"
+    }
+  ],
+  "extras": [
+    {
+      "sourceGridIndex": 42,
+      "file": "extras/00-severe-thunder-rain.png",
+      "label": "severe-thunder-rain"
+    },
+    {
+      "sourceGridIndex": 43,
+      "file": "extras/01-heavy-thunder-rain.png",
+      "label": "heavy-thunder-rain"
+    },
+    {
+      "sourceGridIndex": 44,
+      "file": "extras/02-purple-lightning-rain.png",
+      "label": "purple-lightning-rain"
+    },
+    {
+      "sourceGridIndex": 45,
+      "file": "extras/03-ice-pellets.png",
+      "label": "ice-pellets"
+    },
+    {
+      "sourceGridIndex": 46,
+      "file": "extras/04-tornado.png",
+      "label": "tornado"
+    },
+    {
+      "sourceGridIndex": 47,
+      "file": "extras/05-dust-wind.png",
+      "label": "dust-wind"
+    },
+    {
+      "sourceGridIndex": 48,
+      "file": "extras/06-rainbow-partly-cloudy.png",
+      "label": "rainbow-partly-cloudy"
+    }
+  ]
+}

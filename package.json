@@ -1,0 +1,121 @@
+{
+  "name": "clink-desktop",
+  "productName": "C-LINK",
+  "version": "0.1.0",
+  "private": true,
+  "description": "C-LINK for the desktop: a local Electron app for COROS watches. Your data stays on this computer and your phone syncs straight to it.",
+  "main": "dist/main/main.cjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:sample": "CLINK_SAMPLE=1 node scripts/dev.mjs",
+    "build": "node scripts/prepare-binaries.mjs && vite build && node scripts/build-main.mjs",
+    "start": "electron .",
+    "typecheck": "node scripts/build-main.mjs --routes && tsc --noEmit",
+    "lint": "eslint src desktop scripts",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "binaries:prepare": "node scripts/prepare-binaries.mjs",
+    "binaries:pin": "node scripts/pin-binaries.mjs",
+    "dist:mac": "npm run build && electron-builder --mac --arm64 --x64 --publish never && node scripts/stamp-mac-update-minimum.mjs",
+    "release:version": "node scripts/release-version.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.12.0",
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/nunito": "5.3.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "electron-updater": "6.8.12",
+    "mapbox-gl": "3.35.2",
+    "maplibre-gl": "6.16.0",
+    "qrcode": "^1.5.4",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^8.1.3",
+    "@rolldown/plugin-babel": "^0.3.1",
+    "@types/node": "22.20.5",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "electron": "45.4.1",
+    "electron-builder": "26.18.1",
+    "esbuild": "0.28.2",
+    "eslint": "9.39.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.73.0",
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  },
+  "build": {
+    "appId": "app.coroslink",
+    "productName": "C-LINK",
+    "protocols": [
+      {
+        "name": "C-LINK",
+        "schemes": [
+          "clink",
+          "coroslink"
+        ]
+      }
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "JunAkerBuilds",
+      "repo": "CorosLink",
+      "releaseType": "draft"
+    },
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/${platform}-${arch}",
+        "to": "bin/${platform}-${arch}",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "native/ble/target/release/clink-ble",
+        "to": "clink-ble"
+      }
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "CorosLink-${version}-${arch}.${ext}",
+      "category": "public.app-category.healthcare-fitness",
+      "icon": "build/icon.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true,
+      "extendInfo": {
+        "NSBluetoothAlwaysUsageDescription": "C-LINK uses Bluetooth to connect to your COROS watch.",
+        "NSLocalNetworkUsageDescription": "C-LINK syncs with C-LINK on your phone over the same Wi-Fi network.",
+        "NSLocationUsageDescription": "C-LINK uses your location only when you choose Use my location."
+      }
+    },
+    "dmg": {
+      "artifactName": "CorosLink-${version}-${arch}.${ext}"
+    }
+  },
+  "overrides": {
+    "minimatch@^9.0.0": "^11.0.9",
+    "minimatch@^10.0.0": "^11.0.9"
+  }
+}

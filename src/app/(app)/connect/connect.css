@@ -1,0 +1,92 @@
+/* Profile and connections (/connect). Spec: Connections.dc.html / LightConnections.dc.html. */
+.cn-page { gap: 20px; padding-top: 24px; }
+
+/* The profile header on the page itself, not a card (the desktop's This computer). */
+.cn-profile { display: flex; flex-wrap: wrap; align-items: center; gap: 20px 28px; padding: 8px 0 26px; border-bottom: 1px solid var(--line); }
+.cn-avatar {
+  flex: 0 0 84px; display: flex; align-items: center; justify-content: center; width: 84px; height: 84px; border-radius: 999px;
+  background: rgba(83, 203, 161, 0.16); color: var(--h-mint-ink); font-size: 34px; font-weight: 800;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--h-mint-ink) 50%, transparent), 0 0 0 6px rgba(var(--fg-rgb), 0.03);
+}
+.cn-who { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.cn-who h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.cn-who-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--muted); }
+.cn-who-line b { font-weight: 600; overflow-wrap: anywhere; }
+.cn-figures { display: flex; flex-wrap: wrap; gap: 14px 36px; margin: 0; }
+.cn-figures div { display: flex; flex-direction: column; gap: 2px; }
+.cn-figures dt { font-size: 12px; color: var(--muted); }
+.cn-figures dd { margin: 0; font-size: 17px; font-weight: 700; }
+.cn-profile-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.cn-quiet { padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; text-decoration: underline; }
+.cn-quiet:hover { color: var(--fg); }
+.cn-quiet:disabled { opacity: 0.5; }
+.cn-wide { flex: 1 1 100%; }
+
+/* Pills */
+.cn-pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px;
+  background: rgba(var(--fg-rgb), 0.08); color: var(--soft); font-size: 12px; font-weight: 700; white-space: nowrap;
+}
+.cn-pill[data-tone="ok"] { background: rgba(83, 203, 161, 0.16); color: var(--h-mint-ink); }
+.cn-pill[data-tone="ok"]::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.cn-pill[data-tone="bad"] { background: rgba(255, 107, 129, 0.16); color: var(--h-rose-ink); }
+
+.cn-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+.cn-heading h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+
+/* Groups of connection cards */
+.cn-group { display: flex; flex-direction: column; gap: 12px; }
+.cn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 16px; }
+.cn-card { box-sizing: border-box; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.cn-card-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; }
+.cn-card-name { flex: 1 1 140px; min-width: 0; display: flex; flex-direction: column; }
+.cn-card-name h4 { margin: 0; font-size: 15px; font-weight: 700; }
+.cn-card-name span { font-size: 13px; color: var(--muted); }
+.cn-mono {
+  flex: 0 0 40px; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px;
+  background: color-mix(in srgb, var(--mono) 15%, transparent); color: var(--mono); font-size: 13px; font-weight: 800; letter-spacing: 0.02em;
+}
+.cn-mono[data-hue="coral"] { --mono: var(--h-coral); }
+.cn-mono[data-hue="blue"] { --mono: var(--h-blue); }
+.cn-mono[data-hue="pink"] { --mono: var(--h-pink-ink); }
+.cn-mono[data-hue="amber"] { --mono: var(--h-amber-soft-ink); }
+.cn-mono[data-hue="mint"] { --mono: var(--h-mint-ink); }
+.cn-mono[data-hue="grey"] { --mono: var(--muted); }
+
+.cn-rows { display: flex; flex-direction: column; margin: 0; }
+.cn-rows div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.cn-rows dt { color: var(--muted); }
+.cn-rows dd { margin: 0; min-width: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.cn-rows .cn-row-switch { align-items: center; padding: 0; min-height: 37px; }
+.cn-pills { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.cn-link { font-size: 13px; font-weight: 600; color: var(--h-mint-ink); text-decoration: underline; text-underline-offset: 2px; }
+.cn-card .notice { margin: 0; }
+.cn-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; }
+.cn-card-actions .btn { height: 32px; }
+.cn-note { margin: 0; font-size: 13px; color: var(--muted); }
+.cn-problem { margin: 0; font-size: 13px; font-weight: 600; color: var(--h-rose-ink); }
+
+/* Sign-in forms inside the Training Hub card */
+.cn-form { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.cn-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }
+.cn-form p { margin: 0; font-size: 13px; }
+.cn-form .cn-small { font-size: 12px; color: var(--muted); }
+
+/* Quiet lists: "Not on the web yet" and "Managed on your phone" */
+.cn-list { box-sizing: border-box; padding: 18px; display: flex; flex-direction: column; gap: 6px; }
+.cn-list h3, .cn-group h3 { margin: 0; font-size: 16px; font-weight: 700; }
+.cn-list ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.cn-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; min-height: 48px; padding: 8px 0; border-top: 1px solid var(--line); }
+.cn-list li:first-child { border-top: 0; }
+.cn-list-what { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cn-list-what > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.cn-list-what b { font-weight: 600; }
+.cn-list-what small { font-size: 13px; color: var(--muted); }
+
+@media (max-width: 720px) {
+  .cn-profile { gap: 16px; }
+  .cn-who { flex-basis: calc(100% - 100px); }
+  .cn-figures, .cn-profile-actions { flex: 1 1 100%; }
+  .cn-profile-actions { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+  .cn-pill { white-space: normal; height: auto; min-height: 24px; padding-top: 3px; padding-bottom: 3px; }
+}

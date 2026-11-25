@@ -1,0 +1,211 @@
+/**
+ * Pure maths for the training calendar: the weeks of a month (Monday first), paging,
+ * where repeated workouts fall, and the week totals column.
+ * Days are local calendar days written YYYY-MM-DD; months are YYYY-MM.
+ */
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const toKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const toDate = (key: string) => {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
+export function isDayKey(text: string | null | undefined): text is string {
+  if (!text || !/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  return toKey(toDate(text)) === text;
+}
+
+export function isMonthKey(text: string | null | undefined): text is string {
+  if (!text || !/^\d{4}-\d{2}$/.test(text)) return false;
+  const m = Number(text.slice(5));
+  return m >= 1 && m <= 12;
+}
+
+export function addDays(day: string, n: number): string {
+  const d = toDate(day);
+  return toKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
+}
+
+/** The Monday of the week a day is in. */
+export function mondayOf(day: string): string {
+  const d = toDate(day);
+  return addDays(day, -((d.getDay() + 6) % 7));
+}
+
+export function monthOf(day: string): string {
+  return day.slice(0, 7);
+}
+
+export function addMonths(month: string, n: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+}
+
+/** Seven days from a Monday. */
+export function weekDays(monday: string): string[] {
+  return Array.from({ length: 7 }, (_, k) => addDays(monday, k));
+}
+
+/** Every week that has a day in the month, Monday first: four to six rows of seven days. */
+export function monthWeeks(month: string): string[][] {
+  const first = `${month}-01`;
+  const next = `${addMonths(month, 1)}-01`;
+  const weeks: string[][] = [];
+  for (let monday = mondayOf(first); monday < next; monday = addDays(monday, 7)) weeks.push(weekDays(monday));
+  return weeks;
+}
+
+/** The week to show when switching from a month to one week: today's if it is in the month, else the first. */
+export function weekInMonth(month: string, today: string): string {
+  return monthOf(today) === month ? mondayOf(today) : mondayOf(`${month}-01`);
+}
+
+/** The month a week belongs to: the one holding its Thursday. */
+export function monthOfWeek(monday: string): string {
+  return monthOf(addDays(monday, 3));
+}
+
+/** The days a workout falls on: its day, then the same weekday for `repeatWeeks` weeks in all. */
+export function occurrences(day: string, repeatWeeks: number): string[] {
+  const n = Number.isFinite(repeatWeeks) ? Math.max(1, Math.min(52, Math.floor(repeatWeeks))) : 1;
+  return Array.from({ length: n }, (_, k) => addDays(day, k * 7));
+}
+
+/* ───────────── Entries ───────────── */
+
+export interface PlacedEntry {
+  id: string;
+  date: string;
+  sport: string;
+  status: "done" | "planned";
+  source: string;
+  metres?: number;
+  load?: number;
+}
+
+export interface Placed<E> {
+  /** What each day shows, done first. */
+  byDay: Map<string, E[]>;
+  /** Planned entries from the account that a workout saved here took the place of. */
+  replaced: E[];
+}
+
+/**
+ * Lays entries on their days. A workout saved in this browser replaces whatever the sample or COROS
+ * had planned for that day; recorded activities and the gym plans a phone synced always stay.
+ */
+export function placeEntries<E extends PlacedEntry>(account: readonly E[], saved: readonly E[]): Placed<E> {
+  const savedDays = new Set(saved.map((e) => e.date));
+  const byDay = new Map<string, E[]>();
+  const replaced: E[] = [];
+  const put = (e: E) => {
+    const list = byDay.get(e.date);
+    if (list) list.push(e); else byDay.set(e.date, [e]);
+  };
+  for (const e of account) {
+    if (e.status === "planned" && e.source !== "synced" && savedDays.has(e.date)) replaced.push(e);
+    else put(e);
+  }
+  for (const e of saved) put(e);
+  for (const list of byDay.values()) list.sort((a, b) => Number(a.status === "planned") - Number(b.status === "planned"));
+  return { byDay, replaced };
+}
+
+/* ───────────── Week totals ───────────── */
+
+export interface WeekBase {
+  timeSeconds: number | null;
+  runMetres: number;
+  load: number | null;
+  plannedLoad: number | null;
+}
+
+export interface WeekSummary {
+  timeSeconds: number | null;
+  /** Null when the week has no running at all. */
+  runMetres: number | null;
+  load: number | null;
+  plannedLoad: number | null;
+  /** Width of the load bar, 0 to 100. */
+  bar: number;
+}
+
+/** A week's recorded load that fills the bar. */
+export const LOAD_BAR_FULL = 500;
+
+const sum = (list: readonly PlacedEntry[], pick: (e: PlacedEntry) => number | undefined) =>
+  list.reduce((total, e) => total + (pick(e) ?? 0), 0);
+
+/**
+ * The totals column for one week: the account's own totals, adjusted for workouts saved here
+ * (`added`) and the planned entries they replaced.
+ * Running distance counts what was recorded once anything is; before that, what is planned.
+ */
+export function weekSummary(base: WeekBase | undefined, added: readonly PlacedEntry[], replaced: readonly PlacedEntry[]): WeekSummary {
+  const isRun = (e: PlacedEntry) => e.sport === "run";
+  const runDelta = sum(added.filter(isRun), (e) => e.metres) - sum(replaced.filter(isRun), (e) => e.metres);
+  const loadDelta = sum(added, (e) => e.load) - sum(replaced, (e) => e.load);
+  const recorded = base != null && base.timeSeconds != null;
+
+  const run = recorded ? base.runMetres : Math.max(0, (base?.runMetres ?? 0) + runDelta);
+  const load = base?.load ?? null;
+  let plannedLoad = base?.plannedLoad ?? null;
+  if (added.length > 0 || replaced.length > 0) plannedLoad = Math.max(0, (plannedLoad ?? load ?? 0) + loadDelta);
+
+  return {
+    timeSeconds: base?.timeSeconds ?? null,
+    runMetres: base == null && run === 0 ? null : run,
+    load,
+    plannedLoad,
+    bar: load == null ? 0 : Math.max(0, Math.min(100, Math.round((load / LOAD_BAR_FULL) * 100))),
+  };
+}
+
+/** Hours and minutes of a week's time, as the column prints it (4:32). */
+export function hoursMinutes(seconds: number): string {
+  const minutes = Math.floor(Math.max(0, seconds) / 60);
+  return `${Math.floor(minutes / 60)}:${pad(minutes % 60)}`;
+}
+
+/* ───────────── Names ───────────── */
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export function weekdayName(day: string): string {
+  return DAYS[toDate(day).getDay()];
+}
+
+/** Thursday 19 November */
+export function longDay(day: string): string {
+  const d = toDate(day);
+  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+/** Thu 19 Nov, with the year on request. */
+export function shortDay(day: string, withYear = false): string {
+  const d = toDate(day);
+  return `${DAYS[d.getDay()].slice(0, 3)} ${dayMonth(day)}${withYear ? ` ${d.getFullYear()}` : ""}`;
+}
+
+/** 28 Aug */
+export function dayMonth(day: string): string {
+  const d = toDate(day);
+  return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
+}
+
+/** November 2026 */
+export function monthTitle(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return `${MONTHS[m - 1]} ${y}`;
+}
+
+/** 16 – 22 November 2026, or 30 Nov – 6 Dec 2026 when the week crosses months. */
+export function weekTitle(monday: string): string {
+  const a = toDate(monday), b = toDate(addDays(monday, 6));
+  if (a.getMonth() === b.getMonth()) return `${a.getDate()} – ${b.getDate()} ${MONTHS[b.getMonth()]} ${b.getFullYear()}`;
+  const yearA = a.getFullYear() === b.getFullYear() ? "" : ` ${a.getFullYear()}`;
+  return `${dayMonth(monday)}${yearA} – ${dayMonth(addDays(monday, 6))} ${b.getFullYear()}`;
+}

@@ -1,0 +1,6 @@
+/* The open-bottom dial's entrance (Health sleep score, Energy). Off under reduced motion via globals.css. */
+@keyframes dial-draw { from { stroke-dasharray: 0 2000; } }
+@keyframes dial-bloom { from { opacity: 0; } }
+.dial-track { animation: dial-draw 0.9s cubic-bezier(0.3, 0.7, 0.2, 1) 0.2s both; }
+.dial-value { animation: dial-draw 1.5s cubic-bezier(0.3, 0.7, 0.2, 1) 0.45s both; }
+.dial-glow { animation: dial-draw 1.5s cubic-bezier(0.3, 0.7, 0.2, 1) 0.45s both, dial-bloom 0.9s ease-out 1.5s both; }

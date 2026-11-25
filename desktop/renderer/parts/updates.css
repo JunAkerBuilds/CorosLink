@@ -1,0 +1,75 @@
+/* C-LINK's updates (parts/Updates.tsx): the sidebar's Updates control, its popover, and the update prompt. */
+
+/* The account menu's Updates row (it takes the menu's row style), with a mint dot when an update waits for you. */
+.acct-rows .upd-icon { position: relative; flex: none; display: grid; place-items: center; width: 18px; height: 18px; }
+.acct-rows .upd-icon svg { width: 18px; height: 18px; }
+.upd-icon[data-dot]::after {
+  content: ""; position: absolute; top: -2px; right: -3px; width: 8px; height: 8px; border-radius: 999px;
+  background: var(--h-mint); box-shadow: 0 0 0 2px var(--tip-bg);
+}
+.upd-row[data-open="true"] { background: var(--hover) !important; }
+.acct-rows .upd-row-version { flex: none; color: var(--muted); font-size: 12px; font-weight: 550; font-variant-numeric: tabular-nums; }
+/* …and on the account button. */
+.avatar { position: relative; }
+.upd-avatar-dot {
+  position: absolute; top: 0; right: 0; width: 10px; height: 10px; border-radius: 999px;
+  background: var(--h-mint); box-shadow: 0 0 0 2px var(--bar-bg, var(--card-bg));
+}
+.upd-spin { animation: upd-turn 1s linear infinite; }
+@keyframes upd-turn { to { transform: rotate(360deg); } }
+
+/* The popover: beside the account menu (placed by the row, on <body>), in the menu's colours. */
+.upd-fly { position: fixed; z-index: 60; }
+.upd-pop {
+  width: 300px; display: flex; flex-direction: column; gap: 12px;
+  padding: 16px; border-radius: 18px; background: var(--tip-bg); border: 1px solid var(--tip-border); box-shadow: var(--tip-shadow);
+  animation: upd-pop 0.16s ease-out;
+}
+@keyframes upd-pop { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
+.upd-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.upd-head h2 { margin: 0; font-size: 15px; font-weight: 750; letter-spacing: -0.01em; }
+.upd-version { color: var(--muted); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.upd-wide { width: 100%; }
+.upd-line { margin: -2px 0 0; color: var(--muted); font-size: 12px; line-height: 17px; }
+.upd-line[data-tone="good"] { color: var(--h-mint-ink); }
+.upd-line[data-tone="bad"] { color: var(--h-crimson); }
+.upd-link {
+  align-self: flex-start; margin-top: -6px; padding: 0; border: 0; background: transparent; color: var(--link, var(--h-mint-ink));
+  font-size: 12px; font-weight: 650; cursor: pointer;
+}
+.upd-link:hover { text-decoration: underline; }
+.upd-opt { display: flex; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.upd-opt > span { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.upd-opt strong { font-size: 13px; font-weight: 650; }
+.upd-opt small { color: var(--muted); font-size: 12px; line-height: 16px; }
+.upd-bar { height: 6px; border-radius: 999px; overflow: hidden; background: rgba(var(--fg-rgb), 0.1); }
+.upd-bar i { display: block; height: 100%; border-radius: inherit; background: var(--h-mint); transition: width 0.3s ease; }
+
+/* The prompt: the release notes and what to do, over a blurred page. */
+.upd-scrim {
+  position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(15, 21, 20, 0.32); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); -webkit-app-region: no-drag;
+}
+[data-theme="dark"] .upd-scrim { background: rgba(0, 0, 0, 0.55); }
+.upd-prompt {
+  width: 520px; max-width: 100%; max-height: calc(100vh - 48px); display: flex; flex-direction: column; gap: 18px; padding: 26px 28px 24px;
+  border-radius: 26px; background: var(--card-bg); border: 1px solid var(--line); box-shadow: var(--shadow-popover);
+  animation: cl-rise 0.22s ease-out;
+}
+[data-theme="dark"] .upd-prompt { background: #151a19; }
+.upd-prompt header { display: flex; align-items: flex-start; gap: 16px; }
+.upd-badge {
+  display: grid; place-items: center; flex: none; width: 46px; height: 46px; border-radius: 14px;
+  background: color-mix(in srgb, var(--h-mint) 18%, transparent); color: var(--h-mint-ink);
+}
+.upd-badge .brand-mark { height: 28px; }
+.upd-eyebrow { margin: 0 0 2px; color: var(--h-mint-ink); font-size: 12px; font-weight: 750; letter-spacing: 0.04em; text-transform: uppercase; }
+.upd-prompt h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.upd-prompt header p:last-child { margin: 4px 0 0; color: var(--soft); font-size: 14px; }
+.upd-notes {
+  min-height: 80px; max-height: 280px; overflow-y: auto; padding: 14px 16px; border-radius: 16px; background: rgba(var(--fg-rgb), 0.04);
+  border: 1px solid var(--line); color: var(--soft); font-size: 13px; line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.upd-prompt footer { display: flex; flex-direction: column; gap: 14px; }
+.upd-prompt footer p { margin: 0; color: var(--muted); font-size: 13px; line-height: 19px; }
+.upd-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }

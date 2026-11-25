@@ -1,0 +1,133 @@
+/*
+  Health and Energy screens. Theme colours come from the tokens in globals.css.
+  The night sky is the one surface whose colours are fixed: it stays a night sky in light and dark.
+*/
+
+/* ---------- Night sky (sleep panel) ---------- */
+.sky {
+  --stage-light: #cdc4ff;
+  --stage-deep: #8b7cff;
+  --sky-rating: #cdc4ff;
+  --sky-text: rgba(255, 255, 255, 0.68);
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: radial-gradient(circle 360px at 85% 4%, rgba(143, 123, 255, 0.18), transparent),
+    radial-gradient(circle 420px at 5% 60%, rgba(59, 91, 219, 0.14), transparent),
+    linear-gradient(180deg, #070b1f, #161a4a 40%, #2b1f63 75%, #1d1645);
+  box-shadow: 0 2px 6px rgba(29, 22, 69, 0.1), 0 8px 20px rgba(29, 22, 69, 0.12);
+}
+[data-theme="dark"] .sky { box-shadow: none; }
+.sky-layer { position: absolute; inset: 0; pointer-events: none; }
+.sky-horizon {
+  background: linear-gradient(180deg, transparent 55%, rgba(247, 169, 138, 0.14) 84%, rgba(255, 138, 114, 0.3) 100%);
+}
+.sky-stars { fill: #ffffff; opacity: 0.42; }
+.sky-bright { fill: #ffffff; opacity: 0.9; }
+.sky-moon { fill: #f6e7b4; }
+.sky-moon-shade { fill: #17194a; }
+@keyframes sky-twinkle {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sky-bright { animation: sky-twinkle 5.5s ease-in-out infinite; }
+  .sky-bright[data-group="1"] { animation-duration: 7s; animation-delay: -2.3s; }
+  .sky-bright[data-group="2"] { animation-duration: 8.5s; animation-delay: -4.1s; }
+}
+
+.health-night {
+  flex: 2 1 620px; min-width: 0; padding: 26px 28px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 20px 36px;
+}
+.health-night > :not(.sky-layer) { position: relative; }
+.health-stage-tip {
+  position: absolute; top: -6px; transform: translate(-50%, -100%); white-space: nowrap; z-index: 2;
+}
+
+/* ---------- Trend charts ---------- */
+.health-trends {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
+}
+.health-trend {
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 10px;
+  cursor: crosshair; touch-action: pan-y;
+}
+
+/* A see-through layer over a chart that takes the pointer and the keyboard. */
+.chart-hit {
+  position: absolute; inset: 0; border-radius: 8px; cursor: crosshair; touch-action: pan-y;
+}
+
+/* ---------- Energy ---------- */
+:root {
+  --energy-glow: rgba(124, 181, 24, 0.45);
+  --energy-chip-bg: rgba(124, 181, 24, 0.16);
+}
+[data-theme="dark"],
+.night {
+  --energy-glow: rgba(184, 227, 90, 0.45);
+  --energy-chip-bg: rgba(184, 227, 90, 0.16);
+}
+.seg.energy-seg button { height: 32px; padding: 0 16px; }
+/* Hero: the gauge beside Coach's line, the stats and the day chart. */
+.energy-hero { padding: 28px; display: flex; flex-wrap: wrap; align-items: center; gap: 28px 40px; }
+.energy-gauge { flex: none; display: flex; flex-direction: column; align-items: center; gap: 16px; margin: 0 auto; }
+.energy-chip {
+  display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 999px;
+  background: var(--energy-chip-bg); color: var(--h-lime-ink); font-size: 14px; font-weight: 700;
+}
+.energy-readout {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px;
+  padding-top: 14px; border-top: 1px solid var(--line);
+}
+.energy-row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 20px; }
+.energy-card { flex: 1 1 300px; min-width: 0; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; }
+.energy-card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; }
+.energy-note { margin-top: auto; font-size: 13px; }
+.energy-how { display: flex; gap: 12px; }
+.energy-how > span {
+  flex: none; width: 28px; height: 28px; border-radius: 9px; background: rgba(var(--fg-rgb), 0.08); color: var(--fg);
+  display: flex; align-items: center; justify-content: center; font-weight: 800;
+}
+.energy-how > span[data-sign="+"] { background: var(--energy-chip-bg); color: var(--h-lime-ink); }
+.energy-how p { margin: 0; font-size: 14px; line-height: 21px; color: var(--soft); }
+.energy-how strong { color: var(--fg); }
+
+/* Energy motion: the waking mark settles after the ring sweeps, the strip and the shares grow,
+   the steps rise one after another from the level before them. */
+@keyframes energy-fade { from { opacity: 0; } }
+@keyframes energy-grow-x { from { transform: scaleX(0); } }
+@keyframes energy-grow-y { from { transform: scaleY(0); } }
+.energy-mark { animation: energy-fade 0.5s ease-out 1.6s both; }
+.energy-strip { transform-box: fill-box; transform-origin: left; animation: energy-grow-x 0.8s cubic-bezier(0.3, 0.7, 0.2, 1) 0.9s both; }
+.energy-share { transform-box: fill-box; transform-origin: left; animation: energy-grow-x 1.1s cubic-bezier(0.3, 0.7, 0.2, 1) 0.5s both; }
+.energy-step { transform-box: fill-box; animation: energy-grow-y 0.6s cubic-bezier(0.3, 1.2, 0.5, 1) both; }
+.energy-days { position: absolute; inset: 0; display: grid; }
+.energy-days button {
+  border: 0; padding: 0; background: transparent; border-radius: 12px; min-width: 0;
+}
+.energy-days button:hover { background: var(--hover); }
+.energy-tip {
+  position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; z-index: 2;
+}
+
+@media (max-width: 520px) {
+  .health-night { padding: 22px 16px; }
+  .energy-hero { padding: 20px 16px; }
+  .energy-card { padding: 20px 18px; }
+}
+
+/* ---------- Health motion ---------- */
+/* The 30-day range markers slide from the low end to today's place; the range bars themselves don't wipe. */
+@keyframes range-mark { from { transform: translateX(var(--from, 0)); opacity: 0; } 30% { opacity: 1; } }
+.range-mark { transform-box: view-box; animation: range-mark 0.9s cubic-bezier(0.3, 0.7, 0.2, 1) both; }
+/* Trend cards rise one after another. */
+.health-trends > * { animation: cl-rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+.health-trends > :nth-child(2) { animation-delay: 0.06s; }
+.health-trends > :nth-child(3) { animation-delay: 0.12s; }
+.health-trends > :nth-child(4) { animation-delay: 0.18s; }
+.health-trends > :nth-child(5) { animation-delay: 0.24s; }
+.health-trends > :nth-child(n + 6) { animation-delay: 0.3s; }

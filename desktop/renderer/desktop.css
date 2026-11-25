@@ -1,0 +1,66 @@
+/* What the desktop adds to the web app's styles: the bundled fonts under the web app's font variables. */
+:root { --font-inter: "Inter"; --font-nunito: "Nunito"; }
+
+/* Mac window without a title bar: the window buttons sit at the top of the sidebar, and the strip along the top
+   edge moves the window. Controls inside the strip stay clickable (Electron subtracts no-drag from drag). */
+[data-titlebar="inset"] body::before {
+  content: ""; position: fixed; inset: 0 0 auto 0; height: 40px; z-index: 1000; pointer-events: none; -webkit-app-region: drag; app-region: drag;
+}
+[data-titlebar="inset"] :is(a, button, input, select, textarea, [role="button"], [role="switch"], kbd) { -webkit-app-region: no-drag; app-region: no-drag; }
+[data-titlebar="inset"] .rail { padding-top: 46px; }
+
+/* Sample data on (developer mode): a pill in the corner, on every screen, that opens the Developer page. */
+.dev-sample-pill {
+  position: fixed; right: 92px; bottom: 30px; z-index: 900; padding: 7px 14px; border-radius: 999px;
+  background: var(--h-gold, #e0a526); color: #1b1404; font-size: 12px; font-weight: 700; text-decoration: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+/* Local-Only Mode on: a chip at the foot of the sidebar that opens Settings → Privacy & local data. */
+.lo-chip {
+  display: flex; align-items: center; gap: 8px; align-self: flex-start; height: 30px; padding: 0 12px;
+  border-radius: 999px; background: color-mix(in srgb, var(--h-mint) 18%, transparent); color: var(--fg);
+  font-size: 12px; font-weight: 700; text-decoration: none;
+}
+.lo-chip svg { flex: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rail-foot { margin-top: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.rail-foot + .rail-account { margin-top: 10px; }
+/* "Buy me a coffee": golden pill above Local mode; opens in the browser. */
+.coffee-chip {
+  display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px;
+  color: #4a2c00; font-size: 12px; font-weight: 700; text-decoration: none;
+  background: linear-gradient(180deg, #ffd25e, #f5a623); border: 1px solid #e3961a;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.5) inset, 0 4px 12px -4px rgb(245 166 35 / 0.55);
+}
+.coffee-chip:hover, .coffee-chip:focus-visible { color: #4a2c00; background: linear-gradient(180deg, #ffdb78, #f7b03a); }
+.coffee-chip svg { flex: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+/* Light/dark switch above the coffee pill (parts/RailFoot.tsx). */
+.theme-switch {
+  display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px 0 4px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--muted); font-size: 12px; font-weight: 650; cursor: pointer;
+}
+.theme-switch:hover, .theme-switch:focus-visible { color: var(--fg); background: var(--hover); }
+.theme-track {
+  position: relative; flex: none; width: 40px; height: 24px; border-radius: 999px;
+  background: var(--well-bg, rgba(var(--fg-rgb), 0.1)); box-shadow: var(--well-shadow, none); transition: background 0.2s;
+}
+.theme-thumb {
+  position: absolute; top: 3px; left: 3px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 999px;
+  background: var(--thumb-bg, #fff); box-shadow: var(--thumb-shadow, 0 1px 3px rgb(0 0 0 / 0.25)); color: var(--fg); transition: transform 0.2s;
+}
+.theme-thumb svg { stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.theme-switch[aria-checked="true"] .theme-thumb { transform: translateX(16px); }
+.rail[data-collapsed="true"] .rail-foot { align-items: center; }
+.rail[data-collapsed="true"] .theme-switch { padding: 0; width: 44px; justify-content: center; }
+.rail[data-collapsed="true"] .coffee-chip { width: 36px; padding: 0; justify-content: center; }
+.rail[data-collapsed="true"] .lo-chip { align-self: center; width: 36px; padding: 0; justify-content: center; }
+@media (max-width: 860px) { .rail-foot { margin: 0; flex-direction: row; } .lo-chip .rail-label, .coffee-chip .rail-label, .theme-switch .rail-label { display: none; } }
+
+/* Watch: "Connected by USB" under the sync line (parts/WatchLink.tsx). */
+.wa-link {
+  display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--h-mint) 14%, transparent); color: var(--soft); font-size: 13px;
+}
+.wa-link svg { color: var(--h-mint); }
+.wa-link b { color: var(--fg); font-weight: 700; }
+.rail:not([data-collapsed="true"]) .theme-switch[data-tip]::after { content: none; }

@@ -1,0 +1,398 @@
+import type {
+  CorosWatchfaceArtwork,
+  CorosWatchfaceDesignState,
+  CorosWatchfaceModeDesignState
+} from "../types";
+import {
+  AOD_DIM_FACTOR,
+  dimHexColor,
+  type WatchfacePreviewMode
+} from "./watchfaceStudio";
+
+const DEFAULT_STATIC_SEPARATORS = {
+  colon: { enabled: false, x: 400, y: 320, size: 64, color: "#ffffff" },
+  dateSlash: { enabled: false, x: 400, y: 240, size: 48, color: "#ffffff" }
+};
+const DEFAULT_AMPM_STYLE = {
+  enabled: false,
+  x: 480,
+  y: 360,
+  scale: 1
+};
+
+function makeModeDefaultDesign(): CorosWatchfaceDesignState {
+  return {
+    version: 1,
+    backgroundColor: "#000000",
+    accentColor: "#51e0b5",
+    artwork: null,
+    artworkVisible: true,
+    zoom: 1,
+    fontFamily: "",
+    fontWeight: 400,
+    fontStyle: "normal",
+    letterSpacing: 0,
+    digitColor: "#ffffff",
+    tintLabels: false,
+    tintIcons: false,
+    previewComplication: "",
+    metricChanges: {},
+    metricStyles: {},
+    controlComplicationEnabled: {},
+    controlIconOffsets: {},
+    separateAutoTime: false,
+    timeStyles: {},
+    dateStyles: {},
+    staticSeparators: {
+      colon: { ...DEFAULT_STATIC_SEPARATORS.colon },
+      dateSlash: { ...DEFAULT_STATIC_SEPARATORS.dateSlash }
+    },
+    ampmIndicator: { ...DEFAULT_AMPM_STYLE },
+    layoutOffsets: {},
+    linkedLayerGroups: [],
+    editorGroups: [],
+    editorGuides: [],
+    lockedLayerIds: [],
+    removedLayerIds: [],
+    effectStyles: [],
+    layerEffects: {},
+    layerStrokes: {},
+    layerVisibility: {},
+    layerOpacities: {},
+    layerColors: {},
+    configAssetOverrides: {},
+    designSprites: [],
+    artworkLayerOrder: [],
+    backgroundElements: []
+  };
+}
+
+const MODE_DESIGN_KEYS = [
+  "backgroundColor",
+  "accentColor",
+  "artwork",
+  "artworkVisible",
+  "zoom",
+  "fontFamily",
+  "rasterFont",
+  "fontWeight",
+  "fontStyle",
+  "letterSpacing",
+  "digitColor",
+  "tintLabels",
+  "tintIcons",
+  "previewComplication",
+  "metricChanges",
+  "metricStyles",
+  "kcalProgress",
+  "exerciseProgress",
+  "exerciseSeparator",
+  "selectableMetricStyle",
+  "controlComplicationEnabled",
+  "controlBarometerMode",
+  "controlIconOffsets",
+  "separateAutoTime",
+  "addSeconds",
+  "addWeekday",
+  "addDateMonth",
+  "addDateDay",
+  "timeStyles",
+  "dateStyles",
+  "staticSeparators",
+  "ampmIndicator",
+  "weatherIndicator",
+  "nativeData",
+  "layoutOffsets",
+  "linkedLayerGroups",
+  "editorGroups",
+  "editorGuides",
+  "lockedLayerIds",
+  "removedLayerIds",
+  "effectStyles",
+  "layerEffects",
+  "layerStrokes",
+  "layerVisibility",
+  "layerOpacities",
+  "layerColors",
+  "configAssetOverrides",
+  "designSprites",
+  "artworkLayerOrder",
+  "backgroundElements"
+] as const satisfies ReadonlyArray<keyof CorosWatchfaceModeDesignState>;
+
+function scopedRecord<T>(
+  record: Record<string, T> | undefined,
+  prefix: string
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(record ?? {}).flatMap(([key, value]) =>
+      key.startsWith(prefix) ? [[key.slice(prefix.length), value]] : []
+    )
+  );
+}
+
+function dimStyleRecord<T extends { color?: string }>(
+  record: Record<string, T> | undefined
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(record ?? {}).map(([key, style]) => [
+      key,
+      style.color
+        ? { ...style, color: dimHexColor(style.color, AOD_DIM_FACTOR) }
+        : { ...style }
+    ])
+  );
+}
+
+function dimKcalProgress(
+  style: CorosWatchfaceDesignState["kcalProgress"]
+): CorosWatchfaceDesignState["kcalProgress"] {
+  return style
+    ? {
+        ...style,
+        arcColor: dimHexColor(style.arcColor, AOD_DIM_FACTOR),
+        rectColor: dimHexColor(style.rectColor, AOD_DIM_FACTOR),
+        arc: { ...style.arc },
+        rect: { ...style.rect }
+      }
+    : undefined;
+}
+
+function dimExerciseProgress(
+  style: CorosWatchfaceDesignState["exerciseProgress"]
+): CorosWatchfaceDesignState["exerciseProgress"] {
+  return style
+    ? {
+        ...style,
+        color: dimHexColor(style.color, AOD_DIM_FACTOR),
+        arc: { ...style.arc },
+        rect: { ...style.rect }
+      }
+    : undefined;
+}
+
+export function dimExerciseSeparator(
+  style: CorosWatchfaceDesignState["exerciseSeparator"]
+): CorosWatchfaceDesignState["exerciseSeparator"] {
+  return style
+    ? {
+        ...style,
+        color: dimHexColor(style.color, AOD_DIM_FACTOR),
+        artwork: style.artwork ? { ...style.artwork } : style.artwork
+      }
+    : undefined;
+}
+
+/** Produces the legacy auto-dimmed AOD appearance as independent mode state. */
+export function materializeLegacyAodDesign(
+  design: CorosWatchfaceDesignState,
+  artwork: CorosWatchfaceArtwork | null,
+  backgroundColor = "#000000"
+): CorosWatchfaceModeDesignState {
+  const configAssetOverrides = Object.fromEntries(
+    Object.entries(design.configAssetOverrides ?? {}).flatMap(([key, value]) =>
+      key.startsWith("aod:")
+        ? [[`config:${key.slice("aod:".length)}`, value]]
+        : []
+    )
+  );
+  const layerEffects = scopedRecord(design.layerEffects, "aod:");
+  return {
+    backgroundColor,
+    accentColor: dimHexColor(design.accentColor, AOD_DIM_FACTOR),
+    artwork,
+    artworkVisible:
+      configAssetOverrides["config:background_icon"]?.enabled !== false,
+    zoom: 1,
+    fontFamily: design.fontFamily,
+    rasterFont: design.rasterFont,
+    fontWeight: design.fontWeight,
+    fontStyle: design.fontStyle,
+    letterSpacing: design.letterSpacing,
+    digitColor: dimHexColor(design.digitColor, AOD_DIM_FACTOR),
+    tintLabels: design.tintLabels,
+    tintIcons: design.tintIcons,
+    previewComplication: "",
+    metricChanges: {},
+    metricStyles: dimStyleRecord(design.metricStyles),
+    kcalProgress: dimKcalProgress(design.kcalProgress),
+    exerciseProgress: dimExerciseProgress(design.exerciseProgress),
+    exerciseSeparator: dimExerciseSeparator(design.exerciseSeparator),
+    controlComplicationEnabled: {},
+    controlBarometerMode: design.controlBarometerMode,
+    controlIconOffsets: {},
+    separateAutoTime: false,
+    timeStyles: dimStyleRecord(design.timeStyles),
+    dateStyles: dimStyleRecord(design.dateStyles),
+    staticSeparators: {
+      colon: { ...DEFAULT_STATIC_SEPARATORS.colon },
+      dateSlash: { ...DEFAULT_STATIC_SEPARATORS.dateSlash }
+    },
+    ampmIndicator: { ...DEFAULT_AMPM_STYLE, enabled: false },
+    weatherIndicator: undefined,
+    nativeData: {},
+    layoutOffsets: {},
+    linkedLayerGroups: [],
+    editorGroups: [],
+    editorGuides: [],
+    lockedLayerIds: [],
+    removedLayerIds: [],
+    effectStyles: [...(design.effectStyles ?? [])],
+    layerEffects,
+    layerStrokes: {},
+    layerVisibility: {},
+    layerOpacities: {},
+    layerColors: Object.fromEntries(
+      Object.entries(design.layerColors ?? {}).map(([key, color]) => [
+        key,
+        dimHexColor(color, AOD_DIM_FACTOR)
+      ])
+    ),
+    configAssetOverrides,
+    designSprites: [],
+    artworkLayerOrder: [],
+    backgroundElements: []
+  };
+}
+
+export function resolveWatchfaceModeDesign(
+  design: CorosWatchfaceDesignState,
+  mode: WatchfacePreviewMode
+): CorosWatchfaceDesignState {
+  if (mode === "current" || !design.modeDesigns?.aod) return design;
+  const defaults = makeModeDefaultDesign();
+  return {
+    ...defaults,
+    ...design.modeDesigns.aod,
+    version: 1,
+    archiveWatchFaceVersion: design.archiveWatchFaceVersion,
+    stripBlankConfigKeys: design.stripBlankConfigKeys,
+    watchLanguages: design.watchLanguages,
+    configTextEdits: design.configTextEdits,
+    chartPageModes: design.chartPageModes,
+    modeDesigns: design.modeDesigns
+  };
+}
+
+/**
+ * Writes an active mode design back into the project while keeping archive
+ * settings and raw config edits global.
+ */
+export function writeWatchfaceModeDesign(
+  root: CorosWatchfaceDesignState,
+  mode: WatchfacePreviewMode,
+  active: CorosWatchfaceDesignState
+): CorosWatchfaceDesignState {
+  const global = {
+    archiveWatchFaceVersion: active.archiveWatchFaceVersion,
+    stripBlankConfigKeys: active.stripBlankConfigKeys,
+    watchLanguages: active.watchLanguages,
+    configTextEdits: active.configTextEdits,
+    chartPageModes: active.chartPageModes
+  };
+  if (mode === "current") {
+    const previousDimmedKcalProgress = dimKcalProgress(root.kcalProgress);
+    const aodKcalProgress = root.modeDesigns?.aod?.kcalProgress;
+    const kcalProgressStillLinked =
+      aodKcalProgress === undefined ||
+      JSON.stringify(aodKcalProgress) ===
+        JSON.stringify(previousDimmedKcalProgress);
+    const previousDimmedExerciseProgress = dimExerciseProgress(
+      root.exerciseProgress
+    );
+    const aodExerciseProgress = root.modeDesigns?.aod?.exerciseProgress;
+    const exerciseProgressStillLinked =
+      aodExerciseProgress === undefined ||
+      JSON.stringify(aodExerciseProgress) ===
+        JSON.stringify(previousDimmedExerciseProgress);
+    const previousDimmedExerciseSeparator = dimExerciseSeparator(
+      root.exerciseSeparator
+    );
+    const aodExerciseSeparator = root.modeDesigns?.aod?.exerciseSeparator;
+    const aodExerciseSeparatorIsAvailable =
+      aodExerciseSeparator !== undefined ||
+      root.modeDesigns?.aod?.metricChanges?.exercise === true;
+    const exerciseSeparatorStillLinked =
+      aodExerciseSeparatorIsAvailable &&
+      (aodExerciseSeparator === undefined ||
+        JSON.stringify(aodExerciseSeparator) ===
+          JSON.stringify(previousDimmedExerciseSeparator));
+    const modeDesigns =
+      root.modeDesigns?.aod &&
+      (kcalProgressStillLinked ||
+        exerciseProgressStillLinked ||
+        exerciseSeparatorStillLinked)
+        ? {
+            ...root.modeDesigns,
+            aod: {
+              ...root.modeDesigns.aod,
+              ...(kcalProgressStillLinked
+                ? { kcalProgress: dimKcalProgress(active.kcalProgress) }
+                : {}),
+              ...(exerciseProgressStillLinked
+                ? {
+                    exerciseProgress: dimExerciseProgress(
+                      active.exerciseProgress
+                    )
+                  }
+                : {}),
+              ...(exerciseSeparatorStillLinked
+                ? {
+                    exerciseSeparator: dimExerciseSeparator(
+                      active.exerciseSeparator
+                    )
+                  }
+                : {})
+            }
+          }
+        : root.modeDesigns;
+    return {
+      ...active,
+      ...global,
+      modeDesigns
+    };
+  }
+  const previous = resolveWatchfaceModeDesign(root, "aod");
+  const backgroundKeys = [
+    "backgroundColor",
+    "artwork",
+    "artworkVisible",
+    "zoom",
+    "staticSeparators",
+    "exerciseSeparator",
+    "designSprites",
+    "artworkLayerOrder",
+    "backgroundElements",
+    "layerStrokes"
+  ] as const;
+  const exerciseSeparatorBackgroundEdited = Boolean(
+    previous.exerciseSeparator || active.exerciseSeparator
+  ) && (
+    JSON.stringify(previous.layoutOffsets?.exercise) !==
+      JSON.stringify(active.layoutOffsets?.exercise) ||
+    previous.metricChanges?.exercise !== active.metricChanges?.exercise ||
+    previous.layerVisibility?.exercise !== active.layerVisibility?.exercise
+  );
+  const backgroundEdited =
+    root.modeDesigns?.aod?.backgroundEdited === true ||
+    exerciseSeparatorBackgroundEdited ||
+    backgroundKeys.some(
+      (key) =>
+        JSON.stringify(previous[key]) !== JSON.stringify(active[key])
+    );
+  const aod: CorosWatchfaceModeDesignState = {};
+  for (const key of MODE_DESIGN_KEYS) {
+    (aod as Record<string, unknown>)[key] = active[key];
+  }
+  return {
+    ...root,
+    ...global,
+    modeDesigns: {
+      ...(root.modeDesigns ?? {}),
+      aod: {
+        ...aod,
+        ...(backgroundEdited ? { backgroundEdited: true } : {})
+      }
+    }
+  };
+}

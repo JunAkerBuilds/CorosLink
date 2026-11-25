@@ -1,0 +1,176 @@
+// Moved from CorosLink scripts/test-watchface-font-snapshots.mjs (c2ff5110), paths pointed at desktop/watchface.
+import assert from "node:assert/strict";
+import {
+  attachWatchfaceFontSnapshots,
+  collectWatchfaceFontUses,
+  findMissingWatchfaceFonts,
+  hasWatchfaceFontSnapshot,
+  isSyntheticWatchfaceWeight,
+  measureWatchfaceText,
+  normalizeWatchfaceFontFamily,
+  setWatchfaceCanvasFont,
+  withoutWatchfaceFontSnapshots
+} from "../engine/watchfaceFontSnapshots";
+
+const baseDesign = {
+  version: 1,
+  fontFamily: "Futura",
+  fontWeight: 500,
+  fontStyle: "normal",
+  metricStyles: {
+    heartRate: { scale: 1 },
+    steps: { scale: 1, fontFamily: "" }
+  },
+  timeStyles: {
+    hours: { scale: 1, fontWeight: 700 },
+    minutes: { scale: 1, fontFamily: "Avenir Next", fontStyle: "italic" }
+  },
+  dateStyles: { dateWeek: { scale: 1, fontFamily: "'Didot', serif" } },
+  staticSeparators: {
+    colon: { enabled: true, x: 0, y: 0, size: 40, color: "#fff" },
+    dateSlash: { enabled: false, x: 0, y: 0, size: 40, color: "#fff", fontFamily: "Unused Face" }
+  },
+  backgroundElements: [
+    { id: "t", kind: "text", text: "Run", fontFamily: "sans-serif", fontSize: 40, color: "#fff", weight: 400, align: "center", x: 0, y: 0 }
+  ],
+  modeDesigns: { aod: { timeStyles: { hours: { scale: 1, fontFamily: "Menlo" } } } },
+  fontSnapshots: [{ family: "Futura" }]
+};
+
+const uses = collectWatchfaceFontUses(baseDesign);
+const summary = uses.map((use) => `${use.usedBy}${use.alwaysOn ? " (always-on)" : ""}: ${use.family} ${use.weight} ${use.style}`);
+// Component styles inherit the face-wide family and weight, as the renderers do.
+assert.ok(summary.includes("Face-wide font: Futura 500 normal"));
+assert.ok(summary.includes("Metrics: Futura 500 normal"));
+assert.ok(summary.includes("Time: Futura 700 normal"));
+assert.ok(summary.includes("Time: Avenir Next 500 italic"));
+// Quoted family lists resolve to their first family.
+assert.ok(summary.includes("Date: Didot 500 normal"));
+// Separator glyphs are always drawn bold.
+assert.ok(summary.includes("Separators: Futura 700 normal"));
+assert.ok(summary.includes("Time (always-on): Menlo 500 normal"));
+// Weights other layers pick are captured as drawn: native fields and their components, separators.
+const weighted = collectWatchfaceFontUses({
+  ...baseDesign,
+  staticSeparators: { ...baseDesign.staticSeparators, colon: { ...baseDesign.staticSeparators.colon, fontWeight: 300 } },
+  nativeData: { weather_uv: { enabled: true, x: 0, y: 0, scale: 1, color: "#fff", fontFamily: "Avenir Next", fontWeight: 600, parts: { icon: { fontStyle: "italic" } } } }
+}).map((use) => `${use.usedBy}: ${use.family} ${use.weight} ${use.style}`);
+assert.ok(weighted.includes("Separators: Futura 300 normal"));
+assert.ok(weighted.includes("Native data: Avenir Next 600 normal"));
+assert.ok(weighted.includes("Native data: Avenir Next 600 italic"), "A component's own style uses the layer family");
+// An explicit "" selects a PNG font; disabled separators and generic families draw nothing local.
+assert.ok(!uses.some((use) => use.family === "" || use.family === "Unused Face" || use.family === "sans-serif"));
+
+assert.equal(normalizeWatchfaceFontFamily(' "Helvetica Neue" , Arial'), "Helvetica Neue");
+assert.equal(normalizeWatchfaceFontFamily("system-ui"), "");
+assert.equal(normalizeWatchfaceFontFamily(undefined), "");
+
+// Snapshots never enter the editor's live design state.
+assert.equal("fontSnapshots" in withoutWatchfaceFontSnapshots(baseDesign), false);
+const plain = { version: 1, fontFamily: "" };
+assert.equal(withoutWatchfaceFontSnapshots(plain), plain);
+
+// Without a DOM nothing can be captured, so saving drops stale snapshots
+// instead of writing ones the renderer could not verify.
+const saved = await attachWatchfaceFontSnapshots(baseDesign);
+assert.equal("fontSnapshots" in saved, false);
+assert.equal(saved.fontFamily, "Futura");
+
+// Without a DOM every family counts as drawable, and measuring falls through
+// to the context untouched.
+assert.deepEqual(findMissingWatchfaceFonts(baseDesign), []);
+// Nor can a snapshot decode, so no family counts as embedded.
+assert.equal(hasWatchfaceFontSnapshot("Futura"), false);
+const context = {
+  font: "10px sans-serif",
+  textAlign: "left",
+  textBaseline: "alphabetic",
+  measureText: (text) => ({
+    width: text.length * 10,
+    actualBoundingBoxLeft: 1,
+    actualBoundingBoxRight: text.length * 10 - 1,
+    actualBoundingBoxAscent: 7,
+    actualBoundingBoxDescent: 2
+  })
+};
+setWatchfaceCanvasFont(context, { family: "Futura", size: 20 }, '20px "Futura"');
+assert.equal(context.font, '20px "Futura"');
+const metrics = measureWatchfaceText(context, "12");
+assert.equal(metrics.width, 20);
+assert.equal(metrics.actualBoundingBoxAscent, 7);
+
+// A weight is drawn thinner or bolder only when the family has other faces to place it by.
+{
+  // Each family's faces by the weights the browser draws them for.
+  const faces = {
+    "Two Face": (weight) => (weight <= 500 ? 100 : 200),
+    "One Face Bold": () => 200
+  };
+  const nativeDocument = globalThis.document;
+  globalThis.document = {
+    createElement: () => {
+      const probe = {
+        font: "",
+        clearRect: () => {},
+        fillText: () => {},
+        measureText: (text) => ({ width: text.length * 10 }),
+        getImageData: (_x, _y, width, height) => {
+          const [, weight, family] = /(\d{3}) \d+px "(.+)"/.exec(probe.font);
+          const data = new Uint8ClampedArray(width * height * 4);
+          data[3] = faces[family](Number(weight));
+          return { data };
+        }
+      };
+      return { width: 0, height: 0, getContext: () => probe };
+    }
+  };
+  try {
+    const synthetic = (family, weight) => isSyntheticWatchfaceWeight({ family, weight, style: "normal" });
+    assert.equal(synthetic("Two Face", 300), true, "a weight between faces is drawn thinner");
+    assert.equal(synthetic("Two Face", 400), false);
+    assert.equal(synthetic("Two Face", 700), false);
+    assert.equal(synthetic("Two Face", 900), true, "a weight past the boldest face is drawn bolder");
+    for (const weight of [100, 400, 700, 900]) {
+      assert.equal(synthetic("One Face Bold", weight), false, `a single-face family draws as it is at ${weight}`);
+    }
+  } finally {
+    globalThis.document = nativeDocument;
+  }
+}
+
+// Font names with the weight glued on read as the Google family plus weight,
+// and switching a face to it shifts every weight it drew with (2LoT_v4test).
+{
+  const { parseWatchfaceGoogleFontName } = await import("../engine/watchfaceGoogleFonts");
+  const { renameWatchfaceFontFamily } = await import("../engine/watchfaceFontRename");
+  assert.deepEqual(parseWatchfaceGoogleFontName("RobotoBold"), { family: "Roboto", weight: 700, italic: false });
+  assert.deepEqual(parseWatchfaceGoogleFontName("roboto bold"), { family: "Roboto", weight: 700, italic: false });
+  assert.deepEqual(parseWatchfaceGoogleFontName("Roboto-BlackItalic"), { family: "Roboto", weight: 900, italic: true });
+  assert.deepEqual(parseWatchfaceGoogleFontName("RobotoCondensed-Light"), { family: "Roboto Condensed", weight: 300, italic: false });
+  assert.deepEqual(parseWatchfaceGoogleFontName("Roboto"), { family: "Roboto", weight: 400, italic: false });
+  assert.equal(parseWatchfaceGoogleFontName("Bold"), null, "A weight word alone is no family");
+  assert.equal(parseWatchfaceGoogleFontName("HelveticaBold"), null, "Only families Studio knows from Google");
+
+  const design = {
+    ...baseDesign, fontFamily: "Impact", fontWeight: 400,
+    metricStyles: { steps: { scale: 1, fontFamily: "RobotoBlack" }, battery: { scale: 1, fontFamily: "RobotoBlack", fontWeight: 200 }, heartRate: { scale: 1 } },
+    nativeData: {
+      weather_rainfall: { enabled: true, x: 0, y: 0, scale: 1, fontFamily: "RobotoBlack", parts: { value: { fontFamily: "RobotoBlack" }, unit: { fontWeight: 600 } } },
+      chart: { enabled: true, x: 0, y: 0, scale: 1, fontFamily: "Impact", parts: { value: { fontFamily: "RobotoBlack" } } }
+    },
+    modeDesigns: { aod: { metricStyles: { steps: { scale: 1, fontFamily: "RobotoBlack", fontWeight: 500 } } } }
+  };
+  const next = renameWatchfaceFontFamily(design, { from: "RobotoBlack", to: "Roboto", weight: 900 });
+  assert.equal(next.fontFamily, "Impact", "Other families stay");
+  assert.deepEqual(next.metricStyles.steps, { scale: 1, fontFamily: "Roboto", fontWeight: 900 }, "Its regular becomes the named weight");
+  assert.deepEqual(next.metricStyles.battery, { scale: 1, fontFamily: "Roboto", fontWeight: 700 }, "A thinned 200 shifts with it");
+  assert.deepEqual(next.metricStyles.heartRate, { scale: 1 }, "Layers on other fonts are untouched");
+  assert.equal(next.nativeData.weather_rainfall.fontFamily, "Roboto");
+  assert.equal(next.nativeData.weather_rainfall.fontWeight, 900);
+  assert.deepEqual(next.nativeData.weather_rainfall.parts.value, { fontFamily: "Roboto" }, "A part inheriting the shifted weight stays inheriting");
+  assert.deepEqual(next.nativeData.weather_rainfall.parts.unit, { fontWeight: 900 }, "600 on the old family is past the scale: 900");
+  assert.deepEqual(next.nativeData.chart.parts.value, { fontFamily: "Roboto", fontWeight: 900 }, "A part on the old font under another family pins its weight");
+  assert.deepEqual(next.modeDesigns.aod.metricStyles.steps, { scale: 1, fontFamily: "Roboto", fontWeight: 900 }, "Always-on too");
+}
+
+console.log("Watchface font snapshot tests passed");

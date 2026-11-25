@@ -1,0 +1,13 @@
+/* This computer, at the top of Connections. Colours from the web app's tokens. */
+.tc-mark { display: inline-flex; align-items: center; justify-content: center; color: var(--h-mint-ink); }
+.tc-pair { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; padding: 20px; border-radius: 18px; background: var(--tile-bg); border: 1px solid var(--line); }
+.tc-qr { width: 200px; height: 200px; padding: 10px; border-radius: 14px; background: #fff; flex: none; }
+.tc-qr svg { width: 100%; height: 100%; display: block; }
+.tc-steps { display: flex; flex-direction: column; gap: 10px; min-width: 240px; flex: 1; }
+.tc-steps h2 { margin: 0; font-size: 18px; }
+.tc-steps ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--soft); }
+.tc-actions { display: flex; gap: 8px; }
+.tc-phones h3 { display: flex; align-items: center; gap: 8px; }
+.tc-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: rgba(var(--fg-rgb), 0.08); color: var(--muted); font-size: 12px; font-weight: 700; }
+.tc-remove { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.tc-remove:hover, .tc-remove:focus-visible { color: var(--h-rose-ink); border-color: color-mix(in srgb, var(--h-rose-ink) 45%, transparent); background: rgba(255, 107, 129, 0.08); }

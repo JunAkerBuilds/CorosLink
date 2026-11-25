@@ -1,0 +1,91 @@
+/* Bringing CorosLink's data over (Move.tsx): a hero card with the real counts, a grid of tiles, a side panel and a
+   bar fixed at the bottom. The app's ground, cards, switches and buttons. */
+.mx-ground { min-height: 100vh; }
+.mx { position: relative; min-height: 100vh; display: flex; flex-direction: column; color: var(--fg); font-family: Inter, system-ui, sans-serif; }
+.mx-top { display: flex; align-items: center; height: 56px; padding: 0 24px; }
+[data-titlebar="inset"] .mx-top { padding: 10px 24px 0 108px; }
+.mx-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; letter-spacing: 0.02em; }
+
+.mx-hero { position: relative; overflow: hidden; margin: 8px 24px 0; border-radius: 28px; padding: 40px 48px 36px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px 40px; align-items: end;
+  background: var(--card-bg); border: 1px solid var(--line); box-shadow: var(--card-shadow); }
+:root:not([data-theme="dark"]) .mx-hero { background: #ffffff; }
+.mx-kicker { display: inline-flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--h-mint-ink); }
+.mx-hero h1 { margin: 12px 0 0; font-size: 76px; line-height: 0.92; font-weight: 900; letter-spacing: -0.055em; }
+.mx-hero h1 span { color: var(--h-mint-ink); }
+.mx-swap { display: flex; align-items: center; gap: 18px; padding-bottom: 6px; }
+.mx-app { width: 104px; height: 104px; border-radius: 26px; display: flex; align-items: center; justify-content: center; }
+.mx-app[data-old] { background: linear-gradient(160deg, #3a4442, #1b2120); color: rgba(207, 216, 213, 0.75); font-weight: 900; font-size: 22px; letter-spacing: 0.02em; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); transform: rotate(-6deg) scale(0.86); opacity: 0.7; }
+.mx-app[data-new] { background: linear-gradient(160deg, #13221d, #050807); box-shadow: 0 0 0 2px var(--h-mint), 0 24px 60px rgba(83, 203, 161, 0.35); }
+.mx-app[data-new] img { height: 58px; width: auto; }
+.mx-dash { display: flex; gap: 6px; color: var(--h-mint); }
+.mx-dash i { width: 10px; height: 4px; border-radius: 4px; background: currentColor; animation: mx-blink 1.2s ease-in-out infinite; }
+.mx-dash i:nth-child(2) { animation-delay: 0.2s; } .mx-dash i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes mx-blink { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+.mx-big { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); padding-top: 22px; }
+.mx-big div { display: flex; flex-direction: column; gap: 4px; padding-right: 20px; }
+.mx-big div + div { padding-left: 24px; border-left: 1px solid var(--line); }
+.mx-big b { font-size: 56px; line-height: 1; font-weight: 900; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
+.mx-big span { font-size: 14px; font-weight: 700; color: var(--muted); }
+
+/* copying: Coach runs along the track */
+.mx-track { grid-column: 1 / -1; position: relative; height: 120px; margin-top: 4px; }
+.mx-track-line { position: absolute; left: 0; right: 0; bottom: 18px; height: 14px; border-radius: 999px; background: rgba(var(--fg-rgb), 0.1); overflow: hidden; }
+.mx-track-line i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--primary-bg); transition: width 300ms linear; }
+.mx-runner { position: absolute; bottom: 24px; margin-left: -58px; transition: left 300ms linear; }
+/* Coach's running strip: 16 frames of 256 px, one shown at a time. */
+.mx-sprite { position: relative; display: block; overflow: hidden; width: 116px; height: 116px; }
+.mx-sprite img { display: block; height: 100%; width: auto; max-width: none; animation: mx-strip 0.8s steps(16) infinite; }
+@keyframes mx-strip { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+.mx-pct { position: absolute; right: 0; top: -6px; font-size: 96px; line-height: 1; font-weight: 900; letter-spacing: -0.06em; font-variant-numeric: tabular-nums; }
+
+.mx-body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; padding: 24px 24px 120px; }
+.mx-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-content: start; }
+@media (max-width: 1100px) { .mx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mx-body { grid-template-columns: minmax(0, 1fr) 280px; } }
+.mx-tile { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 16px 16px 14px; border-radius: 20px; background: var(--card-bg); box-shadow: var(--card-shadow); border: 1.5px solid transparent; }
+:root:not([data-theme="dark"]) .mx-tile { background: #ffffff; }
+.mx-tile[data-on] { border-color: color-mix(in srgb, var(--h-mint) 55%, transparent); }
+.mx-tile[data-off] { opacity: 0.55; }
+.mx-tile[data-attn] { border-color: color-mix(in srgb, var(--h-gold) 60%, transparent); opacity: 1; }
+.mx-tile-top { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
+.mx-tile .lm-ico { width: 40px; height: 40px; border-radius: 13px; }
+.mx-tile strong { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+.mx-tile p { margin: -6px 0 0; font-size: 12px; line-height: 17px; color: var(--muted); min-height: 34px; }
+.mx-tile-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: auto; }
+.mx-tile-foot b { font-size: 26px; font-weight: 900; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.mx-tile .lm-step-bar { width: 100%; height: 6px; }
+.mx-state { font-size: 12px; font-weight: 800; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+.mx-state[data-s="done"] { color: var(--h-mint-ink); }
+.mx-state[data-s="wait"], .mx-state[data-s="left"] { color: var(--muted); }
+.mx-state[data-s="attn"] { color: var(--h-gold-ink); }
+
+.mx-side { display: flex; flex-direction: column; gap: 14px; }
+.mx-box { padding: 20px; border-radius: 22px; display: flex; flex-direction: column; gap: 12px; }
+.mx-box h3 { margin: 0; font-size: 16px; font-weight: 800; }
+.mx-box p { margin: 0; font-size: 13px; line-height: 19px; color: var(--muted); }
+.mx-coach { display: flex; align-items: flex-end; gap: 10px; }
+.mx-coach img { flex: none; }
+.mx-bubble { position: relative; margin-bottom: 18px; padding: 12px 14px; border-radius: 18px; background: var(--card-bg); box-shadow: var(--card-shadow); border: 1px solid var(--line); font-size: 14px; line-height: 20px; font-weight: 600; }
+:root:not([data-theme="dark"]) .mx-bubble, :root:not([data-theme="dark"]) .mx-bubble::before { background: #ffffff; }
+.mx-bubble::before { content: ""; position: absolute; left: -7px; bottom: 16px; width: 14px; height: 14px; transform: rotate(-45deg); background: var(--card-bg); border-left: 1px solid var(--line); border-top: 1px solid var(--line); }
+[data-theme="dark"] .mx-bubble::before { background: #1f2221; }
+.mx-fig { display: flex; justify-content: space-between; font-size: 13px; }
+.mx-fig span { color: var(--muted); } .mx-fig strong { font-variant-numeric: tabular-nums; }
+.mx-map div { display: grid; grid-template-columns: 1fr 16px 1fr; gap: 8px; align-items: center; padding: 8px 0; font-size: 13px; border-bottom: 1px solid var(--line-soft); }
+.mx-map div:last-child { border-bottom: 0; }
+.mx-map span:first-child { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(var(--fg-rgb), 0.3); }
+.mx-map span:last-child { font-weight: 800; }
+.mx-map svg { color: var(--h-mint-ink); }
+
+.mx-bar { position: fixed; left: 24px; right: 24px; bottom: 20px; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 14px 14px 14px 24px; border-radius: 24px;
+  background: var(--bar-bg), rgba(248, 249, 248, 0.86); border: 1px solid var(--bar-border); box-shadow: var(--bar-shadow); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+/* The app's bar is see-through over a page; here tiles scroll under it, so it sits on the ground's own colour. */
+[data-theme="dark"] .mx-bar { background: var(--bar-bg), rgba(21, 21, 21, 0.9); }
+.mx-bar-text { display: flex; flex-direction: column; gap: 2px; }
+.mx-bar-text strong { font-size: 17px; font-weight: 800; }
+.mx-bar-text span { font-size: 13px; color: var(--muted); font-weight: 600; }
+.mx-grow { flex: 1; }
+.mx .btn.mx-btn { height: 44px; padding: 0 20px; font-size: 15px; gap: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mx *, .mx *::before, .mx *::after { animation: none !important; transition: none !important; }
+}
