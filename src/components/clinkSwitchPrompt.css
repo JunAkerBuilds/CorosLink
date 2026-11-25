@@ -1,0 +1,269 @@
+/* The C-LINK beta offer, in C-LINK's own look. The backdrop and footer are the update prompt's (styles.css); the hero
+   keeps C-LINK's dark green in both themes, the way its app icon does, and the rest follows the theme. */
+
+.clink-switch-prompt {
+  --clink-mint: #53cba1;
+  --clink-mint-deep: #12b886;
+  --clink-ink: #0b0f0e;
+  width: min(600px, 100%);
+  border-color: color-mix(in srgb, var(--clink-mint) 34%, var(--glass-border));
+  animation: clink-switch-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.clink-switch-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 26px 28px 24px;
+  border-bottom: 1px solid rgba(83, 203, 161, 0.22);
+  color: #eef5f2;
+  background:
+    radial-gradient(ellipse 70% 90% at 0% 0%, rgba(83, 203, 161, 0.34), transparent 60%),
+    radial-gradient(ellipse 60% 80% at 100% 100%, rgba(18, 184, 134, 0.18), transparent 62%),
+    linear-gradient(160deg, #13211d 0%, #0c1513 58%, #080b0a 100%);
+}
+
+/* A faint dot grid, like C-LINK's Studio canvas, fading out towards the text. */
+.clink-switch-hero::before {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1.2px);
+  background-size: 14px 14px;
+  -webkit-mask-image: linear-gradient(115deg, transparent 30%, #000 100%);
+  mask-image: linear-gradient(115deg, transparent 30%, #000 100%);
+  content: "";
+  pointer-events: none;
+}
+
+.clink-switch-hero > * {
+  position: relative;
+}
+
+.clink-switch-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.clink-switch-mark {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 15px;
+  background: linear-gradient(160deg, #15201d, var(--clink-ink));
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 10px 28px -6px rgba(83, 203, 161, 0.55);
+}
+
+.clink-switch-mark svg {
+  width: 36px;
+  height: 36px;
+}
+
+.clink-switch-word {
+  margin-left: 2px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.clink-switch-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--clink-mint);
+  color: #06241a;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.clink-switch-badge.is-quiet {
+  margin-left: -4px;
+  border: 1px solid rgba(83, 203, 161, 0.45);
+  background: transparent;
+  color: var(--clink-mint);
+}
+
+.clink-switch-hero h2 {
+  margin: 20px 0 0;
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 3.6vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.clink-switch-hero p {
+  max-width: 470px;
+  margin: 10px 0 0;
+  color: rgba(226, 238, 233, 0.78);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+/* What's new: four tiles. */
+.clink-switch-features {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 20px 28px 0;
+  list-style: none;
+}
+
+.clink-switch-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md, 12px);
+  background: color-mix(in srgb, var(--glass-bg) 72%, transparent);
+}
+
+.clink-switch-feature-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--clink-mint) 16%, transparent);
+  color: var(--clink-mint-deep);
+}
+
+.clink-switch-features li > span:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.clink-switch-features strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.clink-switch-features small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.clink-switch-notes {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 16px 28px 0;
+  list-style: none;
+}
+
+.clink-switch-notes li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.clink-switch-notes svg {
+  flex: 0 0 auto;
+  color: var(--clink-mint-deep);
+}
+
+.clink-switch-prompt .clink-switch-footer {
+  padding-top: 22px;
+}
+
+/* The buttons are C-LINK's own (its globals.css .btn-primary and .btn-glass): pills, its mint in the dark and its
+   deep green in the light, so the choice already looks like the app it leads to. */
+.clink-switch-prompt .update-prompt-actions .clink-switch-go,
+.clink-switch-prompt .update-prompt-actions .clink-switch-later {
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.clink-switch-prompt .update-prompt-actions .clink-switch-go {
+  border: 0;
+  background: linear-gradient(180deg, #74dfba, #3db88c);
+  color: rgba(0, 0, 0, 0.88);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.16),
+    0 8px 20px rgba(83, 203, 161, 0.32);
+}
+
+.clink-switch-prompt .update-prompt-actions .clink-switch-later {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
+  color: #eef2f1;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 6px 16px rgba(0, 0, 0, 0.32);
+}
+
+:root[data-theme="paper"] .clink-switch-prompt .update-prompt-actions .clink-switch-go {
+  background: linear-gradient(180deg, #0c8468, #0a6f57);
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(11, 125, 98, 0.2), 0 4px 10px rgba(11, 125, 98, 0.16);
+}
+
+:root[data-theme="paper"] .clink-switch-prompt .update-prompt-actions .clink-switch-later {
+  border-color: rgba(15, 21, 20, 0.07);
+  background: linear-gradient(180deg, #ffffff, #f3f6f5);
+  color: #0f1514;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+
+.clink-switch-prompt .update-prompt-actions .clink-switch-go:hover:not(:disabled),
+.clink-switch-prompt .update-prompt-actions .clink-switch-later:hover:not(:disabled) {
+  filter: brightness(1.05);
+  transform: none;
+}
+
+:root[data-theme="paper"] .clink-switch-feature-icon,
+:root[data-theme="paper"] .clink-switch-notes svg {
+  color: #0b7d62;
+}
+
+@keyframes clink-switch-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clink-switch-prompt {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .clink-switch-hero {
+    padding: 22px 20px 20px;
+  }
+
+  .clink-switch-features {
+    grid-template-columns: 1fr;
+    padding: 16px 20px 0;
+  }
+
+  .clink-switch-notes {
+    padding: 14px 20px 0;
+  }
+}

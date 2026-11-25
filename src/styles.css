@@ -10519,6 +10519,14 @@ td span {
   letter-spacing: -0.04em;
 }
 
+.training-recovery-ring .storage-ring-label strong.is-word {
+  max-width: calc(var(--recovery-ring-size) * 0.7);
+  font-size: calc(var(--recovery-ring-size) * 0.13);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
 .training-recovery-ring .storage-ring-label span {
   margin-top: 4px;
   color: var(--ring-color);

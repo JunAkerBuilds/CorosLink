@@ -5,10 +5,14 @@ import path from "node:path";
 import { app, BrowserWindow, shell } from "electron";
 import type { CancellationToken } from "electron-updater";
 import { getSetting, setSetting } from "./database";
-import type { AppUpdateSnapshot } from "./types";
+import type { AppUpdateSnapshot, AppUpdateTrack } from "./types";
 
 const AUTO_CHECK_KEY = "updater.autoCheck";
 const AUTO_DOWNLOAD_KEY = "updater.autoDownload";
+const TRACK_KEY = "updater.track";
+const CLINK_OFFER_ANSWERED_KEY = "updater.clinkOfferAnswered";
+// C-LINK betas are GitHub prereleases tagged v0.2.0-clink.N with clink-mac.yml.
+const CLINK_CHANNEL = "clink";
 const STARTUP_CHECK_DELAY_MS = 5000;
 // The app only checks at startup, so without these one GitHub hiccup would
 // hide a new release until the next launch.
@@ -44,7 +48,9 @@ let snapshot: AppUpdateSnapshot = {
   currentVersion: app.getVersion(),
   status: "idle",
   autoCheck: true,
-  autoDownload: true
+  autoDownload: true,
+  track: "legacy",
+  clinkOfferAnswered: false
 };
 
 function readBooleanSetting(key: string, fallback: boolean): boolean {
@@ -53,6 +59,46 @@ function readBooleanSetting(key: string, fallback: boolean): boolean {
     return value === undefined ? fallback : value === "true";
   } catch {
     return fallback;
+  }
+}
+
+/** C-LINK desktop ships for macOS only so far; elsewhere the track is always legacy. */
+function isClinkTrackSupported(): boolean {
+  return process.platform === "darwin";
+}
+
+function readTrack(): AppUpdateTrack {
+  if (!isClinkTrackSupported()) {
+    return "legacy";
+  }
+  try {
+    return getSetting(TRACK_KEY) === "clink" ? "clink" : "legacy";
+  } catch {
+    return "legacy";
+  }
+}
+
+/**
+ * Points electron-updater at the right releases. Legacy installs with no
+ * channel set are left exactly as electron-updater starts: /releases/latest
+ * (never a prerelease) and latest-mac.yml.
+ */
+function applyUpdateTrack(track: AppUpdateTrack): void {
+  const { autoUpdater } = electronUpdater();
+  if (track === "clink") {
+    // Only releases whose tag's prerelease id is "clink" match, and their
+    // clink-mac.yml is fetched. Setting channel turns allowDowngrade on.
+    autoUpdater.channel = CLINK_CHANNEL;
+    autoUpdater.allowPrerelease = true;
+    autoUpdater.allowDowngrade = false;
+    return;
+  }
+  if (autoUpdater.channel != null) {
+    // Back from C-LINK: electron-updater can't clear a channel, and "latest"
+    // is the default channel's own name (latest-mac.yml).
+    autoUpdater.channel = "latest";
+    autoUpdater.allowPrerelease = false;
+    autoUpdater.allowDowngrade = false;
   }
 }
 
@@ -129,6 +175,10 @@ function isTransientUpdaterError(error: unknown): boolean {
 function formatUpdaterError(error: unknown): string {
   const status = readHttpStatus(error);
   const code = (error as { code?: unknown } | null | undefined)?.code;
+
+  if (snapshot.track === "clink" && code === "ERR_UPDATER_NO_PUBLISHED_VERSIONS") {
+    return "The C-LINK beta isn't out yet. CorosLink will look again on the next check.";
+  }
 
   if (
     status === 404 ||
@@ -369,6 +419,8 @@ export function initializeAppUpdater(window: BrowserWindow): void {
 
   const autoCheck = readBooleanSetting(AUTO_CHECK_KEY, true);
   const autoDownload = readBooleanSetting(AUTO_DOWNLOAD_KEY, true);
+  const track = readTrack();
+  const clinkOfferAnswered = readBooleanSetting(CLINK_OFFER_ANSWERED_KEY, false);
 
   if (!isUpdaterEnabled()) {
     snapshot = {
@@ -376,7 +428,9 @@ export function initializeAppUpdater(window: BrowserWindow): void {
       currentVersion: app.getVersion(),
       status: "idle",
       autoCheck,
-      autoDownload
+      autoDownload,
+      track,
+      clinkOfferAnswered
     };
     return;
   }
@@ -384,16 +438,19 @@ export function initializeAppUpdater(window: BrowserWindow): void {
   // On a reopened window keep reporting what the updater is doing (a
   // download in progress, a downloaded update) instead of resetting to idle.
   snapshot = listenersRegistered
-    ? { ...snapshot, autoCheck, autoDownload }
+    ? { ...snapshot, autoCheck, autoDownload, track, clinkOfferAnswered }
     : {
         supported: true,
         currentVersion: app.getVersion(),
         status: "idle",
         autoCheck,
-        autoDownload
+        autoDownload,
+        track,
+        clinkOfferAnswered
       };
 
   registerAutoUpdaterListeners();
+  applyUpdateTrack(track);
   publishSnapshot();
 
   if (!staleUpdateCleanupStarted) {
@@ -544,6 +601,64 @@ export function setUpdaterPreferences(prefs: {
     void downloadAppUpdate();
   }
 
+  return getAppUpdateSnapshot();
+}
+
+/**
+ * Moves this install to the C-LINK beta ("clink", macOS only) or back to
+ * normal CorosLink releases ("legacy"), then checks the new track at once.
+ * The check reuses the normal flow: an update found there is downloaded when
+ * "Download automatically" is on and offered with "Restart to update".
+ */
+export async function setUpdateTrack(
+  requested: AppUpdateTrack
+): Promise<AppUpdateSnapshot> {
+  const track: AppUpdateTrack =
+    requested === "clink" && isClinkTrackSupported() ? "clink" : "legacy";
+  setSetting(TRACK_KEY, track);
+  if (track === "clink") {
+    setSetting(CLINK_OFFER_ANSWERED_KEY, "true");
+  }
+
+  const changed = track !== snapshot.track;
+  setSnapshot({
+    track,
+    clinkOfferAnswered: snapshot.clinkOfferAnswered || track === "clink"
+  });
+
+  if (!isUpdaterEnabled() || !changed) {
+    return getAppUpdateSnapshot();
+  }
+
+  // An update found or downloaded on the other track no longer applies.
+  downloadRequestGeneration += 1;
+  if (activeDownload && !activeDownload.cancellation.cancelled) {
+    activeDownload.cancellation.cancel();
+  }
+  setSnapshot({
+    status: "idle",
+    availableVersion: undefined,
+    releaseNotes: undefined,
+    downloadPercent: undefined,
+    installMethod: undefined,
+    manualInstallUrl: undefined,
+    error: undefined
+  });
+  applyUpdateTrack(track);
+  // Let a cancelled download unwind before a new one can start.
+  while (activeDownload?.cancellation.cancelled) {
+    await activeDownload.finished;
+  }
+
+  clearScheduledUpdateCheck();
+  await runUpdateCheck();
+  return getAppUpdateSnapshot();
+}
+
+/** Remembers that the one-time C-LINK offer was answered with "Not now". */
+export function dismissClinkOffer(): AppUpdateSnapshot {
+  setSetting(CLINK_OFFER_ANSWERED_KEY, "true");
+  setSnapshot({ clinkOfferAnswered: true });
   return getAppUpdateSnapshot();
 }
 

@@ -162,7 +162,9 @@ export function UpdateAvailablePrompt({
           />
           <div>
             <p className="update-prompt-eyebrow">{t("Update available")}</p>
-            <h2 id="update-prompt-title">CorosLink {visibleVersion}</h2>
+            <h2 id="update-prompt-title">
+              {snapshot.track === "clink" ? "C-LINK" : "CorosLink"} {visibleVersion}
+            </h2>
             <p id="update-prompt-description">
               {t("Everything new since CorosLink")} {snapshot.currentVersion}.
             </p>

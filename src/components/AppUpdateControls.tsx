@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
+  ArrowRightLeft,
   Download,
   Loader2,
   RefreshCw,
@@ -22,6 +23,12 @@ interface AppUpdateControlsProps {
     autoCheck?: boolean;
     autoDownload?: boolean;
   }) => void;
+  /** macOS only: the C-LINK beta track can be chosen here. */
+  clinkTrackAvailable: boolean;
+  /** Opens the C-LINK beta offer. */
+  onTryClink: () => void;
+  /** Back to normal CorosLink releases before C-LINK installs. */
+  onStayOnCorosLink: () => void;
 }
 
 function UpdatePreferencesMenu({
@@ -32,6 +39,9 @@ function UpdatePreferencesMenu({
   onDownload,
   onInstall,
   onPreferencesChange,
+  clinkTrackAvailable,
+  onTryClink,
+  onStayOnCorosLink,
 }: AppUpdateControlsProps) {
   useLanguage();
   const [open, setOpen] = useState(false);
@@ -205,6 +215,41 @@ function UpdatePreferencesMenu({
               {t("Your preferences will apply when you install CorosLink.")} </p>
           )}
 
+          {clinkTrackAvailable ? (
+            <div className="update-settings-actions">
+              {snapshot.track === "clink" ? (
+                <>
+                  <p className="update-settings-note">
+                    {t("This Mac gets the C-LINK beta.")}
+                  </p>
+                  <button
+                    className="update-settings-action"
+                    type="button"
+                    onClick={() => {
+                      onStayOnCorosLink();
+                      setOpen(false);
+                    }}
+                  >
+                    <ArrowRightLeft size={14} aria-hidden="true" />
+                    {t("Stay on CorosLink")}
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="update-settings-action"
+                  type="button"
+                  onClick={() => {
+                    onTryClink();
+                    setOpen(false);
+                  }}
+                >
+                  <Sparkles size={14} aria-hidden="true" />
+                  {t("Try the new C-LINK (beta)")}
+                </button>
+              )}
+            </div>
+          ) : null}
+
           <label className="update-settings-option">
             <input
               type="checkbox"
@@ -256,6 +301,9 @@ export function AppUpdateControls({
   onDownload,
   onInstall,
   onPreferencesChange,
+  clinkTrackAvailable,
+  onTryClink,
+  onStayOnCorosLink,
 }: AppUpdateControlsProps) {
   useLanguage();
   const settings = (
@@ -267,6 +315,9 @@ export function AppUpdateControls({
       onDownload={onDownload}
       onInstall={onInstall}
       onPreferencesChange={onPreferencesChange}
+      clinkTrackAvailable={clinkTrackAvailable}
+      onTryClink={onTryClink}
+      onStayOnCorosLink={onStayOnCorosLink}
     />
   );
 

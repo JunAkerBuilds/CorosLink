@@ -107,6 +107,7 @@ import type {
   TransferResult,
   AppInfo,
   AppUpdateSnapshot,
+  AppUpdateTrack,
   WatchConnectionSmokeOptionId,
   WatchStatus,
   WatchTransferProgress,
@@ -890,6 +891,8 @@ export interface CorosLinkApi {
     autoCheck?: boolean;
     autoDownload?: boolean;
   }) => Promise<AppUpdateSnapshot>;
+  setAppUpdateTrack: (track: AppUpdateTrack) => Promise<AppUpdateSnapshot>;
+  dismissClinkOffer: () => Promise<AppUpdateSnapshot>;
   quitAndInstallUpdate: () => Promise<{ installMethod: "restart" | "manual" }>;
   onAppUpdateStatus: (
     callback: (snapshot: AppUpdateSnapshot) => void

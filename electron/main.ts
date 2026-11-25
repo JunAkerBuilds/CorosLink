@@ -372,7 +372,7 @@ import type {
   CorosBluetoothDeviceChoice,
   WatchTransferProgress
 } from "./types";
-import type { CommunityWatchfaceOpenRequest } from "./types";
+import type { AppUpdateTrack, CommunityWatchfaceOpenRequest } from "./types";
 import type { CoachChartPreview, FitIndexSyncOptions } from "./types";
 import {
   deleteWatchTrack,
@@ -464,7 +464,9 @@ import {
   getAppUpdateSnapshot,
   initializeAppUpdater,
   quitAndInstallUpdate,
-  setUpdaterPreferences
+  setUpdaterPreferences,
+  setUpdateTrack,
+  dismissClinkOffer
 } from "./updaterService";
 import {
   cancelChat,
@@ -3394,6 +3396,12 @@ function registerIpcHandlers(): void {
     (_event, prefs: { autoCheck?: boolean; autoDownload?: boolean }) =>
       setUpdaterPreferences(prefs)
   );
+
+  ipcMain.handle("app:setUpdateTrack", (_event, track: AppUpdateTrack) =>
+    setUpdateTrack(track === "clink" ? "clink" : "legacy")
+  );
+
+  ipcMain.handle("app:dismissClinkOffer", () => dismissClinkOffer());
 
   ipcMain.handle("app:quitAndInstallUpdate", () => quitAndInstallUpdate());
 
