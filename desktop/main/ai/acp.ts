@@ -1,12 +1,13 @@
 // The Agent Client Protocol: newline-delimited JSON-RPC 2.0 over an agent program's stdio. Gemini CLI, OpenCode and
 // Antigravity all speak it. C-LINK is the client: it starts a session with only Coach's tools (over the bridge),
 // sends one prompt, and streams the agent's words back. Files and terminals are never offered to the agent.
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import type { CoachFile } from "@/lib/coach/files";
 import { textFileBlock } from "@/lib/coach/files";
 import { CoachModelError } from "@/server/coach/anthropic";
 import type { AgentAsk, AgentDone } from "./agent";
 import { BRIDGE_NAME, type ToolBridge } from "./bridge";
+import { startProgram } from "./cli";
 import { t } from "@/lib/i18n";
 
 type Json = Record<string, unknown>;
@@ -40,7 +41,8 @@ export class AcpAgent {
   }
 
   static start(file: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv; onPermission?: (params: Json) => Json; onStderr?: (line: string) => void }): AcpAgent {
-    return new AcpAgent(spawn(file, args, { cwd: options.cwd, env: options.env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true }), options);
+    // Throws when the program can't be started at all (a Windows shim C-LINK can't read).
+    return new AcpAgent(startProgram(file, args, { cwd: options.cwd, env: options.env, stdio: ["pipe", "pipe", "pipe"] }), options);
   }
 
   initialize(protocolVersion = 1): Promise<Json> {

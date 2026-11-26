@@ -78,6 +78,8 @@ export const downloadPackage = (id: string) => send<PackagesStatus>("POST", `/pa
 export const cancelPackage = (id: string) => send<PackagesStatus>("POST", `/packages/${encodeURIComponent(id)}/cancel`);
 export const deleteCached = (id: string) => send<PackagesStatus>("DELETE", `/packages/cached/${encodeURIComponent(id)}`);
 export const installPackages = (ids: string[]) => send<PackagesStatus>("POST", "/packages/install", { ids });
+/** Reads the package's files on the watch back, compares them with the download, and replaces any that differ. */
+export const checkPackages = (ids: string[]) => send<PackagesStatus>("POST", "/packages/install", { ids, check: true });
 export const cancelInstall = () => send<PackagesStatus>("POST", "/packages/install/cancel");
 
 // Formatting

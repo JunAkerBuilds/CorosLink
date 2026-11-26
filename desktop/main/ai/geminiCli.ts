@@ -11,11 +11,20 @@ import { CoachModelError } from "@/server/coach/anthropic";
 import { AcpAgent, acpFailure, acpAnswer, allowCoachTools } from "./acp";
 import { agentModel, type AgentAsk } from "./agent";
 import { BRIDGE_NAME } from "./bridge";
-import { findProgram, programEnv, runProgram } from "./cli";
+import { locateProgram, programEnv, runProgram } from "./cli";
 import type { AccountProvider } from "./service";
 import { msg, t } from "@/lib/i18n";
 
 const NOT_INSTALLED = msg("Install Gemini CLI first: github.com/google-gemini/gemini-cli");
+
+/** Starts Gemini CLI, or says plainly that it can't be started. */
+function startGemini(...args: Parameters<typeof AcpAgent.start>): AcpAgent {
+  try {
+    return AcpAgent.start(...args);
+  } catch (error) {
+    throw new CoachModelError("unreachable", error instanceof Error ? error.message : t("The program couldn't be started."));
+  }
+}
 
 const WORKSPACE_SETTINGS = {
   tools: { core: [] as string[] },
@@ -42,11 +51,13 @@ export function geminiSignIn(home = geminiHome(), env: NodeJS.ProcessEnv = proce
 
 export class GeminiCliAccount implements AccountProvider {
   readonly canSignOut = false;
+  readonly programName = "gemini";
   private acpFlag: string | null = null;
-  constructor(private readonly folder: string) {}
+  /** `chosen`: the path the athlete gave under Program, if any. */
+  constructor(private readonly folder: string, private readonly chosen: () => string | null = () => null) {}
 
-  private program(): string {
-    const found = findProgram("gemini");
+  private async program(): Promise<string> {
+    const found = await locateProgram("gemini", this.chosen(), programEnv());
     if (!found) throw new CoachModelError("unreachable", t(NOT_INSTALLED));
     return found;
   }
@@ -60,7 +71,7 @@ export class GeminiCliAccount implements AccountProvider {
   }
 
   async status() {
-    const program = findProgram("gemini");
+    const program = await locateProgram("gemini", this.chosen(), programEnv());
     if (!program) return { ready: false, problem: t(NOT_INSTALLED) };
     const s = geminiSignIn();
     return s.signedIn ? { ready: true, program, account: s.method === "oauth-personal" ? t("Google account") : s.method === "gemini-api-key" ? "Gemini API key" : s.method } : { ready: false, program, problem: t("Not signed in to Gemini CLI.") };
@@ -68,9 +79,9 @@ export class GeminiCliAccount implements AccountProvider {
 
   /** Gemini CLI's own Google sign-in, in the browser. */
   async signIn(): Promise<void> {
-    const program = this.program();
+    const program = await this.program();
     const workspace = await this.workspace();
-    const agent = AcpAgent.start(program, [await this.flag(program)], { cwd: workspace, env: programEnv() });
+    const agent = startGemini(program, [await this.flag(program)], { cwd: workspace, env: programEnv() });
     const timer = setTimeout(() => agent.close(), 6 * 60_000);
     try {
       await agent.initialize();
@@ -98,14 +109,14 @@ export class GeminiCliAccount implements AccountProvider {
   }
 
   private async answer(model: string, ask: AgentAsk) {
-    const program = this.program();
+    const program = await this.program();
     const cwd = await this.workspace();
     const promptFile = path.join(this.folder, "gemini-coach", `${randomUUID()}.md`);
     await writeFile(promptFile, ask.system, { mode: 0o600 });
     const log: string[] = [];
     try {
       const args = [await this.flag(program), "--allowed-mcp-server-names", BRIDGE_NAME, "--extensions", "none", ...(model ? ["--model", model] : [])];
-      const agent = AcpAgent.start(program, args, {
+      const agent = startGemini(program, args, {
         cwd, env: programEnv({ GEMINI_SYSTEM_MD: promptFile }), onPermission: allowCoachTools,
         onStderr: (line) => { log.push(line); if (log.length > 30) log.shift(); },
       });

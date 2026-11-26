@@ -182,13 +182,18 @@ export interface AreasStatus {
 export interface AreaHistory { id: string; label: string; tiles: Tile[]; fileCount: number; sizeBytes: number; via: "wifi" | "usb"; at: string }
 
 export interface CopyProgress {
-  state: "copying" | "done" | "failed" | "cancelled";
+  /** "checking": reading the watch's files back (copiedBytes/totalBytes are bytes read), before any copying. */
+  state: "checking" | "copying" | "done" | "failed" | "cancelled";
   label: string;
   copiedBytes: number;
   totalBytes: number;
   files: number;
   filesDone: number;
   message?: string;
+  /** This was a check of the files already on the watch, not just an install. */
+  checked?: boolean;
+  /** After a check: files on the watch that were different and were written again. */
+  fixed?: number;
 }
 
 // ---- COROS Maps ----

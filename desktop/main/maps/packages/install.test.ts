@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { assertNotOwnFolder, fingerprint, mapFolderOf, onWatch, overlaps, plan, targetOf, unpack } from "./install";
+import { assertNotOwnFolder, clearLeftovers, fingerprint, mapFolderOf, onWatch, overlaps, plan, targetOf, unpack } from "./install";
 import { buildZip } from "./testZip";
 
 const temp = () => mkdtempSync(path.join(os.tmpdir(), "clink-inst-"));
@@ -28,7 +28,7 @@ describe("installing map packages over USB", () => {
     writeFileSync(path.join(watchMap, "VSM", "023", "S1.t"), tile(100));
     writeFileSync(path.join(watchMap, "VSM", "023", "S2.t"), tile(50));
     const totals = await plan([zip], watchMap);
-    expect(totals).toEqual({ files: 2, bytes: 500, neededBytes: 150 + 300, skipped: 1 });
+    expect(totals).toEqual({ files: 2, bytes: 500, neededBytes: 150 + 300, skipped: 1, replace: new Set() });
   });
 
   it("unpacks the zip's map folder into the watch's own Map folder, skipping what's there", async () => {
@@ -92,5 +92,44 @@ describe("installing map packages over USB", () => {
     expect(targetOf("/w/Map", e("map/../x.t"))).toBeNull();
     expect(targetOf("/w/Map", e("other/x.t"))).toBeNull();
     expect(targetOf("/w/Map", e("map/VSM/._S.t"))).toBeNull();
+  });
+
+  // File names don't change between map versions (…V00.t), so a stale tile can match in size: only its contents tell.
+  it("a check replaces a same-size file whose contents differ and leaves a matching one", async () => {
+    const dir = temp(), zip = region(dir), watchMap = path.join(dir, "watch", "map");
+    await unpack([{ file: zip, label: "x" }], watchMap);
+    const stale = path.join(watchMap, "VSM", "023", "S2.t");
+    writeFileSync(stale, tile(200, "z"));
+
+    // Sizes alone see nothing to do.
+    expect((await plan([zip], watchMap)).files).toBe(0);
+
+    const read: number[] = [];
+    const totals = await plan([zip], watchMap, undefined, { check: true, onChecked: (n, total) => { read.push(n); expect(total).toBe(600); } });
+    expect(totals).toMatchObject({ files: 1, bytes: 200, neededBytes: 0, skipped: 2 });
+    expect([...totals.replace]).toEqual([stale.toLowerCase()]);
+    expect(read.at(-1)).toBe(600);
+
+    expect(await unpack([{ file: zip, label: "x" }], watchMap, { replace: totals.replace })).toEqual({ copiedBytes: 200, filesDone: 1 });
+    expect(readFileSync(stale, "utf8")).toBe(tile(200, "b"));
+    expect((await plan([zip], watchMap, undefined, { check: true })).files).toBe(0);
+  });
+
+  it("a check stops when cancelled", async () => {
+    const dir = temp(), zip = region(dir), watchMap = path.join(dir, "watch", "map");
+    await unpack([{ file: zip, label: "x" }], watchMap);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(plan([zip], watchMap, controller.signal, { check: true })).rejects.toThrow(/cancelled/);
+  });
+
+  it("clears unfinished parts a cut-short copy left on the watch", async () => {
+    const dir = temp(), watchMap = path.join(dir, "watch", "map");
+    mkdirSync(path.join(watchMap, "VSM", "023"), { recursive: true });
+    writeFileSync(path.join(watchMap, "VSM", "023", "S1.t.clink-part"), "half");
+    writeFileSync(path.join(watchMap, "VSM", "023", "S2.t"), "kept");
+    expect(await clearLeftovers(watchMap)).toBe(1);
+    expect(readdirSync(path.join(watchMap, "VSM", "023"))).toEqual(["S2.t"]);
+    expect(await clearLeftovers(path.join(dir, "no-watch"))).toBe(0);
   });
 });

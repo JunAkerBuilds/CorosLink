@@ -637,5 +637,11 @@
   "Today": "Heute",
   "base map|Topo": "Topo",
   "fidelity|Balanced": "Ausgewogen",
-  "surface|Mixed": "Gemischt"
+  "surface|Mixed": "Gemischt",
+  "Check files": "Dateien prüfen",
+  "Read the files on the watch back and replace any that don't match the download": "Liest die Dateien auf der Uhr und ersetzt alle, die nicht zum Download passen",
+  "Checking {name} on the watch": "{name} auf der Uhr wird geprüft",
+  "{checked} of {size} read": "{checked} von {size} gelesen",
+  "{name}: {n} files on the watch didn't match and were replaced.": "{name}: {n} Dateien auf der Uhr stimmten nicht überein und wurden ersetzt.",
+  "{name}: every file on the watch matches the download.": "{name}: Alle Dateien auf der Uhr stimmen mit dem Download überein."
 }

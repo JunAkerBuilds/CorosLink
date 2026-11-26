@@ -1,11 +1,14 @@
 // AI on the desktop: the one place the athlete picks who answers Coach, the workout notes, meal estimates and chat
 // titles. It answers the AI page (/api/desktop/ai/*) and is the web code's `hostAI`, so every AI route in src/ asks
 // the picked provider. Keys and tokens stay in the vault; nothing here hands one to the page.
+import { existsSync } from "node:fs";
+import path from "node:path";
 import type { CoachModel, ExtraTools } from "@/lib/coach/loop";
 import { answerOnce, type HostAI, type HostModel } from "@/server/ai/host";
 import { CoachModelError } from "@/server/coach/anthropic";
 import { LOCAL_SERVERS, localBase, provider, PROVIDERS, type Provider, type ProviderId } from "./catalog";
 import { checkReach, keyedModel, listModels } from "./keyed";
+import { programNames } from "./cli";
 import type { AIVault } from "./vault";
 import { t } from "@/lib/i18n";
 
@@ -19,8 +22,10 @@ const EFFORT = /^[a-z]{2,16}$/;
 export interface AccountProvider {
   /** False for a program's own sign-in (Claude Code, the CLIs): signing out there would sign every app out. */
   readonly canSignOut?: boolean;
+  /** The installed program it runs (`claude`, `gemini`, `opencode`), when the athlete may say where it is. */
+  readonly programName?: string;
   /** Whether it can answer now, the account it is signed in as, and why not when it can't. */
-  status(): Promise<{ ready: boolean; account?: string; problem?: string; program?: string }>;
+  status(): Promise<{ ready: boolean; account?: string; problem?: string; program?: string; signingIn?: boolean }>;
   /** Signs in, however the provider does it (a window, a browser). Resolves once signed in. */
   signIn(): Promise<void>;
   signOut(): Promise<void>;
@@ -38,6 +43,10 @@ export interface ProviderView {
   effort: string;
   /** Where the installed program was found (Claude Code, Gemini CLI, OpenCode). */
   program?: string;
+  /** The program's name, when the athlete can say where it is. */
+  programName?: string;
+  /** A sign-in is open in the browser; the page checks again until it's done. */
+  signingIn?: boolean;
   /** Whether "Sign out" / "Forget" applies. */
   canForget: boolean;
 }
@@ -70,15 +79,18 @@ export class AIService implements HostAI {
     return this.vault.hasSecret(p.id);
   }
 
+  /** One provider as the AI page shows it. */
+  private async view(p: Provider): Promise<ProviderView> {
+    const base = { id: p.id, name: t(p.name), group: p.group, model: this.modelOf(p), keyHint: p.keyHint, keyPage: p.keyPage, canForget: p.group !== "account" || this.accounts[p.id]?.canSignOut !== false, effort: this.vault.current.efforts[p.id] ?? "" };
+    if (p.group !== "account") return { ...base, ready: await this.ready(p) };
+    const account = this.accounts[p.id];
+    if (!account) return { ...base, ready: false, problem: t("Not in this build yet.") };
+    const s = await account.status().catch((error: unknown) => ({ ready: false, problem: said(error).message }));
+    return { ...base, ...(account.programName ? { programName: account.programName } : {}), ...s };
+  }
+
   async status(): Promise<AIStatus> {
-    const views = await Promise.all(PROVIDERS.map(async (p): Promise<ProviderView> => {
-      const base = { id: p.id, name: t(p.name), group: p.group, model: this.modelOf(p), keyHint: p.keyHint, keyPage: p.keyPage, canForget: p.group !== "account" || this.accounts[p.id]?.canSignOut !== false, effort: this.vault.current.efforts[p.id] ?? "" };
-      if (p.group !== "account") return { ...base, ready: await this.ready(p) };
-      const account = this.accounts[p.id];
-      if (!account) return { ...base, ready: false, problem: t("Not in this build yet.") };
-      const s = await account.status().catch((error: unknown) => ({ ready: false, problem: said(error).message }));
-      return { ...base, ...s };
-    }));
+    const views = await Promise.all(PROVIDERS.map((p) => this.view(p)));
     const { picked, localUrl } = this.vault.current;
     return { picked, localUrl, providers: views };
   }
@@ -133,6 +145,9 @@ export class AIService implements HostAI {
         return reply({ error: "not_found", message: t("No Ollama or LM Studio is running on this computer.") }, 404);
       }
       if (!p) return reply({ error: "invalid", message: t("Pick a provider.") }, 400);
+
+      // One provider again, without asking every other one (the page does this while a sign-in is open).
+      if (request.method === "GET" && action === "provider") return reply({ provider: await this.view(p) });
 
       if (request.method === "GET" && action === "models") return reply({ models: await this.models(p), model: this.modelOf(p) });
 
@@ -190,11 +205,30 @@ export class AIService implements HostAI {
         return reply({ ok: true, ms: Date.now() - started, label: host.label });
       }
 
+      // Where an installed program is, when C-LINK can't find it; "" goes back to looking for it.
+      if (request.method === "POST" && action === "program") {
+        const name = this.accounts[p.id]?.programName;
+        if (!name) return reply({ error: "invalid", message: t("{name} doesn't run a program.", { name: p.name }) }, 400);
+        const file = typeof body.program === "string" ? body.program.trim().replace(/^"(.*)"$/, "$1") : "";
+        if (file) {
+          // Only the program itself: the page can't point C-LINK at some other file to run.
+          const base = file.split(/[\\/]/).pop()!.toLowerCase();
+          if (!path.isAbsolute(file) || !programNames(name).includes(base)) {
+            return reply({ error: "invalid", message: t("Give the full path to {files}.", { files: programNames(name).join(", ") }) }, 400);
+          }
+          if (!existsSync(file)) return reply({ error: "invalid", message: t("There's no {file} there.", { file: base }) }, 400);
+        }
+        this.vault.choose({ programs: { [p.id]: file || undefined } });
+        return reply(await this.status());
+      }
+
       if (request.method === "POST" && action === "signin") {
         const account = this.accounts[p.id];
         if (!account) return reply({ error: "invalid", message: t("{name} isn't in this build yet.", { name: p.name }) }, 400);
         await account.signIn();
-        if (!this.vault.current.picked || this.vault.current.picked === p.id) this.vault.choose({ picked: p.id });
+        // Signing in picks it for Coach. A sign-in that finishes later in the browser (Claude Code) is picked by the
+        // page once it's done.
+        if (await this.ready(p)) this.vault.choose({ picked: p.id });
         return reply(await this.status());
       }
 

@@ -16,9 +16,11 @@ export interface AIChoices {
   efforts: Partial<Record<ProviderId, string>>;
   /** The OpenAI-compatible server on this computer or network. */
   localUrl: string | null;
+  /** Where the athlete says an installed program is (Claude Code, Gemini CLI, OpenCode), when C-LINK can't find it. */
+  programs: Partial<Record<ProviderId, string>>;
 }
 
-const EMPTY: AIChoices = { picked: null, models: {}, efforts: {}, localUrl: null };
+const EMPTY: AIChoices = { picked: null, models: {}, efforts: {}, localUrl: null, programs: {} };
 
 /** What a secret is kept under: a provider's key or token, or an MCP server's headers and env (`mcp:<id>`). */
 export type SecretId = ProviderId | `mcp:${string}`;
@@ -40,13 +42,14 @@ export class AIVault {
       models: typeof saved.models === "object" && saved.models ? saved.models : {},
       efforts: typeof saved.efforts === "object" && saved.efforts ? saved.efforts : {},
       localUrl: typeof saved.localUrl === "string" ? saved.localUrl : null,
+      programs: typeof saved.programs === "object" && saved.programs ? saved.programs : {},
     };
   }
 
   get current(): AIChoices { return this.choices; }
 
   choose(change: Partial<AIChoices>): AIChoices {
-    this.choices = { ...EMPTY, ...this.choices, ...change, models: { ...this.choices.models, ...change.models }, efforts: { ...this.choices.efforts, ...change.efforts } };
+    this.choices = { ...EMPTY, ...this.choices, ...change, models: { ...this.choices.models, ...change.models }, efforts: { ...this.choices.efforts, ...change.efforts }, programs: { ...this.choices.programs, ...change.programs } };
     writeFileSync(this.choicesFile, JSON.stringify(this.choices, null, 2), { mode: 0o600 });
     return this.choices;
   }

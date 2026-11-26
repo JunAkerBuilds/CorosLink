@@ -1,7 +1,7 @@
 // Claude Code: Coach answered by the athlete's own Claude subscription, through the `claude` program they installed
 // and signed in to. Each answer runs `claude -p` with no built-in tools, no settings, no saved session, and only
 // Coach's tools (over the bridge). Signing in is Claude Code's own (`claude auth login`).
-import { spawn } from "node:child_process";
+import type { ChildProcess, ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import type { CoachModel } from "@/lib/coach/loop";
@@ -9,13 +9,15 @@ import { textFileBlock } from "@/lib/coach/files";
 import { CoachModelError } from "@/server/coach/anthropic";
 import { agentModel, type AgentAsk, type AgentDone } from "./agent";
 import { BRIDGE_NAME } from "./bridge";
-import { findProgram, programEnv, runProgram } from "./cli";
+import { locateProgram, logProgram, programEnv, runProgram, startProgram } from "./cli";
 import type { AccountProvider, EffortLevels } from "./service";
 import { t } from "@/lib/i18n";
 
 /** Anything that would point Claude Code away from the athlete's subscription. */
 const NOT_SUBSCRIPTION = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_USE_ANTHROPIC_AWS"];
 const IDLE_MS = 3 * 60_000;
+/** How long a browser sign-in stays open. */
+const LOGIN_MS = 10 * 60_000;
 /** What `claude --effort` takes, lowest first. */
 const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
@@ -52,7 +54,13 @@ function failure(text: string): CoachModelError {
 
 function run(program: string, workspace: string, model: string, ask: AgentAsk, effort?: string): Promise<AgentDone> {
   return new Promise((resolve, reject) => {
-    const child = spawn(program, claudeArgs(model, ask.system, ask.bridge, effort), { cwd: workspace, env: env(), stdio: ["pipe", "pipe", "pipe"] });
+    let child: ChildProcessWithoutNullStreams;
+    try {
+      child = startProgram(program, claudeArgs(model, ask.system, ask.bridge, effort), { cwd: workspace, env: env(), stdio: ["pipe", "pipe", "pipe"] }) as ChildProcessWithoutNullStreams;
+    } catch (error) {
+      reject(new CoachModelError("unreachable", error instanceof Error ? error.message : t("Claude Code couldn't be started.")));
+      return;
+    }
     let buffer = "", stderr = "", streamed = "", settled = false;
     let idle: NodeJS.Timeout;
     const finish = (error: Error | null, done?: AgentDone) => {
@@ -99,29 +107,53 @@ function run(program: string, workspace: string, model: string, ask: AgentAsk, e
 
 export class ClaudeCodeAccount implements AccountProvider {
   readonly canSignOut = false;
-  constructor(private readonly folder: string) {}
+  readonly programName = "claude";
+  /** `claude auth login` while it runs: sign-in happens in the browser, in the athlete's own time. */
+  private login: ChildProcess | null = null;
+  /** `chosen`: the path the athlete gave under Program, if any. */
+  constructor(private readonly folder: string, private readonly chosen: () => string | null = () => null) {}
 
-  private program(): string {
-    const found = findProgram("claude");
+  private async program(): Promise<string> {
+    const found = await locateProgram("claude", this.chosen(), env());
     if (!found) throw new CoachModelError("unreachable", t("Install Claude Code first: claude.com/code"));
     return found;
   }
 
   async status() {
-    const program = findProgram("claude");
+    const program = await locateProgram("claude", this.chosen(), env());
     if (!program) return { ready: false, problem: t("Install Claude Code first: claude.com/code") };
     const out = await runProgram(program, ["auth", "status"], { env: env() });
+    if (!out) return { ready: false, program, problem: t("Claude Code couldn't be started. Settings → Error logs says why.") };
     let s: { loggedIn?: boolean; email?: string; authMethod?: string; subscriptionType?: string } = {};
-    try { s = JSON.parse(out?.stdout ?? "{}"); } catch { /* not signed in */ }
+    try { s = JSON.parse(out.stdout || "{}"); } catch { /* not signed in */ }
     // Only a Claude account counts: an API key would be billed separately, and that is the Anthropic row's job.
     const ready = !!s.loggedIn && (s.authMethod === "claude.ai" || !!s.subscriptionType);
-    return ready ? { ready, program, ...(s.email ? { account: s.email } : {}) } : { ready: false, program, problem: t("Not signed in to Claude Code.") };
+    if (ready) return { ready, program, ...(s.email ? { account: s.email } : {}) };
+    return this.login ? { ready: false, program, signingIn: true, problem: t("Finish signing in in your browser.") } : { ready: false, program, problem: t("Not signed in to Claude Code.") };
   }
 
-  /** Claude Code's own sign-in, in the browser. Resolves when it is done. */
+  /**
+   * Starts Claude Code's own sign-in, in the browser, and returns: the athlete finishes it there and presses Check.
+   * Nothing waits on it, so a slow or abandoned sign-in can't time out.
+   */
   async signIn(): Promise<void> {
-    const out = await runProgram(this.program(), ["auth", "login"], { env: env(), timeoutMs: 10 * 60_000 });
-    if (!(await this.status()).ready) throw new CoachModelError("bad_key", out ? t("Claude Code didn't sign in.") : t("Sign-in took too long."));
+    const program = await this.program();
+    // A program that can't start can't sign in either: say that plainly.
+    if (!(await runProgram(program, ["--version"], { env: env() }))) throw new CoachModelError("unreachable", t("Claude Code couldn't be started. Settings → Error logs says why."));
+    if ((await this.status()).ready || this.login) return;
+    let child: ChildProcess;
+    try {
+      child = startProgram(program, ["auth", "login"], { env: env(), stdio: "ignore", detached: true, windowsHide: false });
+    } catch (error) {
+      throw new CoachModelError("unreachable", error instanceof Error ? error.message : t("Claude Code couldn't be started."));
+    }
+    this.login = child;
+    // A sign-in left open in the browser isn't waited on for ever.
+    const giveUp = setTimeout(() => child.kill(), LOGIN_MS);
+    const done = () => { clearTimeout(giveUp); if (this.login === child) this.login = null; };
+    child.on("error", (error) => { logProgram(`Couldn't start claude auth login: ${error.message}`); done(); });
+    child.on("exit", done);
+    child.unref();
   }
 
   /** Signing out of Claude Code would sign every app out; C-LINK just stops using it. */
@@ -139,6 +171,6 @@ export class ClaudeCodeAccount implements AccountProvider {
   model(model: string, effort?: string): CoachModel {
     const workspace = path.join(this.folder, "claude-coach");
     mkdirSync(workspace, { recursive: true });
-    return agentModel((ask) => run(this.program(), workspace, model, ask, effort));
+    return agentModel(async (ask) => run(await this.program(), workspace, model, ask, effort));
   }
 }

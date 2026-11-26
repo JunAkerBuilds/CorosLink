@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Select } from "@/components/ui";
 import { language, locale, msg, t } from "@/lib/i18n";
 import type { CachedPackage, MapManifest, MapPackage, MapRegion, MapsWatch, PackagesStatus } from "../../../maps/types";
-import { bytes, cancelInstall, cancelPackage, deleteCached, downloadPackage, installPackages, manifest, packages, said } from "../../maps";
+import { bytes, cancelInstall, cancelPackage, checkPackages, deleteCached, downloadPackage, installPackages, manifest, packages, said } from "../../maps";
 import { MapsIcon } from "./MapsIcon";
 import { StorageBar } from "./StorageBar";
 
@@ -41,7 +41,7 @@ export default function CorosMaps({ watch, readWatch }: { watch: MapsWatch | nul
     return () => { live = false; };
   }, [shownVersion, refresh]);
 
-  const active = Boolean(status?.jobs.some((j) => j.state === "downloading") || status?.install?.state === "copying");
+  const active = Boolean(status?.jobs.some((j) => j.state === "downloading") || status?.install?.state === "copying" || status?.install?.state === "checking");
   useEffect(() => {
     let live = true;
     const read = () => packages().then((s) => live && setStatus(s), () => {});
@@ -62,13 +62,15 @@ export default function CorosMaps({ watch, readWatch }: { watch: MapsWatch | nul
   const cachedIds = new Set(cached.map((c) => c.packageId));
   const onWatch = new Set(status?.onWatch ?? []);
   const free = watch?.storage?.freeBytes;
-  const installing = status?.install?.state === "copying";
+  const installing = status?.install?.state === "copying" || status?.install?.state === "checking";
   const selectedBytes = cached.filter((c) => checked.has(c.packageId)).reduce((a, c) => a + c.sizeBytes, 0);
   const act = (work: Promise<PackagesStatus>) => work.then(setStatus, (e) => setProblem(said(e)));
-  const install = (ids: string[]) => {
+  const install = (ids: string[], check = false) => {
     if (!watch?.usb) { setProblem(t("Plug the watch in with its USB cable to install maps.")); return; }
-    void act(installPackages(ids));
+    void act(check ? checkPackages(ids) : installPackages(ids));
   };
+  const copy = status?.install;
+  const pct = copy?.totalBytes ? Math.round((copy.copiedBytes / copy.totalBytes) * 100) : 0;
 
   const cell = (region: MapRegion, pkg: MapPackage | undefined) => {
     if (!pkg) return <td className="mp-cell-none">–</td>;
@@ -78,7 +80,11 @@ export default function CorosMaps({ watch, readWatch }: { watch: MapsWatch | nul
       <td>
         <div className="mp-cell">
           <span className="mp-cell-size">{bytes(pkg.sizeBytes)}</span>
-          {onWatch.has(pkg.id) ? <span className="mp-cell-on"><MapsIcon name="check" size={14} />{t("On your watch")}</span>
+          {onWatch.has(pkg.id) ? (
+            <span className="mp-cell-on"><MapsIcon name="check" size={14} />{t("On your watch")}
+              {cachedIds.has(pkg.id) && <button type="button" className="btn btn-glass mp-sm" onClick={() => install([pkg.id], true)} disabled={installing}
+                title={t("Read the files on the watch back and replace any that don't match the download")}>{t("Check files")}</button>}</span>
+          )
             : job?.state === "downloading" ? (
               <span className="mp-cell-dl"><Ring pct={job.totalBytes ? (job.receivedBytes / job.totalBytes) * 100 : 0} /><b>{job.totalBytes ? Math.round((job.receivedBytes / job.totalBytes) * 100) : 0}%</b>
                 <button type="button" className="mp-ib" aria-label={t("Cancel {region} {layer} download", { region: region.name, layer: t(LAYER_LABEL[pkg.layer]) })} onClick={() => void act(cancelPackage(pkg.id))}><MapsIcon name="close" size={15} /></button></span>
@@ -117,20 +123,24 @@ export default function CorosMaps({ watch, readWatch }: { watch: MapsWatch | nul
           <small className="mp-note"><MapsIcon name="info" size={14} />{t("COROS packages are large. Install only the regions you need.")}</small>
         </section>
 
-        {status?.install && status.install.state !== "cancelled" && (
-          status.install.state === "copying" ? (
+        {copy && copy.state !== "cancelled" && (
+          copy.state === "copying" || copy.state === "checking" ? (
             <section className="card card-pad mp-copy" aria-label={t("Copy progress")}>
-              <div className="mp-copy-head"><span>{t("Copying {name}", { name: status.install.label })}</span><b>{status.install.totalBytes ? Math.round((status.install.copiedBytes / status.install.totalBytes) * 100) : 0}%</b></div>
-              <div className="mp-bar" role="progressbar" aria-label={t("Copy progress")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={status.install.totalBytes ? Math.round((status.install.copiedBytes / status.install.totalBytes) * 100) : 0}>
-                <span style={{ width: `${status.install.totalBytes ? (status.install.copiedBytes / status.install.totalBytes) * 100 : 0}%` }} />
+              <div className="mp-copy-head"><span>{copy.state === "checking" ? t("Checking {name} on the watch", { name: copy.label }) : t("Copying {name}", { name: copy.label })}</span><b>{pct}%</b></div>
+              <div className="mp-bar" role="progressbar" aria-label={t("Copy progress")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+                <span style={{ width: `${pct}%` }} />
               </div>
-              <small>{t("{n} of {total} files · {copied} of {size}", { n: status.install.filesDone, total: status.install.files, copied: bytes(status.install.copiedBytes), size: bytes(status.install.totalBytes) })}</small>
+              <small>{copy.state === "checking" ? t("{checked} of {size} read", { checked: bytes(copy.copiedBytes), size: bytes(copy.totalBytes) })
+                : t("{n} of {total} files · {copied} of {size}", { n: copy.filesDone, total: copy.files, copied: bytes(copy.copiedBytes), size: bytes(copy.totalBytes) })}</small>
               <div className="mp-copy-foot"><small>{t("Keep the watch connected until the copy finishes.")}</small><button type="button" className="btn btn-glass" onClick={() => void act(cancelInstall())}>{t("Cancel")}</button></div>
             </section>
           ) : (
-            <section className={`card card-pad mp-done${status.install.state === "failed" ? " mp-done-bad" : ""}`} aria-label={t("Copied")}>
-              <span className="mp-done-icon"><MapsIcon name={status.install.state === "failed" ? "warn" : "check"} size={17} /></span>
-              <span>{status.install.state === "failed" ? status.install.message ?? t("The copy stopped.") : t("{name} is on your watch.", { name: status.install.label })}</span>
+            <section className={`card card-pad mp-done${copy.state === "failed" ? " mp-done-bad" : ""}`} aria-label={t("Copied")}>
+              <span className="mp-done-icon"><MapsIcon name={copy.state === "failed" ? "warn" : "check"} size={17} /></span>
+              <span>{copy.state === "failed" ? copy.message ?? t("The copy stopped.")
+                : copy.checked ? (copy.fixed ? t("{name}: {n} files on the watch didn't match and were replaced.", { name: copy.label, n: copy.fixed })
+                  : t("{name}: every file on the watch matches the download.", { name: copy.label }))
+                : t("{name} is on your watch.", { name: copy.label })}</span>
             </section>
           )
         )}

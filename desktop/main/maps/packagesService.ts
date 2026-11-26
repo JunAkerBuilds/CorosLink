@@ -9,7 +9,7 @@ import path from "node:path";
 import type { CachedPackage, CopyProgress, MapManifest, MapPackage, MapRegion, PackageJob, PackagesStatus } from "../../maps/types";
 import { PackageCache } from "./packages/cache";
 import { download, DownloadProblem, prunePartials } from "./packages/download";
-import { assertNotOwnFolder, fingerprint, InstallProblem, mapFolderOf, onWatch, plan, unpack } from "./packages/install";
+import { assertNotOwnFolder, clearLeftovers, fingerprint, InstallProblem, mapFolderOf, onWatch, plan, unpack, type PlanTotals } from "./packages/install";
 import { isOfficialUrl, manifestUrl, MAP_VERSIONS, mapVersionOf, packagesOf, parseManifest, parsePackageId, regionName, type RawManifest } from "./packages/manifest";
 import { ZipProblem } from "./packages/zip";
 import { t } from "@/lib/i18n";
@@ -82,9 +82,9 @@ export class PackagesService {
         return json(await this.manifest(mapVersionOf(new URL(request.url).searchParams.get("version"))));
       }
       if (method === "POST" && parts.length === 1 && parts[0] === "install") {
-        const body = (await request.json().catch(() => null)) as { ids?: unknown } | null;
+        const body = (await request.json().catch(() => null)) as { ids?: unknown; check?: unknown } | null;
         const ids = Array.isArray(body?.ids) ? [...new Set(body.ids.filter((i): i is string => typeof i === "string"))] : [];
-        return (await this.startInstall(ids)) ?? json(await this.status());
+        return (await this.startInstall(ids, body?.check === true)) ?? json(await this.status());
       }
       if (method === "POST" && parts.length === 2 && parts[0] === "install" && parts[1] === "cancel") {
         this.installing?.controller.abort();
@@ -269,7 +269,11 @@ export class PackagesService {
 
   // ---- Install over USB ----
 
-  private async startInstall(ids: string[]): Promise<Response | null> {
+  /**
+   * Puts cached packages on the watch. `check` also reads back the files already there at the right size and
+   * compares their CRC-32 with the zip's, replacing any that differ; it runs in the background with its own progress.
+   */
+  private async startInstall(ids: string[], check = false): Promise<Response | null> {
     if (!ids.length) return problem(t("Pick at least one downloaded map."), "noIds");
     if (this.installing) return problem(t("Maps are already going to the watch."), "busy", 409);
     const records = ids.map((id) => this.cache.get(id));
@@ -288,14 +292,47 @@ export class PackagesService {
 
     const controller = new AbortController();
     this.installing = { controller, ids };
-    this.install = { state: "copying", label, copiedBytes: 0, totalBytes: 0, files: 0, filesDone: 0, message: t("Checking what the watch already has") };
-    let totals;
-    try {
-      totals = await plan(zips.map((z) => z.file), folder, controller.signal);
+    const prepare = async (): Promise<PlanTotals> => {
+      // A copy cut short (a crash, an unplugged watch) can leave unfinished files behind: cleared first.
+      const cleared = await clearLeftovers(folder);
+      if (cleared) this.host.log?.(`Removed ${cleared} unfinished map file(s) from the watch.`);
+      const totals = await plan(zips.map((z) => z.file), folder, controller.signal, {
+        check,
+        onChecked: (read, total) => { if (this.install?.state === "checking") Object.assign(this.install, { copiedBytes: read, totalBytes: total }); },
+      });
       const free = watch.freeBytes ?? freeSpace(watch.root);
       if (free !== undefined && totals.neededBytes > free) {
         throw new InstallProblem(t("The watch needs {needed} free for these maps and has {free}. Remove some maps or music first.", { needed: gb(totals.neededBytes), free: gb(free) }), "noSpace");
       }
+      return totals;
+    };
+    const copying = (totals: PlanTotals): CopyProgress => ({ state: "copying", label, copiedBytes: 0, totalBytes: totals.bytes, files: totals.files, filesDone: 0, ...(check ? { checked: true } : {}) });
+
+    if (check) {
+      // Reading every file back takes minutes: answered now, followed on the status.
+      this.install = { state: "checking", label, copiedBytes: 0, totalBytes: 0, files: 0, filesDone: 0, checked: true };
+      this.installDone = (async () => {
+        let totals: PlanTotals;
+        try {
+          totals = await prepare();
+        } catch (error) {
+          this.installing = null;
+          const cancelled = controller.signal.aborted;
+          if (!cancelled) this.host.log?.(`Map check failed: ${String(error)}`);
+          this.install = cancelled ? { ...this.install!, state: "cancelled", message: t("Transfer cancelled.") }
+            : { ...this.install!, state: "failed", message: watchWriteMessage(error) };
+          return;
+        }
+        this.install = copying(totals);
+        await this.copy(drive, zips, folder, controller, totals.replace);
+      })();
+      return null;
+    }
+
+    this.install = { state: "copying", label, copiedBytes: 0, totalBytes: 0, files: 0, filesDone: 0, message: t("Checking what the watch already has") };
+    let totals;
+    try {
+      totals = await prepare();
     } catch (error) {
       this.installing = null;
       this.install = error instanceof InstallProblem && error.code === "cancelled"
@@ -303,17 +340,17 @@ export class PackagesService {
       if (error instanceof InstallProblem && error.code === "cancelled") return null;
       throw error;
     }
-    this.install = { state: "copying", label, copiedBytes: 0, totalBytes: totals.bytes, files: totals.files, filesDone: 0 };
-    void this.copy(drive, zips, folder, controller);
+    this.install = copying(totals);
+    void this.copy(drive, zips, folder, controller, totals.replace);
     return null;
   }
 
   /** Resolves when the running install ends; for tests. */
   installDone: Promise<void> = Promise.resolve();
 
-  private copy(drive: PackagesDrive, zips: { file: string; label: string }[], folder: string, controller: AbortController): Promise<void> {
+  private copy(drive: PackagesDrive, zips: { file: string; label: string }[], folder: string, controller: AbortController, replace: ReadonlySet<string>): Promise<void> {
     const work = async () => unpack(zips, folder, {
-      signal: controller.signal,
+      signal: controller.signal, replace,
       onProgress: ({ copiedBytes, filesDone, label }) => {
         if (this.install) Object.assign(this.install, { copiedBytes, filesDone, ...(zips.length > 1 ? { message: label } : {}) });
       },
@@ -321,7 +358,8 @@ export class PackagesService {
     this.installDone = (async () => {
       try {
         const done = await (drive.exclusive ? drive.exclusive(work) : work());
-        if (this.install) Object.assign(this.install, { state: "done", copiedBytes: done.copiedBytes, filesDone: done.filesDone, message: undefined });
+        // After a check, how many files on the watch were different and written again.
+        if (this.install) Object.assign(this.install, { state: "done", copiedBytes: done.copiedBytes, filesDone: done.filesDone, message: undefined, ...(this.install.checked ? { fixed: replace.size } : {}) });
       } catch (error) {
         const cancelled = controller.signal.aborted;
         if (!cancelled) this.host.log?.(`Map install failed: ${String(error)}`);

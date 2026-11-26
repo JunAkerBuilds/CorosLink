@@ -10,6 +10,7 @@ import { hostAI } from "@/server/ai/host";
 import { ChatGPTAccount } from "./ai/chatgpt";
 import { AntigravityAccount } from "./ai/antigravity";
 import { ClaudeCodeAccount } from "./ai/claudeCode";
+import { setProgramLog } from "./ai/cli";
 import { GeminiCliAccount } from "./ai/geminiCli";
 import { OpenCodeAccount } from "./ai/opencode";
 import { McpHub } from "./ai/mcp";
@@ -266,6 +267,8 @@ void app.whenReady().then(async () => {
 
   // Who answers Coach, the notes, meal estimates and titles: the athlete's pick on the AI page (ai/service.ts).
   const vault = new AIVault(data, keychain);
+  // An AI program that can't start, or doesn't answer, says so in Error logs.
+  setProgramLog((line) => errors.add("app", line));
   const ai = new AIService(vault, {
     chatgpt: new ChatGPTAccount({
       load: () => vault.secret("chatgpt"),
@@ -278,9 +281,9 @@ void app.whenReady().then(async () => {
         return () => { signIn.removeListener("closed", onClosed); if (!signIn.isDestroyed()) signIn.close(); };
       },
     }),
-    "claude-code": new ClaudeCodeAccount(data),
-    "gemini-cli": new GeminiCliAccount(data),
-    opencode: new OpenCodeAccount(data),
+    "claude-code": new ClaudeCodeAccount(data, () => vault.current.programs["claude-code"] ?? null),
+    "gemini-cli": new GeminiCliAccount(data, () => vault.current.programs["gemini-cli"] ?? null),
+    opencode: new OpenCodeAccount(data, () => vault.current.programs.opencode ?? null),
     antigravity: new AntigravityAccount(data, { openExternal: (url) => void shell.openExternal(url) }),
   });
   // The athlete's own MCP servers: their tools, once turned on, go to Coach next to its own (ai/mcp.ts).

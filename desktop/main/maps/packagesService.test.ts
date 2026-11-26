@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -145,4 +145,29 @@ describe("COROS Maps packages service", () => {
     const res = (await s.call("POST", `/packages/${enc("v5:topo:atlantis")}/download`))!;
     expect(res.status).toBe(404);
   });
+
+  it("checks the files on the watch in the background, replacing one that differs and clearing unfinished parts", async () => {
+    const s = setup();
+    await s.ok("POST", `/packages/${enc(ID)}/download`);
+    await s.service.settled.get(ID);
+    await s.ok("POST", "/packages/install", { ids: [ID] });
+    await s.service.installDone;
+    const tileDir = path.join(s.root, "Map", "VSM", "asia1");
+    writeFileSync(path.join(tileDir, "S2.t"), "z".repeat(600));
+    writeFileSync(path.join(tileDir, "S9.t.clink-part"), "half");
+
+    let status = await s.ok("POST", "/packages/install", { ids: [ID], check: true });
+    expect(status.install).toMatchObject({ state: "checking", label: "Asia 1 Topo", checked: true });
+    await s.service.installDone;
+    status = await s.ok("GET", "/packages");
+    expect(status.install).toMatchObject({ state: "done", checked: true, fixed: 1, filesDone: 1, copiedBytes: 600 });
+    expect(readFileSync(path.join(tileDir, "S2.t"), "utf8")).toBe("b".repeat(600));
+    expect(existsSync(path.join(tileDir, "S9.t.clink-part"))).toBe(false);
+
+    // Checked again, everything matches.
+    await s.ok("POST", "/packages/install", { ids: [ID], check: true });
+    await s.service.installDone;
+    expect((await s.ok("GET", "/packages")).install).toMatchObject({ state: "done", checked: true, fixed: 0 });
+  });
 });
+

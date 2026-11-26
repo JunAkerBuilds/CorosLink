@@ -683,5 +683,12 @@
   "Recolouring an image": "正在为图片重新着色",
   "Generating an image": "正在生成图片",
   "Planning": "正在规划",
-  "Working": "处理中"
+  "Working": "处理中",
+  "Claude Code couldn't be started. Settings → Error logs says why.": "无法启动 Claude Code。原因见 设置 → 错误日志。",
+  "{program} can't be started from C-LINK. Install it with its own installer, or choose its .exe under Program.": "C-LINK 无法启动 {program}。请用它自己的安装程序安装，或在“程序”中选择它的 .exe。",
+  "OpenCode couldn't be started.": "无法启动 OpenCode。",
+  "{name} doesn't run a program.": "{name} 不使用程序。",
+  "Give the full path to {files}.": "请填写 {files} 的完整路径。",
+  "There's no {file} there.": "那里没有 {file}。",
+  "Finish signing in in your browser.": "请在浏览器中完成登录。"
 }

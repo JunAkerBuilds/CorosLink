@@ -637,5 +637,11 @@
   "Today": "今天",
   "base map|Topo": "地形",
   "fidelity|Balanced": "均衡",
-  "surface|Mixed": "混合"
+  "surface|Mixed": "混合",
+  "Check files": "检查文件",
+  "Read the files on the watch back and replace any that don't match the download": "读取手表上的文件，替换与下载内容不一致的文件",
+  "Checking {name} on the watch": "正在检查手表上的{name}",
+  "{checked} of {size} read": "已读取 {checked}/{size}",
+  "{name}: {n} files on the watch didn't match and were replaced.": "{name}：手表上有 {n} 个文件不一致，已替换。",
+  "{name}: every file on the watch matches the download.": "{name}：手表上的所有文件都与下载内容一致。"
 }

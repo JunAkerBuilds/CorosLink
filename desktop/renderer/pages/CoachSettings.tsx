@@ -1,14 +1,14 @@
 // Coach settings: who answers Coach (and the workout notes, meal estimates and titles), what Coach remembers, and
 // reaching this computer from a phone. Keys and sign-ins are checked and kept by the main process (ai/service.ts).
 // Sections the app has nothing behind yet say so.
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { Button, Card, Field, Select } from "@/components/ui";
 import { TOOLS } from "@/lib/coach/tools";
 import { factsFrom, forgetMemory, rememberOwnFact } from "@/data/coach";
 import { useSyncItems } from "@/data/sync";
 import {
-  AIProblem, connectAI, detectLocalAI, forgetAI, listAIModels, pickAI, readAI, setAIModel, signInAI, testAI,
+  AIProblem, connectAI, detectLocalAI, forgetAI, listAIModels, pickAI, readAI, readAIProvider, setAIModel, setAIProgram, signInAI, testAI,
   type AIStatus, type ProviderView,
 } from "../ai";
 import { readMcp, type McpStatus } from "../mcp";
@@ -57,6 +57,7 @@ function Mono({ id }: { id: string }) {
 
 export default function CoachSettings() {
   const [status, setStatus] = useState<AIStatus | null>(null);
+  const replaceProvider = useCallback((v: ProviderView) => setStatus((s) => s && { ...s, providers: s.providers.map((x) => (x.id === v.id ? v : x)) }), []);
   const [problem, setProblem] = useState<string | null>(null);
   const [section, setSection] = useState<Section | null>(() => new URLSearchParams(location.search).get("section"));
   const facts = factsFrom(useSyncItems("coach.memory"));
@@ -167,7 +168,8 @@ export default function CoachSettings() {
         </nav>
 
         <div className="cs-panel" key={shown}>
-          {current && status ? <ProviderPage p={current} picked={status.picked === current.id} localUrl={status.localUrl} onChange={setStatus} />
+          {current && status ? <ProviderPage p={current} picked={status.picked === current.id} localUrl={status.localUrl} onChange={setStatus}
+            onProvider={replaceProvider} />
             : shown === "memory" ? <Memory facts={facts} />
             : shown === "remote" ? <Panel title={t("Remote access")}><ThisComputer /></Panel>
             : shown === "display" ? <Panel title={t("Display")}><p className="cs-empty">{t("Hiding charts in chat isn't in this app yet. Coach draws a chart when it fits the question.")}</p></Panel>
@@ -228,14 +230,31 @@ function Memory({ facts }: { facts: ReturnType<typeof factsFrom> }) {
   );
 }
 
-function ProviderPage({ p, picked, localUrl, onChange }: { p: ProviderView; picked: boolean; localUrl: string | null; onChange: (s: AIStatus) => void }) {
+function ProviderPage({ p, picked, localUrl, onChange, onProvider }: { p: ProviderView; picked: boolean; localUrl: string | null; onChange: (s: AIStatus) => void; onProvider: (v: ProviderView) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [tested, setTested] = useState<string | null>(null);
   const [key, setKey] = useState("");
   const [url, setUrl] = useState(localUrl ?? "http://localhost:11434/v1");
   const [models, setModels] = useState<string[] | null>(null);
+  // What the athlete typed under Program; null shows where C-LINK found it.
+  const [typed, setTyped] = useState<string | null>(null);
+  const program = typed ?? p.program ?? "";
   const shown = SHOWN[p.id];
+
+  // While a sign-in is open in the browser, look again every few seconds; once it's done it's picked for Coach, as a
+  // sign-in that finishes at once is.
+  useEffect(() => {
+    if (!p.signingIn) return;
+    let live = true;
+    const timer = setInterval(() => {
+      readAIProvider(p.id).then(async (r) => {
+        if (!live) return;
+        if (r.provider.ready) { live = false; onChange(await pickAI(p.id)); } else onProvider(r.provider);
+      }, () => {});
+    }, 3000);
+    return () => { live = false; clearInterval(timer); };
+  }, [p.signingIn, p.id, onProvider, onChange]);
 
   useEffect(() => {
     if (!p.ready) return;
@@ -272,8 +291,9 @@ function ProviderPage({ p, picked, localUrl, onChange }: { p: ProviderView; pick
         {p.program !== undefined || (p.group === "account" && shown?.guide) ? (
           <label className="cs-field">{t("Program")}
             <div className="cs-line">
-              <Field readOnly value={p.program ?? ""} placeholder={t("Not found on this computer")} />
-              <Button disabled={!!busy} onClick={() => run("check", readAI, onChange)}>{t("Check")}</Button>
+              {/* Typed when C-LINK can't find the program; Check keeps it, and an empty field looks again. */}
+              <Field readOnly={!p.programName} spellCheck={false} value={program} onChange={(e) => setTyped(e.target.value)} placeholder={t("Not found on this computer")} />
+              <Button disabled={!!busy} onClick={() => run("check", () => (p.programName && program.trim() !== (p.program ?? "") ? setAIProgram(p.id, program) : readAI()), (s) => { setTyped(null); onChange(s); })}>{t("Check")}</Button>
             </div>
           </label>
         ) : null}

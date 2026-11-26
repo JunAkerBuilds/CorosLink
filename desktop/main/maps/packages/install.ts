@@ -1,8 +1,10 @@
 // Putting cached region zips on the watch over USB: each zip's `map/…` tree is unpacked straight into the watch's
 // Map folder (no extracted copy on this computer). Files the watch already holds at the same size are skipped, so
-// only the bytes still needed count, and free space is checked before anything is written.
-import { createWriteStream, readdirSync, realpathSync, statSync } from "node:fs";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+// only the bytes still needed count, and free space is checked before anything is written. A check reads those
+// same-size files back and compares their CRC-32 with the zip's, so a stale or damaged tile is replaced too.
+import { createReadStream, createWriteStream, readdirSync, realpathSync, statSync } from "node:fs";
+import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import zlib from "node:zlib";
 import path from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -72,32 +74,75 @@ async function sizeAt(file: string): Promise<number | null> {
   return info?.isFile() ? info.size : null;
 }
 
+/** Leftover `.clink-part` files: a copy cut short by a crash or an unplugged watch, never renamed into place. */
+const PART = ".clink-part";
+
+/** Removes the leftover parts in the map folder; how many there were. */
+export async function clearLeftovers(mapFolder: string): Promise<number> {
+  let removed = 0;
+  const walk = async (dir: string): Promise<void> => {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else if (entry.name.endsWith(PART)) { await rm(full, { force: true }); removed++; }
+    }
+  };
+  await walk(mapFolder);
+  return removed;
+}
+
+/** A file's CRC-32, read in pieces; `onBytes` hears each piece. */
+export async function crcOf(file: string, signal?: AbortSignal, onBytes?: (n: number) => void): Promise<number> {
+  let crc = 0;
+  for await (const chunk of createReadStream(file, { highWaterMark: 1 << 20, signal }) as AsyncIterable<Buffer>) {
+    crc = zlib.crc32(chunk, crc);
+    onBytes?.(chunk.length);
+  }
+  return crc >>> 0;
+}
+
 export interface PlanTotals {
   /** Files to write and their bytes (the progress total). */
   files: number;
   bytes: number;
   /** What the watch's free space must take: new bytes beyond the files being replaced. */
   neededBytes: number;
-  /** Files already there at the same size. */
+  /** Files already there at the same size (and, in a check, the same contents). */
   skipped: number;
+  /** Same-size files a check found different: written again (lower-case target paths). */
+  replace: Set<string>;
+}
+
+export interface CheckOptions {
+  /** Read same-size files back and compare their CRC-32 with the zip's. */
+  check?: boolean;
+  /** How far the check is: bytes read of the same-size files' total. */
+  onChecked?: (read: number, total: number) => void;
 }
 
 /** Counts what still has to go to the watch for these zips. */
-export async function plan(zips: string[], mapFolder: string, signal?: AbortSignal): Promise<PlanTotals> {
-  const totals: PlanTotals = { files: 0, bytes: 0, neededBytes: 0, skipped: 0 };
+export async function plan(zips: string[], mapFolder: string, signal?: AbortSignal, options: CheckOptions = {}): Promise<PlanTotals> {
+  const totals: PlanTotals = { files: 0, bytes: 0, neededBytes: 0, skipped: 0, replace: new Set() };
   const seen = new Set<string>();
+  const stop = () => { if (signal?.aborted) throw new InstallProblem(t("Transfer cancelled."), "cancelled"); };
+  const same: { target: string; key: string; size: number; crc: number }[] = [];
   for (const file of zips) {
     const zip = await ZipReader.open(file);
     try {
       for await (const entry of zip.entries()) {
-        if (signal?.aborted) throw new InstallProblem(t("Transfer cancelled."), "cancelled");
+        stop();
         const target = targetOf(mapFolder, entry);
         if (!target) continue;
         const key = target.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
         const existing = await sizeAt(target);
-        if (existing === entry.size) { totals.skipped++; continue; }
+        if (existing === entry.size) {
+          if (options.check) same.push({ target, key, size: entry.size, crc: entry.crc32 >>> 0 });
+          else totals.skipped++;
+          continue;
+        }
         totals.files++;
         totals.bytes += entry.size;
         totals.neededBytes += Math.max(0, entry.size - (existing ?? 0));
@@ -105,6 +150,23 @@ export async function plan(zips: string[], mapFolder: string, signal?: AbortSign
     } finally {
       await zip.close();
     }
+  }
+  // The check: each same-size file read once; a different one is written again (same size, so no new space).
+  const total = same.reduce((a, f) => a + f.size, 0);
+  let read = 0;
+  for (const f of same) {
+    stop();
+    let crc: number | null = null;
+    try {
+      crc = await crcOf(f.target, signal, (n) => { read += n; options.onChecked?.(read, total); });
+    } catch {
+      // A file the watch can't read back is written again.
+      stop();
+    }
+    if (crc === f.crc) { totals.skipped++; continue; }
+    totals.replace.add(f.key);
+    totals.files++;
+    totals.bytes += f.size;
   }
   return totals;
 }
@@ -118,7 +180,7 @@ export interface CopyTick { copiedBytes: number; filesDone: number; label: strin
 export async function unpack(
   zips: { file: string; label: string }[],
   mapFolder: string,
-  options: { signal?: AbortSignal; onProgress?: (tick: CopyTick) => void } = {},
+  options: { signal?: AbortSignal; onProgress?: (tick: CopyTick) => void; replace?: ReadonlySet<string> } = {},
 ): Promise<{ copiedBytes: number; filesDone: number }> {
   const { signal } = options;
   let copiedBytes = 0, filesDone = 0;
@@ -135,10 +197,10 @@ export async function unpack(
         const key = target.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
-        if ((await sizeAt(target)) === entry.size) continue;
+        if ((await sizeAt(target)) === entry.size && !options.replace?.has(key)) continue;
         const dir = path.dirname(target);
         if (!made.has(dir)) { await mkdir(dir, { recursive: true }); made.add(dir); }
-        const temp = `${target}.clink-part`;
+        const temp = `${target}${PART}`;
         const base = copiedBytes;
         try {
           const input = await zip.stream(entry, { signal, verify: true });

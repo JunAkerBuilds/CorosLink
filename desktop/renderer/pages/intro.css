@@ -60,7 +60,10 @@
 
 /* ---- 2: one window ---- */
 .ix-s2-copy { position: absolute; left: 64px; top: 140px; width: 520px; display: flex; flex-direction: column; gap: 28px; }
-.ix-h { margin: 0; font-size: 128px; line-height: 0.86; font-weight: 900; letter-spacing: -0.065em; }
+/* Headlines are sized for English; --fit (set by Intro's fitHeadlines) shrinks a longer translation to the same shape. */
+.ix-h { margin: 0; font-size: calc(128px * var(--fit, 1)); line-height: 0.86; font-weight: 900; letter-spacing: -0.065em; }
+/* Chinese characters fill their square: the Latin headline's tight leading and tracking would make lines touch. */
+.ix-h:lang(zh-Hans) { line-height: 1.04; letter-spacing: 0; word-break: keep-all; }
 .ix-sub { margin: 0; font-size: 22px; line-height: 31px; font-weight: 600; max-width: 460px; color: var(--soft); }
 .ix-chips { display: flex; flex-wrap: wrap; gap: 8px; max-width: 480px; }
 .ix-chips span { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: 999px; background: rgba(var(--fg-rgb), 0.07); box-shadow: inset 0 0 0 1px var(--line); font-size: 14px; font-weight: 800; }
@@ -73,7 +76,7 @@
 
 /* ---- 3: watch, phone, Mac ---- */
 .ix-p-copy { position: absolute; left: 64px; right: 64px; top: 112px; display: grid; grid-template-columns: auto 1fr; gap: 56px; align-items: end; }
-.ix[data-scene="3"] .ix-h { font-size: 112px; }
+.ix[data-scene="3"] .ix-h { font-size: calc(112px * var(--fit, 1)); max-width: 780px; }
 .ix-p-side { display: flex; flex-direction: column; gap: 18px; padding-bottom: 10px; }
 .ix-p-side .ix-sub { font-size: 19px; line-height: 27px; max-width: 560px; }
 .ix-p-facts { display: flex; flex-direction: column; gap: 8px; }
@@ -106,7 +109,7 @@
 .ix-sprite { position: relative; display: block; width: 520px; height: 520px; }
 .ix-sprite img { display: block; width: 100%; height: 100%; }
 .ix-s4-copy { position: absolute; left: 620px; right: 64px; top: 120px; display: flex; flex-direction: column; gap: 26px; }
-.ix[data-scene="4"] .ix-h { font-size: 150px; }
+.ix[data-scene="4"] .ix-h { font-size: calc(150px * var(--fit, 1)); }
 .ix-bubbles { display: flex; flex-direction: column; gap: 14px; }
 .ix-bub { align-self: flex-start; max-width: 620px; padding: 18px 22px; border-radius: 26px 26px 26px 8px; background: var(--card-bg); box-shadow: var(--card-shadow); border: 1px solid var(--line); font-size: 25px; line-height: 33px; font-weight: 700; letter-spacing: -0.01em; }
 :root:not([data-theme="dark"]) .ix-bub:not([data-me]) { background: #ffffff; }
@@ -119,7 +122,7 @@
 .ix-s5-copy { position: absolute; inset: 64px 64px 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 28px; }
 .ix-mark5 { position: relative; height: 96px; }
 .ix-mark5::before { inset: -24px -30px -44px; }
-.ix[data-scene="5"] .ix-h { font-size: 170px; }
+.ix[data-scene="5"] .ix-h { font-size: calc(170px * var(--fit, 1)); }
 .ix-ctas { display: flex; gap: 14px; align-items: center; }
 .ix-fine { font-size: 15px; font-weight: 600; color: var(--soft); }
 
@@ -136,7 +139,7 @@
 .ix[data-scene="0"] .ix-ring[data-b] { width: 820px; height: 820px; margin: -410px 0 0 -410px; animation-duration: 16s; animation-direction: reverse; opacity: 0.5; }
 .ix-s0-copy { position: absolute; inset: 64px 64px 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 36px; }
 .ix-s0-head { display: flex; flex-direction: column; align-items: center; gap: 18px; }
-.ix[data-scene="0"] .ix-h { font-size: 132px; }
+.ix[data-scene="0"] .ix-h { font-size: calc(132px * var(--fit, 1)); }
 .ix[data-scene="0"] .ix-sub { max-width: none; }
 .ix[data-scene="0"] .ix-fine { margin-top: -24px; }
 .ix-langs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; width: 1000px; }

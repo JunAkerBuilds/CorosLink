@@ -3,7 +3,7 @@
 // pairing of Connections, the sample store of Developer, the backup restore of Settings and the AI of Coach settings.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Field, Select, Switch } from "@/components/ui";
-import { AIProblem, connectAI, detectLocalAI, pickAI, readAI, signInAI, type AIStatus } from "../ai";
+import { AIProblem, connectAI, detectLocalAI, pickAI, readAI, signInAndWait, type AIStatus } from "../ai";
 import { readDeveloper } from "../developer";
 import { language, locale, msg, t, tx } from "@/lib/i18n";
 import { tr } from "@/lib/i18n/react";
@@ -383,7 +383,8 @@ function CoachStep({ ai, onChange, onBack, onNext }: { ai: AIStatus | null; onCh
       let status: AIStatus;
       if (shown === "key" && !p.ready) status = await connectAI(p.id, { key });
       else if (shown === "local" && !p.ready) status = await connectAI("local", { url: (await detectLocalAI()).url });
-      else if (!p.ready) status = await signInAI(p.id);
+      // Claude Code's sign-in finishes in the browser: this waits for it, since the athlete picked it here.
+      else if (!p.ready) status = await signInAndWait(p.id);
       else status = ai ?? (await readAI());
       if (status.picked !== p.id) status = await pickAI(p.id);
       onChange(status);

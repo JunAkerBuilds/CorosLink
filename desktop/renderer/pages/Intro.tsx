@@ -78,8 +78,8 @@ function Scene2() {
   const chips: [string, string][] = [[t("Activities"), ICON.activities], [t("Sleep"), ICON.sleep], [t("Fuel"), ICON.fuel], [t("Strength"), ICON.strength], [t("Studio"), ICON.studio], [t("Coach"), ICON.coach]];
   return (
     <Stage>
-      <div className="ix-s2-copy ix-in">
-        <h2 className="ix-h">{t("All of it.")}<br /><span className="ix-mint">{t("One window.")}</span></h2>
+      <div className="ix-s2-copy ix-in" data-fit="">
+        <h2 className="ix-h" data-lines="3">{t("All of it.")}<br /><span className="ix-mint">{t("One window.")}</span></h2>
         <p className="ix-sub">{t("Training, sleep, strength, food, faces and Coach. Side by side, on a screen big enough for them.")}</p>
         <div className="ix-chips">{chips.map(([label, d]) => <span key={label}><Icon d={d} size={15} />{label}</span>)}</div>
       </div>
@@ -91,8 +91,9 @@ function Scene2() {
 function Scene3() {
   return (
     <Stage>
-      <div className="ix-p-copy">
-        <h2 className="ix-h ix-in">{t("Your phone")}<br /><span className="ix-mint">{t("brings it home.")}</span></h2>
+      {/* Clear of the watch, phone and Mac below (.ix-chain starts at 400). */}
+      <div className="ix-p-copy" data-fit="392">
+        <h2 className="ix-h ix-in" data-lines="2">{t("Your phone")}<br /><span className="ix-mint">{t("brings it home.")}</span></h2>
         <div className="ix-p-side ix-in" data-d="1">
           <p className="ix-sub">{t("C-LINK on your phone syncs the watch like always, then hands everything to this {computer}. Scan one code and it just keeps up.", { computer: computerWord() })}</p>
           <div className="ix-p-facts">
@@ -119,8 +120,8 @@ function Scene4() {
       <span className="ix-coachbig">
         <picture className="ix-sprite" role="img" aria-label={t("Coach waving")}><source srcSet="/img/coach-wave-still.webp" media="(prefers-reduced-motion: reduce)" /><img src="/img/coach-wave-hd.webp" alt="" width={720} height={720} /></picture>
       </span>
-      <div className="ix-s4-copy">
-        <h2 className="ix-h ix-in">{t("Meet Coach.")}</h2>
+      <div className="ix-s4-copy" data-fit="">
+        <h2 className="ix-h ix-in" data-lines="2">{t("Meet Coach.")}</h2>
         <div className="ix-bubbles">
           <div className="ix-bub ix-in" data-d="1">{t("Morning! 7h 41m of sleep and your HRV is back up.")}<small>{t("Coach")} · 07:42</small></div>
           <div className="ix-bub ix-in" data-d="2">{t("Tempo's a go. I moved Thursday's intervals so your legs get a day.")}</div>
@@ -135,17 +136,17 @@ function Scene5({ fromCorosLink }: { fromCorosLink: boolean | null }) {
   return (<>
     <span className="ix-ring" aria-hidden="true" /><span className="ix-ring" data-b="" aria-hidden="true" />
     <Stage>
-      <div className="ix-s5-copy">
+      <div className="ix-s5-copy" data-fit="">
         <span className="ix-mark5 ix-in" aria-hidden="true"><img src="/img/clink-mark.png?v=2" alt="" width={88} height={96} /></span>
         {fromCorosLink === null ? null : fromCorosLink ? (<>
-          <h2 className="ix-h ix-in" data-d="1">{t("Welcome")}<br /><span className="ix-mint">{t("home.")}</span></h2>
+          <h2 className="ix-h ix-in" data-d="1" data-lines="2">{t("Welcome")}<br /><span className="ix-mint">{t("home.")}</span></h2>
           <div className="ix-ctas ix-in" data-d="2">
             <Button variant="primary" className="ix-cta" onClick={() => navigate("/welcome/move")}>{t("Bring over my CorosLink data")}<Icon d={ICON.arrow} size={22} width={2.6} /></Button>
             <Button className="ix-cta" onClick={() => void leaveIntro("/setup")}>{t("Start fresh")}</Button>
           </div>
           <span className="ix-fine ix-in" data-d="3">{t("Activities, health, faces and Coach chats come along. CorosLink's folder isn't touched.")}</span>
         </>) : (<>
-          <h2 className="ix-h ix-in" data-d="1">{t("Let's")}<br /><span className="ix-mint">{t("go.")}</span></h2>
+          <h2 className="ix-h ix-in" data-d="1" data-lines="2">{t("Let's")}<br /><span className="ix-mint">{t("go.")}</span></h2>
           <div className="ix-ctas ix-in" data-d="2">
             <Button variant="primary" className="ix-cta" onClick={() => void leaveIntro("/setup")}>{t("Set up C-LINK")}<Icon d={ICON.arrow} size={22} width={2.6} /></Button>
           </div>
@@ -188,9 +189,9 @@ function Scene0({ pick, onPick, onGo }: { pick: Choice; onPick: (c: Choice) => v
   return (<>
     <span className="ix-ring" aria-hidden="true" /><span className="ix-ring" data-b="" aria-hidden="true" />
     <Stage>
-      <div className="ix-s0-copy">
+      <div className="ix-s0-copy" data-fit="">
         <div className="ix-s0-head ix-in">
-          <h2 className="ix-h">{own.hello}</h2>
+          <h2 className="ix-h" data-lines="1">{own.hello}</h2>
           <p className="ix-sub">{own.sub}</p>
         </div>
         <div className="ix-langs ix-in" data-d="1" role="radiogroup" aria-label={own.sub} onKeyDown={move}>
@@ -212,6 +213,44 @@ function Scene0({ pick, onPick, onGo }: { pick: Choice; onPick: (c: Choice) => v
   </>);
 }
 
+/**
+ * Translations run longer than English: each headline shrinks (--fit) just enough to keep the lines it has in English
+ * (data-lines), break no word, and keep its scene's copy (data-fit, or above that line on the stage) clear of the top
+ * bar and the buttons. English, at its designed size, is left as it is. Measured in stage pixels, so the entrance
+ * animation and the window's scale don't change the answer.
+ */
+function fitHeadlines(frame: HTMLElement): void {
+  const stage = frame.querySelector<HTMLElement>(".ix-stage");
+  if (!stage) return;
+  const k = stage.getBoundingClientRect().height / 900 || 1;
+  const stageTop = (frame.clientHeight - 900 * k) / 2;
+  const topLimit = (64 - stageTop) / k + 8;
+  const bottomLimit = (frame.clientHeight - 88 - stageTop) / k - 8;
+  for (const h of stage.querySelectorAll<HTMLElement>(".ix-h")) {
+    const box = h.closest<HTMLElement>("[data-fit]");
+    const lines = Number(h.dataset.lines || 0);
+    const floor = box?.dataset.fit ? Math.min(Number(box.dataset.fit), bottomLimit) : bottomLimit;
+    const fits = () => {
+      if (lines && Math.round(h.offsetHeight / parseFloat(getComputedStyle(h).lineHeight)) > lines) return false;
+      if (h.scrollWidth > h.clientWidth + 1) return false;
+      const kids = box ? ([...box.children] as HTMLElement[]) : [];
+      if (!kids.length) return true;
+      const top = box!.offsetTop + Math.min(...kids.map((c) => c.offsetTop));
+      const bottom = box!.offsetTop + Math.max(...kids.map((c) => c.offsetTop + c.offsetHeight));
+      return top >= topLimit && bottom <= floor;
+    };
+    h.style.removeProperty("--fit");
+    if (fits()) continue;
+    let lo = 0.5, hi = 1;
+    for (let i = 0; i < 7; i++) {
+      const mid = (lo + hi) / 2;
+      h.style.setProperty("--fit", mid.toFixed(3));
+      if (fits()) lo = mid; else hi = mid;
+    }
+    h.style.setProperty("--fit", lo.toFixed(3));
+  }
+}
+
 /** The scene's own art, drawn at 1440 × 900 and scaled (--ix-k, set by Intro). */
 function Stage({ children }: { children: ReactNode }) {
   return <div className="ix-stage">{children}</div>;
@@ -229,6 +268,16 @@ export default function Intro() {
   const [frame, scale] = useStageScale();
 
   useEffect(() => { void readMove().then((m) => setFromCorosLink(!!m?.found)); }, []);
+
+  // Each scene's headlines fitted to the language, again once the fonts are in.
+  useLayoutEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    fitHeadlines(el);
+    let live = true;
+    void document.fonts.ready.then(() => { if (live) fitHeadlines(el); });
+    return () => { live = false; };
+  }, [frame, scene, scale, fromCorosLink]);
   useEffect(() => { document.title = `${t("Welcome")} · C-LINK`; }, []);
 
   // Leaving the language scene puts the pick in place. A new language starts the page over, on the scene asked for.

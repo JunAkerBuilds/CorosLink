@@ -683,5 +683,12 @@
   "Recolouring an image": "Mudando a cor de uma imagem",
   "Generating an image": "Gerando uma imagem",
   "Planning": "Planejando",
-  "Working": "Processando"
+  "Working": "Processando",
+  "Claude Code couldn't be started. Settings → Error logs says why.": "Não foi possível iniciar o Claude Code. O motivo está em Configurações → Registros de erros.",
+  "{program} can't be started from C-LINK. Install it with its own installer, or choose its .exe under Program.": "O C-LINK não consegue iniciar {program}. Instale com o instalador próprio ou escolha o .exe em Programa.",
+  "OpenCode couldn't be started.": "Não foi possível iniciar o OpenCode.",
+  "{name} doesn't run a program.": "{name} não usa nenhum programa.",
+  "Give the full path to {files}.": "Informe o caminho completo para {files}.",
+  "There's no {file} there.": "Não há nenhum {file} aí.",
+  "Finish signing in in your browser.": "Termine o login no navegador."
 }

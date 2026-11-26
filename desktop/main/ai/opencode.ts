@@ -9,7 +9,7 @@ import { CoachModelError } from "@/server/coach/anthropic";
 import { AcpAgent, acpAnswer, acpFailure, sessionModels } from "./acp";
 import { agentModel, type AgentAsk } from "./agent";
 import { BRIDGE_NAME } from "./bridge";
-import { findProgram, programEnv, runProgram } from "./cli";
+import { locateProgram, programEnv, runProgram } from "./cli";
 import type { AccountProvider } from "./service";
 import { msg, t } from "@/lib/i18n";
 
@@ -44,12 +44,14 @@ export function opencodeConfig(major: number, system: string, bridge: { url: str
 
 export class OpenCodeAccount implements AccountProvider {
   readonly canSignOut = false;
+  readonly programName = "opencode";
   private major: number | null = null;
   private listed: { at: number; models: string[] } | null = null;
-  constructor(private readonly folder: string) {}
+  /** `chosen`: the path the athlete gave under Program, if any. */
+  constructor(private readonly folder: string, private readonly chosen: () => string | null = () => null) {}
 
-  private program(): string {
-    const found = findProgram("opencode");
+  private async program(): Promise<string> {
+    const found = await locateProgram("opencode", this.chosen(), programEnv());
     if (!found) throw new CoachModelError("unreachable", t(NOT_INSTALLED));
     return found;
   }
@@ -62,7 +64,7 @@ export class OpenCodeAccount implements AccountProvider {
   }
 
   async status() {
-    const program = findProgram("opencode");
+    const program = await locateProgram("opencode", this.chosen(), programEnv());
     if (!program) return { ready: false, problem: t(NOT_INSTALLED) };
     const out = await runProgram(program, ["auth", "list"], { env: programEnv() });
     const signedIn = /stored|oauth|api key/i.test(`${out?.stdout ?? ""}${out?.stderr ?? ""}`);
@@ -78,17 +80,23 @@ export class OpenCodeAccount implements AccountProvider {
 
   /** Starts OpenCode with an answer's configuration; `stop` removes the configuration again. */
   private async launch(system: string, bridge: { url: string; token: string } | null): Promise<{ agent: AcpAgent; cwd: string; stop: () => Promise<void>; log: string[] }> {
-    const program = this.program();
+    const program = await this.program();
     const dir = path.join(this.folder, "opencode-coach");
     const cwd = path.join(dir, "workspace");
     await mkdir(cwd, { recursive: true, mode: 0o700 });
     const config = path.join(dir, `${randomUUID()}.json`);
     await writeFile(config, JSON.stringify(opencodeConfig(await this.version(program), system, bridge)), { mode: 0o600 });
     const log: string[] = [];
-    const agent = AcpAgent.start(program, ["acp"], {
-      cwd, env: programEnv({ OPENCODE_CONFIG: config, OPENCODE_CONFIG_CONTENT: undefined }),
-      onStderr: (line) => { log.push(line); if (log.length > 30) log.shift(); },
-    });
+    let agent: AcpAgent;
+    try {
+      agent = AcpAgent.start(program, ["acp"], {
+        cwd, env: programEnv({ OPENCODE_CONFIG: config, OPENCODE_CONFIG_CONTENT: undefined }),
+        onStderr: (line) => { log.push(line); if (log.length > 30) log.shift(); },
+      });
+    } catch (error) {
+      await rm(config, { force: true });
+      throw new CoachModelError("unreachable", error instanceof Error ? error.message : t("OpenCode couldn't be started."));
+    }
     return { agent, cwd, log, stop: async () => { agent.close(); await rm(config, { force: true }); } };
   }
 

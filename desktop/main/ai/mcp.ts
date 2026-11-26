@@ -115,7 +115,8 @@ export class McpHub {
       // athlete's own values for this server.
       const env: Record<string, string> = { ...getDefaultEnvironment(), PATH: searchPath().join(path.delimiter), ...secrets.env };
       if (this.hooks.stdio) return { transport: this.hooks.stdio(server, env), stderr: () => "" };
-      const command = server.command!.includes("/") ? server.command! : findProgram(server.command!);
+      // A path (either slash, or a drive letter on Windows) is used as given; a bare name is looked up.
+      const command = /[\\/]/.test(server.command!) ? server.command! : findProgram(server.command!);
       if (!command) throw Object.assign(new Error(t("Couldn't find {command}.", { command: server.command ?? "" })), { code: "ENOENT" });
       const transport = new StdioClientTransport({ command, args: server.args ?? [], env, cwd: os.homedir(), stderr: "pipe" });
       let tail = "";
