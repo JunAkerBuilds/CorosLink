@@ -3,6 +3,31 @@
 C-LINK desktop betas (`vX.Y.Z-clink.N`). They go to CorosLink installs on a Mac that opted in to C-LINK, to earlier
 C-LINK betas, and to anyone who downloads them from the release page. Each section here is also that release's notes on GitHub.
 
+## [0.2.0-clink.3] - 2026-11-26
+
+### Languages
+- C-LINK now speaks Spanish, German, Brazilian Portuguese and Simplified Chinese, as well as English: every screen,
+  menu and message. The first-run intro opens on a language page, and you can change it any time in Settings.
+- The intro's headlines fit every language, so nothing runs under the buttons.
+
+### Coach with Claude Code, Gemini CLI or OpenCode on Windows
+- Claude Code installed with its own installer (`claude.exe`) is found, and one installed with npm (`claude.cmd`) now
+  starts. Before, Check said "Not signed in" and Sign in said "Sign-in took too long" even when you were signed in.
+- A folder added to PATH after C-LINK started is found without restarting it. With more than one install, the newest
+  is used.
+- If C-LINK still can't find the program, type its path under Program and press Check.
+- A program that can't start now says so, and Settings → Error logs says why.
+- The same fixes apply to Gemini CLI and OpenCode.
+
+### Claude Code sign-in
+- Sign in opens Claude Code's sign-in in your browser and no longer times out. Coach switches to Claude Code once
+  you're signed in.
+
+### COROS Maps
+- Check files (on a map that's on your watch) reads the watch's map files back, compares them with the download and
+  replaces any that don't match.
+- A copy cut short by unplugging the watch no longer leaves unfinished files on it.
+
 ## [0.2.0-clink.2] - 2026-11-26
 
 ### Windows and Linux
