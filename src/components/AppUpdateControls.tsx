@@ -23,7 +23,7 @@ interface AppUpdateControlsProps {
     autoCheck?: boolean;
     autoDownload?: boolean;
   }) => void;
-  /** macOS only: the C-LINK beta track can be chosen here. */
+  /** The C-LINK beta track can be chosen here (macOS, Windows, Linux). */
   clinkTrackAvailable: boolean;
   /** Opens the C-LINK beta offer. */
   onTryClink: () => void;
@@ -220,7 +220,7 @@ function UpdatePreferencesMenu({
               {snapshot.track === "clink" ? (
                 <>
                   <p className="update-settings-note">
-                    {t("This Mac gets the C-LINK beta.")}
+                    {t("This computer gets the C-LINK beta.")}
                   </p>
                   <button
                     className="update-settings-action"

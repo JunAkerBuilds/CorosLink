@@ -587,7 +587,7 @@ export default function App() {
   // opened from the updates popover, "preview" is the development toggle.
   const [clinkPrompt, setClinkPrompt] = useState<"auto" | "manual" | "preview" | null>(null);
   const clinkPromptShownRef = useRef(false);
-  const clinkTrackAvailable = api?.platform === "darwin";
+  const clinkTrackAvailable = api?.platform === "darwin" || api?.platform === "win32" || api?.platform === "linux";
 
   useEffect(() => {
     if (!api) return;
@@ -606,7 +606,7 @@ export default function App() {
     return api.onAppUpdateStatus(setAppUpdateSnapshot);
   }, [api]);
 
-  // Offer C-LINK once on launch to installed macOS copies still on CorosLink
+  // Offer C-LINK once on launch to installed copies still on CorosLink
   // releases. Wait for the startup check, and let a CorosLink update that was
   // found go first: its own prompt is already on screen.
   useEffect(() => {

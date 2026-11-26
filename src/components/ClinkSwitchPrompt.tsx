@@ -4,7 +4,7 @@ import { ArrowRightLeft, Check, Command, MessageCircle, Palette, Sparkles } from
 import "./clinkSwitchPrompt.css";
 
 interface ClinkSwitchPromptProps {
-  /** Moves this Mac to the C-LINK beta; it arrives through the normal update flow. */
+  /** Moves this computer to the C-LINK beta; it arrives through the normal update flow. */
   onSwitch: () => void;
   /** "Not now": remembered, so the offer never opens by itself again. */
   onDecline: () => void;
@@ -72,7 +72,7 @@ export function ClinkSwitchPrompt({ onSwitch, onDecline }: ClinkSwitchPromptProp
           </div>
           <h2 id="clink-switch-title">{t("Meet the new C-LINK")}</h2>
           <p id="clink-switch-description">
-            {t("C-LINK is the rebuilt CorosLink. It replaces CorosLink on this Mac and brings over your watch, plans, Coach chats and settings.")}
+            {t("C-LINK is the rebuilt CorosLink. It replaces CorosLink on this computer and brings over your watch, plans, Coach chats and settings.")}
           </p>
         </header>
 

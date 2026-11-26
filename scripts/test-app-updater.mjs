@@ -256,26 +256,27 @@ function loadFailingChecks(clock, responses) {
 }
 
 {
-  // A saved "clink" track on macOS follows the C-LINK beta prereleases from startup.
-  const { api, updater } = loadUpdater({ extraSettings: [["updater.track", "clink"]] });
-  assert.equal(updater.channel, "clink");
-  assert.equal(updater.allowPrerelease, true);
-  assert.equal(updater.allowDowngrade, false, "set after channel, which turns it on");
-  assert.equal(api.getAppUpdateSnapshot().track, "clink");
+  // A saved "clink" track follows the C-LINK beta prereleases from startup, on every platform.
+  for (const platform of ["darwin", "win32", "linux"]) {
+    const { api, updater } = loadUpdater({ platform, extraSettings: [["updater.track", "clink"]] });
+    assert.equal(updater.channel, "clink", `${platform}: clink channel`);
+    assert.equal(updater.allowPrerelease, true);
+    assert.equal(updater.allowDowngrade, false, "set after channel, which turns it on");
+    assert.equal(api.getAppUpdateSnapshot().track, "clink");
+  }
 }
 
 {
-  // C-LINK doesn't ship on Windows or Linux yet: a saved "clink" is ignored there.
+  // Windows and Linux can switch to C-LINK too (C-LINK betas ship clink.yml and clink-linux.yml).
   for (const platform of ["win32", "linux"]) {
-    const { api, updater, settings } = loadUpdater({ platform, extraSettings: [["updater.track", "clink"]] });
-    assert.equal(updater.channel, null, `${platform}: no channel`);
-    assert.equal(updater.allowPrerelease, false);
-    assert.equal(api.getAppUpdateSnapshot().track, "legacy");
-    updater.checkForUpdates = async () => assert.fail("no check for an ignored switch");
+    const { api, updater, settings } = loadUpdater({ platform });
+    let checked = false;
+    updater.checkForUpdates = async () => { checked = true; return null; };
     const snapshot = await api.setUpdateTrack("clink");
-    assert.equal(snapshot.track, "legacy");
-    assert.equal(settings.get("updater.track"), "legacy");
-    assert.equal(updater.channel, null);
+    assert.equal(snapshot.track, "clink", `${platform}: switched`);
+    assert.equal(settings.get("updater.track"), "clink");
+    assert.equal(updater.channel, "clink");
+    assert.ok(checked, `${platform}: checks the beta at once`);
   }
 }
 

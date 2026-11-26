@@ -62,9 +62,9 @@ function readBooleanSetting(key: string, fallback: boolean): boolean {
   }
 }
 
-/** C-LINK desktop ships for macOS only so far; elsewhere the track is always legacy. */
+/** C-LINK desktop betas ship for macOS, Windows and Linux. */
 function isClinkTrackSupported(): boolean {
-  return process.platform === "darwin";
+  return process.platform === "darwin" || process.platform === "win32" || process.platform === "linux";
 }
 
 function readTrack(): AppUpdateTrack {
@@ -605,7 +605,7 @@ export function setUpdaterPreferences(prefs: {
 }
 
 /**
- * Moves this install to the C-LINK beta ("clink", macOS only) or back to
+ * Moves this install to the C-LINK beta ("clink") or back to
  * normal CorosLink releases ("legacy"), then checks the new track at once.
  * The check reuses the normal flow: an update found there is downloaded when
  * "Download automatically" is on and offered with "Restart to update".

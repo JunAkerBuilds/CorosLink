@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.85] - 2026-11-26
+
+### Added
+
+- **The C-LINK beta on Windows and Linux.** CorosLink on Windows and Linux now offers the new C-LINK desktop app too, the same way it does on a Mac: once at launch, and any time from **Updates → Try the new C-LINK (beta)**. **Switch to C-LINK** downloads it like an update and installs it when you restart, replacing CorosLink and bringing over your watch, plans, Coach chats and settings (CorosLink's data is kept as a copy). **Not now** is remembered, and **Stay on CorosLink** goes back to normal CorosLink updates until C-LINK has installed. Nothing changes unless you choose it.
+
 ## [0.1.84] - 2026-11-25
 
 ### Added
