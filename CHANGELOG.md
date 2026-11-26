@@ -27,6 +27,8 @@ C-LINK betas. Each section here is also that release's notes on GitHub.
 - A workout recorded by the watch and also synced from the phone now shows up once, with the details from its FIT
   file.
 - Dropdowns are no longer see-through.
+- The macOS keychain password prompt no longer comes back on every launch. C-LINK asks for CorosLink's saved
+  keychain item at most once, even if you say no.
 
 ## [0.2.0-clink.1] - 2026-11-25
 

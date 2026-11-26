@@ -14,6 +14,7 @@
 // Nothing opened here is logged or written anywhere: the move seals each value again straight away.
 import { createDecipheriv, pbkdf2Sync } from "node:crypto";
 import { execFile } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -81,6 +82,38 @@ async function windowsKey(folder: string): Promise<Buffer | null> {
   }
 }
 
+/** Keychain names already asked for, so a later launch doesn't ask again (each ask is the system's password prompt). */
+export interface AskedNames {
+  has(name: string): boolean;
+  add(name: string): void;
+}
+
+/**
+ * AskedNames kept in a small JSON file. Without it, a value nobody re-seals (the prompt refused, or a development build
+ * sealing it again) asks on every launch.
+ */
+export function askedNamesFile(file: string): AskedNames {
+  let names: Set<string> | null = null;
+  const load = () => {
+    if (names) return names;
+    try {
+      const read = JSON.parse(readFileSync(file, "utf8")) as unknown;
+      names = new Set(Array.isArray(read) ? read.filter((n): n is string => typeof n === "string") : []);
+    } catch { names = new Set(); }
+    return names;
+  };
+  return {
+    has: (name) => load().has(name),
+    add: (name) => {
+      load().add(name);
+      try {
+        mkdirSync(path.dirname(file), { recursive: true });
+        writeFileSync(file, JSON.stringify([...load()]));
+      } catch { /* asked again next launch */ }
+    },
+  };
+}
+
 export interface KeychainSource {
   platform: NodeJS.Platform;
   /** CorosLink's data folder (Windows reads its Local State). */
@@ -93,6 +126,8 @@ export interface KeychainSource {
   /** Keychain names to ask the system for (macOS `security`, Linux libsecret). Default COROSLINK_APP_NAMES; a shipped
    * build passes none on a Mac (`own` instead) and never the development name. */
   names?: readonly string[];
+  /** Names asked for on an earlier launch are not asked for again (macOS, Linux). */
+  asked?: AskedNames;
   /** Tests: the os_crypt password under an app name (macOS/Linux), or the 32-byte key (Windows), without asking the system. */
   secret?: (name: string) => Promise<string | Buffer | null>;
 }
@@ -105,7 +140,11 @@ const strict = new TextDecoder("utf-8", { fatal: true });
  * the names before it don't open a value, once, and the one that worked is tried first after that.
  */
 export function corosLinkKeychain(source: KeychainSource): OldKeychain {
-  const ask = (name: string) => (source.secret ? source.secret(name) : source.platform === "darwin" ? macPassword(name) : linuxPassword(name));
+  const ask = async (name: string) => {
+    if (source.asked?.has(name)) return null;
+    source.asked?.add(name);
+    return source.secret ? source.secret(name) : source.platform === "darwin" ? macPassword(name) : linuxPassword(name);
+  };
   const keys = new Map<string, Promise<Buffer | null>>();
   const keyFor = (name: string, rounds: number) => {
     if (!keys.has(name)) keys.set(name, ask(name).then((p) => (typeof p === "string" && p ? cbcKey(p, rounds) : null), () => null));

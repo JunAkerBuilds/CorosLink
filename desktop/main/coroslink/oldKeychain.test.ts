@@ -1,6 +1,9 @@
 import { createCipheriv, randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { cbcKey, corosLinkKeychain } from "./oldKeychain";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { askedNamesFile, cbcKey, corosLinkKeychain } from "./oldKeychain";
 
 /** What Chromium's os_crypt writes on macOS/Linux: "v10"/"v11" + AES-128-CBC, IV of 16 spaces. */
 function sealCbc(text: string, password: string, rounds: number, prefix = "v10"): string {
@@ -44,6 +47,18 @@ describe("CorosLink's keychain", () => {
     // Sealed under the development name: not opened, and no prompt.
     expect(await keychain.open(sealCbc("dev", "development-password", 1003))).toBeNull();
     expect(asked).toBe(0);
+  });
+
+  it("asks for a name on one launch only, even when the prompt is refused", async () => {
+    const file = path.join(mkdtempSync(path.join(tmpdir(), "keychain-")), "keychain-asked.json");
+    let asked = 0;
+    const launch = (answer: string | null) =>
+      corosLinkKeychain({ platform: "darwin", folder: "", names: ["C-LINK"], asked: askedNamesFile(file), secret: async () => { asked++; return answer; } });
+    // Refused on the first launch: not opened.
+    expect(await launch(null).open(sealCbc("x", "dev-password", 1003))).toBeNull();
+    // Later launches don't ask again, even for a value only that name opens.
+    expect(await launch("dev-password").open(sealCbc("x", "dev-password", 1003))).toBeNull();
+    expect(asked).toBe(1);
   });
 
   it("gives null, never throws, for a wrong password, a refused prompt or a value that isn't sealed", async () => {

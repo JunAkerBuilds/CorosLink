@@ -65,7 +65,10 @@ asked to confirm. A development build is not signed as CorosLink, so it can't sh
 ### Development builds
 
 A development C-LINK keeps "C-LINK Safe Storage" and asks the system (`security`) for CorosLink's password; that
-shows the allow prompt, which is fine there. A CorosLink run in development goes by "coroslink" ("coroslink Safe
+shows the allow prompt, which is fine there. It keeps its own data folder, "C-LINK Dev", unless `CLINK_USER_DATA`
+names one: in the shipped app's folder it would seal values again under "C-LINK Safe Storage", and the shipped app
+would have to ask the system for that item on its next launch. Either build asks the system for the other item on
+one launch only (`keychain-asked.json` in the data folder); a value that doesn't open then is treated as gone. A CorosLink run in development goes by "coroslink" ("coroslink Safe
 Storage" / "coroslink Key") and, on a case-insensitive disk, shares the packaged app's data folder, so values may be
 sealed under either name: development builds try both, the packaged one first, each asked for only when the ones
 before it don't open a value. A result counts only when it is valid UTF-8 (a wrong CBC key now and then passes the

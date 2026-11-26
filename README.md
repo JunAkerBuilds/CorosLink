@@ -29,7 +29,7 @@ item by item from `CorosLink/docs/replacement-checklist.md` without its bloat.
 
 | | |
 |---|---|
-| `npm run dev` | The app with hot reload of the screens. |
+| `npm run dev` | The app with hot reload of the screens. Development builds keep their own data folder, `C-LINK Dev`; set `CLINK_USER_DATA` to use another. |
 | `npm run dev:sample` | The same, with the sample athlete loaded into an empty store to look around. |
 | `npm run build` then `npm start` | The built app. The build first puts the pinned yt-dlp and ffmpeg in `bin/<platform>-<arch>` (see `bin/README.md`). |
 | `npm run binaries:prepare` / `binaries:pin` | Fetch the SHA-256-checked yt-dlp and ffmpeg for Media's downloads / re-pin them from GitHub's release digests. |

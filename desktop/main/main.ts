@@ -32,7 +32,7 @@ import { CorosAccount } from "./watchface/corosAccount";
 import { PhoneSync } from "./phones/phoneSync";
 import { runInRequest } from "./requestScope";
 import { cookieSecret, keychain, keychainName, keychainSecure, setKeychainFallback } from "./secrets";
-import { corosLinkKeychain } from "./coroslink/oldKeychain";
+import { askedNamesFile, corosLinkKeychain } from "./coroslink/oldKeychain";
 import { guardSession } from "./dataMode";
 import { Updates, type Updater } from "./updates";
 import { DesktopSettings } from "./settings";
@@ -58,8 +58,11 @@ protocol.registerSchemesAsPrivileged([
 
 // Before anything reads it: the web app's server code takes its settings from process.env.
 process.env.NODE_ENV = app.isPackaged ? "production" : "development";
-// A separate data folder (tests, a second profile) when asked for.
+// A separate data folder (tests, a second profile) when asked for. A development build otherwise keeps its own,
+// "C-LINK Dev": it seals with a different keychain item than the shipped app, so sharing the shipped app's folder
+// would leave values there that the shipped app has to ask the system for.
 if (process.env.CLINK_USER_DATA) app.setPath("userData", process.env.CLINK_USER_DATA);
+else if (!app.isPackaged) app.setPath("userData", path.join(app.getPath("appData"), "C-LINK Dev"));
 // Shipped Mac builds seal with CorosLink's keychain item (secrets.ts keychainName): its name is fixed now, before
 // ready. The data folder is pinned first so it stays C-LINK's; the name shown goes back to C-LINK once ready.
 const KEYCHAIN = keychainName(app.isPackaged, process.platform);
@@ -70,7 +73,11 @@ if (KEYCHAIN) {
 }
 if (process.platform === "darwin") {
   // What was sealed under the other name (a development build's "C-LINK", or CorosLink's when this is one) opens once.
-  setKeychainFallback(corosLinkKeychain({ platform: "darwin", folder: "", names: [KEYCHAIN ? "C-LINK" : "CorosLink"] }));
+  // The system is asked for that name on one launch only: what it doesn't open then is treated as gone.
+  setKeychainFallback(corosLinkKeychain({
+    platform: "darwin", folder: "", names: [KEYCHAIN ? "C-LINK" : "CorosLink"],
+    asked: askedNamesFile(path.join(app.getPath("userData"), "keychain-asked.json")),
+  }));
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();
