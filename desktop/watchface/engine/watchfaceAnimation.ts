@@ -6,6 +6,7 @@ import type {
   CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateDetails
 } from "../types";
+import { t } from "./text";
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, parseConfigPos, pickPreviewResolution } from "./watchfaceStudio";
 import { DEFAULT_ANIMATION_DELAY, MAX_ANIMATION_DELAY, MAX_ANIMATION_FRAMES, MIN_ANIMATION_DELAY } from "./watchfaceAnimationLimits";
 
@@ -51,16 +52,16 @@ export function parseAnimationDelays(value: string | undefined): number[] | null
 export function animationProblem(animation: CorosWatchfaceAnimation | undefined, frameSizes?: { width: number; height: number }[]): string | null {
   // Disabled animations are dropped from the export, so they never block it.
   if (!animation?.enabled) return null;
-  if (!animation.frames.length) return "The animation has no frames.";
-  if (animation.frames.length > MAX_ANIMATION_FRAMES) return `The animation has ${animation.frames.length} frames; the watch times at most ${MAX_ANIMATION_FRAMES}.`;
-  if (animation.delays.length !== animation.frames.length) return "Give the animation one delay per frame.";
+  if (!animation.frames.length) return t("The animation has no frames.");
+  if (animation.frames.length > MAX_ANIMATION_FRAMES) return t("The animation has {{n}} frames; the watch times at most {{max}}.", { n: animation.frames.length, max: MAX_ANIMATION_FRAMES });
+  if (animation.delays.length !== animation.frames.length) return t("Give the animation one delay per frame.");
   if (animation.delays.some(delay => !Number.isInteger(delay) || delay < MIN_ANIMATION_DELAY || delay > MAX_ANIMATION_DELAY)) {
-    return `Animation delays must be whole milliseconds between ${MIN_ANIMATION_DELAY} and ${MAX_ANIMATION_DELAY}.`;
+    return t("Animation delays must be whole milliseconds between {{min}} and {{max}}.", { min: MIN_ANIMATION_DELAY, max: MAX_ANIMATION_DELAY });
   }
   if (frameSizes?.length) {
     const [first] = frameSizes;
     if (frameSizes.some(size => size.width !== first!.width || size.height !== first!.height)) {
-      return `Every animation frame must be ${first!.width} × ${first!.height}, like the first one.`;
+      return t("Every animation frame must be {{width}} × {{height}}, like the first one.", { width: first!.width, height: first!.height });
     }
   }
   return null;
@@ -213,12 +214,12 @@ export async function importAnimationFrames(
   const pngs = sprites
     .filter(sprite => !sprite.relativePath.replace(/\\/g, "/").includes("/") && /\.png$/i.test(sprite.name))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  if (!pngs.length) throw new Error("Select a folder of PNG frames, such as 00.png, 01.png, …");
-  if (pngs.length > MAX_ANIMATION_FRAMES) throw new Error(`The folder has ${pngs.length} frames; the watch times at most ${MAX_ANIMATION_FRAMES}.`);
+  if (!pngs.length) throw new Error(t("Select a folder of PNG frames, such as 00.png, 01.png, …"));
+  if (pngs.length > MAX_ANIMATION_FRAMES) throw new Error(t("The folder has {{n}} frames; the watch times at most {{max}}.", { n: pngs.length, max: MAX_ANIMATION_FRAMES }));
   const images = await Promise.all(pngs.map(sprite => loadStudioImage(sprite.dataUrl)));
   const { naturalWidth: width, naturalHeight: height } = images[0]!;
   const odd = images.findIndex(image => image.naturalWidth !== width || image.naturalHeight !== height);
-  if (odd >= 0) throw new Error(`${pngs[odd]!.name} is ${images[odd]!.naturalWidth} × ${images[odd]!.naturalHeight}; every frame must be ${width} × ${height}.`);
+  if (odd >= 0) throw new Error(t("{{name}} is {{w}} × {{h}}; every frame must be {{width}} × {{height}}.", { name: pngs[odd]!.name, w: images[odd]!.naturalWidth, h: images[odd]!.naturalHeight, width, height }));
   const frames = await Promise.all(pngs.map(sprite => scaledFrame(sprite.dataUrl, toPreviewScale)));
   return { frames, width: Math.max(1, Math.round(width * toPreviewScale)), height: Math.max(1, Math.round(height * toPreviewScale)) };
 }

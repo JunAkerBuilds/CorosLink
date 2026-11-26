@@ -19,6 +19,7 @@ import {
   configKeysOf, convertWatchfaceEntries, declaredConfigKeys, isLocalTemplateId, localConversionCarrier, type WatchfaceConversionEntry,
 } from "../../watchface/archive/conversion";
 import type { WatchfaceTarget } from "../../watchface/watchfaceTargets";
+import { t } from "@/lib/i18n";
 
 export { isLocalTemplateId };
 
@@ -54,7 +55,7 @@ interface CarrierMeta { scanned: boolean; keys: string[] }
 
 /** The files of an archive, checked the way a template is. */
 function entriesOf(bytes: Buffer, label: string): WatchfaceConversionEntry[] {
-  if (bytes.length <= 0 || bytes.length > MAX_ARCHIVE_BYTES) throw new Error(`The ${label} must be between 1 byte and 100 MB.`);
+  if (bytes.length <= 0 || bytes.length > MAX_ARCHIVE_BYTES) throw new Error(label === "conversion template" ? t("The conversion template must be between 1 byte and 100 MB.") : t("The watch-face archive must be between 1 byte and 100 MB."));
   const { files } = openTemplate(bytes);
   validateArchiveInventory(files, MAX_ARCHIVE_FILES, MAX_ARCHIVE_EXPANDED_BYTES, MAX_ARCHIVE_ENTRY_BYTES, 7, label);
   return files.map(entry => ({ name: entry.path, data: entry.read() }));
@@ -67,7 +68,7 @@ const hasEverySize = (entries: WatchfaceConversionEntry[], target: WatchfaceTarg
 function templateIdOf(entries: WatchfaceConversionEntry[]): string {
   const info = entries.find(entry => entry.name === "info.json")?.data.toString("utf8") ?? "";
   const id = info.match(/"o_template_id"\s*:\s*"?(\d+)"?/)?.[1];
-  if (!id) throw new Error("The destination has no template identity.");
+  if (!id) throw new Error(t("The destination has no template identity."));
   return id;
 }
 
@@ -83,7 +84,7 @@ export class WatchfaceConverter {
   async convert(source: Buffer, target: WatchfaceTarget, options: ConvertOptions = {}): Promise<ConvertedStarter> {
     const sourceEntries = entriesOf(source, "watch-face archive");
     if (!sourceEntries.some(entry => entry.name === "watchface_800x800/config.txt")) {
-      throw new Error("This face has no 800 px master, so it can't be converted yet.");
+      throw new Error(t("This face has no 800 px master, so it can't be converted yet."));
     }
     const edits = Object.fromEntries(validateConfigTextReplacements(
       Object.entries(options.configTextEdits ?? {}).map(([path, text]) => ({ path, text }))));
@@ -92,7 +93,7 @@ export class WatchfaceConverter {
     validateArchiveInventory(converted.entries.map(entry => ({ path: entry.name, size: entry.data.length })),
       MAX_ARCHIVE_FILES, MAX_ARCHIVE_EXPANDED_BYTES, MAX_ARCHIVE_ENTRY_BYTES, 7, "converted watch-face archive");
     const starter = createStoreZip(converted.entries);
-    if (starter.length > MAX_ARCHIVE_BYTES) throw new Error("The converted archive exceeds 100 MB.");
+    if (starter.length > MAX_ARCHIVE_BYTES) throw new Error(t("The converted archive exceeds 100 MB."));
     return {
       starter, sourceTemplateId: templateIdOf(carrier), appliedRawConfigEditCount: converted.appliedRawConfigEditCount,
       generatedAod: converted.generatedAod, aodDesignScale: converted.aodDesignScale,
@@ -135,7 +136,7 @@ export class WatchfaceConverter {
   }
 
   private async scan(target: WatchfaceTarget, wanted: Set<string>, zipPath: string, metaPath: string): Promise<WatchfaceConversionEntry[]> {
-    if (!this.catalog) throw new Error("No template catalog.");
+    if (!this.catalog) throw new Error(t("No template catalog."));
     const rank = (name: string) => /^(BOLD|SIMPLE)$/i.test(name.trim()) ? 0 : 1;
     const ranked = [...await this.catalog.templates(target)].sort((a, b) => rank(a.name) - rank(b.name) || a.id.localeCompare(b.id));
     let best: { bytes: Buffer; entries: WatchfaceConversionEntry[]; keys: Set<string>; covered: number } | undefined;
@@ -149,7 +150,7 @@ export class WatchfaceConverter {
       if (!best || covered > best.covered) best = { bytes, entries, keys, covered };
       if (best.covered === wanted.size) break;
     }
-    if (!best) throw new Error(`COROS did not provide a complete ${target.label} conversion template.`);
+    if (!best) throw new Error(t("COROS did not provide a complete {watch} conversion template.", { watch: target.label }));
     await fs.promises.mkdir(this.carriers, { recursive: true });
     const temp = `${zipPath}.${randomUUID()}.tmp`;
     try {

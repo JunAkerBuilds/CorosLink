@@ -1,4 +1,6 @@
 // The main process's desktop settings (desktop/main/settings.ts), as the Settings page reads and changes them.
+import { t } from "@/lib/i18n";
+
 export type DataMode = "connected" | "localOnly";
 export interface Blocked { at: number; method: string; target: string }
 export interface About { version: string; platform: string; electron: string; chromium: string; node: string }
@@ -16,7 +18,7 @@ async function call<T>(path: string, body?: object): Promise<T> {
     ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
     : { cache: "no-store" });
   const parsed = (await answer.json().catch(() => ({}))) as T & { error?: { code: string; message: string } };
-  if (!answer.ok || parsed.error) throw new SettingsProblem(parsed.error?.message ?? "That didn't work.", parsed.error?.code ?? "problem");
+  if (!answer.ok || parsed.error) throw new SettingsProblem(parsed.error?.message ?? t("That didn't work."), parsed.error?.code ?? "problem");
   return parsed;
 }
 
@@ -33,6 +35,8 @@ export const dataMode = {
 };
 
 export const readSettings = () => call<SettingsState>("").then(noted);
+/** Tells the main process which language the page speaks, for the menu and the lines it sends back. */
+export const tellLanguage = (language: string) => call<{ language: string }>("/language", { language }).catch(() => null);
 export const setDataMode = (next: DataMode) => call<SettingsState>("", { dataMode: next }).then(noted);
 export const clearBlocked = () => call<SettingsState>("/blocked/clear", {}).then(noted);
 export const readStorage = () => call<{ folder: string; places: Place[] }>("/storage");

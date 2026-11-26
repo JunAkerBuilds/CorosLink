@@ -1,3 +1,4 @@
+import { msg } from "@/lib/i18n";
 import { artworkMatchesFrame, batteryIconRotation, batteryPreviewStateIndex, batteryReplacementStateCount, batteryScalesFromArtwork, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates";
 export { batteryPreviewStateIndex } from "./watchfaceBatteryStates";
 import { drawSpritePreservingCore, placePercentGlyph, renderAlignedRasterGlyph, spaceWatchfaceGlyph, type WatchfacePercentAlign } from "./watchfaceGlyphLayout";
@@ -666,33 +667,33 @@ function configAssetLabel(
   arcCutRole: WatchfaceArcCutRole | null = null
 ): string {
   if (configKey === "arc_cut_icon" && arcCutRole === "overlay") {
-    return "Arc cut overlay";
+    return msg("Arc cut overlay");
   }
   const special: Record<string, string> = {
-    background_icon: "Background image",
-    watchface_thmb_icon: "Watch face thumbnail",
-    colon_icon: "Time colon",
-    control_colon_icon: "Control value colon",
-    control_bluetooth_off_icon: "Bluetooth off (control slot)",
-    control_bluetooth_on_icon: "Bluetooth on (control slot)",
-    control_no_disturb_on_icon: "Do Not Disturb (control slot)",
-    control_no_disturb_off_icon: "Do Not Disturb off (control slot)",
-    bluetooth_off_icon: "Bluetooth off indicator",
-    bluetooth_on_icon: "Bluetooth on indicator",
-    no_disturb_on_icon: "Do Not Disturb indicator",
-    no_disturb_off_icon: "Do Not Disturb off indicator",
-    touch_lock_icon: "Touch lock indicator",
-    airplane_icon: "Airplane mode indicator",
-    sleep_mode_icon: "Sleep mode indicator",
-    battery_level_percent_icon: "Battery % sign",
-    negative_sign_icon: "Negative sign",
-    control_negative_sign_icon: "Control negative sign",
-    arc_cut_icon: "Date separator",
-    time_hour_icon: "Analog hour hand",
-    time_minute_icon: "Analog minute hand",
-    time_second_icon: "Analog second hand",
-    time_center_polygon_icon1: "Analog center overlay (hour + minute)",
-    time_center_polygon_icon2: "Analog center overlay (topmost)"
+    background_icon: msg("Background image"),
+    watchface_thmb_icon: msg("Watch face thumbnail"),
+    colon_icon: msg("Time colon"),
+    control_colon_icon: msg("Control value colon"),
+    control_bluetooth_off_icon: msg("Bluetooth off (control slot)"),
+    control_bluetooth_on_icon: msg("Bluetooth on (control slot)"),
+    control_no_disturb_on_icon: msg("Do Not Disturb (control slot)"),
+    control_no_disturb_off_icon: msg("Do Not Disturb off (control slot)"),
+    bluetooth_off_icon: msg("Bluetooth off indicator"),
+    bluetooth_on_icon: msg("Bluetooth on indicator"),
+    no_disturb_on_icon: msg("Do Not Disturb indicator"),
+    no_disturb_off_icon: msg("Do Not Disturb off indicator"),
+    touch_lock_icon: msg("Touch lock indicator"),
+    airplane_icon: msg("Airplane mode indicator"),
+    sleep_mode_icon: msg("Sleep mode indicator"),
+    battery_level_percent_icon: msg("Battery % sign"),
+    negative_sign_icon: msg("Negative sign"),
+    control_negative_sign_icon: msg("Control negative sign"),
+    arc_cut_icon: msg("Date separator"),
+    time_hour_icon: msg("Analog hour hand"),
+    time_minute_icon: msg("Analog minute hand"),
+    time_second_icon: msg("Analog second hand"),
+    time_center_polygon_icon1: msg("Analog center overlay (hour + minute)"),
+    time_center_polygon_icon2: msg("Analog center overlay (topmost)")
   };
   const base = special[configKey] ?? configKey
     .replace(/_icon\d*$/i, "")
@@ -910,28 +911,28 @@ export interface WatchfaceControlStatusPreviewLayer {
 const CONTROL_STATUS_PREVIEW_DEFINITIONS = [
   {
     layoutGroupId: "bluetoothOff",
-    label: "Bluetooth status (control slot)",
+    label: msg("Bluetooth status (control slot)"),
     configKey: "control_bluetooth_off_icon",
     positionKey: "control_bluetooth_icon_pos",
     controlRelative: true
   },
   {
     layoutGroupId: "bluetoothOff",
-    label: "Bluetooth status (control slot)",
+    label: msg("Bluetooth status (control slot)"),
     configKey: "control_bluetooth_on_icon",
     positionKey: "control_bluetooth_icon_pos",
     controlRelative: true
   },
   {
     layoutGroupId: "doNotDisturbOn",
-    label: "Do Not Disturb status (control slot)",
+    label: msg("Do Not Disturb status (control slot)"),
     configKey: "control_no_disturb_on_icon",
     positionKey: "control_no_disturb_icon_pos",
     controlRelative: true
   },
   {
     layoutGroupId: "doNotDisturbOn",
-    label: "Do Not Disturb status (control slot)",
+    label: msg("Do Not Disturb status (control slot)"),
     configKey: "control_no_disturb_off_icon",
     positionKey: "control_no_disturb_icon_pos",
     controlRelative: true
@@ -941,28 +942,28 @@ const CONTROL_STATUS_PREVIEW_DEFINITIONS = [
   // layout group and move together.
   {
     layoutGroupId: "bluetoothStatus",
-    label: "Bluetooth indicator",
+    label: msg("Bluetooth indicator"),
     configKey: "bluetooth_off_icon",
     positionKey: "bluetooth_icon_pos",
     controlRelative: false
   },
   {
     layoutGroupId: "bluetoothStatus",
-    label: "Bluetooth indicator",
+    label: msg("Bluetooth indicator"),
     configKey: "bluetooth_on_icon",
     positionKey: "bluetooth_icon_pos",
     controlRelative: false
   },
   {
     layoutGroupId: "doNotDisturbStatus",
-    label: "Do Not Disturb indicator",
+    label: msg("Do Not Disturb indicator"),
     configKey: "no_disturb_on_icon",
     positionKey: "no_disturb_icon_pos",
     controlRelative: false
   },
   {
     layoutGroupId: "doNotDisturbStatus",
-    label: "Do Not Disturb indicator",
+    label: msg("Do Not Disturb indicator"),
     configKey: "no_disturb_off_icon",
     positionKey: "no_disturb_icon_pos",
     controlRelative: false
@@ -973,21 +974,21 @@ const CONTROL_STATUS_PREVIEW_DEFINITIONS = [
   // Neither has a position key of its own, so each moves with its indicator.
   {
     layoutGroupId: "bluetoothStatus",
-    label: "Airplane mode indicator",
+    label: msg("Airplane mode indicator"),
     configKey: "airplane_icon",
     positionKey: "bluetooth_icon_pos",
     controlRelative: false
   },
   {
     layoutGroupId: "doNotDisturbStatus",
-    label: "Sleep mode indicator",
+    label: msg("Sleep mode indicator"),
     configKey: "sleep_mode_icon",
     positionKey: "no_disturb_icon_pos",
     controlRelative: false
   },
   {
     layoutGroupId: "touchLockStatus",
-    label: "Touch lock indicator",
+    label: msg("Touch lock indicator"),
     configKey: "touch_lock_icon",
     positionKey: "touch_lock_icon_pos",
     controlRelative: false
@@ -4801,7 +4802,7 @@ interface WatchfaceTimePartDefinition {
 export const WATCHFACE_TIME_PARTS: WatchfaceTimePartDefinition[] = [
   {
     id: "hours",
-    label: "Hours",
+    label: msg("Hours"),
     digits: [
       { slot: "high", posKey: "time_hour_high_pos", fontKey: "time_hour_high_font" },
       { slot: "low", posKey: "time_hour_low_pos", fontKey: "time_hour_low_font" }
@@ -4809,7 +4810,7 @@ export const WATCHFACE_TIME_PARTS: WatchfaceTimePartDefinition[] = [
   },
   {
     id: "minutes",
-    label: "Minutes",
+    label: msg("Minutes"),
     digits: [
       { slot: "high", posKey: "time_minute_high_pos", fontKey: "time_minute_high_font" },
       { slot: "low", posKey: "time_minute_low_pos", fontKey: "time_minute_low_font" }
@@ -4817,7 +4818,7 @@ export const WATCHFACE_TIME_PARTS: WatchfaceTimePartDefinition[] = [
   },
   {
     id: "seconds",
-    label: "Seconds",
+    label: msg("Seconds"),
     digits: [
       { slot: "high", posKey: "time_second_high_pos", fontKey: "time_second_high_font" },
       { slot: "low", posKey: "time_second_low_pos", fontKey: "time_second_low_font" }
@@ -4872,7 +4873,7 @@ export interface WatchfaceComplicationDefinition {
 export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   {
     id: "battery",
-    label: "Battery data",
+    label: msg("Battery data"),
     rectKey: "battery_level_rect",
     fontKey: "battery_level_font",
     fontColorKey: "battery_level_font_color",
@@ -4883,7 +4884,7 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   },
   {
     id: "heartRate",
-    label: "Heart rate",
+    label: msg("Heart rate"),
     // `heartreate` is the spelling used by COROS's source templates.
     rectKey: "heartreate_level_rect",
     fontKey: "heartreate_level_font",
@@ -4894,7 +4895,7 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   },
   {
     id: "steps",
-    label: "Steps",
+    label: msg("Steps"),
     rectKey: "step_rect",
     fontKey: "step_font",
     controlPrefix: "step",
@@ -4904,7 +4905,7 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   },
   {
     id: "calories",
-    label: "Calories",
+    label: msg("Calories"),
     rectKey: "kcal_rect",
     fontKey: "kcal_font",
     controlPrefix: "kcal",
@@ -4914,7 +4915,7 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   },
   {
     id: "exercise",
-    label: "Exercise",
+    label: msg("Exercise"),
     rectKey: "exercise_hour_rect",
     valueParts: [
       { rectKey: "exercise_hour_rect", sampleValue: "1", maxDigits: 2 },
@@ -4928,7 +4929,7 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   },
   {
     id: "elevation",
-    label: "Elevation",
+    label: msg("Elevation"),
     rectKey: "elevation_rect",
     fontKey: "elevation_font",
     controlPrefix: "elevation",
@@ -4938,7 +4939,7 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   },
   {
     id: "temperature",
-    label: "Temperature (watch sensor)",
+    label: msg("Temperature (watch sensor)"),
     rectKey: "temperature_rect",
     fontKey: "temperature_font",
     fontColorKey: "temperature_font_color",
@@ -5367,14 +5368,14 @@ export function buildAddedSecondsOverrides(
 }
 
 export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
-  { id: "heartRate", label: "Heart rate", controlPrefix: "hr", sampleValue: "96" },
-  { id: "steps", label: "Steps", controlPrefix: "step", sampleValue: "8420" },
-  { id: "calories", label: "Calories", controlPrefix: "kcal", sampleValue: "534" },
-  { id: "floors", label: "Floors", controlPrefix: "floor", sampleValue: "12" },
-  { id: "elevation", label: "Elevation", controlPrefix: "elevation", sampleValue: "1284" },
+  { id: "heartRate", label: msg("Heart rate"), controlPrefix: "hr", sampleValue: "96" },
+  { id: "steps", label: msg("Steps"), controlPrefix: "step", sampleValue: "8420" },
+  { id: "calories", label: msg("Calories"), controlPrefix: "kcal", sampleValue: "534" },
+  { id: "floors", label: msg("Floors"), controlPrefix: "floor", sampleValue: "12" },
+  { id: "elevation", label: msg("Elevation"), controlPrefix: "elevation", sampleValue: "1284" },
   {
     id: "barometer",
-    label: "Barometer",
+    label: msg("Barometer"),
     controlPrefix: "barometer",
     sampleValue: "1013.2",
     valueParts: [
@@ -5384,7 +5385,7 @@ export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
   },
   {
     id: "exercise",
-    label: "Exercise",
+    label: msg("Exercise"),
     controlPrefix: "exercise",
     sampleValue: "1:24",
     valueParts: [
@@ -5394,7 +5395,7 @@ export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
   },
   {
     id: "sunrise",
-    label: "Sunrise",
+    label: msg("Sunrise"),
     controlPrefix: "sunrise",
     sampleValue: "6:30",
     valueParts: [
@@ -5404,7 +5405,7 @@ export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
   },
   {
     id: "sunset",
-    label: "Sunset",
+    label: msg("Sunset"),
     controlPrefix: "sunset",
     sampleValue: "19:45",
     valueParts: [
@@ -5412,8 +5413,8 @@ export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
       { rectSuffix: "minute", sampleValue: "45" }
     ]
   },
-  { id: "battery", label: "Battery", controlPrefix: "battery", sampleValue: "82" },
-  { id: "temperature", label: "Temperature (watch sensor)", controlPrefix: "temperature", sampleValue: "18" }
+  { id: "battery", label: msg("Battery"), controlPrefix: "battery", sampleValue: "82" },
+  { id: "temperature", label: msg("Temperature (watch sensor)"), controlPrefix: "temperature", sampleValue: "18" }
 ];
 
 /**
@@ -5426,7 +5427,7 @@ export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
  */
 export const CONTROL_DATE_COMPLICATION: WatchfaceComplicationDefinition = {
   id: "date",
-  label: "Date",
+  label: msg("Date"),
   controlPrefix: "english_date_day",
   sampleValue: "27"
 };
@@ -8809,73 +8810,73 @@ export function mergeAssetReplacements(
 export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
   {
     id: "autoTime",
-    label: "Time",
+    label: msg("Time"),
     patterns: [/^autoalign_time_rect$/]
   },
   {
     id: "hours",
-    label: "Hour digits",
+    label: msg("Hour digits"),
     patterns: [/^time_hour_(high|low)_pos$/]
   },
   {
     id: "minutes",
-    label: "Minute digits",
+    label: msg("Minute digits"),
     patterns: [/^time_minute_(high|low)_pos$/]
   },
   {
     id: "seconds",
-    label: "Seconds",
+    label: msg("Seconds"),
     patterns: [/^time_second_(high|low)_pos$/]
   },
   {
     id: "analogCenter",
-    label: "Analog center",
+    label: msg("Analog center"),
     // Every analog hand and center overlay rotates or draws around this one
     // shared firmware coordinate; none of those PNG keys has its own position.
     patterns: [/^time_center_pos$/]
   },
   {
     id: "weekday",
-    label: "Weekday",
+    label: msg("Weekday"),
     // control_<language>_date_* rects belong to the selectable slot and are
     // relative to its origin, so they are not fixed date layers.
     patterns: [/^(?!control_)[a-z_]+_date_week_rect$/]
   },
   {
     id: "dateMonth",
-    label: "Date month",
+    label: msg("Date month"),
     patterns: [/^(?!control_)[a-z_]+_date_month_rect$/]
   },
   {
     id: "dateDay",
-    label: "Date day",
+    label: msg("Date day"),
     patterns: [/^(?!control_)[a-z_]+_date_day_rect$/]
   },
   {
     id: "separators",
-    label: "Time & date separators",
+    label: msg("Time & date separators"),
     patterns: [/^arc_cut_icon_pos$/]
   },
   {
     // The same key when the face uses arc_cut_icon as a progress mask rather
     // than its date slash; layoutGroupKeys routes it to exactly one group.
     id: "arcCut",
-    label: "Arc cut overlay",
+    label: msg("Arc cut overlay"),
     patterns: [/^arc_cut_icon_pos$/]
   },
   {
     id: "battery",
-    label: "Battery data",
+    label: msg("Battery data"),
     patterns: [/^battery_level_rect$/]
   },
   {
     id: "batteryIcon",
-    label: "Battery icon",
+    label: msg("Battery icon"),
     patterns: [/^battery_icon_pos$/]
   },
   {
     id: "complication",
-    label: "Data chosen on watch",
+    label: msg("Data chosen on watch"),
     // Child control positions are relative to this origin. Moving both the
     // origin and every child would apply the offset twice on the watch.
     patterns: [/^rect_control\d+_pos$/]
@@ -8894,32 +8895,32 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
   })),
   {
     id: "heartRate",
-    label: "Heart rate",
+    label: msg("Heart rate"),
     patterns: [/^heartreate_level_rect$/]
   },
   {
     id: "steps",
-    label: "Steps",
+    label: msg("Steps"),
     patterns: [/^step_rect$/]
   },
   {
     id: "calories",
-    label: "Calories",
+    label: msg("Calories"),
     patterns: [/^kcal_rect$/]
   },
   {
     id: "exercise",
-    label: "Exercise",
+    label: msg("Exercise"),
     patterns: [/^exercise_(hour|minute)_rect$/]
   },
   {
     id: "elevation",
-    label: "Elevation",
+    label: msg("Elevation"),
     patterns: [/^elevation_rect$/]
   },
   {
     id: "temperature",
-    label: "Temperature (watch sensor)",
+    label: msg("Temperature (watch sensor)"),
     patterns: [/^temperature_rect$/]
   }
 ];

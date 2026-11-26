@@ -4,6 +4,7 @@
 // told to every screen by reading the sign-in again.
 import { NotWiredError } from "@/data/core";
 import { HubError, HubSessionEndedError, hubSession, type HubErrorCode } from "@/data/hub";
+import { t } from "@/lib/i18n";
 
 export async function hubRequest<T>(path: string, init?: { method: "POST" | "PUT" | "DELETE"; body?: unknown }): Promise<T> {
   let response: Response;
@@ -14,7 +15,7 @@ export async function hubRequest<T>(path: string, init?: { method: "POST" | "PUT
       body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
   } catch {
-    throw new HubError("unreachable", "C-LINK couldn't be reached. Try again.");
+    throw new HubError("unreachable", t("C-LINK couldn't be reached. Try again."));
   }
   let payload: unknown = null;
   try {
@@ -25,7 +26,7 @@ export async function hubRequest<T>(path: string, init?: { method: "POST" | "PUT
   if (response.ok && payload !== null) return payload as T;
   const error = (payload as { error?: { code?: HubErrorCode; message?: string; corosCode?: string } } | null)?.error;
   const code = error?.code ?? "server";
-  const message = error?.message ?? "C-LINK couldn't finish that. Try again.";
+  const message = error?.message ?? t("C-LINK couldn't finish that. Try again.");
   if (code === "expired" || code === "signed_out") {
     void hubSession().catch(() => {});
     throw new HubSessionEndedError(code, message);

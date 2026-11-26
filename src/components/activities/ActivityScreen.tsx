@@ -15,9 +15,11 @@ import {
 } from "@/lib/activityDetail";
 import { extent } from "@/lib/chart";
 import { clock, thousands } from "@/lib/format";
+import { t } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/react";
 import {
   EffortCard, FindingsCard, GearCard, JournalCard, MissingCard, RecordsCard, RelativeEffortCard, StatGrid, SummaryCard, ThresholdMeter, TimeCard, WeatherCard, WeekCard,
-  ZoneBar, ZoneCard, ZoneRows, type Stat, type ZoneLine,
+  sportWord, ZoneBar, ZoneCard, ZoneRows, type Stat, type ZoneLine,
 } from "./parts";
 import { SplitsCard, type SplitChoice } from "./SplitsCard";
 import { ExercisesSection, hasRests, MusclesCard, RestCard, SessionCard, TimelineCard, VolumeCard } from "./StrengthSections";
@@ -42,21 +44,21 @@ export function ActivityScreen({ id }: { id: string }) {
   const state = useLoaded(() => getActivity(id), id);
   const frame = (children: ReactNode) => <main className="page" style={{ paddingTop: 24, gap: 20 }}>{children}</main>;
 
-  if (state.status === "loading") return frame(<div className="skeleton" style={{ minHeight: 520 }} aria-busy="true" aria-label="Loading activity" />);
+  if (state.status === "loading") return frame(<div className="skeleton" style={{ minHeight: 520 }} aria-busy="true" aria-label={t("Loading activity")} />);
   if (state.status === "error") {
     return frame(
       <div className="notice" role="alert">
         <span style={{ flex: 1, minWidth: 0 }}>{state.error.message}</span>
-        <Button onClick={state.reload}>Try again</Button>
+        <Button onClick={state.reload}>{t("Try again")}</Button>
       </div>,
     );
   }
   if (!state.data) {
     return frame(
       <>
-        <nav aria-label="Breadcrumb" className="act-crumb"><Link href="/activities">Activities</Link></nav>
-        <h1 className="ad-title">Activity not found</h1>
-        <div><LinkButton href="/activities">Back to activities</LinkButton></div>
+        <nav aria-label={t("Breadcrumb")} className="act-crumb"><Link href="/activities">{t("Activities")}</Link></nav>
+        <h1 className="ad-title">{t("Activity not found")}</h1>
+        <div><LinkButton href="/activities">{t("Back to activities")}</LinkButton></div>
       </>,
     );
   }
@@ -126,10 +128,10 @@ function Detail({ detail, origin }: { detail: ActivityDetail; origin: Origin }) 
       if (typeof navigator.share === "function") await navigator.share({ title: a.name, url });
       else {
         await navigator.clipboard.writeText(url);
-        setNotice("Link copied.");
+        setNotice(t("Link copied."));
       }
     } catch (e) {
-      if (!(e instanceof DOMException && e.name === "AbortError")) setNotice("This browser would not share or copy the link.");
+      if (!(e instanceof DOMException && e.name === "AbortError")) setNotice(t("This browser would not share or copy the link."));
     }
   };
 
@@ -137,15 +139,15 @@ function Detail({ detail, origin }: { detail: ActivityDetail; origin: Origin }) 
     <>
       <div className="act-head">
         <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
-          <nav aria-label="Breadcrumb" className="act-crumb">
-            <Link href="/activities">Activities</Link><span aria-hidden="true">/</span>
+          <nav aria-label={t("Breadcrumb")} className="act-crumb">
+            <Link href="/activities">{t("Activities")}</Link><span aria-hidden="true">/</span>
             <span>{formatDayTime(a.start)}{detail.extras?.device ? ` · ${detail.extras.device}` : ""}</span>
           </nav>
           <h1 className="ad-title">
             {a.name}
-            <span className="ad-chip" style={{ background: style.tint, color: `var(--h-${style.hue}-ink)` }}>{a.sportName ?? a.sport}</span>
+            <span className="ad-chip" style={{ background: style.tint, color: `var(--h-${style.hue}-ink)` }}>{a.sportName ?? sportWord(a.sport)}</span>
             {percent != null && a.sport !== "Strength" ? (
-              <span className="ad-chip" style={{ background: EFFORT_TINT[level], color: `var(--h-${EFFORT_LEVELS[level].hue}-ink)` }}>{EFFORT_LEVELS[level].title} effort</span>
+              <span className="ad-chip" style={{ background: EFFORT_TINT[level], color: `var(--h-${EFFORT_LEVELS[level].hue}-ink)` }}>{t("{level} effort", { level: t(EFFORT_LEVELS[level].title) })}</span>
             ) : null}
           </h1>
         </div>
@@ -153,18 +155,18 @@ function Detail({ detail, origin }: { detail: ActivityDetail; origin: Origin }) 
           <OriginBadge origin={origin} />
           {a.sport === "Strength" ? null : (
             <>
-              <Button onClick={() => compareActivity(a.id).catch(refuse)}>Compare</Button>
-              <Button onClick={() => exportActivityFit(a.id).catch(refuse)}>Export FIT</Button>
+              <Button onClick={() => compareActivity(a.id).catch(refuse)}>{t("Compare")}</Button>
+              <Button onClick={() => exportActivityFit(a.id).catch(refuse)}>{t("Export FIT")}</Button>
             </>
           )}
-          <Button variant="primary" onClick={share}>Share</Button>
+          <Button variant="primary" onClick={share}>{t("Share")}</Button>
         </div>
       </div>
 
       {notice ? (
         <div className="notice" role="status">
           <span style={{ flex: 1, minWidth: 0 }}>{notice}</span>
-          <Button variant="plain" onClick={() => setNotice(null)}>Dismiss</Button>
+          <Button variant="plain" onClick={() => setNotice(null)}>{t("Dismiss")}</Button>
         </div>
       ) : null}
 
@@ -178,17 +180,17 @@ function Detail({ detail, origin }: { detail: ActivityDetail; origin: Origin }) 
 function Headline({ m, items, narrow }: { m: Model; items: { label: string; value: ReactNode; text?: string }[]; narrow?: boolean }) {
   const { activity: a } = m.detail;
   return (
-    <Card aria-label="Headline" className="ad-headline" data-narrow={narrow || undefined}>
+    <Card aria-label={t("Headline")} className="ad-headline" data-narrow={narrow || undefined}>
       {items.map((s) => (
         <div key={s.label}><span>{s.label}</span>{s.text ? <CountUp className="num" text={s.text} /> : <span className="num">{s.value}</span>}</div>
       ))}
       {m.percent != null ? (
         <div className="ad-meter">
-          <div><span>{Math.round(m.percent)}% of threshold heart rate</span>{a.load != null ? <span className="ad-load">Load {a.load}</span> : null}</div>
-          <ThresholdMeter percent={m.percent} label={`Average heart rate at ${Math.round(m.percent)} percent of threshold: ${EFFORT_LEVELS[m.level].title.toLowerCase()} effort`} />
+          <div><span>{t("{pct}% of threshold heart rate", { pct: Math.round(m.percent) })}</span>{a.load != null ? <span className="ad-load">{t("Load {n}", { n: a.load })}</span> : null}</div>
+          <ThresholdMeter percent={m.percent} label={t("Average heart rate at {pct} percent of threshold: {level} effort", { pct: Math.round(m.percent), level: t(EFFORT_LEVELS[m.level].title).toLowerCase() })} />
         </div>
       ) : a.load != null ? (
-        <div><span>Training load</span><CountUp className="num" style={{ color: "var(--h-pink-ink)" }} text={String(a.load)} /></div>
+        <div><span>{t("Training load")}</span><CountUp className="num" style={{ color: "var(--h-pink-ink)" }} text={String(a.load)} /></div>
       ) : null}
     </Card>
   );
@@ -198,23 +200,23 @@ function paceItems(m: Model): { label: string; value: ReactNode; text?: string }
   const { activity: a } = m.detail;
   const unit = paceUnit(a.sport);
   const items: { label: string; value: ReactNode; text?: string }[] = [];
-  if (a.distanceM != null) items.push({ label: "Distance", value: null, text: formatDistance(a) });
-  if (a.durationS > 0) items.push({ label: "Time", value: null, text: exact(a.durationS) });
+  if (a.distanceM != null) items.push({ label: t("Distance"), value: null, text: formatDistance(a) });
+  if (a.durationS > 0) items.push({ label: t("Time"), value: null, text: exact(a.durationS) });
   const pace = paceOver(a.sport, a.distanceM, a.durationS);
   if (unit && pace != null) {
     items.push(unit === "min/100m"
-      ? { label: "Avg pace", value: <>{clock(Math.round(pace))} <small>/100 m</small></> }
-      : { label: unit === "km/h" ? "Avg speed" : "Avg pace", value: null, text: formatPaceValue(a.sport, pace) });
+      ? { label: t("Avg pace"), value: <>{clock(Math.round(pace))} <small>/100 m</small></> }
+      : { label: unit === "km/h" ? t("Avg speed") : t("Avg pace"), value: null, text: formatPaceValue(a.sport, pace) });
   }
-  if (a.calories != null) items.push({ label: "Calories", value: null, text: `${thousands(a.calories)} kcal` });
-  else if (a.avgHr != null && m.percent == null) items.push({ label: "Avg heart rate", value: null, text: `${a.avgHr} bpm` });
+  if (a.calories != null) items.push({ label: t("Calories"), value: null, text: `${thousands(a.calories)} kcal` });
+  else if (a.avgHr != null && m.percent == null) items.push({ label: t("Avg heart rate"), value: null, text: `${a.avgHr} bpm` });
   return items;
 }
 
 function hrZoneLines(zones: readonly ZoneTime[]): ZoneLine[] {
   const named = zones.length === EFFORT_LEVELS.length;
   return zoneShares(zones).rows.map((z, i) => ({
-    name: named ? `Z${i + 1} ${EFFORT_LEVELS[i].title}` : `Zone ${z.zone}`, range: hrZoneRange(z), seconds: z.seconds, share: z.share, color: zoneColor(i),
+    name: named ? `Z${i + 1} ${t(EFFORT_LEVELS[i].title)}` : t("Zone {n}", { n: z.zone }), range: hrZoneRange(z), seconds: z.seconds, share: z.share, color: zoneColor(i),
   }));
 }
 
@@ -222,17 +224,18 @@ function mostly(lines: readonly ZoneLine[], titles: readonly string[], meanings?
   if (!lines.some((l) => l.seconds > 0)) return undefined;
   let main = 0;
   lines.forEach((l, i) => { if (l.seconds > lines[main].seconds) main = i; });
-  return `Mostly ${titles[main]}: ${Math.round(lines[main].share * 100)}% of the time.${meanings?.[main] ? ` ${meanings[main]}` : ""}`;
+  const sentence = t("Mostly {zone}: {pct}% of the time.", { zone: t(titles[main]), pct: Math.round(lines[main].share * 100) });
+  return meanings?.[main] ? `${sentence} ${t(meanings[main])}` : sentence;
 }
 
 function HrZones({ m, style, missing }: { m: Model; style?: React.CSSProperties; missing?: boolean }) {
-  if (!m.hrZones.some((z) => z.seconds > 0)) return missing ? m.miss("Heart rate zones", undefined, 220) : null;
+  if (!m.hrZones.some((z) => z.seconds > 0)) return missing ? m.miss(t("Heart rate zones"), undefined, 220) : null;
   const lines = hrZoneLines(m.hrZones);
   const five = lines.length === EFFORT_LEVELS.length;
   const thr = m.detail.thresholds?.hr;
   return (
     <ZoneCard
-      title="Heart rate zones" aside={thr ? `Threshold ${Math.round(thr)} bpm` : undefined} zones={lines} style={style}
+      title={t("Heart rate zones")} aside={thr ? t("Threshold {hr} bpm", { hr: Math.round(thr) }) : undefined} zones={lines} style={style}
       sentence={five ? mostly(lines, EFFORT_LEVELS.map((l) => l.title), EFFORT_LEVELS.map((l) => l.meaning)) : undefined}
     />
   );
@@ -266,14 +269,14 @@ function chartRows(m: Model): ChartRow[] {
   if (!streams || !scales) return [];
   const rows: ChartRow[] = [];
   const unit = paceUnit(a.sport);
-  const ends = (v: readonly number[], text: (x: number) => string, u: string) => `from ${text(Math.min(...v))} to ${text(Math.max(...v))} ${u}`;
+  const ends = (label: string, v: readonly number[], text: (x: number) => string, u: string) => t("{what} from {low} to {high} {unit}", { what: label, low: text(Math.min(...v)), high: text(Math.max(...v)), unit: u });
   if (enough(streams.pace) && scales.pace && unit) {
     const avg = paceOver(a.sport, a.distanceM, a.durationS);
     if (unit === "km/h") {
       const text = (v: number) => v.toFixed(1);
       rows.push({
-        key: "speed", label: "Speed", sub: `${avg != null ? `Avg ${avg.toFixed(1)} km/h · ` : ""}Max ${Math.max(...streams.pace).toFixed(1)} km/h`, height: 110,
-        values: streams.pace, low: scales.pace[0], high: scales.pace[1], text, unit: "km/h", describe: labels?.pace ?? `Speed ${ends(streams.pace, text, "km/h")}`,
+        key: "speed", label: t("Speed"), sub: `${avg != null ? `${t("Avg {value}", { value: `${avg.toFixed(1)} km/h` })} · ` : ""}${t("Max {value}", { value: `${Math.max(...streams.pace).toFixed(1)} km/h` })}`, height: 110,
+        values: streams.pace, low: scales.pace[0], high: scales.pace[1], text, unit: "km/h", describe: labels?.pace ?? ends(t("Speed"), streams.pace, text, "km/h"),
         draw: { kind: "line", color: "var(--h-mint)", area: true },
       });
     } else {
@@ -281,9 +284,9 @@ function chartRows(m: Model): ChartRow[] {
       const text = (v: number) => clock(Math.round(v));
       const thr = a.sport === "Run" && unit === "min/km" ? thresholds?.paceSPerKm : undefined;
       rows.push({
-        key: "pace", label: "Pace", sub: `${avg != null ? `Avg ${text(avg)} ${u} · ` : ""}Best ${text(Math.min(...streams.pace))} ${u}`, height: 120,
+        key: "pace", label: t("Pace"), sub: `${avg != null ? `${t("Avg {value}", { value: `${text(avg)} ${u}` })} · ` : ""}${t("Best {value}", { value: `${text(Math.min(...streams.pace))} ${u}` })}`, height: 120,
         // Faster is up: the slowest pace of the scale sits at the bottom.
-        values: streams.pace, low: scales.pace[1], high: scales.pace[0], text, unit: u, describe: labels?.pace ?? `Pace ${ends(streams.pace, text, u)}`,
+        values: streams.pace, low: scales.pace[1], high: scales.pace[0], text, unit: u, describe: labels?.pace ?? ends(t("Pace"), streams.pace, text, u),
         draw: thr ? { kind: "zones", zoneOf: (v) => paceZoneOf(v, thr), colors: ZONE_HUES.map((_, i) => zoneColor(i)), avg: avg ?? undefined } : { kind: "line", color: `var(--h-${m.hue})` },
       });
     }
@@ -292,27 +295,27 @@ function chartRows(m: Model): ChartRow[] {
     const zones = m.hrZones;
     const banded = zones.length > 1 && zones.slice(1).every((z) => z.fromBpm != null);
     rows.push({
-      key: "hr", label: "Heart rate", sub: [a.avgHr != null ? `Avg ${a.avgHr} bpm` : "", a.maxHr != null ? `Max ${a.maxHr} bpm` : ""].filter(Boolean).join(" · "), height: 120,
-      values: streams.hr, low: scales.hr[0], high: scales.hr[1], text: round, unit: "bpm", describe: labels?.hr ?? `Heart rate ${ends(streams.hr, round, "bpm")}`,
+      key: "hr", label: t("Heart rate"), sub: [a.avgHr != null ? t("Avg {value}", { value: `${a.avgHr} bpm` }) : "", a.maxHr != null ? t("Max {value}", { value: `${a.maxHr} bpm` }) : ""].filter(Boolean).join(" · "), height: 120,
+      values: streams.hr, low: scales.hr[0], high: scales.hr[1], text: round, unit: "bpm", describe: labels?.hr ?? ends(t("Heart rate"), streams.hr, round, "bpm"),
       draw: banded ? { kind: "zones", zoneOf: (v) => hrZoneOf(zones, v), colors: zones.map((_, i) => zoneColor(i)), avg: a.avgHr ?? undefined } : { kind: "line", color: "var(--h-rose)", area: true },
     });
   }
   const plain = (key: string, label: string, values: number[], u: string, color: string, avg: number | null | undefined) => {
     const [lo, hi] = extent(values, (Math.max(...values) - Math.min(...values)) * 0.12 || 1);
     rows.push({
-      key, label, sub: `${avg != null ? `Avg ${Math.round(avg)} ${u} · ` : ""}Max ${Math.round(Math.max(...values))} ${u}`, height: 96,
-      values, low: Math.max(0, lo), high: hi, text: round, unit: u, describe: `${label} ${ends(values, round, u)}`, draw: { kind: "line", color, area: true },
+      key, label, sub: `${avg != null ? `${t("Avg {value}", { value: `${Math.round(avg)} ${u}` })} · ` : ""}${t("Max {value}", { value: `${Math.round(Math.max(...values))} ${u}` })}`, height: 96,
+      values, low: Math.max(0, lo), high: hi, text: round, unit: u, describe: ends(label, values, round, u), draw: { kind: "line", color, area: true },
     });
   };
-  if (enough(streams.power)) plain("power", "Power", streams.power, "W", "var(--h-gold)", a.avgPowerW ?? (m.track ? powerNumbers(m.track, streams.power, null).avg : null));
-  if (enough(streams.cadence)) plain("cadence", "Cadence", streams.cadence, a.sport === "Ride" ? "rpm" : "spm", "var(--h-blue)", a.cadence);
+  if (enough(streams.power)) plain("power", t("Power"), streams.power, "W", "var(--h-gold)", a.avgPowerW ?? (m.track ? powerNumbers(m.track, streams.power, null).avg : null));
+  if (enough(streams.cadence)) plain("cadence", t("Cadence"), streams.cadence, a.sport === "Ride" ? "rpm" : "spm", "var(--h-blue)", a.cadence);
   if (enough(streams.elevation) && scales.elevation) {
     const whole = m.track?.dist ? totalClimb(m, streams) : null;
     const lo = Math.min(...streams.elevation), hi = Math.max(...streams.elevation);
     rows.push({
-      key: "elevation", label: "Elevation", sub: `${whole ? `↑${Math.round(whole.up)} ↓${Math.round(whole.down)} · ` : ""}${Math.round(lo)}–${Math.round(hi)} m`, height: 80,
+      key: "elevation", label: t("Elevation"), sub: `${whole ? `↑${Math.round(whole.up)} ↓${Math.round(whole.down)} · ` : ""}${Math.round(lo)}–${Math.round(hi)} m`, height: 80,
       values: streams.elevation, low: scales.elevation[0], high: scales.elevation[1], text: round, unit: "m",
-      describe: labels?.elevation ?? `Elevation ${ends(streams.elevation, round, "m")}`, draw: { kind: "area" },
+      describe: labels?.elevation ?? ends(t("Elevation"), streams.elevation, round, "m"), draw: { kind: "area" },
     });
   }
   return rows;
@@ -337,42 +340,42 @@ function ChartsCard({ m, marks }: { m: Model; marks: number[] }) {
   if (!streams || rows.length === 0) return null;
   const at = positionText(m);
   return (
-    <Card aria-label="Charts" className="ad-charts">
+    <Card aria-label={t("Charts")} className="ad-charts">
       <div className="ad-between">
-        <h2 className="h2">Charts</h2>
-        <span className="ad-note">At <strong style={{ color: "var(--fg)" }}>{at}</strong>{marks.length ? " · dashed lines are your watch's laps" : ""}</span>
+        <h2 className="h2">{t("Charts")}</h2>
+        <span className="ad-note">{tr("At {where}", { where: <strong style={{ color: "var(--fg)" }}>{at}</strong> })}{marks.length ? ` · ${t("dashed lines are your watch's laps")}` : ""}</span>
       </div>
       <ActivityChartStack rows={rows} n={streams.x.length} index={m.index} onIndex={m.setIndex} marks={marks} valueText={at} />
-      <div className="ad-axis">{axisTicks(a.sport, streams).map((t, k) => <span key={k}>{t}</span>)}</div>
+      <div className="ad-axis">{axisTicks(a.sport, streams).map((tick, k) => <span key={k}>{tick}</span>)}</div>
     </Card>
   );
 }
 
 function MapCard({ m }: { m: Model }) {
   const { activity: a, streams, route, labels } = m.detail;
-  if (!route || !streams) return m.detail.streams || a.distanceM == null ? null : m.miss("Map", "1.5 1 560px", 420);
+  if (!route || !streams) return m.detail.streams || a.distanceM == null ? null : m.miss(t("Map"), "1.5 1 560px", 420);
   const hr = streams.hr?.[m.index];
   const readout: { label: string; value: ReactNode; color?: string }[] = [];
-  if (m.atM != null) readout.push({ label: "Distance", value: a.sport === "Swim" ? `${thousands(m.atM)} m` : `${(m.atM / 1000).toFixed(2)} km` });
-  if (m.atS != null) readout.push({ label: "Time", value: clock(Math.round(m.atS)) });
-  if (hr != null) readout.push({ label: "Heart rate", value: `${Math.round(hr)} bpm`, color: "var(--h-rose-ink)" });
+  if (m.atM != null) readout.push({ label: t("Distance"), value: a.sport === "Swim" ? `${thousands(m.atM)} m` : `${(m.atM / 1000).toFixed(2)} km` });
+  if (m.atS != null) readout.push({ label: t("Time"), value: clock(Math.round(m.atS)) });
+  if (hr != null) readout.push({ label: t("Heart rate"), value: `${Math.round(hr)} bpm`, color: "var(--h-rose-ink)" });
   return (
     <ActivityRoutePlayback
       route={route} distanceM={a.distanceM ?? route[route.length - 1].d} startedAt={parseStart(a.start)} at={m.atM} span={m.chosen ? { from: m.chosen.fromM, to: m.chosen.toM } : null} hue={m.hue} sample={m.origin === "sample"}
-      label={`${labels?.route ?? `Route, ${formatDistance(a)}`}, with the playback marker on it`} n={streams.x.length} index={m.index} onIndex={m.setIndex} readout={readout}
+      label={t("{route}, with the playback marker on it", { route: labels?.route ?? t("Route, {distance}", { distance: formatDistance(a) }) })} n={streams.x.length} index={m.index} onIndex={m.setIndex} readout={readout}
     />
   );
 }
 
 function timeRows(m: Model): Stat[] {
   const { activity: a, extras } = m.detail;
-  const rows: Stat[] = [{ label: "Moving time", value: exact(a.durationS) }];
+  const rows: Stat[] = [{ label: t("Moving time"), value: exact(a.durationS) }];
   if (extras?.elapsedS != null && extras.elapsedS - a.durationS >= 0.5) {
-    rows.push({ label: "Elapsed time", value: clock(Math.round(extras.elapsedS)), note: `${clock(Math.round(extras.elapsedS - a.durationS))} stopped` });
+    rows.push({ label: t("Elapsed time"), value: clock(Math.round(extras.elapsedS)), note: t("{time} stopped", { time: clock(Math.round(extras.elapsedS - a.durationS)) }) });
   }
   if (extras?.watchTempC) {
     const [lo, hi] = extras.watchTempC;
-    rows.push({ label: "Temperature", value: lo === hi ? `${lo}°` : `${lo}–${hi}°`, note: "The watch's sensor, warmed by your wrist" });
+    rows.push({ label: t("Temperature"), value: lo === hi ? `${lo}°` : `${lo}–${hi}°`, note: t("The watch's sensor, warmed by your wrist") });
   }
   return rows;
 }
@@ -384,8 +387,8 @@ function Closing({ m, time, children }: { m: Model; time?: Stat[]; children?: Re
     <div className="ad-cols">
       {children}
       <TimeCard rows={time ?? timeRows(m)} style={{ flex: "1 1 240px" }} />
-      {m.percent != null ? <EffortCard percent={m.percent} level={m.level} sentence={thresholdPaceSentence(pace, thresholds?.paceSPerKm)} style={{ flex: "1 1 280px" }} /> : m.miss("Effort", "1 1 280px", 150)}
-      {week ? <WeekCard week={week} style={{ flex: "1 1 240px" }} /> : m.miss("In the week", "1 1 240px", 150)}
+      {m.percent != null ? <EffortCard percent={m.percent} level={m.level} sentence={thresholdPaceSentence(pace, thresholds?.paceSPerKm)} style={{ flex: "1 1 280px" }} /> : m.miss(t("Effort"), "1 1 280px", 150)}
+      {week ? <WeekCard week={week} style={{ flex: "1 1 240px" }} /> : m.miss(t("In the week"), "1 1 240px", 150)}
     </div>
   );
 }
@@ -393,7 +396,7 @@ function Closing({ m, time, children }: { m: Model; time?: Stat[]; children?: Re
 function NotRead({ m }: { m: Model }) {
   const d = m.detail;
   if (m.origin === "synced" || d.streams || d.route || d.laps.length > 0 || d.zones.length > 0) return null;
-  return <div className="notice" role="status">Charts appear once your phone has read the recording.</div>;
+  return <div className="notice" role="status">{t("Charts appear once your phone has read the recording.")}</div>;
 }
 
 // ------------------------------------------------------- run, ride and others
@@ -423,37 +426,37 @@ function PaceLayout({ m }: { m: Model }) {
   const climb = streams && track ? totalClimb(m, streams) : null;
 
   const details: Stat[] = [];
-  if (gap != null) details.push({ label: "Avg grade-adjusted pace", value: `${clock(Math.round(gap))} /km` });
-  if (a.elevationGainM != null) details.push({ label: "Elevation gain", value: `${thousands(a.elevationGainM)} m`, note: climb ? `Loss ${thousands(climb.down)} m` : "" });
-  if (a.avgHr != null) details.push({ label: "Avg heart rate", value: `${a.avgHr} bpm`, note: thr?.maxHr ? `${Math.floor((a.avgHr / thr.maxHr) * 100)}% of the max` : "" });
-  if (a.maxHr != null) details.push({ label: "Max heart rate", value: `${a.maxHr} bpm` });
-  if (ride && enough(streams?.pace)) details.push({ label: "Max speed", value: `${Math.max(...streams.pace).toFixed(1)} km/h` });
-  if (a.calories != null) details.push({ label: "Calories", value: `${thousands(a.calories)} kcal` });
-  if (a.load != null) details.push({ label: "Training load", value: String(a.load), note: "From time and heart rate" });
-  if (a.cadence != null) details.push({ label: "Avg cadence", value: `${a.cadence} ${ride ? "rpm" : "spm"}`, note: enough(streams?.cadence) ? `Max ${Math.round(Math.max(...streams.cadence))}` : "" });
+  if (gap != null) details.push({ label: t("Avg grade-adjusted pace"), value: `${clock(Math.round(gap))} /km` });
+  if (a.elevationGainM != null) details.push({ label: t("Elevation gain"), value: `${thousands(a.elevationGainM)} m`, note: climb ? t("Loss {n} m", { n: thousands(climb.down) }) : "" });
+  if (a.avgHr != null) details.push({ label: t("Avg heart rate"), value: `${a.avgHr} bpm`, note: thr?.maxHr ? t("{pct}% of the max", { pct: Math.floor((a.avgHr / thr.maxHr) * 100) }) : "" });
+  if (a.maxHr != null) details.push({ label: t("Max heart rate"), value: `${a.maxHr} bpm` });
+  if (ride && enough(streams?.pace)) details.push({ label: t("Max speed"), value: `${Math.max(...streams.pace).toFixed(1)} km/h` });
+  if (a.calories != null) details.push({ label: t("Calories"), value: `${thousands(a.calories)} kcal` });
+  if (a.load != null) details.push({ label: t("Training load"), value: String(a.load), note: t("From time and heart rate") });
+  if (a.cadence != null) details.push({ label: t("Avg cadence"), value: `${a.cadence} ${ride ? "rpm" : "spm"}`, note: enough(streams?.cadence) ? t("Max {value}", { value: Math.round(Math.max(...streams.cadence)) }) : "" });
   const avgPower = a.avgPowerW ?? power?.avg ?? null;
-  if (avgPower != null) details.push({ label: "Avg power", value: `${Math.round(avgPower)} W`, note: power ? `Max ${Math.round(power.max)}` : "" });
-  if (run && whole?.strideM != null) details.push({ label: "Avg stride length", value: `${whole.strideM.toFixed(2)} m` });
-  if (whole?.groundContactMs != null) details.push({ label: "Avg ground contact", value: `${Math.round(whole.groundContactMs)} ms` });
+  if (avgPower != null) details.push({ label: t("Avg power"), value: `${Math.round(avgPower)} W`, note: power ? t("Max {value}", { value: Math.round(power.max) }) : "" });
+  if (run && whole?.strideM != null) details.push({ label: t("Avg stride length"), value: `${whole.strideM.toFixed(2)} m` });
+  if (whole?.groundContactMs != null) details.push({ label: t("Avg ground contact"), value: `${Math.round(whole.groundContactMs)} ms` });
 
   // Analysis rows, in the phone's order.
   const findings: Finding[] = [];
   const kind = track ? workoutKind({ sport: a.sport, laps: laps ?? [], hr: streams?.hr ?? null, dt: track.dt, movingS: a.durationS, thresholdHr: thr?.hr, avgHr: a.avgHr }) : null;
-  if (kind) findings.push({ title: kind, note: "Workout type" });
+  if (kind) findings.push({ title: t(kind), note: t("Workout type") });
   if (track && streams && kind !== "Intervals") {
     const drift = run && track.dist ? decoupling(track, track.speed, streams.hr) : ride && enough(streams.power) ? decoupling(track, streams.power, streams.hr) : null;
-    if (drift != null) findings.push({ title: decouplingTitle(drift), note: ride ? "Heart rate against power" : "Heart rate against pace" });
+    if (drift != null) findings.push({ title: decouplingTitle(drift), note: ride ? t("Heart rate against power") : t("Heart rate against pace") });
     const split = run ? pacingSplit(track, streams.elevation) : null;
     if (split != null) findings.push(pacingFinding(split));
   }
   if (gap != null && pace != null && Math.abs(pace - gap) >= 3) {
-    findings.push({ title: `Grade-adjusted pace ${clock(Math.round(gap))} /km`, note: pace > gap ? `${Math.round(pace - gap)} s/km of climbing` : `${Math.round(gap - pace)} s/km from the descents` });
+    findings.push({ title: t("Grade-adjusted pace {pace} /km", { pace: clock(Math.round(gap)) }), note: pace > gap ? t("{n} s/km of climbing", { n: Math.round(pace - gap) }) : t("{n} s/km from the descents", { n: Math.round(gap - pace) }) });
   }
   if (run && a.distanceM != null && a.distanceM >= 3000 && a.durationS >= 1200 && a.avgHr) {
-    findings.push({ title: `${(((a.distanceM / a.durationS) * 60) / a.avgHr).toFixed(2)} m per heartbeat`, note: "Efficiency" });
+    findings.push({ title: t("{n} m per heartbeat", { n: (((a.distanceM / a.durationS) * 60) / a.avgHr).toFixed(2) }), note: t("Efficiency") });
   }
-  if (ride && power?.intensity != null) findings.push({ title: intensityLabel(power.intensity), note: `Intensity factor ${power.intensity.toFixed(2)}` });
-  if (ride && power?.variability != null && a.durationS >= 1200) findings.push({ title: variabilityLabel(power.variability), note: `Variability ${power.variability.toFixed(2)}` });
+  if (ride && power?.intensity != null) findings.push({ title: intensityLabel(power.intensity), note: t("Intensity factor {n}", { n: power.intensity.toFixed(2) }) });
+  if (ride && power?.variability != null && a.durationS >= 1200) findings.push({ title: variabilityLabel(power.variability), note: t("Variability {n}", { n: power.variability.toFixed(2) }) });
 
   // Pace zones: runs with a threshold pace, counting only the samples that were moving.
   const paceLines: ZoneLine[] = [];
@@ -461,7 +464,7 @@ function PaceLayout({ m }: { m: Model }) {
   if (thrPace && track && enough(streams?.pace)) {
     const seconds = timeInZones(streams.pace, track.dt, (v) => paceZoneOf(v, thrPace), PACE_ZONE_RATIOS.length + 1, (v) => v > 1250);
     zoneShares(seconds.map((s) => ({ seconds: s }))).rows.forEach((z, i) => {
-      paceLines.push({ name: `Z${i + 1} ${EFFORT_LEVELS[i].title}`, range: paceZoneRange(i, thrPace), seconds: z.seconds, share: z.share, color: zoneColor(i) });
+      paceLines.push({ name: `Z${i + 1} ${t(EFFORT_LEVELS[i].title)}`, range: paceZoneRange(i, thrPace), seconds: z.seconds, share: z.share, color: zoneColor(i) });
     });
   }
   const powerLines: ZoneLine[] = [];
@@ -469,18 +472,18 @@ function PaceLayout({ m }: { m: Model }) {
     const ftp = thr.ftp;
     const seconds = timeInZones(streams.power, track.dt, (v) => powerZoneOf(v, ftp), POWER_ZONE_NAMES.length);
     zoneShares(seconds.map((s) => ({ seconds: s }))).rows.forEach((z, i) => {
-      if (z.seconds >= 30) powerLines.push({ name: `Z${i + 1} ${POWER_ZONE_NAMES[i]}`, range: powerZoneRange(i, ftp), seconds: z.seconds, share: z.share, color: `var(--pz-${i + 1})` });
+      if (z.seconds >= 30) powerLines.push({ name: `Z${i + 1} ${t(POWER_ZONE_NAMES[i])}`, range: powerZoneRange(i, ftp), seconds: z.seconds, share: z.share, color: `var(--pz-${i + 1})` });
     });
   }
 
   const powerItems: Stat[] = [];
   if (ride && power) {
-    if (power.np != null) powerItems.push({ label: "Normalized power", value: `${Math.round(power.np)} W` });
-    powerItems.push({ label: "Avg power", value: `${Math.round(avgPower ?? power.avg)} W`, note: `Max ${Math.round(power.max)} W` });
-    if (power.intensity != null) powerItems.push({ label: "Intensity factor", value: power.intensity.toFixed(2) });
-    if (power.stress != null) powerItems.push({ label: "Training stress", value: power.stress.toFixed(1) });
-    if (power.variability != null) powerItems.push({ label: "Variability", value: power.variability.toFixed(2) });
-    if (a.cadence != null) powerItems.push({ label: "Avg cadence", value: `${a.cadence} rpm`, note: enough(streams?.cadence) ? `Max ${Math.round(Math.max(...streams.cadence))} rpm` : "" });
+    if (power.np != null) powerItems.push({ label: t("Normalized power"), value: `${Math.round(power.np)} W` });
+    powerItems.push({ label: t("Avg power"), value: `${Math.round(avgPower ?? power.avg)} W`, note: t("Max {value}", { value: `${Math.round(power.max)} W` }) });
+    if (power.intensity != null) powerItems.push({ label: t("Intensity factor"), value: power.intensity.toFixed(2) });
+    if (power.stress != null) powerItems.push({ label: t("Training stress"), value: power.stress.toFixed(1) });
+    if (power.variability != null) powerItems.push({ label: t("Variability"), value: power.variability.toFixed(2) });
+    if (a.cadence != null) powerItems.push({ label: t("Avg cadence"), value: `${a.cadence} rpm`, note: enough(streams?.cadence) ? t("Max {value}", { value: `${Math.round(Math.max(...streams.cadence))} rpm` }) : "" });
   }
   const climbTime = climbs.reduce((s, c) => s + c.seconds, 0);
   const climbPower = climbs.every((c) => c.powerW != null) && climbTime > 0 ? climbs.reduce((s, c) => s + (c.powerW as number) * c.seconds, 0) / climbTime : null;
@@ -494,11 +497,11 @@ function PaceLayout({ m }: { m: Model }) {
       const [lo, hi] = extent(values, (Math.max(...values) - Math.min(...values)) * 0.15 || 1);
       const avg = values.reduce((s, v) => s + v, 0) / values.length;
       const text = (v: number) => v.toFixed(digits);
-      dynamics.push({ key, label, sub: `Avg ${text(avg)} ${unit}`, height: 80, values, low: lo, high: hi, text, unit, describe: `${label} from ${text(Math.min(...values))} to ${text(Math.max(...values))} ${unit}`, draw: { kind: "line", color } });
+      dynamics.push({ key, label, sub: t("Avg {value}", { value: `${text(avg)} ${unit}` }), height: 80, values, low: lo, high: hi, text, unit, describe: t("{what} from {low} to {high} {unit}", { what: label, low: text(Math.min(...values)), high: text(Math.max(...values)), unit }), draw: { kind: "line", color } });
     };
-    dyn("gct", "Ground contact", streams.groundContact, "ms", "var(--h-cyan)", 0);
-    dyn("vo", "Vertical oscillation", streams.verticalOsc, "cm", "var(--h-sky)", 1);
-    dyn("stride", "Stride length", streams.stride, "m", "var(--h-orange)", 2);
+    dyn("gct", t("Ground contact"), streams.groundContact, "ms", "var(--h-cyan)", 0);
+    dyn("vo", t("Vertical oscillation"), streams.verticalOsc, "cm", "var(--h-sky)", 1);
+    dyn("stride", t("Stride length"), streams.stride, "m", "var(--h-orange)", 2);
   }
 
   const lapSpeeds = (laps ?? []).map((l) => (l.distanceM && l.durationS > 0 ? l.distanceM / l.durationS : 0));
@@ -515,45 +518,45 @@ function PaceLayout({ m }: { m: Model }) {
         <div className="ad-cols">
           <MapCard m={m} />
           {details.length > 0 ? (
-            <Card aria-label="Details" clip style={{ flex: "1 1 400px", display: "flex", flexDirection: "column" }}>
-              <div className="ad-head"><h2 className="h2">Details</h2></div>
+            <Card aria-label={t("Details")} clip style={{ flex: "1 1 400px", display: "flex", flexDirection: "column" }}>
+              <div className="ad-head"><h2 className="h2">{t("Details")}</h2></div>
               <div style={{ flex: detail.route ? 1 : undefined, display: "grid" }}><StatGrid items={details} cols={detail.route ? 2 : 4} /></div>
             </Card>
-          ) : m.miss("Details", "1 1 400px", 200)}
+          ) : m.miss(t("Details"), "1 1 400px", 200)}
         </div>
       ) : null}
 
       {powerItems.length > 0 || powerLines.length > 0 || climbs.length > 1 || (ride && m.origin === "synced") ? (
         <div className="ad-cols">
           {powerItems.length > 0 ? (
-            <Card aria-label="Power" clip style={{ flex: "1.2 1 420px" }}>
-              <div className="ad-head"><h2 className="h2">Power</h2>{thr?.ftp ? <span className="ad-sub">FTP {Math.round(thr.ftp)}</span> : null}</div>
+            <Card aria-label={t("Power")} clip style={{ flex: "1.2 1 420px" }}>
+              <div className="ad-head"><h2 className="h2">{t("Power")}</h2>{thr?.ftp ? <span className="ad-sub">FTP {Math.round(thr.ftp)}</span> : null}</div>
               <StatGrid items={powerItems} cols={3} />
               {climbs.length > 1 && climbPower != null ? (
-                <p className="ad-foot">Most of the work was on the {climbs.length} climbs: {clock(Math.round(climbTime))} of the ride, at an average of {Math.round(climbPower)} W.</p>
+                <p className="ad-foot">{t("Most of the work was on the {n} climbs: {time} of the ride, at an average of {power} W.", { n: climbs.length, time: clock(Math.round(climbTime)), power: Math.round(climbPower) })}</p>
               ) : null}
             </Card>
-          ) : ride ? m.miss("Power", "1.2 1 420px", 220) : null}
+          ) : ride ? m.miss(t("Power"), "1.2 1 420px", 220) : null}
           {powerLines.length > 0 ? (
-            <Card aria-label="Power zones" className="ad-pad" style={{ flex: "1 1 360px", gap: 10 }}>
-              <h2 className="h2">Power zones</h2>
+            <Card aria-label={t("Power zones")} className="ad-pad" style={{ flex: "1 1 360px", gap: 10 }}>
+              <h2 className="h2">{t("Power zones")}</h2>
               <ZoneBar zones={powerLines} />
               <ZoneRows zones={powerLines} dot />
             </Card>
-          ) : ride ? m.miss("Power zones", "1 1 360px", 220) : null}
-          {climbs.length > 1 ? <ClimbsCard climbs={climbs} gainM={a.elevationGainM} /> : ride && !enough(streams?.elevation) ? m.miss("Climbs", "1 1 320px", 220) : null}
+          ) : ride ? m.miss(t("Power zones"), "1 1 360px", 220) : null}
+          {climbs.length > 1 ? <ClimbsCard climbs={climbs} gainM={a.elevationGainM} /> : ride && !enough(streams?.elevation) ? m.miss(t("Climbs"), "1 1 320px", 220) : null}
         </div>
       ) : null}
 
       {extras?.summary || findings.length > 0 || extras?.relativeEffort || m.origin === "synced" ? (
         <div className="ad-cols">
-          {extras?.summary ? <SummaryCard text={extras.summary} style={{ flex: "1.3 1 380px" }} /> : m.miss("Summary", "1.3 1 380px", 150)}
-          {findings.length > 0 ? <FindingsCard findings={findings} style={{ flex: "1 1 300px" }} /> : m.miss("Analysis", "1 1 300px", 150)}
-          {extras?.relativeEffort ? <RelativeEffortCard effort={extras.relativeEffort} link style={{ flex: "1 1 300px" }} /> : m.miss("Relative Effort", "1 1 300px", 150)}
+          {extras?.summary ? <SummaryCard text={extras.summary} style={{ flex: "1.3 1 380px" }} /> : m.miss(t("Summary"), "1.3 1 380px", 150)}
+          {findings.length > 0 ? <FindingsCard findings={findings} style={{ flex: "1 1 300px" }} /> : m.miss(t("Analysis"), "1 1 300px", 150)}
+          {extras?.relativeEffort ? <RelativeEffortCard effort={extras.relativeEffort} link style={{ flex: "1 1 300px" }} /> : m.miss(t("Relative Effort"), "1 1 300px", 150)}
         </div>
       ) : null}
 
-      {base.length === 0 && !lapRows && paceUnit(a.sport) ? m.miss("Splits", undefined, 200) : null}
+      {base.length === 0 && !lapRows && paceUnit(a.sport) ? m.miss(t("Splits"), undefined, 200) : null}
       <SplitsCard
         key={a.id} sport={a.sport} base={base} lengths={lengths} startLength={ride && lengths.includes(5) ? 5 : 1} laps={lapRows} hue={m.hue}
         total={{
@@ -572,38 +575,38 @@ function PaceLayout({ m }: { m: Model }) {
             <HrZones m={m} missing />
             {paceLines.length > 0 ? (
               <ZoneCard
-                title="Pace zones" aside={`Threshold ${clock(Math.round(thrPace as number))} /km`} zones={paceLines}
+                title={t("Pace zones")} aside={t("Threshold {pace} /km", { pace: clock(Math.round(thrPace as number)) })} zones={paceLines}
                 sentence={mostly(paceLines, EFFORT_LEVELS.map((l) => l.title), EFFORT_LEVELS.map((l) => l.meaning))}
               />
-            ) : run ? m.miss("Pace zones", undefined, 220) : null}
-            {sideRecords ? <RecordsCard title="Ride records" rows={records} /> : ride ? m.miss("Ride records", undefined, 150) : null}
+            ) : run ? m.miss(t("Pace zones"), undefined, 220) : null}
+            {sideRecords ? <RecordsCard title={t("Ride records")} rows={records} /> : ride ? m.miss(t("Ride records"), undefined, 150) : null}
           </div>
         </div>
       ) : (
         <div className="ad-cols" data-top>
-          {m.miss("Charts", "2 1 620px", 420)}
+          {m.miss(t("Charts"), "2 1 620px", 420)}
           <div className="ad-stack" style={{ flex: "1 1 360px" }}>
             <HrZones m={m} missing />
-            {run ? m.miss("Pace zones", undefined, 220) : null}
-            {ride ? m.miss("Ride records", undefined, 150) : null}
+            {run ? m.miss(t("Pace zones"), undefined, 220) : null}
+            {ride ? m.miss(t("Ride records"), undefined, 150) : null}
           </div>
         </div>
       )}
 
       {dynamics.length > 0 && streams ? (
-        <Card aria-label="Running dynamics" className="ad-pad" style={{ gap: 14 }}>
-          <h2 className="h2">Running dynamics</h2>
+        <Card aria-label={t("Running dynamics")} className="ad-pad" style={{ gap: 14 }}>
+          <h2 className="h2">{t("Running dynamics")}</h2>
           <ActivityChartStack rows={dynamics} n={streams.x.length} index={m.index} onIndex={m.setIndex} grid small valueText={positionText(m)} />
         </Card>
-      ) : run ? m.miss("Running dynamics", undefined, 150) : null}
+      ) : run ? m.miss(t("Running dynamics"), undefined, 150) : null}
 
       <Closing m={m}>
         {laps ? (
-          <Card aria-label="Laps from your watch" className="ad-table" style={{ flex: "1.3 1 360px" }}>
+          <Card aria-label={t("Laps from your watch")} className="ad-table" style={{ flex: "1.3 1 360px" }}>
             <div style={{ minWidth: 340 }}>
-              <div className="ad-head"><h2 className="h2">Laps</h2><span className="ad-sub">{laps.length} from your watch</span></div>
+              <div className="ad-head"><h2 className="h2">{t("Laps")}</h2><span className="ad-sub">{t("{n} from your watch", { n: laps.length })}</span></div>
               <div className="ad-th" style={{ gridTemplateColumns: "30px repeat(4, minmax(0, 1fr))" }}>
-                <span>#</span><span className="ad-r">Dist</span><span className="ad-r">Time</span><span className="ad-r">{ride ? "Speed" : "Pace"}</span><span className="ad-r">HR</span>
+                <span>#</span><span className="ad-r">{t("Dist")}</span><span className="ad-r">{t("Time")}</span><span className="ad-r">{ride ? t("Speed") : t("Pace")}</span><span className="ad-r">{t("HR")}</span>
               </div>
               {laps.map((l, k) => (
                 <div key={k} className="ad-tr" title={l.name} style={{ gridTemplateColumns: "30px repeat(4, minmax(0, 1fr))", minHeight: 40, whiteSpace: "nowrap" }}>
@@ -621,12 +624,12 @@ function PaceLayout({ m }: { m: Model }) {
 
       {(records.length > 0 && !sideRecords) || extras?.weather || extras?.journal || extras?.gear || m.origin === "synced" ? (
         <div className="ad-cols">
-          {ride ? null : records.length > 0 ? <RecordsCard title="Best efforts" rows={records} medal style={{ flex: "1.3 1 360px" }} /> : run ? m.miss("Best efforts", "1.3 1 360px", 200) : null}
-          {extras?.weather ? <WeatherCard weather={extras.weather} style={{ flex: "1 1 280px" }} /> : m.miss("Weather", "1 1 280px", 200)}
+          {ride ? null : records.length > 0 ? <RecordsCard title={t("Best efforts")} rows={records} medal style={{ flex: "1.3 1 360px" }} /> : run ? m.miss(t("Best efforts"), "1.3 1 360px", 200) : null}
+          {extras?.weather ? <WeatherCard weather={extras.weather} style={{ flex: "1 1 280px" }} /> : m.miss(t("Weather"), "1 1 280px", 200)}
           {extras?.journal || extras?.gear || m.origin === "synced" ? (
             <div className="ad-stack" style={{ flex: "1 1 300px" }}>
-              {extras?.journal ? <JournalCard journal={extras.journal} /> : m.miss("How it went", undefined, 110)}
-              {extras?.gear ? <GearCard gear={extras.gear} /> : m.miss("Gear", undefined, 80)}
+              {extras?.journal ? <JournalCard journal={extras.journal} /> : m.miss(t("How it went"), undefined, 110)}
+              {extras?.gear ? <GearCard gear={extras.gear} /> : m.miss(t("Gear"), undefined, 80)}
             </div>
           ) : null}
         </div>
@@ -638,13 +641,13 @@ function PaceLayout({ m }: { m: Model }) {
 function ClimbsCard({ climbs, gainM }: { climbs: readonly Climb[]; gainM: number | null }) {
   const total = climbs.reduce((s, c) => s + c.gainM, 0);
   return (
-    <Card aria-label="Climbs" clip style={{ flex: "1 1 320px" }}>
-      <div className="ad-head"><h2 className="h2">Climbs</h2><span className="ad-sub">{Math.round(total)}{gainM != null ? ` of ${thousands(gainM)}` : ""} m</span></div>
+    <Card aria-label={t("Climbs")} clip style={{ flex: "1 1 320px" }}>
+      <div className="ad-head"><h2 className="h2">{t("Climbs")}</h2><span className="ad-sub">{gainM != null ? t("{n} of {total} m", { n: Math.round(total), total: thousands(gainM) }) : `${Math.round(total)} m`}</span></div>
       {climbs.map((c, k) => (
         <div key={k} className="ad-item" data-n>
           <i>{k + 1}</i>
           <span>
-            <b>{((c.toM - c.fromM) / 1000).toFixed(2)} km at {(c.grade * 100).toFixed(1)}%</b>
+            <b>{t("{km} km at {grade}%", { km: ((c.toM - c.fromM) / 1000).toFixed(2), grade: (c.grade * 100).toFixed(1) })}</b>
             <span className="ad-sub">{[`+${Math.round(c.gainM)} m`, c.powerW != null ? `${Math.round(c.powerW)} W` : "", c.hr != null ? `${Math.round(c.hr)} bpm` : ""].filter(Boolean).join(" · ")}</span>
           </span>
           <span className="num">{clock(Math.round(c.seconds))}</span>
@@ -667,22 +670,22 @@ function SwimLayout({ m }: { m: Model }) {
   const hrRow = chartRows(m).filter((r) => r.key === "hr").map((r) => ({ ...r, draw: { kind: "line" as const, color: "var(--h-rose)", area: true } }));
   const others = chartRows(m).filter((r) => r.key !== "hr");
   const time: Stat[] = numbers
-    ? [{ label: "Moving time", value: exact(numbers.activeS) }, { label: "Elapsed time", value: exact(a.durationS), ...(numbers.restS > 0 ? { note: `${clock(Math.round(numbers.restS))} resting at the wall` } : {}) }]
+    ? [{ label: t("Moving time"), value: exact(numbers.activeS) }, { label: t("Elapsed time"), value: exact(a.durationS), ...(numbers.restS > 0 ? { note: t("{time} resting at the wall", { time: clock(Math.round(numbers.restS)) }) } : {}) }]
     : timeRows(m);
   const pool = a.sportName !== "Open water" && !detail.route;
 
   const heart = streams && hrRow.length > 0 ? (
-    <Card aria-label="Heart rate" className="ad-pad">
+    <Card aria-label={t("Heart rate")} className="ad-pad">
       <ActivityChartStack rows={hrRow} n={streams.x.length} index={m.index} onIndex={m.setIndex} valueText={positionText(m)} />
-      <div className="ad-axis">{axisTicks(a.sport, streams).map((t, k) => <span key={k}>{t}</span>)}</div>
+      <div className="ad-axis">{axisTicks(a.sport, streams).map((tick, k) => <span key={k}>{tick}</span>)}</div>
       {lines.length > 0 ? <><ZoneBar zones={lines} /><ZoneRows zones={lines} dot /></> : null}
     </Card>
-  ) : m.miss("Heart rate", undefined, 240);
+  ) : m.miss(t("Heart rate"), undefined, 240);
   const side = (
     <>
       {heart}
-      {extras?.records?.length ? <RecordsCard title="Swim records" rows={extras.records} /> : m.miss("Swim records", undefined, 150)}
-      {extras?.summary ? <SummaryCard text={extras.summary} /> : m.miss("Summary", undefined, 150)}
+      {extras?.records?.length ? <RecordsCard title={t("Swim records")} rows={extras.records} /> : m.miss(t("Swim records"), undefined, 150)}
+      {extras?.summary ? <SummaryCard text={extras.summary} /> : m.miss(t("Summary"), undefined, 150)}
     </>
   );
 
@@ -693,10 +696,10 @@ function SwimLayout({ m }: { m: Model }) {
       {!swim && pool ? (
         <>
           <div className="ad-cols">
-            {m.miss("Swim", "1.3 1 480px", 240)}
-            {m.miss("Sets", "1 1 380px", 240)}
+            {m.miss(t("Swim"), "1.3 1 480px", 240)}
+            {m.miss(t("Sets"), "1 1 380px", 240)}
           </div>
-          {m.miss("Length by length", undefined, 260)}
+          {m.miss(t("Length by length"), undefined, 260)}
         </>
       ) : null}
       {swim ? (
@@ -723,17 +726,17 @@ function SwimLayout({ m }: { m: Model }) {
           ) : null}
           <div className="ad-cols" data-top>
             {streams && others.length > 0 ? (
-              <Card aria-label="Charts" className="ad-charts">
-                <div className="ad-between"><h2 className="h2">Charts</h2><span className="ad-note">At <strong style={{ color: "var(--fg)" }}>{positionText(m)}</strong></span></div>
+              <Card aria-label={t("Charts")} className="ad-charts">
+                <div className="ad-between"><h2 className="h2">{t("Charts")}</h2><span className="ad-note">{tr("At {where}", { where: <strong style={{ color: "var(--fg)" }}>{positionText(m)}</strong> })}</span></div>
                 <ActivityChartStack rows={others} n={streams.x.length} index={m.index} onIndex={m.setIndex} valueText={positionText(m)} />
               </Card>
-            ) : pool ? m.miss("Lengths", "1.4 1 520px", 320) : null}
+            ) : pool ? m.miss(t("Lengths"), "1.4 1 520px", 320) : null}
             <div className="ad-stack" style={{ flex: "1 1 380px" }}>{side}</div>
           </div>
         </>
       )}
       <Closing m={m} time={time}>{null}</Closing>
-      {extras?.journal ? <JournalCard journal={extras.journal} /> : m.miss("How it went", undefined, 110)}
+      {extras?.journal ? <JournalCard journal={extras.journal} /> : m.miss(t("How it went"), undefined, 110)}
     </>
   );
 }
@@ -746,21 +749,21 @@ function StrengthLayout({ m }: { m: Model }) {
   const session = extras?.strength ?? null;
   const numbers = session ? sessionNumbers(session.exercises) : null;
   const hr = enough(streams?.hr) ? streams.hr : null;
-  const items: { label: string; value: ReactNode; text?: string }[] = [{ label: "Time", value: null, text: exact(a.durationS) }];
+  const items: { label: string; value: ReactNode; text?: string }[] = [{ label: t("Time"), value: null, text: exact(a.durationS) }];
   if (numbers) {
-    items.push({ label: "Sets", value: null, text: String(numbers.sets) });
-    if (numbers.volumeKg > 0) items.push({ label: "Volume", value: null, text: `${thousands(numbers.volumeKg)} kg` });
-    else items.push({ label: "Reps", value: null, text: thousands(numbers.reps) });
+    items.push({ label: t("Sets"), value: null, text: String(numbers.sets) });
+    if (numbers.volumeKg > 0) items.push({ label: t("Volume"), value: null, text: `${thousands(numbers.volumeKg)} kg` });
+    else items.push({ label: t("Reps"), value: null, text: thousands(numbers.reps) });
   }
-  if (a.avgHr != null) items.push({ label: "Avg heart rate", value: null, text: `${a.avgHr} bpm` });
-  if (!numbers && a.maxHr != null) items.push({ label: "Max heart rate", value: null, text: `${a.maxHr} bpm` });
-  if (!numbers && a.calories != null) items.push({ label: "Calories", value: null, text: `${thousands(a.calories)} kcal` });
-  const figure = session && (session.figure || session.muscles?.length) ? <MusclesCard session={session} /> : m.miss("Muscles worked", "1 1 380px", 420);
+  if (a.avgHr != null) items.push({ label: t("Avg heart rate"), value: null, text: `${a.avgHr} bpm` });
+  if (!numbers && a.maxHr != null) items.push({ label: t("Max heart rate"), value: null, text: `${a.maxHr} bpm` });
+  if (!numbers && a.calories != null) items.push({ label: t("Calories"), value: null, text: `${thousands(a.calories)} kcal` });
+  const figure = session && (session.figure || session.muscles?.length) ? <MusclesCard session={session} /> : m.miss(t("Muscles worked"), "1 1 380px", 420);
   const sets = session ? session.exercises.reduce((s, ex) => s + ex.sets.filter((x) => !x.warmUp).length, 0) : 0;
   const timeline = track && hr && scales?.hr ? (
     <TimelineCard
       session={session} track={track} hr={hr} range={scales.hr} durationS={a.durationS}
-      label={labels?.hr ?? (sets ? `Heart rate across the session with the ${sets} sets marked` : "Heart rate across the session")}
+      label={labels?.hr ?? (sets ? t("Heart rate across the session with the {n} sets marked", { n: sets }) : t("Heart rate across the session"))}
     />
   ) : null;
 
@@ -769,26 +772,26 @@ function StrengthLayout({ m }: { m: Model }) {
       <NotRead m={m} />
       {!session ? (
         <div className="notice" role="status">
-          {m.origin === "sample" ? "No sets were logged for this workout." : "No sets were logged for this workout. Sets, volume and muscles show when it was logged in C-LINK's gym log on your phone."}
+          {m.origin === "sample" ? t("No sets were logged for this workout.") : t("No sets were logged for this workout. Sets, volume and muscles show when it was logged in C-LINK's gym log on your phone.")}
         </div>
       ) : null}
       <div className="ad-cols">
         {figure}
         <div className="ad-stack" style={{ flex: "2 1 560px" }}>
-          <Card aria-label="Headline" className="ad-headline" data-narrow>
+          <Card aria-label={t("Headline")} className="ad-headline" data-narrow>
             {items.map((s) => <div key={s.label}><span>{s.label}</span><CountUp className="num" text={s.text as string} /></div>)}
           </Card>
-          {session ? <SessionCard session={session} load={a.load} /> : m.miss("Session", undefined, 190)}
-          {timeline ?? m.miss("Timeline", undefined, 220)}
-          {session && sets > 0 ? <VolumeCard session={session} /> : m.miss("Volume by set", undefined, 190)}
+          {session ? <SessionCard session={session} load={a.load} /> : m.miss(t("Session"), undefined, 190)}
+          {timeline ?? m.miss(t("Timeline"), undefined, 220)}
+          {session && sets > 0 ? <VolumeCard session={session} /> : m.miss(t("Volume by set"), undefined, 190)}
         </div>
       </div>
-      {session ? <ExercisesSection session={session} time={track?.time ?? null} hr={hr} /> : m.miss("Exercises", undefined, 200)}
+      {session ? <ExercisesSection session={session} time={track?.time ?? null} hr={hr} /> : m.miss(t("Exercises"), undefined, 200)}
       <div className="ad-cols">
-        {session && hasRests(session) ? <RestCard session={session} time={track?.time ?? null} hr={hr} style={{ flex: "1 1 220px" }} /> : m.miss("Rest & recovery", "1 1 220px", 150)}
-        {extras?.records?.length ? <RecordsCard title="Lift records" rows={extras.records} link={{ href: "/strength", label: "Strength progress" }} style={{ flex: "1.3 1 300px" }} /> : m.miss("Lift records", "1.3 1 300px", 150)}
-        {extras?.relativeEffort ? <RelativeEffortCard effort={extras.relativeEffort} style={{ flex: "1 1 240px" }} /> : m.miss("Relative Effort", "1 1 240px", 150)}
-        {detail.week ? <WeekCard week={detail.week} style={{ flex: "1 1 200px" }} /> : m.miss("In the week", "1 1 200px", 150)}
+        {session && hasRests(session) ? <RestCard session={session} time={track?.time ?? null} hr={hr} style={{ flex: "1 1 220px" }} /> : m.miss(t("Rest & recovery"), "1 1 220px", 150)}
+        {extras?.records?.length ? <RecordsCard title={t("Lift records")} rows={extras.records} link={{ href: "/strength", label: t("Strength progress") }} style={{ flex: "1.3 1 300px" }} /> : m.miss(t("Lift records"), "1.3 1 300px", 150)}
+        {extras?.relativeEffort ? <RelativeEffortCard effort={extras.relativeEffort} style={{ flex: "1 1 240px" }} /> : m.miss(t("Relative Effort"), "1 1 240px", 150)}
+        {detail.week ? <WeekCard week={detail.week} style={{ flex: "1 1 200px" }} /> : m.miss(t("In the week"), "1 1 200px", 150)}
       </div>
     </>
   );

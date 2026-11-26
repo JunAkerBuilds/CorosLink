@@ -4,6 +4,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
 import { Button, Card, Field } from "@/components/ui";
 import { useStore } from "@/data/local/store";
+import { locale, t } from "@/lib/i18n";
 import {
   cancelSend, deleteFromLibrary, dismissSend, ejectWatch, fixExtension, importFile, MediaProblem, readMedia, refreshMedia,
   MEDIA_TABS, removeFromWatch, revealTrack, sendToWatch, type MediaState,
@@ -22,7 +23,7 @@ const BooksPanel = lazy(() => import("./MediaBooks"));
 
 const ROW = 44;
 const VIEW_ROWS = 12;
-const said = (e: unknown) => (e instanceof MediaProblem || e instanceof Error ? e.message : "That didn't work.");
+const said = (e: unknown) => (e instanceof MediaProblem || e instanceof Error ? e.message : t("That didn't work."));
 
 export default function Media() {
   const [state, setState] = useState<MediaState | null>(null);
@@ -64,12 +65,12 @@ export default function Media() {
       try {
         ids.push((await importFile(file)).track.id);
       } catch (e) {
-        setProblem(`${file.name}: ${said(e)}`);
+        setProblem(t("{name}: {problem}", { name: file.name, problem: said(e) }));
       }
       setAdding({ done: i + 1, total: mp3s.length });
     }
     setAdding(null);
-    if (skipped) setNote(`Added ${ids.length}. ${skipped} ${skipped === 1 ? "wasn't an MP3" : "weren't MP3s"}, so ${skipped === 1 ? "it was" : "they were"} left out.`);
+    if (skipped) setNote(skipped === 1 ? t("Added {added}. 1 wasn't an MP3, so it was left out.", { added: ids.length }) : t("Added {added}. {skipped} weren't MP3s, so they were left out.", { added: ids.length, skipped }));
     if (toWatch && ids.length) act(() => sendToWatch(ids));
     else void readMedia().then(setState);
   };
@@ -124,19 +125,19 @@ export default function Media() {
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; id: string | null } | null>(null);
 
   const watch = state?.watch;
-  const model = watch?.model ?? "your watch";
+  const model = watch?.model ?? t("your watch");
 
   return (
     <main className="page md-page">
       <div className="page-head md-head">
-        <h1>Media</h1>
-        <nav className="seg" aria-label="Media sections" onContextMenu={(e) => {
+        <h1>{t("Media")}</h1>
+        <nav className="seg" aria-label={t("Media sections")} onContextMenu={(e) => {
           e.preventDefault();
           const id = (e.target as HTMLElement).closest<HTMLElement>("[data-tab]")?.dataset.tab ?? null;
           setTabMenu({ x: e.clientX, y: e.clientY, id: id && canHideTab(id) && !hiddenTabs.includes(id) ? id : null });
         }}>
-          {visibleTabs(MEDIA_TABS, hiddenTabs, tab).map((t) => (
-            <button key={t.id} type="button" data-tab={t.id} aria-pressed={tab === t.id} onClick={() => tabStore.set(t.id)}>{t.label}</button>
+          {visibleTabs(MEDIA_TABS, hiddenTabs, tab).map((s) => (
+            <button key={s.id} type="button" data-tab={s.id} aria-pressed={tab === s.id} onClick={() => tabStore.set(s.id)}>{t(s.label)}</button>
           ))}
         </nav>
         <div className="actions">
@@ -144,9 +145,9 @@ export default function Media() {
             <span className="md-watch" data-watch-drop="chip" data-over={overZone === "chip" || undefined}>
               <span className="md-watch-icon" data-on><WatchIcon /></span>
               <span className="md-watch-name">{watch.model}<small>USB</small></span>
-              <button type="button" className="md-eject" aria-label={`Eject ${watch.model}`} title="Eject" disabled={sending} onClick={() => act(ejectWatch)}><EjectIcon /></button>
+              <button type="button" className="md-eject" aria-label={t("Eject {model}", { model: watch.model ?? "" })} title={t("Eject")} disabled={sending} onClick={() => act(ejectWatch)}><EjectIcon /></button>
             </span>
-          ) : <span className="md-watch" data-off><span className="md-watch-icon"><WatchIcon /></span><span className="md-watch-name">No watch</span></span>}
+          ) : <span className="md-watch" data-off><span className="md-watch-icon"><WatchIcon /></span><span className="md-watch-name">{t("No watch")}</span></span>}
         </div>
       </div>
 
@@ -164,15 +165,15 @@ export default function Media() {
         <Library state={state} model={model} adding={adding} act={act} onAdd={() => files.current?.click()} onAddFolder={() => folder.current?.click()} overZone={overZone} />
       )}
 
-      {dragging ? <div className="md-drop" aria-hidden="true"><span>{overWatch ? `Drop to send to ${model}` : tab === "books" ? "Drop a book's files to convert them" : state?.watch.connected ? "Drop to add · on the watch to send it" : "Drop MP3s or folders to add them"}</span></div> : null}
+      {dragging ? <div className="md-drop" aria-hidden="true"><span>{overWatch ? t("Drop to send to {model}", { model }) : tab === "books" ? t("Drop a book's files to convert them") : state?.watch.connected ? t("Drop to add · on the watch to send it") : t("Drop MP3s or folders to add them")}</span></div> : null}
       {tabMenu ? (
-        <Menu x={tabMenu.x} y={tabMenu.y} onClose={() => setTabMenu(null)} label="Media sections" items={[
-          ...(tabMenu.id ? [{ label: `Hide ${MEDIA_TABS.find((t) => t.id === tabMenu.id)?.label}`, run: () => {
+        <Menu x={tabMenu.x} y={tabMenu.y} onClose={() => setTabMenu(null)} label={t("Media sections")} items={[
+          ...(tabMenu.id ? [{ label: t("Hide {name}", { name: t(MEDIA_TABS.find((s) => s.id === tabMenu.id)?.label ?? "") }), run: () => {
             hiddenTabsStore.set((h) => [...h, tabMenu.id!]);
             if (tab === tabMenu.id) tabStore.set("library");
           } }] : []),
-          ...MEDIA_TABS.filter((t) => hiddenTabs.includes(t.id)).map((t) => ({ label: `Show ${t.label}`, run: () => hiddenTabsStore.set((h) => h.filter((x) => x !== t.id)) })),
-          { label: "Customize Media…", run: () => navigate("/settings/sidebar") },
+          ...MEDIA_TABS.filter((s) => hiddenTabs.includes(s.id)).map((s) => ({ label: t("Show {name}", { name: t(s.label) }), run: () => hiddenTabsStore.set((h) => h.filter((x) => x !== s.id)) })),
+          { label: t("Customize Media…"), run: () => navigate("/settings/sidebar") },
         ]} />
       ) : null}
     </main>
@@ -211,15 +212,15 @@ function Library({ state, model, adding, act, onAdd, onAddFolder, overZone }: {
   const onComputer = chosen.filter((r) => r.id);
   const clear = () => { setPicked(new Set()); setAnchor(null); };
   const busy = !!job?.running;
-  const tracks = (n: number) => `${n.toLocaleString("en-US")} ${n === 1 ? "track" : "tracks"}`;
+  const tracks = (n: number) => (n === 1 ? t("1 track") : t("{n} tracks", { n: n.toLocaleString(locale("en-US")) }));
 
   const send = (list: Row[]) => { if (list.length && watch.connected) { act(() => sendToWatch(list.map((r) => r.id!))); } };
   const remove = (list: Row[]) => {
-    if (!list.length || !confirm(`Remove ${list.length} from ${model}?`)) return;
+    if (!list.length || !confirm(t("Remove {n} from {model}?", { n: list.length, model }))) return;
     act(() => removeFromWatch(list.map((r) => r.watchPath!))); clear();
   };
   const del = (list: Row[]) => {
-    if (!list.length || !confirm(`Delete ${list.length} from this computer? Copies on the watch stay.`)) return;
+    if (!list.length || !confirm(t("Delete {n} from this computer? Copies on the watch stay.", { n: list.length }))) return;
     act(() => deleteFromLibrary(list.map((r) => r.id!))); clear();
   };
 
@@ -275,7 +276,7 @@ function Library({ state, model, adding, act, onAdd, onAddFolder, overZone }: {
     </button>
   );
   const all = (s: Side) => (
-    <input type="checkbox" aria-label="Select all" checked={s === side && lists[s].length > 0 && lists[s].every((r) => picked.has(r.key))}
+    <input type="checkbox" aria-label={t("Select all")} checked={s === side && lists[s].length > 0 && lists[s].every((r) => picked.has(r.key))}
       onChange={(e) => { setSide(s); setPicked(e.target.checked ? new Set(lists[s].map((r) => r.key)) : new Set()); setAnchor(null); }} />
   );
   const list = (s: Side, empty: string) => (
@@ -292,73 +293,73 @@ function Library({ state, model, adding, act, onAdd, onAddFolder, overZone }: {
     <div className="md-filters">
       {chosen.length ? (
         <div className="md-bulk">
-          <strong>{chosen.length} selected</strong><span>{megabytes(chosen.reduce((a, r) => a + r.bytes, 0))}</span>
+          <strong>{t("{n} selected", { n: chosen.length })}</strong><span>{megabytes(chosen.reduce((a, r) => a + r.bytes, 0))}</span>
           <span className="actions">
-            {toSend.length && watch.connected ? <Button variant="ink" disabled={busy} onClick={() => { send(toSend); clear(); }}>Send {toSend.length} to watch</Button> : null}
-            {onWatch.length ? <Button disabled={busy} onClick={() => remove(onWatch)}>Remove {onWatch.length} from watch</Button> : null}
-            {onComputer.length ? <Button onClick={() => del(onComputer)}>Delete from computer</Button> : null}
-            <Button variant="plain" onClick={clear}>Clear</Button>
+            {toSend.length && watch.connected ? <Button variant="ink" disabled={busy} onClick={() => { send(toSend); clear(); }}>{t("Send {n} to watch", { n: toSend.length })}</Button> : null}
+            {onWatch.length ? <Button disabled={busy} onClick={() => remove(onWatch)}>{t("Remove {n} from watch", { n: onWatch.length })}</Button> : null}
+            {onComputer.length ? <Button onClick={() => del(onComputer)}>{t("Delete from computer")}</Button> : null}
+            <Button variant="plain" onClick={clear}>{t("Clear")}</Button>
           </span>
         </div>
-      ) : <p className="md-foot muted">MP3 only. The watch plays files in the order they were copied.</p>}
-      <Field ref={search} type="search" className="md-search" aria-label="Search title, artist or album" placeholder="Title, artist or album" value={query} onChange={(e) => setQuery(e.target.value)} />
+      ) : <p className="md-foot muted">{t("MP3 only. The watch plays files in the order they were copied.")}</p>}
+      <Field ref={search} type="search" className="md-search" aria-label={t("Search title, artist or album")} placeholder={t("Title, artist or album")} value={query} onChange={(e) => setQuery(e.target.value)} />
     </div>
 
     <div className="md-split">
-      <Card clip className="md-pane" aria-label="On this computer">
+      <Card clip className="md-pane" aria-label={t("On this computer")}>
         <div className="md-pane-head">
           <span className="md-pane-icon" aria-hidden="true"><ComputerIcon /></span>
           <div className="md-pane-title">
-            <h2>This computer</h2>
-            <span>{tracks(library.length)} · {megabytes(libraryBytes)}{waiting.length ? ` · ${waiting.length} not on the watch` : ""}</span>
+            <h2>{t("This computer")}</h2>
+            <span>{tracks(library.length)} · {megabytes(libraryBytes)}{waiting.length ? ` · ${t("{n} not on the watch", { n: waiting.length })}` : ""}</span>
           </div>
           <div className="actions">
-            <Button onClick={onAddFolder} disabled={!!adding}>Add a folder</Button>
-            <Button variant="primary" onClick={onAdd} disabled={!!adding}><PlusIcon />Add music</Button>
+            <Button onClick={onAddFolder} disabled={!!adding}>{t("Add a folder")}</Button>
+            <Button variant="primary" onClick={onAdd} disabled={!!adding}><PlusIcon />{t("Add music")}</Button>
           </div>
         </div>
-        <div className="md-table" tabIndex={0} role="listbox" aria-multiselectable="true" aria-label="Tracks on this computer" onKeyDown={onListKey("computer")}>
+        <div className="md-table" tabIndex={0} role="listbox" aria-multiselectable="true" aria-label={t("Tracks on this computer")} onKeyDown={onListKey("computer")}>
           <div className="md-tr md-thead" data-side="computer">
-            {all("computer")}{head("title", "Title")}{head("artist", "Artist")}{head("secs", "Length", true)}{head("bytes", "Size", true)}<span className="md-th">On watch</span>
+            {all("computer")}{head("title", t("Title"))}{head("artist", t("Artist"))}{head("secs", t("Length"), true)}{head("bytes", t("Size"), true)}<span className="md-th">{t("On watch")}</span>
           </div>
-          {list("computer", library.length ? "No tracks match" : "Drop MP3s or a folder here")}
+          {list("computer", library.length ? t("No tracks match") : t("Drop MP3s or a folder here"))}
         </div>
       </Card>
 
-      <Card clip className="md-pane" aria-label={watch.connected ? `On ${model}` : "On your watch"} data-watch-drop={watch.connected ? "storage" : undefined} data-over={(watch.connected && overZone === "storage") || undefined}>
+      <Card clip className="md-pane" aria-label={watch.connected ? t("On {model}", { model }) : t("On your watch")} data-watch-drop={watch.connected ? "storage" : undefined} data-over={(watch.connected && overZone === "storage") || undefined}>
         <div className="md-pane-head">
           <span className="md-pane-icon" data-kind="watch" data-on={watch.connected || undefined} aria-hidden="true"><WatchIcon /></span>
           <div className="md-pane-title">
-            <h2>{watch.connected ? model : "Your watch"}</h2>
-            <span>{watch.connected ? `${tracks(watch.tracks.length)} · ${megabytes(watch.musicBytes ?? 0)} · plays top to bottom` : "Not plugged in"}</span>
+            <h2>{watch.connected ? model : t("Your watch")}</h2>
+            <span>{watch.connected ? `${tracks(watch.tracks.length)} · ${megabytes(watch.musicBytes ?? 0)} · ${t("plays top to bottom")}` : t("Not plugged in")}</span>
           </div>
-          {watch.connected && waiting.length ? <div className="actions"><Button variant="ink" disabled={busy} onClick={() => act(() => sendToWatch(waiting.map((t) => t.id)))}>Send {waiting.length} here</Button></div> : null}
+          {watch.connected && waiting.length ? <div className="actions"><Button variant="ink" disabled={busy} onClick={() => act(() => sendToWatch(waiting.map((w) => w.id)))}>{t("Send {n} here", { n: waiting.length })}</Button></div> : null}
         </div>
         {watch.connected ? (<>
           <WatchStore state={state} />
-          <div className="md-table" tabIndex={0} role="listbox" aria-multiselectable="true" aria-label={`Tracks on ${model}`} onKeyDown={onListKey("watch")}>
+          <div className="md-table" tabIndex={0} role="listbox" aria-multiselectable="true" aria-label={t("Tracks on {model}", { model })} onKeyDown={onListKey("watch")}>
             <div className="md-tr md-thead" data-side="watch">
-              {all("watch")}<span className="md-th">#</span><span className="md-th">Title</span><span className="md-th">Artist</span><span className="md-th" data-end>Length</span><span className="md-th" data-end>Size</span><span className="md-th">On computer</span>
+              {all("watch")}<span className="md-th">#</span><span className="md-th">{t("Title")}</span><span className="md-th">{t("Artist")}</span><span className="md-th" data-end>{t("Length")}</span><span className="md-th" data-end>{t("Size")}</span><span className="md-th">{t("On computer")}</span>
             </div>
-            {list("watch", watch.tracks.length ? "No tracks match" : "Nothing on the watch yet. Drag tracks here from the left.")}
+            {list("watch", watch.tracks.length ? t("No tracks match") : t("Nothing on the watch yet. Drag tracks here from the left."))}
           </div>
         </>) : (
           <div className="md-pane-body md-unplugged">
             <PlugInArt held={!!watch.waiting} />
-            <strong>{watch.waiting ? "Connected, but not as a drive" : "Plug in your watch to see what's on it"}</strong>
-            {waiting.length ? <span className="muted">{tracks(waiting.length)} will go on it, {megabytes(waitingBytes)}</span> : null}
-            <Button onClick={() => act(refreshMedia)}>Check again</Button>
+            <strong>{watch.waiting ? t("Connected, but not as a drive") : t("Plug in your watch to see what's on it")}</strong>
+            {waiting.length ? <span className="muted">{t("{tracks} will go on it, {size}", { tracks: tracks(waiting.length), size: megabytes(waitingBytes) })}</span> : null}
+            <Button onClick={() => act(refreshMedia)}>{t("Check again")}</Button>
           </div>
         )}
       </Card>
     </div>
     {menu && chosen.length ? (
-      <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)} label="Track actions" items={[
-        ...(toSend.length && watch.connected ? [{ label: `Send ${toSend.length === 1 ? "" : `${toSend.length} `}to watch`, run: () => send(toSend), disabled: busy }] : []),
-        ...(one?.capital ? [{ label: "Rename to .mp3", run: () => act(() => fixExtension(one.watchPath!)), disabled: busy }] : []),
-        ...(one?.id ? [{ label: "Show in Finder", run: () => void revealTrack(one.id!) }] : []),
-        ...(onWatch.length ? [{ label: `Remove ${onWatch.length === 1 ? "" : `${onWatch.length} `}from watch`, run: () => remove(onWatch), disabled: busy }] : []),
-        ...(onComputer.length ? [{ label: `Delete ${onComputer.length === 1 ? "" : `${onComputer.length} `}from computer`, run: () => del(onComputer), danger: true }] : []),
+      <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)} label={t("Track actions")} items={[
+        ...(toSend.length && watch.connected ? [{ label: toSend.length === 1 ? t("Send to watch") : t("Send {n} to watch", { n: toSend.length }), run: () => send(toSend), disabled: busy }] : []),
+        ...(one?.capital ? [{ label: t("Rename to .mp3"), run: () => act(() => fixExtension(one.watchPath!)), disabled: busy }] : []),
+        ...(one?.id ? [{ label: t("Show in Finder"), run: () => void revealTrack(one.id!) }] : []),
+        ...(onWatch.length ? [{ label: onWatch.length === 1 ? t("Remove from watch") : t("Remove {n} from watch", { n: onWatch.length }), run: () => remove(onWatch), disabled: busy }] : []),
+        ...(onComputer.length ? [{ label: onComputer.length === 1 ? t("Delete from computer") : t("Delete {n} from computer", { n: onComputer.length }), run: () => del(onComputer), danger: true }] : []),
       ]} />
     ) : null}
   </>);
@@ -402,7 +403,7 @@ function Rows({ side, rows, picked, focus, onClick, onRightClick, act, busy }: {
             onClick={(e) => { if (!(e.target as HTMLElement).closest("button, input")) onClick(e, r.key); }}
             onContextMenu={(e) => onRightClick(e, r.key)}
             style={{ position: "absolute", top: (first + i) * ROW, left: 0, right: 0, height: ROW }}>
-            <input type="checkbox" tabIndex={-1} aria-label={`Select ${r.title}`} checked={picked.has(r.key)} onChange={() => {}}
+            <input type="checkbox" tabIndex={-1} aria-label={t("Select {title}", { title: r.title })} checked={picked.has(r.key)} onChange={() => {}}
               onClick={(e) => onClick({ ...e, metaKey: !e.shiftKey, ctrlKey: false } as ReactMouseEvent, r.key)} />
             {side === "watch" ? <span className="md-num">{r.order ?? "—"}</span> : null}
             <span className="md-title" title={r.title}>{r.title}</span>
@@ -411,9 +412,9 @@ function Rows({ side, rows, picked, focus, onClick, onRightClick, act, busy }: {
             <span className="md-end muted">{megabytes(r.bytes)}</span>
             <span className="md-state">
               {side === "watch"
-                ? (r.capital ? <button type="button" className="md-link" disabled={busy} onClick={() => act(() => fixExtension(r.watchPath!))}>Rename to .mp3</button>
-                  : r.id ? <><i data-on="true" />On computer</> : <><i />Only on watch</>)
-                : r.watchPath ? <><i data-on="true" />On watch</> : <><i />Not sent yet</>}
+                ? (r.capital ? <button type="button" className="md-link" disabled={busy} onClick={() => act(() => fixExtension(r.watchPath!))}>{t("Rename to .mp3")}</button>
+                  : r.id ? <><i data-on="true" />{t("On computer")}</> : <><i />{t("Only on watch")}</>)
+                : r.watchPath ? <><i data-on="true" />{t("On watch")}</> : <><i />{t("Not sent yet")}</>}
             </span>
           </div>
         ))}
@@ -463,43 +464,43 @@ function Guide({ state, model, waiting, waitingBytes, adding, act, onAdd, sendAl
   const step = done.findIndex((d) => !d) + 1;
   let title: string, detail: ReactNode = null, actions: ReactNode = null, progress: number | null = null;
   if (adding) {
-    title = `Adding ${adding.done + 1 > adding.total ? adding.total : adding.done + 1} of ${adding.total}`;
+    title = t("Adding {n} of {total}", { n: adding.done + 1 > adding.total ? adding.total : adding.done + 1, total: adding.total });
     progress = adding.done / adding.total;
   } else if (job?.running) {
-    title = `Sending to ${model}`;
-    detail = `${job.done + 1} of ${job.total}${job.current ? ` · ${job.current}` : ""}. Keep the watch plugged in.`;
+    title = t("Sending to {model}", { model });
+    detail = job.current ? t("{n} of {total} · {track}. Keep the watch plugged in.", { n: job.done + 1, total: job.total, track: job.current }) : t("{n} of {total}. Keep the watch plugged in.", { n: job.done + 1, total: job.total });
     progress = job.totalBytes ? job.sentBytes / job.totalBytes : 0;
-    actions = <Button disabled={job.cancelled} onClick={() => act(cancelSend)}>{job.cancelled ? "Stopping…" : "Stop after this track"}</Button>;
+    actions = <Button disabled={job.cancelled} onClick={() => act(cancelSend)}>{job.cancelled ? t("Stopping…") : t("Stop after this track")}</Button>;
   } else if (job) {
-    title = job.error ? "Sending stopped" : `Sent ${job.done} to ${model}`;
-    detail = job.error ?? (job.cancelled ? `${job.total - job.done} not sent.` : null);
-    actions = <>{watch.connected && !job.error ? <Button onClick={() => act(ejectWatch)}>Eject</Button> : null}<Button variant="plain" onClick={() => act(dismissSend)}>Done</Button></>;
+    title = job.error ? t("Sending stopped") : t("Sent {n} to {model}", { n: job.done, model });
+    detail = job.error ?? (job.cancelled ? t("{n} not sent.", { n: job.total - job.done }) : null);
+    actions = <>{watch.connected && !job.error ? <Button onClick={() => act(ejectWatch)}>{t("Eject")}</Button> : null}<Button variant="plain" onClick={() => act(dismissSend)}>{t("Done")}</Button></>;
   } else if (ejected && !watch.connected) {
-    title = "Safe to unplug";
-    detail = "The watch shows a loading icon for about a minute while it reads the new files.";
+    title = t("Safe to unplug");
+    detail = t("The watch shows a loading icon for about a minute while it reads the new files.");
   } else if (!watch.connected && watch.waiting) {
-    title = "Connected, but not as a drive";
-    detail = "Allow the USB connection on the watch, or try another cable or port.";
-    actions = <Button onClick={() => act(refreshMedia)}>Check again</Button>;
+    title = t("Connected, but not as a drive");
+    detail = t("Allow the USB connection on the watch, or try another cable or port.");
+    actions = <Button onClick={() => act(refreshMedia)}>{t("Check again")}</Button>;
   } else if (!watch.connected) {
-    title = "Plug in your watch";
-    detail = waiting ? `${waiting} ${waiting === 1 ? "track is" : "tracks are"} waiting, ${megabytes(waitingBytes)}.` : null;
-    actions = <Button onClick={() => act(refreshMedia)}>Check again</Button>;
+    title = t("Plug in your watch");
+    detail = !waiting ? null : waiting === 1 ? t("1 track is waiting, {size}.", { size: megabytes(waitingBytes) }) : t("{n} tracks are waiting, {size}.", { n: waiting, size: megabytes(waitingBytes) });
+    actions = <Button onClick={() => act(refreshMedia)}>{t("Check again")}</Button>;
   } else if (!library.length) {
-    title = "Add MP3s to send them";
-    actions = <Button variant="primary" onClick={onAdd}>Add music</Button>;
+    title = t("Add MP3s to send them");
+    actions = <Button variant="primary" onClick={onAdd}>{t("Add music")}</Button>;
   } else if (waiting) {
-    title = `${waiting} ${waiting === 1 ? "track is" : "tracks are"} ready for your watch`;
+    title = waiting === 1 ? t("1 track is ready for your watch") : t("{n} tracks are ready for your watch", { n: waiting });
     detail = megabytes(waitingBytes);
-    actions = <Button variant="ink" onClick={sendAll}>Send {waiting} to watch</Button>;
+    actions = <Button variant="ink" onClick={sendAll}>{t("Send {n} to watch", { n: waiting })}</Button>;
   } else {
-    title = `Everything is on ${model}`;
+    title = t("Everything is on {model}", { model });
   }
   return (
-    <section className="md-guide" aria-label="Put it on your watch" data-watch-drop={watch.connected ? "guide" : undefined} data-over={(watch.connected && overWatch) || undefined}>
+    <section className="md-guide" aria-label={t("Put it on your watch")} data-watch-drop={watch.connected ? "guide" : undefined} data-over={(watch.connected && overWatch) || undefined}>
       <div className="md-steps">
-        <span className="md-steps-title">Put it on your watch</span>
-        {["Choose", "Connect", "Send"].map((s, i) => (
+        <span className="md-steps-title">{t("Put it on your watch")}</span>
+        {[t("Choose"), t("Connect"), t("Send")].map((s, i) => (
           <span key={s} className="md-step" data-done={done[i] || undefined} aria-current={i + 1 === step ? "step" : undefined}>
             <b>{done[i] ? "✓" : i + 1}</b>{s}
           </span>
@@ -523,14 +524,14 @@ function WatchStore({ state }: { state: MediaState }) {
   const music = watch.musicBytes ?? 0, maps = watch.mapBytes ?? 0, other = Math.max(0, used - music - maps);
   const known = [...watch.tracks.map((t) => t.bytes), ...library.map((t) => t.bytes)];
   const average = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 0;
-  const parts = [{ label: "Maps", bytes: maps, kind: "maps" }, { label: "Music", bytes: music, kind: "music" }, { label: "Other", bytes: other, kind: "other" }];
+  const parts = [{ label: t("Maps"), bytes: maps, kind: "maps" }, { label: t("Music"), bytes: music, kind: "music" }, { label: t("Other"), bytes: other, kind: "other" }];
   return (
-    <div className="md-pane-store" aria-label="Watch storage">
+    <div className="md-pane-store" aria-label={t("Watch storage")}>
       <div className="md-pane-free">
-        <strong>{gigabytes(free)} GB free</strong><span className="muted">of {gigabytes(total)} GB</span>
-        {average ? <span className="muted md-pane-room">Room for about {Math.floor(free / average).toLocaleString("en-US")} tracks</span> : null}
+        <strong>{t("{size} GB free", { size: gigabytes(free) })}</strong><span className="muted">{t("of {size} GB", { size: gigabytes(total) })}</span>
+        {average ? <span className="muted md-pane-room">{t("Room for about {n} tracks", { n: Math.floor(free / average).toLocaleString(locale("en-US")) })}</span> : null}
       </div>
-      <div className="md-meter" role="img" aria-label={`Storage: ${parts.map((p) => `${p.label} ${gigabytes(p.bytes)} GB`).join(", ")}`}>
+      <div className="md-meter" role="img" aria-label={t("Storage: {parts}", { parts: parts.map((p) => `${p.label} ${gigabytes(p.bytes)} GB`).join(", ") })}>
         {parts.map((p) => <span key={p.kind} data-kind={p.kind} style={{ flexBasis: total ? `${(p.bytes / total) * 100}%` : 0 }} />)}
       </div>
       <div className="md-pane-legend">

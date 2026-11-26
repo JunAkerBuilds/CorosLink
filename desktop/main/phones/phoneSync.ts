@@ -4,6 +4,7 @@ import { hostname } from "node:os";
 import QRCode from "qrcode";
 import { lanAddresses, PhoneServer, type SyncStore } from "./server";
 import { PhoneSessions } from "./sessions";
+import { t } from "@/lib/i18n";
 
 /** Where phones find this computer unless that port is taken. */
 const PREFERRED_PORT = 47410;
@@ -48,7 +49,7 @@ export class PhoneSync {
     }
     if (url.pathname === "/api/desktop/phones/pair" && request.method === "POST") {
       await this.start();
-      if (lanAddresses().length === 0) return Response.json({ error: { code: "no_network", message: "This computer isn't on a local network. Connect to Wi-Fi, then try again." } }, { status: 409 });
+      if (lanAddresses().length === 0) return Response.json({ error: { code: "no_network", message: t("This computer isn't on a local network. Connect to Wi-Fi, then try again.") } }, { status: 409 });
       const { secret, expiresAt } = this.sessions.startPairing();
       const link = this.server.pairingLink(secret);
       const qr = await QRCode.toString(link, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
@@ -58,6 +59,6 @@ export class PhoneSync {
       const id = url.searchParams.get("id") ?? "";
       return Response.json({ removed: this.sessions.remove(id) });
     }
-    return Response.json({ error: { code: "not_found", message: "Not found." } }, { status: 404 });
+    return Response.json({ error: { code: "not_found", message: t("Not found.") } }, { status: 404 });
   }
 }

@@ -5,6 +5,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { t } from "@/lib/i18n";
 
 export type Tool = "yt-dlp" | "ffmpeg";
 
@@ -61,14 +62,14 @@ export function runJson(command: string, args: string[], ms: number, signal?: Ab
     let err = "";
     child.stdout.on("data", (b: Buffer) => out.push(b));
     child.stderr.on("data", (b: Buffer) => { err = (err + b.toString("utf8")).slice(-4000); });
-    child.on("error", (e) => reject(both.aborted && !signal?.aborted ? new Error("YouTube took too long to answer.") : e));
+    child.on("error", (e) => reject(both.aborted && !signal?.aborted ? new Error(t("YouTube took too long to answer.")) : e));
     child.on("close", (code) => {
       const text = Buffer.concat(out).toString("utf8").trim();
       if (code !== 0 && !text) {
         const last = err.split(/\r?\n/).filter((l) => /error/i.test(l)).at(-1)?.replace(/^ERROR:\s*(\[[^\]]+\]\s*)?/, "");
         return reject(new Error(last || `${path.basename(command)} stopped (${code}).`));
       }
-      try { resolve(JSON.parse(text)); } catch { reject(new Error("yt-dlp's answer wasn't readable.")); }
+      try { resolve(JSON.parse(text)); } catch { reject(new Error(t("yt-dlp's answer wasn't readable."))); }
     });
   });
 }
@@ -105,13 +106,13 @@ const AUDIO_IN = /\.(mp3|m4a|m4b|aac|mp4|wav|flac|ogg|oga|opus)$/i;
 
 /** ffmpeg's arguments to turn a local audio file into a mono 64 kbps MP3 (plenty for speech, small on the watch). */
 export function ffmpegArgs(input: string, output: string): string[] {
-  if (!path.isAbsolute(input) || !AUDIO_IN.test(input)) throw new Error("Only audio files on this computer can be converted.");
+  if (!path.isAbsolute(input) || !AUDIO_IN.test(input)) throw new Error(t("Only audio files on this computer can be converted."));
   return ["-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file", "-y", "-i", input, "-vn", "-map_metadata", "-1", "-ac", "1", "-b:a", "64k", "-f", "mp3", output];
 }
 
 /** yt-dlp's arguments to list a search or a playlist without downloading: one JSON document, at most `limit` entries. */
 export function listArgs(input: string, limit: number): string[] {
-  if (!/^(ytsearch\d{1,2}:|https:\/\/www\.youtube\.com\/(watch\?v=[\w-]{6,}|playlist\?list=[\w-]{2,}))/.test(input)) throw new Error("Not a YouTube search or address.");
+  if (!/^(ytsearch\d{1,2}:|https:\/\/www\.youtube\.com\/(watch\?v=[\w-]{6,}|playlist\?list=[\w-]{2,}))/.test(input)) throw new Error(t("Not a YouTube search or address."));
   return [...ytDlpBase(), "--flat-playlist", "-J", "--playlist-end", String(limit), "--", input];
 }
 
@@ -121,9 +122,9 @@ export function listArgs(input: string, limit: number): string[] {
  */
 export function concatArgs(files: string[], list: string, output: string): { args: string[]; listText: string } {
   for (const f of files) {
-    if (!path.isAbsolute(f) || !AUDIO_IN.test(f) || /[\r\n]/.test(f)) throw new Error("Only audio files on this computer can be joined.");
+    if (!path.isAbsolute(f) || !AUDIO_IN.test(f) || /[\r\n]/.test(f)) throw new Error(t("Only audio files on this computer can be joined."));
   }
-  if (!path.isAbsolute(list) || !list.endsWith(".txt")) throw new Error("The concat list must be a file on this computer.");
+  if (!path.isAbsolute(list) || !list.endsWith(".txt")) throw new Error(t("The concat list must be a file on this computer."));
   const listText = `${files.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join("\n")}\n`;
   return {
     listText,

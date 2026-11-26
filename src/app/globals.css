@@ -805,6 +805,10 @@ main .card:hover { transform: translateY(-3px); }
   width: min(520px, 46vw, calc(100vw - 40px)); height: min(760px, calc(100vh - 40px)); border-radius: 24px;
   border: 1px solid var(--bar-border); box-shadow: var(--bar-shadow), 0 24px 60px rgba(0, 0, 0, 0.35);
 }
+/* Open, the panel sits over busy pages, so the glass gets a near-solid page fill under it: the page never reads through,
+   whether or not the backdrop blur is drawn. */
+.cd-morph::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--page); opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+.cd-morph[data-open]::before { opacity: 0.92; }
 .cd-morph:not([data-open])[data-busy] { animation: cd-ring 1.4s ease-in-out infinite; }
 @keyframes cd-ring { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--h-mint) 30%, transparent), 0 10px 28px rgba(0, 0, 0, 0.32); } }
 .cd-head {

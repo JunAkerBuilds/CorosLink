@@ -11,10 +11,11 @@ import {
 import { useStore } from "@/data/local/store";
 import { shortDay } from "@/lib/calendar";
 import { dayKey } from "@/lib/format";
+import { t } from "@/lib/i18n";
 import { DEFAULT_IMPORT_DAYS, IMPORT_RANGES, importDistance, importSummary, isImportDays } from "@/lib/intervals";
 import "../activities.css";
 
-const said = (e: unknown): string => (e instanceof Error ? e.message : "C-LINK couldn't finish that. Try again.");
+const said = (e: unknown): string => (e instanceof Error ? e.message : t("C-LINK couldn't finish that. Try again."));
 const CARD = { boxSizing: "border-box", padding: 18, display: "flex", flexDirection: "column", gap: 14 } as const;
 
 interface RowState { busy: boolean; error: string | null }
@@ -99,52 +100,53 @@ export default function ImportPage() {
       }
     } finally {
       const left = queue.length - done - failed;
-      const parts = [`Imported ${done} of ${queue.length}.`];
-      if (failed > 0) parts.push(`${failed} failed, see the rows below.`);
-      if (stopped) parts.push(`Stopped with ${left} left: ${stopped}`);
+      const parts = [t("Imported {done} of {total}.", { done, total: queue.length })];
+      if (failed > 0) parts.push(t("{n} failed, see the rows below.", { n: failed }));
+      if (stopped) parts.push(t("Stopped with {n} left: {reason}", { n: left, reason: stopped }));
       setAllSummary(parts.join(" "));
       setImportingAll(false);
     }
   };
 
-  const rangeLabel = IMPORT_RANGES.find((range) => range.days === days)?.label ?? `${days} days`;
+  const found = IMPORT_RANGES.find((range) => range.days === days)?.label;
+  const rangeLabel = found ? t(found) : t("{n} days", { n: days });
 
   return (
     <main className="page" style={{ gap: 20, paddingTop: 24 }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: "1 1 360px", minWidth: 0 }}>
-          <nav aria-label="Breadcrumb" className="muted" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 13 }}>
-            <Link href="/activities" style={{ textDecoration: "none", fontWeight: 600 }}>Activities</Link>
+          <nav aria-label={t("Breadcrumb")} className="muted" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 13 }}>
+            <Link href="/activities" style={{ textDecoration: "none", fontWeight: 600 }}>{t("Activities")}</Link>
             <span aria-hidden="true">/</span>
-            <span aria-current="page">Import</span>
+            <span aria-current="page">{t("Import")}</span>
           </nav>
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}>Import from intervals.icu</h1>
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("Import from intervals.icu")}</h1>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          <LinkButton href="/activities">Cancel</LinkButton>
+          <LinkButton href="/activities">{t("Cancel")}</LinkButton>
         </div>
       </div>
 
       {hub && !signedIn ? (
         <div className="notice">
-          <span style={{ flex: "1 1 240px" }}>{hub.state === "ended" ? "COROS signed you out. Sign in again to import." : "Imported activities go to your COROS account. Sign in to COROS first."}</span>
-          <LinkButton variant="primary" href="/connect">Sign in to COROS</LinkButton>
+          <span style={{ flex: "1 1 240px" }}>{hub.state === "ended" ? t("COROS signed you out. Sign in again to import.") : t("Imported activities go to your COROS account. Sign in to COROS first.")}</span>
+          <LinkButton variant="primary" href="/connect">{t("Sign in to COROS")}</LinkButton>
         </div>
       ) : null}
 
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: 24 }}>
         <div style={{ flex: "2.4 1 640px", minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-          <Card aria-label="Activities" aria-busy={refreshing} style={CARD}>
+          <Card aria-label={t("Activities")} aria-busy={refreshing} style={CARD}>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <div role="group" aria-label="How far back to look" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <div role="group" aria-label={t("How far back to look")} style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {IMPORT_RANGES.map((range) => (
-                  <button key={range.days} type="button" className="chip" aria-pressed={days === range.days} disabled={refreshing || importingAll || anyBusy} onClick={() => saveImportDays(range.days)}>{range.label}</button>
+                  <button key={range.days} type="button" className="chip" aria-pressed={days === range.days} disabled={refreshing || importingAll || anyBusy} onClick={() => saveImportDays(range.days)}>{t(range.label)}</button>
                 ))}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                <Button disabled={!wanted || refreshing || importingAll || anyBusy} onClick={() => setNonce((n) => n + 1)}>{refreshing ? "Refreshing…" : "Refresh"}</Button>
+                <Button disabled={!wanted || refreshing || importingAll || anyBusy} onClick={() => setNonce((n) => n + 1)}>{refreshing ? t("Refreshing…") : t("Refresh")}</Button>
                 <Button variant="primary" style={{ fontSize: 14, fontWeight: 700 }} disabled={missing.length === 0 || importingAll || anyBusy || refreshing} onClick={() => void importAll()}>
-                  {importingAll ? "Importing…" : `Import all missing${missing.length > 0 ? ` (${missing.length})` : ""}`}
+                  {importingAll ? t("Importing…") : missing.length > 0 ? t("Import all missing ({n})", { n: missing.length }) : t("Import all missing")}
                 </Button>
               </div>
             </div>
@@ -152,20 +154,20 @@ export default function ImportPage() {
             {allSummary ? <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{allSummary}</p> : null}
 
             {!wanted ? (
-              status && hub ? <span className="muted" style={{ fontSize: 13 }}>{!signedIn ? "Sign in to COROS to compare your activities." : "Connect your intervals.icu account to see what COROS is missing."}</span> : null
+              status && hub ? <span className="muted" style={{ fontSize: 13 }}>{!signedIn ? t("Sign in to COROS to compare your activities.") : t("Connect your intervals.icu account to see what COROS is missing.")}</span> : null
             ) : loaded?.key === key && loaded.error ? (
               <p role="alert" style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--h-rose-ink)" }}>{loaded.error}</p>
             ) : loaded === null ? (
               <div className="skeleton" style={{ minHeight: 220 }} />
             ) : shown.length === 0 ? (
-              <span className="muted" style={{ fontSize: 13 }}>{refreshing ? "Refreshing…" : `No intervals.icu activities in the last ${rangeLabel}.`}</span>
+              <span className="muted" style={{ fontSize: 13 }}>{refreshing ? t("Refreshing…") : t("No intervals.icu activities in the last {range}.", { range: rangeLabel })}</span>
             ) : (
               <>
-                <span className="muted" role="status" style={{ fontSize: 13 }}>{refreshing ? "Refreshing…" : importSummary(shown)}</span>
+                <span className="muted" role="status" style={{ fontSize: 13 }}>{refreshing ? t("Refreshing…") : importSummary(shown)}</span>
                 <div className="scroll-x">
-                  <div role="table" aria-label="intervals.icu activities" style={{ minWidth: 780 }}>
+                  <div role="table" aria-label={t("intervals.icu activities")} style={{ minWidth: 780 }}>
                     <div role="row" className="imp-head">
-                      <span role="columnheader">Activity</span><span role="columnheader">Date</span><span role="columnheader">Type</span><span role="columnheader">Distance</span><span role="columnheader">Status</span>
+                      <span role="columnheader">{t("Activity")}</span><span role="columnheader">{t("Date")}</span><span role="columnheader">{t("Type")}</span><span role="columnheader">{t("Distance")}</span><span role="columnheader">{t("Status")}</span>
                     </div>
                     {shown.map((row) => {
                       const state = rowState[row.intervalsId];
@@ -181,11 +183,11 @@ export default function ImportPage() {
                           {row.onCoros ? (
                             <span role="cell" style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "var(--h-mint-ink)" }}>
                               <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 2.4, strokeLinecap: "round", strokeLinejoin: "round" }}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
-                              On COROS
+                              {t("On COROS")}
                             </span>
                           ) : (
                             <span role="cell">
-                              <Button style={{ height: 32 }} disabled={state?.busy || importingAll || refreshing} aria-label={`Import ${row.name}`} onClick={() => void importOne(row)}>{state?.busy ? "Importing…" : "Import"}</Button>
+                              <Button style={{ height: 32 }} disabled={state?.busy || importingAll || refreshing} aria-label={t("Import {name}", { name: row.name })} onClick={() => void importOne(row)}>{state?.busy ? t("Importing…") : t("Import")}</Button>
                             </span>
                           )}
                         </div>
@@ -199,32 +201,32 @@ export default function ImportPage() {
         </div>
 
         <div style={{ flex: "1 1 300px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
-          <Card aria-label="Account" style={CARD}>
-            <h2 className="h2">intervals.icu account</h2>
+          <Card aria-label={t("Account")} style={CARD}>
+            <h2 className="h2">{t("intervals.icu account")}</h2>
             {status === null ? <div className="skeleton" style={{ minHeight: 120 }} /> : connected ? (
               <>
                 <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "var(--h-mint-ink)" }}>
                   <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 2.4, strokeLinecap: "round", strokeLinejoin: "round" }}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
-                  Connected{status.athleteId ? ` · Athlete ${status.athleteId}` : ""}
+                  {status.athleteId ? t("Connected · Athlete {id}", { id: status.athleteId }) : t("Connected")}
                 </span>
-                <div><Button disabled={connecting || importingAll || anyBusy} onClick={disconnect}>Disconnect</Button></div>
+                <div><Button disabled={connecting || importingAll || anyBusy} onClick={disconnect}>{t("Disconnect")}</Button></div>
               </>
             ) : (
               <form onSubmit={(e) => { e.preventDefault(); connect(); }} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>intervals.icu API key
+                <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("intervals.icu API key")}
                   <input type="password" className="field imp-field" autoComplete="off" value={apiKey} onChange={(e) => setApiKey(e.target.value)} disabled={connecting} />
                 </label>
-                <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Athlete ID
+                <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("Athlete ID")}
                   <input type="text" className="field imp-field" autoComplete="off" placeholder="i123456" value={athleteId} onChange={(e) => setAthleteId(e.target.value)} disabled={connecting} />
                 </label>
-                <div><Button type="submit" disabled={connecting || apiKey.trim() === "" || athleteId.trim() === ""}>{connecting ? "Connecting…" : "Connect"}</Button></div>
+                <div><Button type="submit" disabled={connecting || apiKey.trim() === "" || athleteId.trim() === ""}>{connecting ? t("Connecting…") : t("Connect")}</Button></div>
               </form>
             )}
             {accountProblem ? <p role="alert" style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--h-rose-ink)" }}>{accountProblem}</p> : null}
           </Card>
-          <Card aria-label="Already on COROS" style={CARD}>
-            <h2 className="h2">Already on COROS</h2>
-            <p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: "19px" }}>An activity counts as already there when the start is within 3 minutes and the time and distance are within 5%.</p>
+          <Card aria-label={t("Already on COROS")} style={CARD}>
+            <h2 className="h2">{t("Already on COROS")}</h2>
+            <p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: "19px" }}>{t("An activity counts as already there when the start is within 3 minutes and the time and distance are within 5%.")}</p>
           </Card>
         </div>
       </div>

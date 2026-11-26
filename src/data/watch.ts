@@ -4,6 +4,7 @@ import { SAMPLE_WATCH } from "./sample/watch";
 import { put, remove, syncView, type SyncView } from "./sync";
 import { changeWrites, watchFromState, writesForChange, writesForUndo, type ChangeWrites } from "./sync/watch";
 import type { Json, PendingChange } from "@/lib/watch";
+import { msg, t } from "@/lib/i18n";
 
 export type GpsMode = "standard" | "all" | "dual";
 
@@ -69,8 +70,20 @@ export interface Watch {
 /** The settings as the watch had them at the last sync. */
 export async function loadWatch(): Promise<Loaded<Watch>> {
   const view = await syncView();
-  if (!view) return fromSample(SAMPLE_WATCH);
+  if (!view) return fromSample(sampleWatch());
   return fromSynced(watchFromState(view.get("watch.state", "me"), view.all("watch.change"), new Date()));
+}
+
+/** The sample watch with its words in the app's language. */
+function sampleWatch(): Watch {
+  const w = SAMPLE_WATCH;
+  return {
+    ...w,
+    synced: t(w.synced), battery: { ...w.battery, left: t(w.battery.left) }, firmware: { ...w.firmware, state: t(w.firmware.state) },
+    goals: w.goals.map((g) => ({ ...g, name: t(g.name), soFar: t(g.soFar) })),
+    gpsOptions: w.gpsOptions.map((o) => ({ ...o, name: t(o.name), detail: t(o.detail) })),
+    batteryHistory: { ...w.batteryHistory, summary: t(w.batteryHistory.summary), perDay: t(w.batteryHistory.perDay), alt: t(w.batteryHistory.alt) },
+  };
 }
 
 function write(writes: ChangeWrites): void {
@@ -105,7 +118,7 @@ export async function discardWatchChanges(): Promise<void> {
   write(state ? changeWrites(state, [], existing, new Date()) : { puts: [], removes: existing.map((e) => e.id) });
 }
 
-export const WATCH_NOT_CONNECTED = "The phone connection isn't built yet";
+export const WATCH_NOT_CONNECTED = msg("The phone connection isn't built yet");
 
 /**
  * Signed out only: hands the waiting changes to the phone app. Without an account nothing leaves this browser.
@@ -113,5 +126,5 @@ export const WATCH_NOT_CONNECTED = "The phone connection isn't built yet";
  */
 export async function sendPendingToPhone(count: number): Promise<never> {
   void count;
-  throw new NotWiredError("watch.sync", `${WATCH_NOT_CONNECTED}. Changes stay saved in this browser and have not reached the watch.`);
+  throw new NotWiredError("watch.sync", t("The phone connection isn't built yet. Changes stay saved in this browser and have not reached the watch."));
 }

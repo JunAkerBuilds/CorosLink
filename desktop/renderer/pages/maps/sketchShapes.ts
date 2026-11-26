@@ -1,13 +1,16 @@
 // Sketch outlines for GPS art: preset shapes and a single-stroke font (each letter traced once), in unit space
 // [-1, 1] (x east, y north), then placed on the map at a centre, size (metres across) and rotation.
+import { tx } from "@/lib/i18n";
 import type { LatLon } from "../../../maps/types";
 
 export type Unit = [number, number];
 export type ShapeId = "circle" | "heart" | "star" | "square" | "triangle" | "bolt";
-export const SHAPES: { id: ShapeId; label: string }[] = [
-  { id: "circle", label: "Circle" }, { id: "heart", label: "Heart" }, { id: "star", label: "Star" },
-  { id: "square", label: "Square" }, { id: "triangle", label: "Triangle" }, { id: "bolt", label: "Bolt" },
-];
+export const SHAPES: ShapeId[] = ["circle", "heart", "star", "square", "triangle", "bolt"];
+/** A shape's name, in the app's language (read when shown). */
+export const shapeName = (id: ShapeId) => ({
+  circle: tx("sketch shape", "Circle"), heart: tx("sketch shape", "Heart"), star: tx("sketch shape", "Star"),
+  square: tx("sketch shape", "Square"), triangle: tx("sketch shape", "Triangle"), bolt: tx("sketch shape", "Bolt"),
+})[id];
 
 /** Scales and centres points to fill [-1, 1] and closes the outline. */
 export function normalize(points: Unit[], close = true): Unit[] {

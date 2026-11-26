@@ -6,6 +6,7 @@ import { HubMoveFailed, HubProblem } from "./errors";
 import { at, int, isObject, list, num, text, word, type Json, type JsonObject } from "./json";
 import { hubTotals, sportOfCode, usesExercises } from "./rules";
 import { attachSources, buildProgram, readCatalog, readProgram, toWeb, type Units } from "./workout";
+import { t } from "@/lib/i18n";
 
 /** A workout on the COROS calendar as Training Hub lists it: the entry (`entity`) and its program. */
 export interface ScheduledEntry {
@@ -95,8 +96,8 @@ export async function scheduledOne(hub: TrainingHub, session: HubSession, day: H
   if (byID.length === 1) return byID[0];
   const byName = (byID.length === 0 ? entries : byID).filter((entry) => entry.name === name);
   if (byName.length === 1) return byName[0];
-  throw new HubProblem(entries.length === 0 ? "COROS has no workout on that day any more. Refresh the calendar."
-    : "C-LINK couldn't tell which workout on that day this is. Refresh the calendar and try again.");
+  throw new HubProblem(entries.length === 0 ? t("COROS has no workout on that day any more. Refresh the calendar.")
+    : t("C-LINK couldn't tell which workout on that day this is. Refresh the calendar and try again."));
 }
 
 /** COROS's exercise catalog for strength and HYROX (HYROX stations are in Strength's), with the athlete's own exercises. */
@@ -109,7 +110,7 @@ export async function exercises(hub: TrainingHub, session: HubSession, sport: Hu
 /** COROS's distance, time and load for a program, folded into it (`/training/program/calculate`). */
 async function calculate(hub: TrainingHub, session: HubSession, program: JsonObject): Promise<JsonObject> {
   const calculation = await hub.post("training/program/calculate", program, session);
-  if (calculation === undefined) throw new HubProblem("COROS didn't work out the workout's totals.");
+  if (calculation === undefined) throw new HubProblem(t("COROS didn't work out the workout's totals."));
   const result = { ...program };
   for (const [from, to] of [["planDistance", "distance"], ["planDuration", "duration"], ["planTrainingLoad", "trainingLoad"], ["planPitch", "pitch"],
     ["distanceDisplayUnit", "distanceDisplayUnit"], ["exerciseBarChart", "exerciseBarChart"]]) {
@@ -206,7 +207,7 @@ export async function moveStep(hub: TrainingHub, session: HubSession, move: HubM
   const entry = await scheduledOne(hub, session, move.from, move.idInPlan, move.name);
   const found = { ...move, idInPlan: entry.idInPlan };
   if (entry.program.exercises === undefined) {
-    throw new HubMoveFailed(new HubProblem(`COROS gave no steps for ${entry.name}, so C-LINK can't move it. Move it in the COROS app.`), found);
+    throw new HubMoveFailed(new HubProblem(t("COROS gave no steps for {name}, so C-LINK can't move it. Move it in the COROS app.", { name: entry.name })), found);
   }
   // Noted before the copy goes up, so a lost answer can be recognised.
   if (!before) return { ...found, targetBefore: target.map((other) => other.idInPlan) };
@@ -227,7 +228,7 @@ export async function moveScheduled(hub: TrainingHub, session: HubSession, start
   let move = start;
   if (move.from === move.to) return { ...move, newIdInPlan: move.idInPlan, removed: true };
   for (let steps = 0; !moveDone(move); steps++) {
-    if (steps > 8) throw new HubMoveFailed(new HubProblem("The move didn't finish. Try again."), move);
+    if (steps > 8) throw new HubMoveFailed(new HubProblem(t("The move didn't finish. Try again.")), move);
     try {
       move = await moveStep(hub, session, move);
     } catch (error) {
@@ -269,7 +270,7 @@ export function toSaved(program: Json): HubSavedWorkout | null {
 export async function libraryProgram(hub: TrainingHub, session: HubSession, id: string): Promise<HubSavedWorkout> {
   const program = await hub.get("training/program/detail", { id, supportRestExercise: "1" }, session);
   const saved = isObject(program) && Array.isArray(program.exercises) ? toSaved({ ...program, id: word(program.id) ?? id }) : null;
-  if (!saved) throw new HubProblem("COROS gave no steps for that saved workout.");
+  if (!saved) throw new HubProblem(t("COROS gave no steps for that saved workout."));
   return saved;
 }
 
@@ -284,7 +285,7 @@ export async function addToLibrary(hub: TrainingHub, session: HubSession, workou
   if (given !== undefined && given !== "0" && given !== "") return given;
   const named = (list(await hub.post("training/program/query", {}, session)) ?? []).filter((saved) => text(at(saved, "name")) === workout.name);
   const id = named.map((saved) => word(at(saved, "id"))).filter((value): value is string => value !== undefined).sort((x, y) => (x.length - y.length) || (x < y ? -1 : 1)).pop();
-  if (id === undefined) throw new HubProblem("COROS took the workout but didn't say where it saved it. Look in your COROS workout library.");
+  if (id === undefined) throw new HubProblem(t("COROS took the workout but didn't say where it saved it. Look in your COROS workout library."));
   return id;
 }
 

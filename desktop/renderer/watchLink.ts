@@ -1,5 +1,6 @@
 // Local mode's watch (desktop/main/watch/service.ts) as the Watch page reads and drives it.
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { language, locale, t } from "@/lib/i18n";
 
 export type Region = "us" | "eu" | "sg" | "cn";
 export interface Found { name: string; display: string; rssi?: number; connected?: boolean }
@@ -30,14 +31,14 @@ export class WatchLinkProblem extends Error {}
 /** Auto-sync choices, in hours; 0 is off. */
 /** Auto-sync choices in minutes; 0 is off (main: watch/service.ts AUTO_SYNC_MINUTES). */
 export const AUTO_SYNC = [0, 5, 10, 15, 30, 45, 60] as const;
-export const autoSyncLabel = (m: number) => (m === 0 ? "Off" : m < 60 ? `Every ${m} min` : "Every hour");
+export const autoSyncLabel = (m: number) => (m === 0 ? t("Off") : m < 60 ? t("Every {n} min", { n: m }) : t("Every hour"));
 
 async function call(path: string, body?: object): Promise<WatchStatus> {
   const answer = await fetch(`/api/desktop/watch${path}`, body
     ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
     : { cache: "no-store" });
   const parsed = (await answer.json().catch(() => ({}))) as WatchStatus & { error?: { message: string } };
-  if (!answer.ok || parsed.error) throw new WatchLinkProblem(parsed.error?.message ?? "That didn't work.");
+  if (!answer.ok || parsed.error) throw new WatchLinkProblem(parsed.error?.message ?? t("That didn't work."));
   publish(parsed);
   return parsed;
 }
@@ -76,30 +77,31 @@ export function useWatchLink(): WatchStatus | null {
 /** "just now", "12 min ago", "today 10:42", "24 Nov". */
 export function whenSynced(iso: string, now = Date.now()): string {
   const at = Date.parse(iso), minutes = Math.round((now - at) / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return t("just now");
+  if (minutes < 60) return t("{n} min ago", { n: minutes });
   const d = new Date(at), today = new Date(now);
-  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
-  if (d.toDateString() === today.toDateString()) return `today at ${time}`;
-  return `${d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} at ${time}`;
+  const tag = language() === "en" ? undefined : locale();
+  const time = d.toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (d.toDateString() === today.toDateString()) return t("today at {time}", { time });
+  return t("{date} at {time}", { date: d.toLocaleDateString(tag, { day: "numeric", month: "short" }), time });
 }
 
 /** What a sync step is called while it runs. */
 export function stepLabel(step: { step: string; percent?: number } | null): string {
   const names: Record<string, string> = {
-    searching: "Looking for the watch", reaching: "Reaching the watch", discovering: "Connecting", readingInfo: "Connecting",
-    subscribing: "Connecting", signingIn: "Signing in to the watch", changes: "Sending your changes", steps: "Reading today",
-    health: "Reading health and sleep", settings: "Reading settings", profile: "Reading settings", goals: "Reading goals",
-    alarms: "Reading alarms", storage: "Reading storage", workouts: "Reading workouts", weather: "Sending the weather", face: "Sending the face",
+    searching: t("Looking for the watch"), reaching: t("Reaching the watch"), discovering: t("Connecting"), readingInfo: t("Connecting"),
+    subscribing: t("Connecting"), signingIn: t("Signing in to the watch"), changes: t("Sending your changes"), steps: t("Reading today"),
+    health: t("Reading health and sleep"), settings: t("Reading settings"), profile: t("Reading settings"), goals: t("Reading goals"),
+    alarms: t("Reading alarms"), storage: t("Reading storage"), workouts: t("Reading workouts"), weather: t("Sending the weather"), face: t("Sending the face"),
   };
-  if (!step) return "Syncing";
-  return names[step.step] ?? "Syncing";
+  if (!step) return t("Syncing");
+  return names[step.step] ?? t("Syncing");
 }
 
 /** A tiny shared clock so "12 min ago" moves on. */
 export function useMinute(): number {
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
   return now;
 }
 
@@ -123,7 +125,7 @@ async function watchCall<T>(path: string, body?: object): Promise<T> {
     ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
     : { cache: "no-store" });
   const parsed = (await answer.json().catch(() => ({}))) as T & { error?: { message: string } };
-  if (!answer.ok || parsed.error) throw new WatchLinkProblem(parsed.error?.message ?? "That didn't work.");
+  if (!answer.ok || parsed.error) throw new WatchLinkProblem(parsed.error?.message ?? t("That didn't work."));
   return parsed;
 }
 

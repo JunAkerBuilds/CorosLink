@@ -3,16 +3,17 @@ import type { EnergyBand, EnergyDay, EnergyEvent, EnergyPoint } from "../energy"
 import type { EnergyDayBody, NativeSleepNight } from "./native";
 import { dayKey, parseDay } from "@/lib/format";
 import { addDays, clockOfDay, energyAt, energyRange } from "@/lib/health";
+import { msg, t } from "@/lib/i18n";
 
 interface Item<B> { id: string; body: B }
 type NativeEvent = NonNullable<EnergyDayBody["events"]>[number];
 
 const DAY = 1440;
 const PACE: Record<NonNullable<EnergyDayBody["trend"]>, NonNullable<EnergyDay["pace"]>> = {
-  charging: { label: "Charging", direction: "up" },
-  steady: { label: "Holding steady", direction: "flat" },
-  usingSlowly: { label: "Using slowly", direction: "down" },
-  usingFast: { label: "Using fast", direction: "down" },
+  charging: { label: msg("Charging"), direction: "up" },
+  steady: { label: msg("Holding steady"), direction: "flat" },
+  usingSlowly: { label: msg("Using slowly"), direction: "down" },
+  usingFast: { label: msg("Using fast"), direction: "down" },
 };
 
 const whole = (p: { minute: number; level: number }): EnergyPoint => ({ minute: p.minute, level: Math.round(p.level) });
@@ -42,7 +43,7 @@ export function bandsOfDay(events: readonly NativeEvent[]): EnergyBand[] {
 }
 
 const nameOf = (e: NativeEvent) =>
-  e.kind === "sleep" ? "Sleep" : e.kind === "rest" ? "Rest" : e.kind === "stress" ? "Stress" : e.kind === "awake" ? "Awake" : e.workoutName || "Workout";
+  e.kind === "sleep" ? t("Sleep") : e.kind === "rest" ? t("Rest") : e.kind === "stress" ? t("Stress") : e.kind === "awake" ? t("Awake") : e.workoutName || t("Workout");
 
 /**
  * What charged and used energy, oldest first. Changes are whole points, as the phone shows them. Time awake is one
@@ -58,13 +59,13 @@ export function eventsOfDay(events: readonly NativeEvent[], current: boolean): E
     const event: EnergyEvent = { kind: e.kind, name: nameOf(e), detail: when, delta: Math.round(e.change) };
     if (e.kind === "sleep") {
       event.when = when;
-      if (e.sleepScore != null) event.detail = `${when} · Score ${e.sleepScore}`;
+      if (e.sleepScore != null) event.detail = t("{time} · Score {score}", { time: when, score: e.sleepScore });
     }
     out.push(event);
   }
   if (awake != null) {
-    const event: EnergyEvent = { kind: "awake", name: "Awake", detail: current ? "The rest of the day so far" : "The rest of the day", delta: Math.round(awake) };
-    if (current) event.when = "so far";
+    const event: EnergyEvent = { kind: "awake", name: t("Awake"), detail: current ? t("The rest of the day so far") : t("The rest of the day"), delta: Math.round(awake) };
+    if (current) event.when = t("so far");
     out.push(event);
   }
   return out;
@@ -85,7 +86,7 @@ export function energyDayFromItem(date: string, body: EnergyDayBody, current: bo
   const bands = bandsOfDay(events);
   for (const e of next?.events ?? []) {
     if (e.kind === "sleep" && e.startMinute < 0 && e.endMinute > e.startMinute) {
-      bands.push({ kind: "sleep", from: Math.max(0, DAY + e.startMinute), to: Math.min(DAY, DAY + e.endMinute), label: "Sleep" });
+      bands.push({ kind: "sleep", from: Math.max(0, DAY + e.startMinute), to: Math.min(DAY, DAY + e.endMinute), label: t("Sleep") });
     }
   }
 
@@ -98,7 +99,7 @@ export function energyDayFromItem(date: string, body: EnergyDayBody, current: bo
 
   if (current && body.now) {
     day.now = whole(body.now);
-    if (body.trend) day.pace = PACE[body.trend];
+    if (body.trend) day.pace = { ...PACE[body.trend], label: t(PACE[body.trend].label) };
     // Where the day is heading: the end of the phone's projection. (`bedtime` in the contract is last night's.)
     const ahead = (body.projection ?? []).filter((p) => p.minute > body.now!.minute).sort((a, b) => a.minute - b.minute);
     const end = ahead[ahead.length - 1] ?? (body.bedtime && body.bedtime.minute > body.now.minute ? body.bedtime : undefined);

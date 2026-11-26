@@ -6,6 +6,7 @@ import type { CoachHue, PlanSession } from "@/data/coach";
 import type { HubSport, HubWorkout } from "@/data/hub";
 import type { Workout } from "@/data/workouts";
 import { addDays } from "@/lib/calendar";
+import { t, tx } from "@/lib/i18n";
 import { daysBetween, DAY_NAMES, MAX_PLAN_WEEKS, PHASE_KINDS, PHASE_LABELS, planDate, trainingPlanEntryMetrics, type PhaseKind, type TrainingPlanDocument } from "@/lib/plan";
 import { finite, isDay, quoted } from "./items";
 
@@ -66,6 +67,8 @@ export function parsePlans(raw: unknown): PlanBrief[] {
 }
 
 const dayName = (plan: PlanBrief, day: number): string => (plan.start ? new Date(`${addDays(plan.start, day)}T12:00:00Z`).toUTCString().slice(0, 3) : DAY_NAMES[day]);
+/** `dayName` for the card, in the app's language. */
+const shownDayName = (plan: PlanBrief, day: number): string => tx("weekday", dayName(plan, day));
 const dateOf = (plan: PlanBrief, week: number, day: number): string => (plan.start ? addDays(plan.start, week * 7 + day) : "");
 const weekLoad = (plan: PlanBrief, week: number) => plan.entries.filter((e) => e.week === week && e.kind === "workout").reduce((s, e) => s + e.load, 0);
 
@@ -131,7 +134,7 @@ export function planEdit(plan: PlanBrief, changes: readonly EditInput[], made: r
   let weeks = plan.weeks;
   const before = plan.entries.reduce((s, e) => s + (e.kind === "workout" ? e.load : 0), 0);
   let after = before;
-  const at = (week: number, day: number) => `W${week + 1} · ${dayName(plan, day)}`;
+  const at = (week: number, day: number) => t("W{week} · {day}", { week: week + 1, day: shownDayName(plan, day) });
   const where = (c: EditInput, n: number): { week: number; day: number } | string => {
     if (isDay(c.date)) {
       if (!plan.start) return `change ${n}: this plan has no start date, so send week and weekday instead of date.`;
@@ -155,14 +158,14 @@ export function planEdit(plan: PlanBrief, changes: readonly EditInput[], made: r
         const e = entryOf(c, n); if (typeof e === "string") return { error: e };
         const to = where(c, n); if (typeof to === "string") return { error: to };
         if (to.week >= weeks) return { error: `change ${n}: week ${to.week + 1} is past the plan's last week (${weeks}). Add a week first.` };
-        rows.push({ label: e.week === to.week ? `${at(e.week, e.day)} → ${dayName(plan, to.day)}` : `${at(e.week, e.day)} → W${to.week + 1} ${dayName(plan, to.day)}`, now: [{ name: e.title, hue: hueOf(e.sport) }], proposed: [{ name: e.title, hue: hueOf(e.sport), changed: true }], loadNow: 0, loadNext: 0 });
+        rows.push({ label: `${at(e.week, e.day)} → ${e.week === to.week ? shownDayName(plan, to.day) : at(to.week, to.day)}`, now: [{ name: e.title, hue: hueOf(e.sport) }], proposed: [{ name: e.title, hue: hueOf(e.sport), changed: true }], loadNow: 0, loadNext: 0 });
         ops.push({ op: "move", entry: e.id, week: to.week, day: to.day });
         e.week = to.week; e.day = to.day;
         break;
       }
       case "remove": {
         const e = entryOf(c, n); if (typeof e === "string") return { error: e };
-        rows.push({ label: at(e.week, e.day), now: [{ name: e.title, hue: e.kind === "rest" ? "none" : hueOf(e.sport) }], proposed: [NONE("Removed")], loadNow: e.load, loadNext: 0 });
+        rows.push({ label: at(e.week, e.day), now: [{ name: e.title, hue: e.kind === "rest" ? "none" : hueOf(e.sport) }], proposed: [NONE(t("Removed"))], loadNow: e.load, loadNext: 0 });
         after -= e.load; entries.delete(e.id);
         ops.push({ op: "remove", entry: e.id });
         break;
@@ -193,7 +196,7 @@ export function planEdit(plan: PlanBrief, changes: readonly EditInput[], made: r
         if (copy === null) return { error: `change ${n}: copy_week must be a week of the plan, 1 to ${weeks}.` };
         const copied = copy ? [...entries.values()].filter((e) => e.week === copy - 1 && e.kind === "workout") : [];
         const recovery = c.recovery === true;
-        rows.push({ label: `New week ${afterW + 1}`, now: [NONE("—")], proposed: copied.length ? copied.map((e) => ({ name: e.title, hue: hueOf(e.sport), changed: true })) : [NONE(recovery ? "Recovery week, empty to fill" : "Empty week")], loadNow: 0, loadNext: copied.reduce((s, e) => s + e.load, 0) });
+        rows.push({ label: t("New week {n}", { n: afterW + 1 }), now: [NONE("—")], proposed: copied.length ? copied.map((e) => ({ name: e.title, hue: hueOf(e.sport), changed: true })) : [NONE(recovery ? t("Recovery week, empty to fill") : t("Empty week"))], loadNow: 0, loadNext: copied.reduce((s, e) => s + e.load, 0) });
         after += copied.reduce((s, e) => s + e.load, 0);
         for (const e of entries.values()) if (e.week >= afterW) e.week += 1;
         weeks += 1;
@@ -206,7 +209,7 @@ export function planEdit(plan: PlanBrief, changes: readonly EditInput[], made: r
         if (weeks <= 1) return { error: `change ${n}: a plan needs at least one week.` };
         const gone = [...entries.values()].filter((e) => e.week === week - 1);
         const load = gone.reduce((s, e) => s + (e.kind === "workout" ? e.load : 0), 0);
-        rows.push({ label: `Week ${week}`, now: gone.length ? gone.filter((e) => e.kind === "workout").map((e) => ({ name: e.title, hue: hueOf(e.sport) })) : [NONE("Empty")], proposed: [NONE("Week removed; later weeks move up")], loadNow: load, loadNext: 0 });
+        rows.push({ label: t("Week {n}", { n: week }), now: gone.length ? gone.filter((e) => e.kind === "workout").map((e) => ({ name: e.title, hue: hueOf(e.sport) })) : [NONE(tx("week", "Empty"))], proposed: [NONE(t("Week removed; later weeks move up"))], loadNow: load, loadNext: 0 });
         after -= load;
         for (const e of gone) entries.delete(e.id);
         for (const e of entries.values()) if (e.week > week - 1) e.week -= 1;
@@ -223,22 +226,22 @@ export function planEdit(plan: PlanBrief, changes: readonly EditInput[], made: r
           if (!kind || s === null || e === null || s > e) return { error: `change ${n}: each phase needs kind (${PHASE_KINDS.join(", ")}) and start_week ≤ end_week within 1–${weeks}.` };
           phases.push({ kind, startWeek: s, endWeek: e });
         }
-        const show = (ps: { kind: string; name?: string; startWeek: number; endWeek: number }[]) => ps.length ? ps.map((p) => ({ name: `${p.name || PHASE_LABELS[p.kind as PhaseKind] || p.kind} W${p.startWeek}–${p.endWeek}`, hue: "none" as const })) : [NONE("No phases")];
-        rows.push({ label: "Phases", now: show(plan.phases), proposed: show(phases).map((p) => ({ ...p, changed: true })), loadNow: 0, loadNext: 0 });
+        const show = (ps: { kind: string; name?: string; startWeek: number; endWeek: number }[]) => ps.length ? ps.map((p) => ({ name: t("{phase} W{from}–{to}", { phase: p.name || t(PHASE_LABELS[p.kind as PhaseKind] ?? p.kind), from: p.startWeek, to: p.endWeek }), hue: "none" as const })) : [NONE(t("No phases"))];
+        rows.push({ label: t("Phases"), now: show(plan.phases), proposed: show(phases).map((p) => ({ ...p, changed: true })), loadNow: 0, loadNext: 0 });
         ops.push({ op: "phases", phases });
         break;
       }
       case "rename": {
         const name = quoted(c.name, 80);
         if (!name) return { error: `change ${n}: rename needs name.` };
-        rows.push({ label: "Name", now: [NONE(plan.name)], proposed: [{ name, hue: "none", changed: true }], loadNow: 0, loadNext: 0 });
+        rows.push({ label: t("Name"), now: [NONE(plan.name)], proposed: [{ name, hue: "none", changed: true }], loadNow: 0, loadNext: 0 });
         ops.push({ op: "rename", name });
         break;
       }
       case "set_goal": {
         const goal = quoted(c.goal, 180);
         if (!goal) return { error: `change ${n}: set_goal needs goal.` };
-        rows.push({ label: "Goal", now: [NONE(plan.goal || "—")], proposed: [{ name: goal, hue: "none", changed: true }], loadNow: 0, loadNext: 0 });
+        rows.push({ label: t("Goal"), now: [NONE(plan.goal || "—")], proposed: [{ name: goal, hue: "none", changed: true }], loadNow: 0, loadNext: 0 });
         ops.push({ op: "goal", goal });
         break;
       }

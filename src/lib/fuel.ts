@@ -1,6 +1,7 @@
 /** Fuel sums. Pure: food amounts in, totals, what's left and petal counts out. */
 import type { DayBurn, DayLog, FoodItem, LoggedFood, MealKey, Meals, Nutrients, Unit } from "@/data/fuel";
 import { dayKey, parseDay } from "@/lib/format";
+import { locale } from "@/lib/i18n";
 
 export const NUTRIENT_KEYS = ["kcal", "protein", "carbs", "fat", "fiber", "sugar", "satFat", "sodium", "cholesterol"] as const;
 export type NutrientKey = (typeof NUTRIENT_KEYS)[number];
@@ -199,7 +200,7 @@ export function searchFoods(foods: readonly FoodItem[], query: string): FoodItem
 export function trim(value: number, decimals = 1): string {
   const scale = 10 ** decimals;
   const rounded = Math.round(value * scale) / scale;
-  return (Object.is(rounded, -0) ? 0 : rounded).toLocaleString("en-US", { maximumFractionDigits: decimals });
+  return (Object.is(rounded, -0) ? 0 : rounded).toLocaleString(locale("en-US"), { maximumFractionDigits: decimals });
 }
 
 /** "Greek yoghurt, 150 g", "Coffee with milk, 250 ml", "Apple", "Apple × 2". */
@@ -210,8 +211,8 @@ export function foodLabel(food: Pick<LoggedFood, "name" | "unit" | "amount">): s
 
 /** Reads a typed number ("72,4" or "72.4"). Null for anything that isn't a number of zero or more. */
 export function parseAmount(text: string): number | null {
-  const t = text.trim().replace(",", ".");
-  if (t === "" || !/^\d*\.?\d*$/.test(t) || t === ".") return null;
-  const v = Number(t);
+  const typed = text.trim().replace(",", ".");
+  if (typed === "" || !/^\d*\.?\d*$/.test(typed) || typed === ".") return null;
+  const v = Number(typed);
   return isFinite(v) && v >= 0 ? v : null;
 }

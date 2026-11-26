@@ -4,6 +4,7 @@
 // never run. Rewritten from CorosLink's corosWifiMapService.ts.
 import { createHash, randomUUID } from "node:crypto";
 import { AREA_ZOOM, MAX_AREA_TILES, quadkey, type AreaPreview, type Tile } from "../../../maps/types";
+import { t } from "@/lib/i18n";
 
 const HOST = "https://mapstatic.coros.com";
 const ASSETS = "https://map-oss-us.coros.com/coros-map/";
@@ -24,13 +25,13 @@ export interface Signing { id: string; key: string }
 
 /** 1–16 squares, each x and y a whole number from 0 to 127; duplicates dropped, sorted. */
 export function normalizeTiles(input: unknown): Tile[] {
-  if (!Array.isArray(input) || input.length < 1 || input.length > MAX_AREA_TILES) throw new AreasProblem(`Pick between one and ${MAX_AREA_TILES} map areas.`);
+  if (!Array.isArray(input) || input.length < 1 || input.length > MAX_AREA_TILES) throw new AreasProblem(t("Pick between one and {max} map areas.", { max: MAX_AREA_TILES }));
   const tiles = new Map<string, Tile>();
   for (const value of input as unknown[]) {
-    const t = value as Partial<Tile> | null;
+    const tile = value as Partial<Tile> | null;
     const ok = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) < CELLS;
-    if (!t || !ok(t.x) || !ok(t.y)) throw new AreasProblem("That map area isn't on COROS's map grid.");
-    tiles.set(`${t.x},${t.y}`, { x: t.x, y: t.y });
+    if (!tile || !ok(tile.x) || !ok(tile.y)) throw new AreasProblem(t("That map area isn't on COROS's map grid."));
+    tiles.set(`${tile.x},${tile.y}`, { x: tile.x, y: tile.y });
   }
   return [...tiles.values()].sort((a, b) => a.x - b.x || a.y - b.y);
 }
@@ -65,10 +66,10 @@ export class MapPackageClient {
   /** Text from COROS, capped at 2 MB, never following redirects. */
   private async text(url: string, init?: RequestInit, acceptNotFound = false): Promise<string> {
     const answer = await (this.host.fetch ?? fetch)(url, { ...init, signal: AbortSignal.timeout(25_000), redirect: "error" })
-      .catch(() => { throw new AreasProblem("COROS's map service couldn't be reached. Check the connection.", "network", 502); });
-    if (!answer.ok && !(acceptNotFound && answer.status === 404)) throw new AreasProblem(`COROS's map service answered ${answer.status}. Try again later.`, "coros", 502);
+      .catch(() => { throw new AreasProblem(t("COROS's map service couldn't be reached. Check the connection."), "network", 502); });
+    if (!answer.ok && !(acceptNotFound && answer.status === 404)) throw new AreasProblem(t("COROS's map service answered {status}. Try again later.", { status: answer.status }), "coros", 502);
     const body = Buffer.from(await answer.arrayBuffer());
-    if (body.length > 2_000_000) throw new AreasProblem("COROS's map service answered with too much.", "coros", 502);
+    if (body.length > 2_000_000) throw new AreasProblem(t("COROS's map service answered with too much."), "coros", 502);
     return body.toString("utf8");
   }
 
@@ -77,7 +78,7 @@ export class MapPackageClient {
     // The page is a single-page app whose root can answer 404 with the full page; the script reference is what counts.
     const html = await this.text(`${HOST}/`, undefined, true);
     const main = /window\.__assetsPath\("(public\/main-[A-Za-z0-9_-]+\.js)"\)/.exec(html)?.[1];
-    if (!main) throw new AreasProblem("COROS changed its map service. Update C-LINK and try again.", "coros", 502);
+    if (!main) throw new AreasProblem(t("COROS changed its map service. Update C-LINK and try again."), "coros", 502);
     const source = await this.text(ASSETS + main);
     const direct = readSigning(source);
     if (direct) return direct;
@@ -86,11 +87,11 @@ export class MapPackageClient {
       const found = result.status === "fulfilled" ? readSigning(result.value) : undefined;
       if (found) return found;
     }
-    throw new AreasProblem("COROS's map service isn't available. Try again later.", "coros", 502);
+    throw new AreasProblem(t("COROS's map service isn't available. Try again later."), "coros", 502);
   }
 
   private async request(tiles: Tile[], action: "check" | "download", model: string) {
-    if (!/^[A-Z][A-Z0-9]{1,7}$/.test(model)) throw new AreasProblem("Map areas aren't made for this watch.");
+    if (!/^[A-Z][A-Z0-9]{1,7}$/.test(model)) throw new AreasProblem(t("Map areas aren't made for this watch."));
     this.signing ??= this.loadSigning().catch((error: unknown) => { this.signing = null; throw error; });
     const signing = await this.signing;
     const body: Record<string, unknown> = { action, list: tiles.map((t) => ({ quadkey: quadkey(t), O: 0, C: 0 })), deviceModel: model, app_id: signing.id };
@@ -100,27 +101,27 @@ export class MapPackageClient {
       answer = JSON.parse(await this.text(HOST + ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })) as typeof answer;
     } catch (error) {
       if (error instanceof AreasProblem) throw error;
-      throw new AreasProblem("COROS's map service answered with something unreadable.", "coros", 502);
+      throw new AreasProblem(t("COROS's map service answered with something unreadable."), "coros", 502);
     }
     const data = answer.data;
     if (answer.code !== 200 || !data || !Number.isSafeInteger(data.fileSize) || (data.fileSize as number) < 0
-      || !Number.isSafeInteger(data.fileCount) || (data.fileCount as number) < 0) throw new AreasProblem("COROS couldn't prepare these map areas.", "coros", 502);
+      || !Number.isSafeInteger(data.fileCount) || (data.fileCount as number) < 0) throw new AreasProblem(t("COROS couldn't prepare these map areas."), "coros", 502);
     return data as { fileSize: number; fileCount: number; map_id?: unknown; files?: unknown };
   }
 
   /** The files COROS packs for these squares: per square the landscape map (S…, folder VSM) and its contour lines (C…, VCM). */
   static files(tiles: Tile[], data: { fileCount: number; files?: unknown }): AreaFile[] {
     const keys = new Set(tiles.map(quadkey));
-    if (!Array.isArray(data.files) || data.files.length !== data.fileCount) throw new AreasProblem("COROS sent a map file list that doesn't add up.", "coros", 502);
+    if (!Array.isArray(data.files) || data.files.length !== data.fileCount) throw new AreasProblem(t("COROS sent a map file list that doesn't add up."), "coros", 502);
     const files = (data.files as { name?: unknown; size?: unknown }[]).map((f) => {
       const match = typeof f?.name === "string" ? /^([SC])([0-3]{7})(V\d{2})\.t$/.exec(f.name) : null;
       const size = f?.size;
       if (!match || !keys.has(match[2]) || !Number.isSafeInteger(size) || (size as number) <= 0 || (size as number) > 2_000_000_000) {
-        throw new AreasProblem("COROS sent a map file list that doesn't add up.", "coros", 502);
+        throw new AreasProblem(t("COROS sent a map file list that doesn't add up."), "coros", 502);
       }
       return { name: f.name as string, layer: match[1] === "S" ? "VSM" : "VCM", quadkey: match[2], version: match[3], sizeBytes: size as number } satisfies AreaFile;
     });
-    if (new Set(files.map((f) => f.name)).size !== files.length) throw new AreasProblem("COROS sent a map file list that doesn't add up.", "coros", 502);
+    if (new Set(files.map((f) => f.name)).size !== files.length) throw new AreasProblem(t("COROS sent a map file list that doesn't add up."), "coros", 502);
     return files;
   }
 
@@ -140,8 +141,8 @@ export class MapPackageClient {
   /** A preview still fresh and made for this model; one sized for another watch would fetch the wrong package. */
   take(previewId: string, model: string): Preview {
     const entry = this.previews.get(previewId);
-    if (!entry || entry.expires < this.now() || entry.model !== model) throw new AreasProblem("Check the size of these map areas again first.", "stale");
-    if (!entry.value.fileCount || !entry.value.sizeBytes) throw new AreasProblem("COROS has no maps for these areas.", "empty");
+    if (!entry || entry.expires < this.now() || entry.model !== model) throw new AreasProblem(t("Check the size of these map areas again first."), "stale");
+    if (!entry.value.fileCount || !entry.value.sizeBytes) throw new AreasProblem(t("COROS has no maps for these areas."), "empty");
     return entry.value;
   }
 
@@ -151,7 +152,7 @@ export class MapPackageClient {
   async createTask(previewId: string, model: string): Promise<string> {
     const preview = this.take(previewId, model);
     const data = await this.request(preview.tiles, "download", model);
-    if (typeof data.map_id !== "string" || !/^[A-Za-z0-9_-]{8}$/.test(data.map_id)) throw new AreasProblem("COROS returned an invalid map download id.", "coros", 502);
+    if (typeof data.map_id !== "string" || !/^[A-Za-z0-9_-]{8}$/.test(data.map_id)) throw new AreasProblem(t("COROS returned an invalid map download id."), "coros", 502);
     return data.map_id;
   }
 

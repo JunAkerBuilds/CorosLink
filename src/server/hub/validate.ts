@@ -5,6 +5,7 @@ import type {
 } from "@/data/hub";
 import { HubInvalid } from "./errors";
 import { CLIMB_SYSTEM_ID, HUB_SPORTS } from "./rules";
+import { t } from "@/lib/i18n";
 
 const STEP_KINDS: readonly HubStepKind[] = ["warmup", "training", "rest", "cooldown"];
 const TARGETS: readonly HubStepTarget[] = ["time", "distance", "open", "reps", "load", "hrRecovery", "elevationGain", "routes"];
@@ -49,14 +50,14 @@ export function plainText(value: unknown, what: string, max: number, allowEmpty 
 export function account(value: unknown): string {
   const found = typeof value === "string" ? value.trim() : "";
   if (found.length < 3 || found.length > 254 || !/^[^\s@\u0000-\u001f\u007f]+@[^\s@\u0000-\u001f\u007f]+$/.test(found)) {
-    throw new HubInvalid("Enter your COROS email and password.");
+    throw new HubInvalid(t("Enter your COROS email and password."));
   }
   return found;
 }
 
 /** The password's MD5 as the browser hashed it: 32 lower-case hex digits, never the password. */
 export function passwordHash(value: unknown): string {
-  if (typeof value !== "string" || !/^[0-9a-f]{32}$/.test(value)) throw new HubInvalid("Enter your COROS email and password.");
+  if (typeof value !== "string" || !/^[0-9a-f]{32}$/.test(value)) throw new HubInvalid(t("Enter your COROS email and password."));
   return value;
 }
 

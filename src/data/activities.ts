@@ -1,5 +1,6 @@
 import { fromSample, fromSynced, NotWiredError, type Loaded } from "@/data/core";
 import { createStore } from "@/data/local/store";
+import { language, t } from "@/lib/i18n";
 import { addMinutes, weatherFrom, weatherUrl } from "@/lib/openMeteo";
 import { SAMPLE_ACTIVITIES, sampleActivityDetail } from "@/data/sample/activities";
 import { syncView } from "@/data/sync";
@@ -217,13 +218,14 @@ export async function getActivity(id: string): Promise<Loaded<ActivityDetail | n
     training: view.get("view.training", "me"),
     gym: gym && body.start != null ? { workout: gym, start: body.start, names: view.get("view.strength", "me")?.exerciseNames ?? {} } : undefined,
   });
-  // The note C-LINK wrote about this workout (the server's summary endpoint or the phone), in this browser's
+  // The note C-LINK wrote about this workout (the server's summary endpoint or the phone), in the app's
   // language when there is one in it, else whichever was written last.
   const notes = view.all("ai.note").map((n) => n.body).filter((n) => n.kind === "workout" && n.key === id && n.text);
-  const language = typeof navigator !== "undefined" ? navigator.language.split("-")[0] : "en";
-  const note = notes.find((n) => n.language.split("-")[0] === language) ?? notes.sort((a, b) => b.writtenAt - a.writtenAt)[0];
+  const lang = language();
+  const base = lang.split("-")[0];
+  const note = notes.find((n) => n.language.split("-")[0] === base) ?? notes.sort((a, b) => b.writtenAt - a.writtenAt)[0];
   if (note) detail.extras = { ...detail.extras, summary: note.text };
-  else askForNote(id, language);
+  else askForNote(id, lang);
   if (!detail.extras?.weather) {
     const weather = await weatherFor(detail);
     if (weather) detail.extras = { ...detail.extras, weather };
@@ -284,19 +286,19 @@ export async function importActivityFile(file: { name: string }): Promise<never>
   throw new NotWiredError(
     "activities.import",
     known
-      ? `Importing files is not connected yet. ${file.name} was not added.`
-      : `${file.name} is not a .fit, .gpx or .tcx file, and importing is not connected yet.`,
+      ? t("Importing files is not connected yet. {file} was not added.", { file: file.name })
+      : t("{file} is not a .fit, .gpx or .tcx file, and importing is not connected yet.", { file: file.name }),
   );
 }
 
 export async function exportActivityFit(id: string): Promise<never> {
   void id;
-  throw new NotWiredError("activities.exportFit", "Export FIT is not connected yet. The original file stays on your COROS account.");
+  throw new NotWiredError("activities.exportFit", t("Export FIT is not connected yet. The original file stays on your COROS account."));
 }
 
 export async function compareActivity(id: string): Promise<never> {
   void id;
-  throw new NotWiredError("activities.compare", "Compare is not connected yet.");
+  throw new NotWiredError("activities.compare", t("Compare is not connected yet."));
 }
 
 let mapToken: Promise<string | null> | null = null;

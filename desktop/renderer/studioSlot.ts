@@ -5,6 +5,7 @@
 // renderSelectableSlotSharedAssets, renderControlBatteryInspector), writing the design fields its editor writes, so the
 // engine builds the same config: a type that is off has every one of its keys deleted, one that is on gets the keys it
 // needs. Pure functions over the design; the panel is parts/StudioSlot.tsx.
+import { msg, t } from "@/lib/i18n";
 import type { CorosWatchfaceTemplateDetails } from "../watchface/types";
 import {
   CONTROL_DATE_COMPLICATION, getAvailableComplications, hasControlComplication, isControlComplicationEnabled, parseConfigPos, pickPreviewResolution,
@@ -17,19 +18,19 @@ import type { Design, EditorLayer, Mode } from "./studioFace";
 /** The slot's layer, and the key the editor's screen state keeps the barometer trend being looked at under. */
 export const SLOT_LAYER = "complication";
 /** Studio's one name for it, in Layers, Add and the inspector (the engine's layer is "Data chosen on watch"). */
-export const SLOT_LABEL = "Selectable data";
+export const SLOT_LABEL = msg("Selectable data");
 export const SLOT_BATTERY_LAYER = "controlBatteryIcon";
 export const TREND_CHOICE = "barometerTrend";
-export const BAROMETER_TRENDS = [{ id: "down", label: "Falling" }, { id: "flat", label: "Steady" }, { id: "up", label: "Rising" }] as const;
+export const BAROMETER_TRENDS = [{ id: "down", label: msg("Falling") }, { id: "flat", label: msg("Steady") }, { id: "up", label: msg("Rising") }] as const;
 export type BarometerTrend = (typeof BAROMETER_TRENDS)[number]["id"];
 /** What a new slot offers on a template that has none of its own. */
 export const SLOT_STARTER: WatchfaceComplicationId[] = ["heartRate", "steps", "calories"];
 
-const LABEL: Partial<Record<WatchfaceComplicationId, string>> = { temperature: "Sensor temperature" };
+const LABEL: Partial<Record<WatchfaceComplicationId, string>> = { temperature: msg("Sensor temperature") };
 /** The line under a type that needs one. */
 const NOTE: Partial<Record<WatchfaceComplicationId, string>> = {
-  temperature: "The watch's own thermometer, warmed by the wrist. For the forecast add Current weather.",
-  date: "This template's own. Studio can keep or drop it, not restyle it.",
+  temperature: msg("The watch's own thermometer, warmed by the wrist. For the forecast add Current weather."),
+  date: msg("This template's own. Studio can keep or drop it, not restyle it."),
 };
 const SAMPLE_UNIT: Partial<Record<WatchfaceComplicationId, string>> = { battery: "%", temperature: "°" };
 
@@ -105,7 +106,7 @@ export function slotTypes(details: CorosWatchfaceTemplateDetails, design: Design
   const available = new Set(mode === "aod" ? getAvailableComplications(details).map((c) => c.id) : []);
   return watchfaceComplicationChoices(details).map((c): SlotType => {
     const inTemplate = hasControlComplication(details, c.id);
-    const blocked = mode === "aod" && !available.has(c.id) ? "Not on this template's always-on screen" : null;
+    const blocked = mode === "aod" && !available.has(c.id) ? t("Not on this template's always-on screen") : null;
     const on = !blocked && isControlComplicationEnabled(details, design, c.id);
     const iconKey = iconKeyOf(c);
     const iconLayer = on && iconKey ? assetLayer(layers, iconKey) ?? null : null;
@@ -225,19 +226,19 @@ export interface SlotIconGrip { id: WatchfaceComplicationId; label: string; boun
  */
 export function slotIconGrip(details: CorosWatchfaceTemplateDetails, design: Design, types: SlotType[]): SlotIconGrip | null {
   if (design.lockedLayerIds?.includes(SLOT_LAYER)) return null;
-  const t = types.find((x) => x.id === slotPreview(types, design));
-  const c = t?.canOffset && t.icon !== "hidden" ? WATCHFACE_COMPLICATIONS.find((x) => x.id === t.id) : undefined;
-  if (!t || !c) return null;
+  const ty = types.find((x) => x.id === slotPreview(types, design));
+  const c = ty?.canOffset && ty.icon !== "hidden" ? WATCHFACE_COMPLICATIONS.find((x) => x.id === ty.id) : undefined;
+  if (!ty || !c) return null;
   const { resolution, config } = slotConfig(details, design);
   const originKey = Object.keys(config).find((k) => /^rect_control\d+_pos$/.test(k));
   const origin = parseConfigPos(originKey ? config[originKey] : undefined);
   const key = `control_${c.controlPrefix}_icon`;
   const pos = parseConfigPos(config[`${key}_pos`]);
   if (!resolution || !origin || !pos) return null;
-  const size = iconSize(resolution, config, key, design.configAssetOverrides?.[t.iconLayer?.configAssetId ?? `config:${key}`]?.replacement);
+  const size = iconSize(resolution, config, key, design.configAssetOverrides?.[ty.iconLayer?.configAssetId ?? `config:${key}`]?.replacement);
   if (!size) return null;
   const x0 = origin.x + pos.x, y0 = origin.y + pos.y;
-  return { id: t.id, label: `${t.label} icon`, bounds: { x0, y0, x1: x0 + size.width, y1: y0 + size.height } };
+  return { id: ty.id, label: t("{label} icon", { label: t(ty.label) }), bounds: { x0, y0, x1: x0 + size.width, y1: y0 + size.height } };
 }
 
 type Resolution = NonNullable<ReturnType<typeof pickPreviewResolution>>;
@@ -273,8 +274,8 @@ export interface SlotPiece { key: string; label: string; note: string; layer: Ed
 /** The colon and minus every type shares, where the face has them. */
 export function slotShared(layers: EditorLayer[]): SlotPiece[] {
   return [
-    { key: "control_colon_icon", label: "Colon", note: "Exercise, sunrise and sunset" },
-    { key: "control_negative_sign_icon", label: "Minus sign", note: "Values below zero" },
+    { key: "control_colon_icon", label: msg("Colon"), note: msg("Exercise, sunrise and sunset") },
+    { key: "control_negative_sign_icon", label: msg("Minus sign"), note: msg("Values below zero") },
   ].flatMap((p) => { const layer = assetLayer(layers, p.key); return layer?.present ? [{ ...p, layer }] : []; });
 }
 
@@ -285,7 +286,7 @@ export function barometerPieces(layers: EditorLayer[]): { trends: (SlotPiece & {
     return layer ? [{ id: t.id, key, label: t.label, note: "", layer }] : [];
   });
   const point = assetLayer(layers, "control_point_icon");
-  return { trends, point: point ? { key: "control_point_icon", label: "Decimal point", note: "Between 1013 and 2", layer: point } : null };
+  return { trends, point: point ? { key: "control_point_icon", label: msg("Decimal point"), note: msg("Between 1013 and 2"), layer: point } : null };
 }
 
 /** Where the template keeps the picture a slot key points at, for a thumbnail; absent when it has none. */
@@ -329,12 +330,15 @@ export function slotSelector(details: CorosWatchfaceTemplateDetails, design: Des
     const owners = WATCHFACE_COMPLICATIONS.filter((c) => built.resolutions.some((r) => Object.keys(r.config).some((key) =>
       key.startsWith(`control_${c.controlPrefix}_`) && !BLANK_OK.test(key) && !(r.config[key] ?? "").trim()))).map((c) => c.id);
     if (owners.length) {
-      const names = owners.map(slotLabel);
-      warnings.push({ kind: "blank", ids: owners, text: `${names.length === 1 ? `${names[0]} has` : `${names.slice(0, 3).join(", ")}${names.length > 3 ? ` and ${names.length - 3} more` : ""} have`} an empty key: the watch may list a blank entry.` });
+      const names = owners.map((id) => t(slotLabel(id)));
+      const text = names.length === 1 ? t("{name} has an empty key: the watch may list a blank entry.", { name: names[0]! })
+        : names.length > 3 ? t("{names} and {more} more have an empty key: the watch may list a blank entry.", { names: names.slice(0, 3).join(", "), more: names.length - 3 })
+          : t("{names} have an empty key: the watch may list a blank entry.", { names: names.join(", ") });
+      warnings.push({ kind: "blank", ids: owners, text });
     }
   }
-  const bare = listed.filter((t) => t.icon === "none" || t.icon === "hidden");
-  if (bare.length) warnings.push({ kind: "noIcon", ids: bare.map((t) => t.id), text: `No icon: ${bare.map((t) => t.label).join(", ")}. The watch shows the value alone.` });
-  if (!types.some((t) => t.on)) warnings.push({ kind: "empty", ids: [], text: "Nothing is on, so the watch shows nothing here." });
+  const bare = listed.filter((x) => x.icon === "none" || x.icon === "hidden");
+  if (bare.length) warnings.push({ kind: "noIcon", ids: bare.map((x) => x.id), text: t("No icon: {names}. The watch shows the value alone.", { names: bare.map((x) => t(x.label)).join(", ") }) });
+  if (!types.some((x) => x.on)) warnings.push({ kind: "empty", ids: [], text: t("Nothing is on, so the watch shows nothing here.") });
   return { listed, warnings };
 }

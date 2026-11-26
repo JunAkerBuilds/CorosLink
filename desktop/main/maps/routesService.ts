@@ -22,6 +22,7 @@ import { Ors } from "./routing/ors";
 import { Overpass, type TrailKind } from "./routing/overpass";
 import { shapeMatch, sketchWaypoints } from "./routing/sketch";
 import { checkDistance, ELEVATIONS, SPORTS, SURFACES, type Prefs } from "./routing/sports";
+import { t } from "@/lib/i18n";
 
 export interface RoutesHost {
   /** Route Studio's own folder (saved routes, routing settings, the sealed key). */
@@ -75,11 +76,11 @@ export class RoutesService {
     const method = request.method.toUpperCase();
     try {
       const answer = await this.dispatch(method, head, id, tail, url, request);
-      return answer ?? problem("That isn't something this page can do.", "method", 405);
+      return answer ?? problem(t("That isn't something this page can do."), "method", 405);
     } catch (e) {
       if (e instanceof RoutingProblem) return problem(e.message, e.code, e.status);
-      if (e instanceof SyntaxError) return problem("The request wasn't readable.", "bad_request");
-      return problem("Something went wrong planning the route. Try again.", "internal", 500);
+      if (e instanceof SyntaxError) return problem(t("The request wasn't readable."), "bad_request");
+      return problem(t("Something went wrong planning the route. Try again."), "internal", 500);
     }
   }
 
@@ -104,7 +105,7 @@ export class RoutesService {
         if (method !== "GET") return null;
         if (id === "reverse") {
           const point: LatLon = [Number(q.get("lat")), Number(q.get("lon"))];
-          if (!isLatLon(point)) throw new RoutingProblem("Pick a point on the map.", "point");
+          if (!isLatLon(point)) throw new RoutingProblem(t("Pick a point on the map."), "point");
           return json(await this.places.reverse(point[0], point[1]));
         }
         return json(await this.places.search(q.get("q") ?? ""));
@@ -148,16 +149,16 @@ export class RoutesService {
     if (id === "import" && !tail) {
       if (method !== "POST") return null;
       const size = Number(request.headers.get("content-length") ?? 0);
-      if (size > MAX_GPX_BYTES) throw new RoutingProblem("That GPX file is too big.", "too_big", 413);
+      if (size > MAX_GPX_BYTES) throw new RoutingProblem(t("That GPX file is too big."), "too_big", 413);
       const text = await request.text();
-      if (text.length > MAX_GPX_BYTES) throw new RoutingProblem("That GPX file is too big.", "too_big", 413);
+      if (text.length > MAX_GPX_BYTES) throw new RoutingProblem(t("That GPX file is too big."), "too_big", 413);
       return json({ routes: (await this.store.importGpx(text, q.get("name"))).map((r) => this.marked(r)) });
     }
-    if (!isRouteId(id)) return problem("That route wasn't found.", "not_found", 404);
+    if (!isRouteId(id)) return problem(t("That route wasn't found."), "not_found", 404);
     if (tail === "gpx") {
       if (method !== "GET") return null;
       const route = await this.store.get(id);
-      if (!route) return problem("That route wasn't found.", "not_found", 404);
+      if (!route) return problem(t("That route wasn't found."), "not_found", 404);
       return new Response(toGpx(route), {
         headers: {
           "Content-Type": "application/gpx+xml; charset=utf-8",
@@ -168,14 +169,14 @@ export class RoutesService {
     }
     if (method === "GET") {
       const route = await this.store.get(id);
-      return route ? json(this.marked(route)) : problem("That route wasn't found.", "not_found", 404);
+      return route ? json(this.marked(route)) : problem(t("That route wasn't found."), "not_found", 404);
     }
     if (method === "PATCH") {
       const route = await this.store.rename(id, (await body(request)).name);
-      return route ? json(this.marked(route)) : problem("That route wasn't found.", "not_found", 404);
+      return route ? json(this.marked(route)) : problem(t("That route wasn't found."), "not_found", 404);
     }
     if (method === "DELETE") {
-      return (await this.store.remove(id)) ? json({ deleted: 1 }) : problem("That route wasn't found.", "not_found", 404);
+      return (await this.store.remove(id)) ? json({ deleted: 1 }) : problem(t("That route wasn't found."), "not_found", 404);
     }
     return null;
   }
@@ -222,14 +223,14 @@ export class RoutesService {
   }
 
   private async setConfig(b: Record<string, unknown>): Promise<RoutingConfig> {
-    if (b.engine !== "keyless" && b.engine !== "ors") throw new RoutingProblem("Pick keyless routing or OpenRouteService.", "engine");
+    if (b.engine !== "keyless" && b.engine !== "ors") throw new RoutingProblem(t("Pick keyless routing or OpenRouteService."), "engine");
     if (typeof b.orsKey === "string" || b.orsKey === null) {
       const key = typeof b.orsKey === "string" ? b.orsKey.trim() : "";
-      if (key && !/^[\x21-\x7e]{16,400}$/.test(key)) throw new RoutingProblem("That doesn't look like an OpenRouteService key.", "ors_key");
+      if (key && !/^[\x21-\x7e]{16,400}$/.test(key)) throw new RoutingProblem(t("That doesn't look like an OpenRouteService key."), "ors_key");
       if (key) await writeFile(this.keyFile, await this.host.sealer.encrypt(key), { mode: 0o600 });
       else await rm(this.keyFile, { force: true });
     }
-    if (b.engine === "ors" && !(await this.orsKey())) throw new RoutingProblem("Add your OpenRouteService key first.", "ors_key");
+    if (b.engine === "ors" && !(await this.orsKey())) throw new RoutingProblem(t("Add your OpenRouteService key first."), "ors_key");
     this.engine = b.engine;
     await writeFile(this.configFile, JSON.stringify({ engine: b.engine }));
     return this.config();
@@ -253,7 +254,7 @@ export class RoutesService {
   private async leg(b: Record<string, unknown>): Promise<RouteGeometry> {
     const req = b as unknown as LegRequest;
     const prefs = checkPrefs({ ...b, elevation: "any" });
-    if (!isLatLon(req.from) || !isLatLon(req.to)) throw new RoutingProblem("Pick two points on the map.", "points");
+    if (!isLatLon(req.from) || !isLatLon(req.to)) throw new RoutingProblem(t("Pick two points on the map."), "points");
     const from: LatLon = [req.from[0], req.from[1]], to: LatLon = [req.to[0], req.to[1]];
     checkDistance(prefs.sport, Math.max(0.001, meters(from, to) / 1000));
     if (req.snap === false) return lineGeometry([trackPoint(from[0], from[1]), trackPoint(to[0], to[1])]);
@@ -265,7 +266,7 @@ export class RoutesService {
     const prefs = checkPrefs({ ...b, elevation: "any" });
     const fidelity = req.fidelity === "loose" || req.fidelity === "strict" ? req.fidelity : "balanced";
     if (!Array.isArray(req.outline) || req.outline.length < 2 || req.outline.length > MAX_OUTLINE || !req.outline.every(isLatLon)) {
-      throw new RoutingProblem("Place a shape on the map first.", "outline");
+      throw new RoutingProblem(t("Place a shape on the map first."), "outline");
     }
     const outline = req.outline.map((p): LatLon => [p[0], p[1]]);
     checkDistance(prefs.sport, Math.max(0.001, lengthOf(outline) / 1000));
@@ -275,7 +276,7 @@ export class RoutesService {
 
   private async trail(id: string): Promise<RouteGeometry> {
     const { points } = await this.overpass.relation(id);
-    if (points.length > 40_000) throw new RoutingProblem("This trail is too long for the watch (over 40,000 points).", "too_many_points");
+    if (points.length > 40_000) throw new RoutingProblem(t("This trail is too long for the watch (over 40,000 points)."), "too_many_points");
     // Heights are a nice-to-have here: without them the line still shows.
     return this.heights.line(points).catch(() => lineGeometry(points.map((p) => trackPoint(p[0], p[1]))));
   }
@@ -283,12 +284,12 @@ export class RoutesService {
 
 async function body(request: Request): Promise<Record<string, unknown>> {
   const parsed = (await request.json()) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new RoutingProblem("The request wasn't readable.", "bad_request");
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new RoutingProblem(t("The request wasn't readable."), "bad_request");
   return parsed as Record<string, unknown>;
 }
 
 function checkPrefs(b: Record<string, unknown>): Prefs {
-  if (!SPORTS.includes(b.sport as Prefs["sport"])) throw new RoutingProblem("Pick a sport.", "sport");
+  if (!SPORTS.includes(b.sport as Prefs["sport"])) throw new RoutingProblem(t("Pick a sport."), "sport");
   const sport = b.sport as Prefs["sport"];
   const surface = SURFACES.includes(b.surface as Prefs["surface"]) ? (b.surface as Prefs["surface"]) : sport === "hike" || sport === "mtb" ? "trail" : "road";
   const elevation = ELEVATIONS.includes(b.elevation as Prefs["elevation"]) ? (b.elevation as Prefs["elevation"]) : "any";
@@ -297,9 +298,9 @@ function checkPrefs(b: Record<string, unknown>): Prefs {
 
 function checkGenerate(b: Record<string, unknown>): GenerateRequest {
   const prefs = checkPrefs(b);
-  if (b.kind !== "loop" && b.kind !== "ab") throw new RoutingProblem("Pick a loop or A to B.", "kind");
-  if (!isLatLon(b.start)) throw new RoutingProblem("Pick where the route starts.", "start");
-  if (b.kind === "ab" && !isLatLon(b.end)) throw new RoutingProblem("Pick where the route ends.", "end");
+  if (b.kind !== "loop" && b.kind !== "ab") throw new RoutingProblem(t("Pick a loop or A to B."), "kind");
+  if (!isLatLon(b.start)) throw new RoutingProblem(t("Pick where the route starts."), "start");
+  if (b.kind === "ab" && !isLatLon(b.end)) throw new RoutingProblem(t("Pick where the route ends."), "end");
   const seed = typeof b.seed === "number" && Number.isFinite(b.seed) ? b.seed : undefined;
   return {
     ...prefs,

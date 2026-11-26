@@ -6,7 +6,7 @@ import { BackupProblem, isSealed, packBackup, unpackBackup } from "./backup";
 import { guardSession, savedMode, uploadsToCoros } from "./dataMode";
 import { ErrorLog, redact } from "./errorLog";
 import { LocalStore } from "./localStore";
-import { DesktopSettings } from "./settings";
+import { DesktopSettings, platformLabel } from "./settings";
 
 const folder = () => mkdtempSync(path.join(tmpdir(), "clink-settings-"));
 const items = [{ collection: "feel.check", id: "2026-11-21", body: { feel: 4, tags: [] } }, { collection: "coach.memory", id: "m1", body: { text: "Goal: sub-3 marathon" } }];
@@ -116,7 +116,7 @@ describe("Local-Only Mode", () => {
 describe("settings file", () => {
   const host = (store: LocalStore | null = null) => ({
     version: "1", store: () => store, saveDialog: async () => null, openDialog: async () => null, reveal: () => undefined,
-    restored: () => undefined, confirm: async () => false, lastPhoneSync: () => null, modeChanged: () => undefined,
+    restored: () => undefined, confirm: async () => false, lastPhoneSync: () => null, modeChanged: () => undefined, languageChanged: () => undefined,
   });
   const ask = (s: DesktopSettings, body?: object) => s.answer(new Request("clink://app/api/desktop/settings", body
     ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {})).then((r) => r.json() as Promise<{ dataMode: string; local: unknown }>);
@@ -158,5 +158,14 @@ describe("settings file", () => {
     const old = folder();
     writeFileSync(path.join(old, "settings.json"), JSON.stringify({ dataMode: "connected", blocked: [] }));
     expect(new DesktopSettings(old, new ErrorLog(old), host()).introPending).toBe(false);
+  });
+});
+
+describe("the platform in About", () => {
+  it("names Windows 11 by its build, not the 10.0 it reports", () => {
+    expect(platformLabel("win32", "x64", "10.0.26300")).toBe("Windows 11 (build 26300)");
+    expect(platformLabel("win32", "x64", "10.0.19045")).toBe("Windows 10 (build 19045)");
+    expect(platformLabel("darwin", "arm64", "25.0.0")).toBe("macOS · Apple silicon");
+    expect(platformLabel("linux", "x64", "6.8.0")).toBe("Linux 6.8.0");
   });
 });

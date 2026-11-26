@@ -10,6 +10,7 @@ import { useStore } from "@/data/local/store";
 import { changeWatchSetting, discardWatchChanges, loadWatch, sendPendingToPhone, undoWatchSetting, WATCH_NOT_CONNECTED, type Alarm, type GpsMode, type Watch } from "@/data/watch";
 import { useSyncStatus } from "@/data/sync";
 import { parseDay } from "@/lib/format";
+import { language, locale, t, tx } from "@/lib/i18n";
 import { type Json, alarmJson, alarmKey, alarmLine, alarmRows, dayShort, goalShare, lastChargeIndex, pendingCount, pendingFor, repeatLabel, stepGoal, valueOf, WEEK_ORDER } from "@/lib/watch";
 import { platformSlots } from "@/lib/platform";
 import "./watch.css";
@@ -33,8 +34,8 @@ export default function WatchPage() {
 function Waiting({ label, onUndo }: { label: string; onUndo: () => void }) {
   return (
     <span className="wa-wait">
-      <span className="wa-chip">Waiting for sync</span>
-      <button type="button" className="wa-undo" aria-label={`Undo the change to ${label}`} onClick={onUndo}>Undo</button>
+      <span className="wa-chip">{t("Waiting for sync")}</span>
+      <button type="button" className="wa-undo" aria-label={t("Undo the change to {what}", { what: label })} onClick={onUndo}>{t("Undo")}</button>
     </span>
   );
 }
@@ -63,10 +64,10 @@ function WatchScreen({ watch, origin }: { watch: Watch; origin: Origin }) {
   const discardPending = () => saved(discardWatchChanges());
   // What can honestly be said about the waiting changes: on this page only, in the account, or not there yet.
   const queueNote = !synced
-    ? (count ? syncNote || `${WATCH_NOT_CONNECTED}.` : `${WATCH_NOT_CONNECTED}: changes made here are saved in this browser until it is.`)
-    : sync.error ? `Not saved to your account yet. ${sync.error}`
-      : sync.unsent ? "Not saved to your account yet"
-        : count ? (watch.viaComputer ? "Going to the watch" : "Waiting for the phone app") : syncNote;
+    ? (count ? syncNote || `${t(WATCH_NOT_CONNECTED)}.` : t("{reason}: changes made here are saved in this browser until it is.", { reason: t(WATCH_NOT_CONNECTED) }))
+    : sync.error ? `${t("Not saved to your account yet.")} ${sync.error}`
+      : sync.unsent ? t("Not saved to your account yet")
+        : count ? (watch.viaComputer ? t("Going to the watch") : t("Waiting for the phone app")) : syncNote;
 
   const gps = valueOf<GpsMode | null>(queue, "gps.mode", watch.gpsMode);
   const percent = watch.battery.percent;
@@ -97,16 +98,16 @@ function WatchScreen({ watch, origin }: { watch: Watch; origin: Origin }) {
 
   return (
     <main className="page wa-page">
-      {watch.empty ? <p className="notice" role="status">Nothing from your phone yet</p> : null}
+      {watch.empty ? <p className="notice" role="status">{t("Nothing from your phone yet")}</p> : null}
       {watch.refused ? <p className="notice" role="status">{watch.refused}</p> : null}
-      <section aria-label="Device" className="wa-hero">
+      <section aria-label={t("Device")} className="wa-hero">
         <div aria-hidden="true" className="wa-watch">
           <i className="wa-strap" /><i className="wa-strap" data-low="" /><i className="wa-crown" /><i className="wa-case" /><i className="wa-dial" />
           <svg width="128" height="128" viewBox="0 0 128 128">
             <circle cx="64" cy="64" r="54" fill="none" style={{ stroke: "rgba(255, 255, 255, 0.12)", strokeWidth: 7 }} />
             <circle className="cl-ring" cx="64" cy="64" r="54" fill="none" strokeDasharray={`${((percent ?? 0) / 100) * 339.3} 340`} style={{ stroke: "#53cba1", strokeWidth: 7, strokeLinecap: "round" }} />
           </svg>
-          <span className="wa-dial-text"><CountUp className="num" text={percent === null ? "—" : `${percent}%`} /><span>Battery</span></span>
+          <span className="wa-dial-text"><CountUp className="num" text={percent === null ? "—" : `${percent}%`} /><span>{t("Battery")}</span></span>
         </div>
         <div className="wa-id">
           <h1>{watch.name}</h1>
@@ -117,28 +118,28 @@ function WatchScreen({ watch, origin }: { watch: Watch; origin: Origin }) {
           <div className="wa-queue" role="status">
             {count ? (
               <>
-                <span className="wa-count">{count} {count === 1 ? "change" : "changes"} waiting for sync</span>
-                <Button onClick={discardPending}>Discard {count === 1 ? "change" : `all ${count}`}</Button>
+                <span className="wa-count">{count === 1 ? t("1 change waiting for sync") : t("{n} changes waiting for sync", { n: count })}</span>
+                <Button onClick={discardPending}>{count === 1 ? t("Discard change") : t("Discard all {n}", { n: count })}</Button>
               </>
-            ) : <span className="muted">No changes waiting</span>}
+            ) : <span className="muted">{t("No changes waiting")}</span>}
             {queueNote ? <p>{queueNote}</p> : null}
           </div>
         </div>
         <div className="wa-tiles">
-          <div className="tile"><span className="wa-k">Battery life</span><span className="wa-v">{watch.battery.left || "—"}</span><span className="wa-s">{watch.batteryHistory.perDay ? `At ${watch.batteryHistory.perDay}` : ""}</span></div>
+          <div className="tile"><span className="wa-k">{t("Battery life")}</span><span className="wa-v">{watch.battery.left || "—"}</span><span className="wa-s">{watch.batteryHistory.perDay ? t("At {rate}", { rate: watch.batteryHistory.perDay }) : ""}</span></div>
           <div className="tile">
-            <span className="wa-k">Storage</span><CountUp className="wa-v" text={watch.storage ? `${watch.storage.usedGb} GB` : "—"} />
+            <span className="wa-k">{t("Storage")}</span><CountUp className="wa-v" text={watch.storage ? `${watch.storage.usedGb} GB` : "—"} />
             <div aria-hidden="true" className="wa-meter"><i className="cl-bar" style={{ width: `${watch.storage ? (watch.storage.usedGb / watch.storage.totalGb) * 100 : 0}%`, background: "var(--h-blue)" }} /></div>
-            <span className="wa-s">{watch.storage ? `of ${watch.storage.totalGb} GB used` : ""}</span>
+            <span className="wa-s">{watch.storage ? t("of {total} GB used", { total: watch.storage.totalGb }) : ""}</span>
           </div>
-          <div className="tile"><span className="wa-k">Firmware</span><span className="wa-v">{watch.firmware.version || "—"}</span><span className="wa-s">{watch.firmware.state}</span></div>
+          <div className="tile"><span className="wa-k">{t("Firmware")}</span><span className="wa-v">{watch.firmware.version || "—"}</span><span className="wa-s">{watch.firmware.state}</span></div>
         </div>
       </section>
 
       <div className="wa-board">
         {WatchCards ? <WatchCards /> : null}
-        <Card aria-label="Daily goal" className="wa-card wa-w7">
-          <h2>Daily goal</h2>
+        <Card aria-label={t("Daily goal")} className="wa-card wa-w7">
+          <h2>{t("Daily goal")}</h2>
           <div className="wa-goals">
             {watch.goals.map((g) => {
               const key = `goal.${g.key}`;
@@ -159,11 +160,11 @@ function WatchScreen({ watch, origin }: { watch: Watch; origin: Origin }) {
                   </div>
                   <span className="wa-s">{g.soFar}</span>
                   <div className="wa-stepper">
-                    <button type="button" className="btn btn-glass" aria-label={`Lower the ${g.name.toLowerCase()} goal`} disabled={goal <= g.step} onClick={() => setPending(key, g.goal, stepGoal(goal, g.step, -1, g.max))}>
+                    <button type="button" className="btn btn-glass" aria-label={t("Lower the {name} goal", { name: g.name.toLowerCase() })} disabled={goal <= g.step} onClick={() => setPending(key, g.goal, stepGoal(goal, g.step, -1, g.max))}>
                       <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 2.5, strokeLinecap: "round" }}><path d="M5 12h14" /></svg>
                     </button>
                     <NumberField id={`g-${g.key}`} value={goal} max={g.max} onCommit={(n) => setPending(key, g.goal, n)} />
-                    <button type="button" className="btn btn-glass" aria-label={`Raise the ${g.name.toLowerCase()} goal`} disabled={goal >= g.max} onClick={() => setPending(key, g.goal, stepGoal(goal, g.step, 1, g.max))}>
+                    <button type="button" className="btn btn-glass" aria-label={t("Raise the {name} goal", { name: g.name.toLowerCase() })} disabled={goal >= g.max} onClick={() => setPending(key, g.goal, stepGoal(goal, g.step, 1, g.max))}>
                       <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 2.5, strokeLinecap: "round" }}><path d="M12 5v14M5 12h14" /></svg>
                     </button>
                   </div>
@@ -174,9 +175,9 @@ function WatchScreen({ watch, origin }: { watch: Watch; origin: Origin }) {
           </div>
         </Card>
 
-        <Card aria-label="Satellite systems" className="wa-card wa-w5">
-          <h2>Satellite systems</h2>
-          <div role="radiogroup" aria-label="Satellite systems" className="wa-picks">
+        <Card aria-label={t("Satellite systems")} className="wa-card wa-w5">
+          <h2>{t("Satellite systems")}</h2>
+          <div role="radiogroup" aria-label={t("Satellite systems")} className="wa-picks">
             {watch.gpsOptions.map((o) => (
               <div key={o.mode} className="wa-pick" data-on={gps === o.mode ? "true" : undefined}>
                 <label>
@@ -184,20 +185,20 @@ function WatchScreen({ watch, origin }: { watch: Watch; origin: Origin }) {
                   <span className="wa-pick-name">{o.name}</span>
                   <span className="wa-pick-detail">{o.detail}</span>
                   <span className="wa-meters">
-                    <Meter label="Accuracy" value={o.accuracy} hue="blue" />
-                    <Meter label="Battery" value={o.battery} hue="mint" />
+                    <Meter label={t("Accuracy")} value={o.accuracy} hue="blue" />
+                    <Meter label={t("Battery")} value={o.battery} hue="mint" />
                   </span>
                 </label>
-                {gps === o.mode && pendingFor(queue, "gps.mode") ? <Waiting label="satellite systems" onUndo={() => undoPending("gps.mode")} /> : null}
+                {gps === o.mode && pendingFor(queue, "gps.mode") ? <Waiting label={t("satellite systems")} onUndo={() => undoPending("gps.mode")} /> : null}
               </div>
             ))}
           </div>
         </Card>
 
-        <Card aria-label="Alarms" className="wa-card wa-w5">
+        <Card aria-label={t("Alarms")} className="wa-card wa-w5">
           <div className="wa-alarms-head">
-            <h2>Alarms</h2>
-            <Button onClick={addAlarm} disabled={draft !== null || watch.empty}>Add alarm</Button>
+            <h2>{t("Alarms")}</h2>
+            <Button onClick={addAlarm} disabled={draft !== null || watch.empty}>{t("Add alarm")}</Button>
           </div>
           <div className="wa-alarm-list">
           {rows.map(({ alarm, pending }) => {
@@ -210,31 +211,31 @@ function WatchScreen({ watch, origin }: { watch: Watch; origin: Origin }) {
               <div key={alarm.id} className="tile wa-alarm" data-off={alarm.on ? undefined : ""} data-removed={removed ? "" : undefined}>
                 <span className="wa-when">
                   <span className="wa-time num">{alarm.time}</span>
-                  <span>{removed ? "Removed" : alarm.label || repeatLabel(alarm.days)}</span>
-                  {pending ? <Waiting label={`the ${alarm.time} alarm`} onUndo={() => undoPending(key)} /> : null}
+                  <span>{removed ? tx("alarm", "Removed") : alarm.label || t(repeatLabel(alarm.days))}</span>
+                  {pending ? <Waiting label={t("the {time} alarm", { time: alarm.time })} onUndo={() => undoPending(key)} /> : null}
                 </span>
                 <span className="wa-daydots" role="img" aria-label={alarmLine(alarm)}>
                   {WEEK_ORDER.map((d) => <i key={d} data-on={alarm.days.includes(d) ? "true" : undefined}>{dayShort(d).slice(0, 1)}</i>)}
                 </span>
-                {removed ? <span /> : <button type="button" className="wa-edit-btn" aria-label={`Edit the ${alarm.time} alarm`} onClick={() => { setDraft(null); setEditing(alarm.id); }}>Edit</button>}
+                {removed ? <span /> : <button type="button" className="wa-edit-btn" aria-label={t("Edit the {time} alarm", { time: alarm.time })} onClick={() => { setDraft(null); setEditing(alarm.id); }}>{t("Edit")}</button>}
                 <Switch
-                  checked={alarm.on && !removed} disabled={removed} label={`${alarm.time} alarm`}
+                  checked={alarm.on && !removed} disabled={removed} label={t("{time} alarm", { time: alarm.time })}
                   onChange={(on) => setPending(key, original(alarm.id), alarmJson({ ...alarm, on }))}
                 />
               </div>
             );
           })}
           {draft ? <AlarmEditor key={draft.id} alarm={draft} isNew onSave={saveAlarm} onCancel={() => { setDraft(null); setEditing(null); }} noLabel={synced} /> : null}
-          {!rows.length && !draft && !watch.empty ? <p className="wa-none">No alarms on the watch.</p> : null}
+          {!rows.length && !draft && !watch.empty ? <p className="wa-none">{t("No alarms on the watch.")}</p> : null}
           </div>
         </Card>
 
-        <Card aria-label="Battery" className="wa-card wa-w7">
-          <h2>Battery</h2>
+        <Card aria-label={t("Battery")} className="wa-card wa-w7">
+          <h2>{t("Battery")}</h2>
           <div className="wa-batt-stats">
-            <div><span className="wa-k">Average use</span><span>{watch.batteryHistory.perDay || "—"}</span></div>
-            <div><span className="wa-k">Last charged</span><span>{charged === null ? "—" : `${chargedDay.getDate()} ${MONTHS[chargedDay.getMonth()]}`}</span></div>
-            <div><span className="wa-k">Left</span><span>{watch.battery.left || "—"}</span></div>
+            <div><span className="wa-k">{t("Average use")}</span><span>{watch.batteryHistory.perDay || "—"}</span></div>
+            <div><span className="wa-k">{t("Last charged")}</span><span>{charged === null ? "—" : language() === "en" ? `${chargedDay.getDate()} ${MONTHS[chargedDay.getMonth()]}` : chargedDay.toLocaleDateString(locale(), { day: "numeric", month: "short" })}</span></div>
+            <div><span className="wa-k">{tx("remaining", "Left")}</span><span>{watch.battery.left || "—"}</span></div>
           </div>
           {watch.batteryHistory.levels.length < 2 ? null : <BatteryChart levels={watch.batteryHistory.levels} firstDay={watch.batteryHistory.firstDay} alt={watch.batteryHistory.alt} />}
         </Card>
@@ -246,7 +247,7 @@ function WatchScreen({ watch, origin }: { watch: Watch; origin: Origin }) {
 
 function Meter({ label, value, hue }: { label: string; value: number; hue: string }) {
   return (
-    <span className="wa-meter3" role="img" aria-label={`${label} ${value} of 3`}>
+    <span className="wa-meter3" role="img" aria-label={t("{label} {n} of 3", { label, n: value })}>
       {label}
       <span aria-hidden="true">{[1, 2, 3].map((k) => <i key={k} style={k <= value ? { background: `var(--h-${hue})` } : undefined} />)}</span>
     </span>

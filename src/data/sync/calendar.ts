@@ -1,6 +1,7 @@
 // Synced items → calendar entries and week totals. Pure: plain item bodies and `now` in.
 import type { CalendarEntry, CalendarSport, WeekTotals } from "@/data/training";
 import { mondayOf } from "@/lib/calendar";
+import { t } from "@/lib/i18n";
 import { activityDetail, dayTotals, isRunning, placeActivities } from "./dashboard";
 import { SPORT_TITLE } from "./geo";
 import { calendarDayKey, type NativeActivity, type NativeDayVitals, type NativeGymPlanned, type NativeGymRoutine, type NativeSport } from "./native";
@@ -25,7 +26,7 @@ export function syncedEntries(
     id: `synced-${p.a.id}`,
     date: p.day,
     sport: calendarSport(p.a.sport),
-    name: p.a.name || SPORT_TITLE[p.a.sport] || "Workout",
+    name: p.a.name || t(SPORT_TITLE[p.a.sport] || "Workout"),
     detail: activityDetail(p.a),
     status: "done",
     source: "synced",
@@ -45,7 +46,7 @@ export function syncedEntries(
         id: `synced-plan-${p.id}`,
         date: calendarDayKey(p.day),
         sport: "strength" as const,
-        name: routine?.name || "Gym workout",
+        name: routine?.name || t("Gym workout"),
         detail: count ? `${count} ${count === 1 ? "exercise" : "exercises"}` : "",
         status: "planned" as const,
         source: "synced" as const,

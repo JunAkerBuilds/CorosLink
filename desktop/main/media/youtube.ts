@@ -11,6 +11,7 @@ import type { Library } from "./library";
 import { SourceProblem } from "./sources";
 import { findTool, listArgs, progressOf, run, runJson, ytDlpArgs } from "./tools";
 import type { Browser, BrowserView, Rect, WebHost } from "./webHost";
+import { t } from "@/lib/i18n";
 
 export const PARTITION = "persist:clink-youtube";
 const HOME = "https://www.youtube.com/";
@@ -35,14 +36,14 @@ const LIST = /^[\w-]{2,64}$/;
  */
 export function normalize(raw: string): string {
   let u: URL;
-  try { u = new URL(raw.trim()); } catch { throw new SourceProblem("That isn't a YouTube link.", "notYouTube"); }
+  try { u = new URL(raw.trim()); } catch { throw new SourceProblem(t("That isn't a YouTube link."), "notYouTube"); }
   const host = hostOf(u);
-  if (u.protocol !== "https:" && u.protocol !== "http:") throw new SourceProblem("That isn't a YouTube link.", "notYouTube");
+  if (u.protocol !== "https:" && u.protocol !== "http:") throw new SourceProblem(t("That isn't a YouTube link."), "notYouTube");
   if (host === "youtu.be") {
     const v = u.pathname.split("/").filter(Boolean)[0] ?? "";
     if (ID.test(v)) return `https://www.youtube.com/watch?v=${v}`;
   }
-  if (!isYouTubeHost(host)) throw new SourceProblem("That isn't a YouTube link.", "notYouTube");
+  if (!isYouTubeHost(host)) throw new SourceProblem(t("That isn't a YouTube link."), "notYouTube");
   const v = u.searchParams.get("v") ?? "", list = u.searchParams.get("list") ?? "", q = u.searchParams.get("search_query");
   if ((u.pathname === "/playlist" || u.pathname === "/watch") && LIST.test(list)) return `https://www.youtube.com/playlist?list=${list}`;
   if (u.pathname === "/watch" && ID.test(v)) return `https://www.youtube.com/watch?v=${v}`;
@@ -99,11 +100,11 @@ export function readListing(json: unknown): { title: string; items: Item[] } {
 /** yt-dlp's last error, said plainly when it's one people meet. */
 export function explain(message: string): string {
   const m = message.toLowerCase();
-  if (m.includes("sign in to confirm") || m.includes("not a bot")) return "YouTube wants a sign-in for this one. Try again later.";
-  if (m.includes("private video") || m.includes("members-only") || m.includes("playlist is private")) return "That's private or members-only.";
-  if (m.includes("video unavailable") || m.includes("does not exist")) return "That video isn't available.";
-  if (m.includes("ffmpeg") || m.includes("postprocessing")) return "The audio couldn't be turned into an MP3.";
-  if (m.includes("max-filesize") || m.includes("larger than max")) return "That's too long to download.";
+  if (m.includes("sign in to confirm") || m.includes("not a bot")) return t("YouTube wants a sign-in for this one. Try again later.");
+  if (m.includes("private video") || m.includes("members-only") || m.includes("playlist is private")) return t("That's private or members-only.");
+  if (m.includes("video unavailable") || m.includes("does not exist")) return t("That video isn't available.");
+  if (m.includes("ffmpeg") || m.includes("postprocessing")) return t("The audio couldn't be turned into an MP3.");
+  if (m.includes("max-filesize") || m.includes("larger than max")) return t("That's too long to download.");
   return message.slice(0, 300);
 }
 
@@ -191,7 +192,7 @@ export class YouTube {
 
   private ytDlp(): string {
     const bin = this.tool("yt-dlp");
-    if (!bin) throw new SourceProblem("Downloading needs yt-dlp on this computer.", "noYtDlp");
+    if (!bin) throw new SourceProblem(t("Downloading needs yt-dlp on this computer."), "noYtDlp");
     return bin;
   }
 
@@ -207,7 +208,7 @@ export class YouTube {
   /** Words are searched; a link is opened. */
   async search(q: string): Promise<Listing> {
     const words = q.trim().slice(0, 200);
-    if (!words) throw new SourceProblem("Type something to search for.", "empty");
+    if (!words) throw new SourceProblem(t("Type something to search for."), "empty");
     if (/^https?:\/\//i.test(words) || /^(www\.)?(youtube\.com|youtu\.be)\//i.test(words)) return this.open(words.startsWith("http") ? words : `https://${words}`);
     const found = await this.read(`ytsearch${SEARCH_RESULTS}:${words}`, SEARCH_RESULTS, LIST_TIMEOUT);
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(words)}`;
@@ -220,7 +221,7 @@ export class YouTube {
     const url = normalize(raw);
     const kind = classify(url);
     if (kind === "search") return this.search(new URL(url).searchParams.get("search_query") ?? "");
-    if (kind !== "video" && kind !== "playlist") throw new SourceProblem("Open a video or a playlist.", "notVideo");
+    if (kind !== "video" && kind !== "playlist") throw new SourceProblem(t("Open a video or a playlist."), "notVideo");
     const found = await this.read(url, kind === "playlist" ? MAX_ITEMS : 1, kind === "playlist" ? PLAYLIST_TIMEOUT : LIST_TIMEOUT);
     const title = found.title || found.items[0]?.title || "YouTube";
     this.history.visit(url, title);
@@ -230,7 +231,7 @@ export class YouTube {
 
   private listing(key: string): Listing {
     const l = this.listings.get(key);
-    if (!l) throw new SourceProblem("Search or open the link again, then download.", "stale");
+    if (!l) throw new SourceProblem(t("Search or open the link again, then download."), "stale");
     return l;
   }
 
@@ -270,7 +271,7 @@ export class YouTube {
   combined(key: string, combine: Partial<Pick<Combine, "fetchTrack" | "join">> = {}): { queued: number } {
     this.ytDlp();
     const l = this.listing(key);
-    if (l.kind !== "playlist" || !l.listId) throw new SourceProblem("Only a playlist can be combined.", "notPlaylist");
+    if (l.kind !== "playlist" || !l.listId) throw new SourceProblem(t("Only a playlist can be combined."), "notPlaylist");
     const id = `yt:${l.listId}`;
     const work = combinedWork({
       id, name: l.title, source: "YouTube", active: this.active,
@@ -279,7 +280,7 @@ export class YouTube {
       fetchTrack: combine.fetchTrack ?? ytDlpTrack(() => this.tool("yt-dlp"), () => this.tool("ffmpeg")),
       join: combine.join ?? ffmpegJoin(() => this.tool("ffmpeg")),
     });
-    const queued = this.downloads.add({ source: "YouTube", title: `${l.title} (combined)`, artist: null, origin: combinedOrigin(id) }, work, true);
+    const queued = this.downloads.add({ source: "YouTube", title: t("{title} (combined)", { title: l.title }), artist: null, origin: combinedOrigin(id) }, work, true);
     if (queued && l.url) this.history.downloaded(l.url, l.title);
     return { queued: queued ? 1 : 0 };
   }
@@ -312,7 +313,7 @@ export class YouTube {
   openBrowser(raw?: string): ReturnType<YouTube["view"]> {
     const url = raw ? normalize(raw) : this.lastUrl;
     if (this.browser?.view()) { if (raw) this.browser.go({ url }); return this.view(); }
-    if (!this.host.web.browse) throw new SourceProblem("Browsing YouTube isn't available here.", "noBrowser");
+    if (!this.host.web.browse) throw new SourceProblem(t("Browsing YouTube isn't available here."), "noBrowser");
     this.browser = this.host.web.browse({
       url, partition: PARTITION, title: "YouTube", allow: allowedInBrowser,
       visited: (v) => {
@@ -337,7 +338,7 @@ export class YouTube {
     if (this.library.byOrigin(`yt:${id}`)) state = "done";
     else if (!this.tool("yt-dlp")) state = "failed";
     else {
-      this.downloads.add({ source: "YouTube", title: item.title || "YouTube video", artist: null, origin: `yt:${id}` }, this.videoWork(item));
+      this.downloads.add({ source: "YouTube", title: item.title || t("YouTube video"), artist: null, origin: `yt:${id}` }, this.videoWork(item));
       this.history.downloaded(`https://www.youtube.com/watch?v=${id}`, item.title);
       state = "queued";
       this.watched.add(id);
@@ -366,7 +367,7 @@ export class YouTube {
   /** Reads what the window shows now, so it can be downloaded. */
   async fromBrowser(): Promise<Listing> {
     const v = this.browser?.view();
-    if (!v) throw new SourceProblem("Open YouTube first.", "noBrowser");
+    if (!v) throw new SourceProblem(t("Open YouTube first."), "noBrowser");
     return this.open(v.url);
   }
 

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PlanItem } from "./tools";
+import { t } from "@/lib/i18n";
 
 export interface ChatPicture { assetId: string; why?: string }
 
@@ -37,12 +38,12 @@ export class ChatStore {
   constructor(private readonly projectsDir: string) {}
 
   private dir(projectId: string): string {
-    if (!ID.test(projectId)) throw new Error("That isn't a face.");
+    if (!ID.test(projectId)) throw new Error(t("That isn't a face."));
     return path.join(this.projectsDir, projectId, "watchmaker");
   }
 
   private file(projectId: string, chatId: string): string {
-    if (!ID.test(chatId)) throw new Error("That isn't a chat.");
+    if (!ID.test(chatId)) throw new Error(t("That isn't a chat."));
     return path.join(this.dir(projectId), `${chatId}.json`);
   }
 
@@ -55,14 +56,14 @@ export class ChatStore {
 
   async load(projectId: string, chatId: string): Promise<Chat> {
     const chat = JSON.parse(await readFile(this.file(projectId, chatId), "utf8")) as Chat;
-    if (chat.id !== chatId || chat.projectId !== projectId || !Array.isArray(chat.messages)) throw new Error("That chat is damaged.");
+    if (chat.id !== chatId || chat.projectId !== projectId || !Array.isArray(chat.messages)) throw new Error(t("That chat is damaged."));
     return chat;
   }
 
   /** A new, empty chat (saved once it has a message). */
   fresh(projectId: string): Chat {
     const now = new Date().toISOString();
-    return { id: randomUUID(), projectId, title: "New chat", createdAt: now, updatedAt: now, messages: [] };
+    return { id: randomUUID(), projectId, title: t("New chat"), createdAt: now, updatedAt: now, messages: [] };
   }
 
   async save(chat: Chat): Promise<void> {
@@ -82,6 +83,6 @@ export class ChatStore {
 /** A chat's title: the start of its first message. */
 export function titleOf(text: string, pictures: number): string {
   const line = text.trim().split("\n")[0]?.trim() ?? "";
-  if (!line) return pictures ? "Image reference" : "New chat";
+  if (!line) return pictures ? t("Image reference") : t("New chat");
   return line.length > 60 ? `${line.slice(0, 57).trimEnd()}…` : line;
 }

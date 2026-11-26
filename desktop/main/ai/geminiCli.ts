@@ -13,8 +13,9 @@ import { agentModel, type AgentAsk } from "./agent";
 import { BRIDGE_NAME } from "./bridge";
 import { findProgram, programEnv, runProgram } from "./cli";
 import type { AccountProvider } from "./service";
+import { msg, t } from "@/lib/i18n";
 
-const NOT_INSTALLED = "Install Gemini CLI first: github.com/google-gemini/gemini-cli";
+const NOT_INSTALLED = msg("Install Gemini CLI first: github.com/google-gemini/gemini-cli");
 
 const WORKSPACE_SETTINGS = {
   tools: { core: [] as string[] },
@@ -46,7 +47,7 @@ export class GeminiCliAccount implements AccountProvider {
 
   private program(): string {
     const found = findProgram("gemini");
-    if (!found) throw new CoachModelError("unreachable", NOT_INSTALLED);
+    if (!found) throw new CoachModelError("unreachable", t(NOT_INSTALLED));
     return found;
   }
 
@@ -60,9 +61,9 @@ export class GeminiCliAccount implements AccountProvider {
 
   async status() {
     const program = findProgram("gemini");
-    if (!program) return { ready: false, problem: NOT_INSTALLED };
+    if (!program) return { ready: false, problem: t(NOT_INSTALLED) };
     const s = geminiSignIn();
-    return s.signedIn ? { ready: true, program, account: s.method === "oauth-personal" ? "Google account" : s.method === "gemini-api-key" ? "Gemini API key" : s.method } : { ready: false, program, problem: "Not signed in to Gemini CLI." };
+    return s.signedIn ? { ready: true, program, account: s.method === "oauth-personal" ? t("Google account") : s.method === "gemini-api-key" ? "Gemini API key" : s.method } : { ready: false, program, problem: t("Not signed in to Gemini CLI.") };
   }
 
   /** Gemini CLI's own Google sign-in, in the browser. */
@@ -80,7 +81,7 @@ export class GeminiCliAccount implements AccountProvider {
       clearTimeout(timer);
       agent.close();
     }
-    if (!(await this.status()).ready) throw new CoachModelError("bad_key", "Gemini CLI didn't sign in.");
+    if (!(await this.status()).ready) throw new CoachModelError("bad_key", t("Gemini CLI didn't sign in."));
   }
 
   async signOut(): Promise<void> {}
@@ -116,7 +117,7 @@ export class GeminiCliAccount implements AccountProvider {
   }
 
   model(model: string): CoachModel {
-    if (model && !/^[A-Za-z0-9._:-]{1,100}$/.test(model)) throw new CoachModelError("refused_request", "That isn't a Gemini model name.");
+    if (model && !/^[A-Za-z0-9._:-]{1,100}$/.test(model)) throw new CoachModelError("refused_request", t("That isn't a Gemini model name."));
     return agentModel((ask) => this.answer(model, ask));
   }
 }

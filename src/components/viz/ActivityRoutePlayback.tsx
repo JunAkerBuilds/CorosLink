@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Select } from "@/components/ui";
 import { loadMapToken, type RoutePoint } from "@/data/activities";
 import { isPlaced, pointsPath, routePositionAt, routeSlice, type Span } from "@/lib/activities";
+import { t } from "@/lib/i18n";
 import { lightAt, ROUTE_MAP_TYPES, takesLighting, type RouteMapType } from "@/lib/routeMap";
 
 // Mapbox is large and draws with WebGL: fetched only when a route can go on a real map, never on the server.
@@ -53,7 +54,7 @@ export function ActivityRoutePlayback({ route, distanceM, startedAt, at, span, l
   useEffect(() => {
     if (!hasPlace) return;
     let current = true;
-    loadMapToken().then((t) => { if (current) setToken(t); });
+    loadMapToken().then((tok) => { if (current) setToken(tok); });
     return () => { current = false; };
   }, [hasPlace]);
   const mapped = placed && token && !failed ? { placed, token } : null;
@@ -88,7 +89,7 @@ export function ActivityRoutePlayback({ route, distanceM, startedAt, at, span, l
   };
 
   return (
-    <section aria-label="Map" className="card ad-map">
+    <section aria-label={t("Map")} className="card ad-map">
       <div className="ad-map-box">
         {mapped ? (
           <div role="img" aria-label={label} className="ad-map-live">
@@ -120,35 +121,35 @@ export function ActivityRoutePlayback({ route, distanceM, startedAt, at, span, l
               ) : null}
             </svg>
             <div className="ad-map-zoom">
-              <button type="button" aria-label="Zoom in" disabled={zoom === ZOOMS.length - 1} onClick={() => setZoom((v) => Math.min(ZOOMS.length - 1, v + 1))}>+</button>
-              <button type="button" aria-label="Zoom out" disabled={zoom === 0} onClick={() => setZoom((v) => Math.max(0, v - 1))}>−</button>
+              <button type="button" aria-label={t("Zoom in")} disabled={zoom === ZOOMS.length - 1} onClick={() => setZoom((v) => Math.min(ZOOMS.length - 1, v + 1))}>+</button>
+              <button type="button" aria-label={t("Zoom out")} disabled={zoom === 0} onClick={() => setZoom((v) => Math.max(0, v - 1))}>−</button>
             </div>
-            <span className="ad-map-note" role="status">{failed ? "The map didn't load. This is the route as a sketch." : "Route sketch, map tiles not shown"}</span>
+            <span className="ad-map-note" role="status">{failed ? t("The map didn't load. This is the route as a sketch.") : t("Route sketch, map tiles not shown")}</span>
           </>
         )}
         {mapped ? (
           <>
             <div className="ad-map-top">
-              <Select aria-label="Map type" value={type} onChange={(e) => setType(e.target.value as RouteMapType)}>
-                {ROUTE_MAP_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              <Select aria-label={t("Map type")} value={type} onChange={(e) => setType(e.target.value as RouteMapType)}>
+                {ROUTE_MAP_TYPES.map((mt) => <option key={mt.value} value={mt.value}>{t(mt.label)}</option>)}
               </Select>
               {takesLighting(type) ? (
-                <label className="ad-map-pill"><input type="checkbox" checked={lit} onChange={(e) => setLit(e.target.checked)} />Time-of-day lighting</label>
+                <label className="ad-map-pill"><input type="checkbox" checked={lit} onChange={(e) => setLit(e.target.checked)} />{t("Time-of-day lighting")}</label>
               ) : null}
             </div>
             <div className="ad-map-bottom">
-              <button type="button" className="ad-map-pill" aria-pressed={follow} onClick={() => setFollow((v) => !v)}>Follow the marker</button>
-              <button type="button" className="ad-map-pill" onClick={() => { setFollow(false); setFit((v) => v + 1); }}>Show the whole route</button>
+              <button type="button" className="ad-map-pill" aria-pressed={follow} onClick={() => setFollow((v) => !v)}>{t("Follow the marker")}</button>
+              <button type="button" className="ad-map-pill" onClick={() => { setFollow(false); setFit((v) => v + 1); }}>{t("Show the whole route")}</button>
             </div>
           </>
         ) : null}
       </div>
       <div className="ad-play">
-        <button type="button" className="ad-play-btn" aria-label={playing ? "Pause" : "Play the route"} aria-pressed={playing} onClick={toggle}>
+        <button type="button" className="ad-play-btn" aria-label={playing ? t("Pause") : t("Play the route")} aria-pressed={playing} onClick={toggle}>
           <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">{playing ? <path d="M6 4h4v16H6zM14 4h4v16h-4z" /> : <path d="M7 4l14 8-14 8z" />}</svg>
         </button>
         <input
-          type="range" aria-label="Position along the route" min={0} max={Math.max(0, n - 1)} value={index}
+          type="range" aria-label={t("Position along the route")} min={0} max={Math.max(0, n - 1)} value={index}
           onChange={(e) => { setPlaying(false); onIndex(Math.max(0, Math.min(n - 1, Number(e.target.value) || 0))); }}
         />
         <div className="ad-play-read">

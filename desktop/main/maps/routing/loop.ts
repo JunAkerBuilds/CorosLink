@@ -12,6 +12,7 @@ import { meters, offset, projector } from "./geo";
 import { carFreeShare, pavedShare, publicGeometry, surfaceShare, unpavedShare, wayShare, type Routed } from "./makeup";
 import { RoutingProblem } from "./net";
 import { checkDistance, isCycling, maxKmFor, type Prefs } from "./sports";
+import { t } from "@/lib/i18n";
 
 export interface Engine {
   /** Route through points. `placed` = C-LINK put these points (detours to touch them may be trimmed). */
@@ -209,7 +210,7 @@ export async function planLoop(start: LatLon, targetM: number, prefs: Prefs, see
 
   const first = await settle(FIRST_BEARINGS.map((b) => ({ bearing: (base + b) % 360, radiusM: radius, clockwise, vias })));
   const all = first.done;
-  if (!all.length) throw first.error instanceof Error ? first.error : new RoutingProblem("Couldn't make a loop from here. Try another start.", "no_route", 422);
+  if (!all.length) throw first.error instanceof Error ? first.error : new RoutingProblem(t("Couldn't make a loop from here. Try another start."), "no_route", 422);
 
   for (const width of ROUNDS) {
     all.sort((a, b) => a.score - b.score);
@@ -282,9 +283,9 @@ export async function generateCandidates(req: GenerateRequest, engine: Engine): 
       variant = (p) => engine.route(plan.points, p, true);
     }
   } else {
-    if (!req.end) throw new RoutingProblem("Pick where the route ends.", "end");
+    if (!req.end) throw new RoutingProblem(t("Pick where the route ends."), "end");
     const straightKm = meters(req.start, req.end) / 1000;
-    if (straightKm < 0.02) throw new RoutingProblem("Start and finish are the same place. Pick a loop instead.", "end");
+    if (straightKm < 0.02) throw new RoutingProblem(t("Start and finish are the same place. Pick a loop instead."), "end");
     if (straightKm > maxKmFor(req.sport)) checkDistance(req.sport, straightKm);
     best = await engine.route([req.start, req.end], prefs, false);
     targetM = best.distanceM;

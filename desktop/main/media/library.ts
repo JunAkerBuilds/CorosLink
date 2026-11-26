@@ -6,6 +6,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { isMp3, lowercaseMp3, readMp3, safeName, withFile } from "./mp3";
 import { freeName, WatchProblem } from "./watchDrive";
+import { t } from "@/lib/i18n";
 
 export interface LibraryTrack {
   id: string;
@@ -67,7 +68,7 @@ export class Library {
   async add(temp: string, name: string, extra: Extra = {}, now = Date.now()): Promise<LibraryTrack> {
     try {
       if (!/\.mp3$/i.test(name) || !(await withFile(temp, (read) => isMp3(read)))) {
-        throw new WatchProblem("The watch plays MP3 files only.", "notMp3");
+        throw new WatchProblem(t("The watch plays MP3 files only."), "notMp3");
       }
       await mkdir(this.folder, { recursive: true });
       const file = await freeName(this.folder, lowercaseMp3(safeName(path.basename(name))));

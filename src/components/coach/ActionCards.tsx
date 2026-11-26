@@ -9,6 +9,8 @@ import { answerTime, weekShares } from "@/lib/coach";
 import { CardShell, hueVar, Icon, ICONS, Outcome, Read, Stat, TICK } from "./CardShell";
 import { useThread } from "./thread";
 import { SPORT_ICONS, SportBody } from "./WorkoutBodies";
+import { t, tx } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/react";
 
 /* ───────────── Plan change ───────────── */
 
@@ -30,50 +32,52 @@ export function PlanChange({ card }: { card: PlanCard }) {
   const shares = weekShares(card.week);
   const w = card.week;
   const act = (action: () => Promise<unknown>) => { setBusy(true); run("apply", action, undefined, () => setBusy(false)); };
-  const changes = applied ? `${applied.steps} ${applied.steps === 1 ? "change" : "changes"} on your calendar${card.ops && applied.steps < card.ops.length ? ` of ${card.ops.length}` : ""}` : "";
+  const changes = !applied ? ""
+    : card.ops && applied.steps < card.ops.length ? t("{n} of {total} changes on your calendar", { n: applied.steps, total: card.ops.length })
+    : applied.steps === 1 ? t("1 change on your calendar") : t("{n} changes on your calendar", { n: applied.steps });
   return (
-    <CardShell id={card.id} hue="mint" icon={ICONS.calendar} foldable={false} label="Plan change" busy={busy}
-      eyebrow={applied ? "Calendar · applied" : kept ? "Calendar · not applied" : "Calendar · needs your OK"} title={card.title}
+    <CardShell id={card.id} hue="mint" icon={ICONS.calendar} foldable={false} label={t("Plan change")} busy={busy}
+      eyebrow={applied ? t("Calendar · applied") : kept ? t("Calendar · not applied") : t("Calendar · needs your OK")} title={card.title}
       footer={
         <footer className="cc-foot">
           {applied ? (
-            <Outcome kind="done" title="Applied" detail={changes}>
-              <LinkButton href="/calendar" className="co-sm">Open calendar</LinkButton>
-              <Button className="co-sm" disabled={busy} onClick={() => act(() => undoPlanChange(thread.conversationId, card))}>Undo</Button>
+            <Outcome kind="done" title={t("Applied")} detail={changes}>
+              <LinkButton href="/calendar" className="co-sm">{t("Open calendar")}</LinkButton>
+              <Button className="co-sm" disabled={busy} onClick={() => act(() => undoPlanChange(thread.conversationId, card))}>{t("Undo")}</Button>
             </Outcome>
           ) : kept ? (
-            <Outcome kind="none" title="Kept as it was" detail="Nothing changed on your calendar">
-              <Button className="co-sm" onClick={() => act(() => keepPlan(thread.conversationId, card, false))}>Review again</Button>
+            <Outcome kind="none" title={t("Kept as it was")} detail={t("Nothing changed on your calendar")}>
+              <Button className="co-sm" onClick={() => act(() => keepPlan(thread.conversationId, card, false))}>{t("Review again")}</Button>
             </Outcome>
           ) : (
             <>
               <Read hue="mint">{card.note}</Read>
               <div className="cc-actions">
-                <button type="button" className="cc-quiet" disabled={busy} onClick={() => { clear("apply"); act(() => keepPlan(thread.conversationId, card, true)); }}>Keep as is</button>
-                <LinkButton href="/calendar" className="co-sm">Open calendar</LinkButton>
-                <Button variant="primary" className="co-sm" disabled={busy} onClick={() => act(() => applyPlanChange(thread.conversationId, card))}>{busy ? "Applying" : "Apply changes"}</Button>
+                <button type="button" className="cc-quiet" disabled={busy} onClick={() => { clear("apply"); act(() => keepPlan(thread.conversationId, card, true)); }}>{t("Keep as is")}</button>
+                <LinkButton href="/calendar" className="co-sm">{t("Open calendar")}</LinkButton>
+                <Button variant="primary" className="co-sm" disabled={busy} onClick={() => act(() => applyPlanChange(thread.conversationId, card))}>{busy ? t("Applying") : t("Apply changes")}</Button>
               </div>
             </>
           )}
           {notes.apply && !kept ? (
-            <Outcome kind="failed" title={applied ? "Not finished" : "Didn't move"} detail={notes.apply}>
-              {applied ? null : <Button className="co-sm" disabled={busy} onClick={() => act(() => applyPlanChange(thread.conversationId, card))}>Try again</Button>}
+            <Outcome kind="failed" title={applied ? t("Not finished") : t("Didn’t move")} detail={notes.apply}>
+              {applied ? null : <Button className="co-sm" disabled={busy} onClick={() => act(() => applyPlanChange(thread.conversationId, card))}>{t("Try again")}</Button>}
             </Outcome>
           ) : null}
         </footer>
       }>
       <div className="cc-body">
         <div className="scroll-x">
-          <div className="cc-table" role="table" aria-label="Proposed plan change" style={{ minWidth: 460 }}>
+          <div className="cc-table" role="table" aria-label={t("Proposed plan change")} style={{ minWidth: 460 }}>
             <div className="cc-plan" data-head role="row">
-              <span role="columnheader">Day</span><span role="columnheader">Now</span><span role="columnheader">Proposed</span><span role="columnheader">Load</span>
+              <span role="columnheader">{tx("date", "Day")}</span><span role="columnheader">{t("Now")}</span><span role="columnheader">{t("Proposed")}</span><span role="columnheader">{t("Load")}</span>
             </div>
             {card.rows.map((r) => (
               <div key={r.day} className="cc-plan cc-row" role="row">
                 <span role="cell" className="muted">{r.day}</span>
                 <div role="cell">{r.now.map((s, i) => <Session key={i} s={s} />)}</div>
                 <div role="cell">{r.proposed.map((s, i) => <Session key={i} s={s} strong />)}</div>
-                <span role="cell" className="muted">{r.loadNow || r.loadNext ? <>{r.loadNow} → <strong>{r.loadNext}</strong></> : <span aria-label="Load not known">—</span>}</span>
+                <span role="cell" className="muted">{r.loadNow || r.loadNext ? <>{r.loadNow} → <strong>{r.loadNext}</strong></> : <span aria-label={t("Load not known")}>—</span>}</span>
               </div>
             ))}
           </div>
@@ -81,10 +85,11 @@ export function PlanChange({ card }: { card: PlanCard }) {
         <div className="cc-week">
           <div>
             <span>{w.label}</span>
-            <span>{w.after !== w.before ? <s>{w.before}</s> : null} <strong className="num">{w.after}</strong> planned · {w.done} done</span>
+            <span>{w.after !== w.before ? <s>{w.before}</s> : null} {tr("{after} planned · {done} done", { after: <strong className="num">{w.after}</strong>, done: w.done })}</span>
           </div>
           <div role="img" className="cc-track" data-tall
-            aria-label={`Week load: ${w.done} done, ${Math.max(0, w.after - w.done)} still planned after the change, ${Math.abs(w.before - w.after)} ${w.after <= w.before ? "less" : "more"} than before`}>
+            aria-label={(w.after <= w.before ? t("Week load: {done} done, {left} still planned after the change, {by} less than before", { done: w.done, left: Math.max(0, w.after - w.done), by: Math.abs(w.before - w.after) })
+              : t("Week load: {done} done, {left} still planned after the change, {by} more than before", { done: w.done, left: Math.max(0, w.after - w.done), by: Math.abs(w.before - w.after) }))}>
             <span style={{ width: `${(shares.planned * 100).toFixed(1)}%`, background: "color-mix(in srgb, var(--h-pink) 42%, transparent)" }} />
             <span className="cl-bar" style={{ width: `${(shares.done * 100).toFixed(1)}%`, background: "var(--h-pink)" }} />
           </div>
@@ -116,38 +121,38 @@ export function Workout({ card }: { card: WorkoutCard }) {
   const browserOnly = !added && !change && !!card.workout && (!card.hub || !hubOn);
   return (
     <CardShell id={card.id} hue={hue} icon={card.sport ? SPORT_ICONS[card.sport] : ICONS.run} foldable={false}
-      eyebrow={`${lined ? `${card.eyebrow.split(" · ")[0]} · ${card.dayLabel}` : card.eyebrow}${change ? ` · replaces “${change.name}”` : ""}`}
+      eyebrow={`${lined ? `${card.eyebrow.split(" · ")[0]} · ${card.dayLabel}` : card.eyebrow}${change ? ` · ${t("replaces “{name}”", { name: change.name })}` : ""}`}
       title={card.title} subtitle={lined ? card.body?.line : undefined} busy={busy}
       footer={
         <footer className="cc-foot">
           {added ? (
-            <Outcome kind="done" title={change ? "Changed" : "Added to your calendar"} detail={added.where === "coros" ? `On your COROS calendar, ${card.dayLabel}` : `Saved on this computer, ${card.dayLabel}`}>
-              <LinkButton href={added.where === "browser" ? builder : "/calendar"} className="co-sm">{added.where === "browser" ? "Open in builder" : "Open calendar"}</LinkButton>
-              <Button className="co-sm" disabled={busy} onClick={() => act(() => undoCoachWorkout(thread.conversationId, card))}>Undo</Button>
+            <Outcome kind="done" title={change ? t("Changed") : t("Added to your calendar")} detail={added.where === "coros" ? t("On your COROS calendar, {day}", { day: card.dayLabel }) : t("Saved on this computer, {day}", { day: card.dayLabel })}>
+              <LinkButton href={added.where === "browser" ? builder : "/calendar"} className="co-sm">{added.where === "browser" ? t("Open in builder") : t("Open calendar")}</LinkButton>
+              <Button className="co-sm" disabled={busy} onClick={() => act(() => undoCoachWorkout(thread.conversationId, card))}>{t("Undo")}</Button>
             </Outcome>
           ) : declined ? (
-            <Outcome kind="none" title="Not now" detail="Nothing went on your calendar">
-              <Button className="co-sm" disabled={busy} onClick={() => act(() => declineCoachWorkout(thread.conversationId, card, false))}>Review again</Button>
+            <Outcome kind="none" title={t("Not now")} detail={t("Nothing went on your calendar")}>
+              <Button className="co-sm" disabled={busy} onClick={() => act(() => declineCoachWorkout(thread.conversationId, card, false))}>{t("Review again")}</Button>
             </Outcome>
           ) : (
             <>
-              {browserOnly ? <span className="cw-where muted" title="Saves on this computer, not on your watch"><Icon d={ICONS.calendar} size={13} width={2} />Not on your watch</span> : null}
+              {browserOnly ? <span className="cw-where muted" title={t("Saves on this computer, not on your watch")}><Icon d={ICONS.calendar} size={13} width={2} />{t("Not on your watch")}</span> : null}
               <div className="cc-actions">
-                {card.hub && hubOn && !change && !card.saved && !card.inLibrary ? <Button className="co-sm" disabled={busy} onClick={() => act(() => saveCoachWorkoutToLibrary(thread.conversationId, card), "library")}>Save to library</Button> : null}
-                <Button className="co-sm" disabled={busy} onClick={() => act(() => declineCoachWorkout(thread.conversationId, card, true))}>Not now</Button>
-                <Button variant="primary" className="co-sm" disabled={busy} onClick={() => act(() => addCoachWorkout(thread.conversationId, card))}>{busy ? "Working" : change ? "Apply change" : "Add to calendar"}</Button>
+                {card.hub && hubOn && !change && !card.saved && !card.inLibrary ? <Button className="co-sm" disabled={busy} onClick={() => act(() => saveCoachWorkoutToLibrary(thread.conversationId, card), "library")}>{t("Save to library")}</Button> : null}
+                <Button className="co-sm" disabled={busy} onClick={() => act(() => declineCoachWorkout(thread.conversationId, card, true))}>{t("Not now")}</Button>
+                <Button variant="primary" className="co-sm" disabled={busy} onClick={() => act(() => addCoachWorkout(thread.conversationId, card))}>{busy ? t("Working") : change ? t("Apply change") : t("Add to calendar")}</Button>
               </div>
             </>
           )}
           {card.inLibrary ? (
-            <Outcome kind="done" title="Saved to your library" detail="In your COROS workout library">
-              <Button className="co-sm" disabled={busy} onClick={() => act(() => removeCoachWorkoutFromLibrary(thread.conversationId, card), "library")}>Remove</Button>
+            <Outcome kind="done" title={t("Saved to your library")} detail={t("In your COROS workout library")}>
+              <Button className="co-sm" disabled={busy} onClick={() => act(() => removeCoachWorkoutFromLibrary(thread.conversationId, card), "library")}>{t("Remove")}</Button>
             </Outcome>
           ) : null}
-          {notes.library ? <Outcome kind="failed" title="Library not changed" detail={notes.library} /> : null}
+          {notes.library ? <Outcome kind="failed" title={t("Library not changed")} detail={notes.library} /> : null}
           {notes.add ? (
-            <Outcome kind="failed" title={added ? "Not undone" : change ? "Not changed" : "Not added"} detail={notes.add}>
-              {added ? null : <Button className="co-sm" disabled={busy} onClick={() => act(() => addCoachWorkout(thread.conversationId, card))}>Try again</Button>}
+            <Outcome kind="failed" title={added ? t("Not undone") : change ? t("Not changed") : t("Not added")} detail={notes.add}>
+              {added ? null : <Button className="co-sm" disabled={busy} onClick={() => act(() => addCoachWorkout(thread.conversationId, card))}>{t("Try again")}</Button>}
             </Outcome>
           ) : null}
         </footer>
@@ -156,13 +161,13 @@ export function Workout({ card }: { card: WorkoutCard }) {
         {/* Coach's own words, so Coach's colour, whatever the sport. */}
         {card.note ? (
           <div className="cw-why">
-            <span className="cw-why-by"><Image src="/img/coach-head.webp" alt="" width={20} height={20} unoptimized />Coach</span>
+            <span className="cw-why-by"><Image src="/img/coach-head.webp" alt="" width={20} height={20} unoptimized />{t("Coach")}</span>
             <p>{card.note}</p>
           </div>
         ) : null}
         {lined ? null : (
           <div className="cc-workout-top">
-            <div className="cc-stat"><span>Day</span><span className="cc-daychip">{card.dayLabel}</span></div>
+            <div className="cc-stat"><span>{tx("date", "Day")}</span><span className="cc-daychip">{card.dayLabel}</span></div>
             {card.stats.map((s) => <Stat key={s.label} stat={s} />)}
           </div>
         )}
@@ -173,7 +178,7 @@ export function Workout({ card }: { card: WorkoutCard }) {
           </div>
           <div className="cc-shape-foot">
             <span>{card.summary}</span>
-            <button type="button" className="cc-quiet" aria-expanded={steps} onClick={() => setSteps((v) => !v)}>{steps ? "Hide steps" : `Show ${card.steps.length} steps`}</button>
+            <button type="button" className="cc-quiet" aria-expanded={steps} onClick={() => setSteps((v) => !v)}>{steps ? t("Hide steps") : card.steps.length === 1 ? t("Show 1 step") : t("Show {n} steps", { n: card.steps.length })}</button>
           </div>
           {steps ? (
             <div className="cc-table">
@@ -203,7 +208,7 @@ export function Question({ card }: { card: QuestionCard }) {
   const say = (text: string) => run("answer", async () => { await answerQuestion(thread.conversationId, card, text); thread.send(text); });
   const sendOwn = () => { if (own.trim()) { say(own.trim()); setOwn(""); } };
   return (
-    <CardShell id={card.id} hue="violet" icon={ICONS.question} foldable={false} label="Question" eyebrow="Coach asks" title={card.title} note={notes.answer}>
+    <CardShell id={card.id} hue="violet" icon={ICONS.question} foldable={false} label={t("Question")} eyebrow={t("Coach asks")} title={card.title} note={notes.answer}>
       <div className="cc-body" style={{ paddingBottom: 14 }}>
         {answer ? (() => {
           // Only the choice made stays, marked as chosen; the others go.
@@ -212,8 +217,8 @@ export function Question({ card }: { card: QuestionCard }) {
             <div className="cc-opt" data-chosen role="status">
               <i aria-hidden="true"><Icon d={TICK} size={11} width={3.4} /></i>
               <span>
-                <span>{answer.text}{chosen?.recommended ? <em>Recommended</em> : null}</span>
-                <span>{chosen?.detail ? `${chosen.detail} · ` : ""}You chose this at {answerTime(answer.at)}</span>
+                <span>{answer.text}{chosen?.recommended ? <em>{t("Recommended")}</em> : null}</span>
+                <span>{chosen?.detail ? `${chosen.detail} · ` : ""}{t("You chose this at {time}", { time: answerTime(answer.at) })}</span>
               </span>
             </div>
           );
@@ -223,14 +228,14 @@ export function Question({ card }: { card: QuestionCard }) {
               <button key={o.id} type="button" className="cc-opt" disabled={thread.busy} onClick={() => say(o.title)}>
                 <i aria-hidden="true" />
                 <span>
-                  <span>{o.title}{o.recommended ? <em>Recommended</em> : null}</span>
+                  <span>{o.title}{o.recommended ? <em>{t("Recommended")}</em> : null}</span>
                   <span>{o.detail}</span>
                 </span>
               </button>
             ))}
             <form className="cc-own" onSubmit={(e) => { e.preventDefault(); sendOwn(); }}>
-              <Field aria-label="Your own answer" placeholder="Your own answer" value={own} onChange={(e) => setOwn(e.target.value)} />
-              <Button type="submit" className="co-sm" disabled={!own.trim() || thread.busy}>Send</Button>
+              <Field aria-label={t("Your own answer")} placeholder={t("Your own answer")} value={own} onChange={(e) => setOwn(e.target.value)} />
+              <Button type="submit" className="co-sm" disabled={!own.trim() || thread.busy}>{t("Send")}</Button>
             </form>
           </>
         )}
@@ -251,21 +256,21 @@ export function Brief({ card }: { card: BriefCard }) {
         <footer className="cc-foot">
           {card.saved ? (
             <Outcome kind="done" title={card.saved} detail={card.savedNote}>
-              {card.briefId ? <Button className="co-sm" onClick={() => run("save", () => removeCoachBrief(thread.conversationId, card))}>Remove</Button> : null}
+              {card.briefId ? <Button className="co-sm" onClick={() => run("save", () => removeCoachBrief(thread.conversationId, card))}>{t("Remove")}</Button> : null}
             </Outcome>
           ) : (
             <div className="cc-actions">
-              <Button variant="primary" className="co-sm" onClick={() => run("save", () => saveCoachBrief(thread.conversationId, card))}>Save brief</Button>
+              <Button variant="primary" className="co-sm" onClick={() => run("save", () => saveCoachBrief(thread.conversationId, card))}>{t("Save brief")}</Button>
             </div>
           )}
         </footer>
       }>
       <div className="cc-body">
         <dl className="cc-dl">
-          <dt>Goal</dt><dd style={{ fontWeight: 600 }}>{card.goal}</dd>
-          <dt>Cues</dt>
+          <dt>{t("Goal")}</dt><dd style={{ fontWeight: 600 }}>{card.goal}</dd>
+          <dt>{t("Cues")}</dt>
           <dd><ul className="cc-cues" data-plain>{card.cues.map((c) => <li key={c}><span>{c}</span></li>)}</ul></dd>
-          {card.fuel ? <><dt>Fuel</dt><dd>{card.fuel}</dd></> : null}
+          {card.fuel ? <><dt>{t("Fuel")}</dt><dd>{card.fuel}</dd></> : null}
         </dl>
       </div>
     </CardShell>
@@ -278,7 +283,7 @@ export function Brief({ card }: { card: BriefCard }) {
 export function Working({ card }: { card: WorkingCard }) {
   const thread = useThread();
   return (
-    <article className="cc-card" aria-label="Coach is working" aria-busy="true">
+    <article className="cc-card" aria-label={t("Coach is working")} aria-busy="true">
       <div className="cc-working">
         <span aria-hidden="true" className="coach-strip" data-pose="run"><Image src="/img/coach-run.webp" alt="" width={896} height={56} unoptimized /></span>
         <div>
@@ -287,12 +292,12 @@ export function Working({ card }: { card: WorkingCard }) {
             {card.steps.map((s) => (
               <li key={s.text} data-done={s.done ? "" : undefined}>
                 {s.done ? <Icon d={TICK} size={14} width={2.8} /> : <i aria-hidden="true" className="cc-spin" />}
-                <span>{s.text}<span className="sr-only">{s.done ? ", done" : ", in progress"}</span></span>
+                <span>{s.text}<span className="sr-only">{s.done ? t(", done") : t(", in progress")}</span></span>
               </li>
             ))}
           </ul>
         </div>
-        {thread.busy ? <Button className="co-sm" onClick={() => thread.stop()}>Stop</Button> : null}
+        {thread.busy ? <Button className="co-sm" onClick={() => thread.stop()}>{t("Stop")}</Button> : null}
       </div>
       <div aria-hidden="true" className="cc-skels"><div><i /><i /><i /></div><i /></div>
     </article>
@@ -303,14 +308,14 @@ export function Working({ card }: { card: WorkingCard }) {
 export function Failed({ card }: { card: FailedCard }) {
   const thread = useThread();
   return (
-    <CardShell id={card.id} hue="coral" icon={ICONS.warn} foldable={false} eyebrow="Couldn't load" title={card.title}>
+    <CardShell id={card.id} hue="coral" icon={ICONS.warn} foldable={false} eyebrow={t("Couldn’t load")} title={card.title}>
       <div className="cc-body">
         <p style={{ margin: 0 }} className="soft">{card.text}</p>
         <div className="cc-failed-foot">
           <span className="muted">{card.tried}</span>
           <div className="cc-actions">
             <Button className="co-sm" disabled={thread.busy || !thread.conversationId} onClick={() => thread.retry()}>
-              <Icon d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" size={14} width={2.2} />Try again
+              <Icon d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" size={14} width={2.2} />{t("Try again")}
             </Button>
           </div>
         </div>
@@ -327,8 +332,8 @@ export function Note({ line }: { line: NoteLine }) {
   return (
     <div className="cc-line">
       <span aria-hidden="true" style={{ color: remembered ? "var(--h-violet-ink)" : "var(--muted)" }}><Icon d={remembered ? ICONS.bookmark : ICONS.check} size={15} width={2.2} /></span>
-      <span style={line.forgotten ? { textDecoration: "line-through" } : undefined}>{remembered ? <><strong>{line.forgotten ? "Forgotten:" : "Remembered:"}</strong> </> : null}{line.text}</span>
-      {remembered && !line.forgotten ? <button type="button" className="cc-quiet" onClick={() => run("forget", () => forgetFact(thread.conversationId, line))}>Forget</button> : null}
+      <span style={line.forgotten ? { textDecoration: "line-through" } : undefined}>{remembered ? <><strong>{line.forgotten ? t("Forgotten:") : t("Remembered:")}</strong> </> : null}{line.text}</span>
+      {remembered && !line.forgotten ? <button type="button" className="cc-quiet" onClick={() => run("forget", () => forgetFact(thread.conversationId, line))}>{t("Forget")}</button> : null}
       {notes.forget ? <span className="cc-line-note" role="status">{notes.forget}</span> : null}
     </div>
   );

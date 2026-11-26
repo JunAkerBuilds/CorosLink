@@ -8,10 +8,11 @@ import { useLoaded } from "@/data/core";
 import { loadPlanEditor } from "@/data/plans";
 import { createTrainingPlan } from "@/lib/plan";
 import "../plans.css";
+import { t } from "@/lib/i18n";
 
 export default function PlanEditorPage() {
   return (
-    <Suspense fallback={<LoadingPage label="Plan editor" />}>
+    <Suspense fallback={<LoadingPage label={t("Plan editor")} />}>
       <EditorScreen />
     </Suspense>
   );
@@ -24,8 +25,8 @@ function EditorScreen() {
   const [blank] = useState(() => createTrainingPlan());
   const state = useLoaded(() => loadPlanEditor({ id, draft, blank }), `${id ?? ""}|${draft}`);
 
-  if (state.status === "loading") return <LoadingPage label="Plan editor" />;
-  if (state.status === "error") return <LoadError error={state.error}><LinkButton href="/calendar/plans">Back to Plans</LinkButton></LoadError>;
+  if (state.status === "loading") return <LoadingPage label={t("Plan editor")} />;
+  if (state.status === "error") return <LoadError error={state.error}><LinkButton href="/calendar/plans">{t("Back to Plans")}</LinkButton></LoadError>;
   // Keyed by the plan, so saving a new plan (same id) keeps the editor and its undo history.
   return <PlanEditor key={state.data.plan.id} initial={state.data} origin={state.origin} draft={draft} />;
 }

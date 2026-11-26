@@ -6,6 +6,8 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import type { BodyExtra, BodyGroup, BodyLift, BodyNumber, BodyRow, BodyShare, BodyStepKind, CoachHue, WorkoutBody } from "@/data/coach";
 import type { HubSport } from "@/data/hub";
 import { hueVar, inkVar, tint } from "./CardShell";
+import { t } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/react";
 
 /** The icon in a workout card's header tile, by sport. */
 export const SPORT_ICONS: Record<HubSport, string> = {
@@ -30,7 +32,16 @@ function kindStyle(kind: BodyStepKind, hue: CoachHue): CSSProperties {
 const CAP = 6;
 /** Step names that only repeat the step's kind: a one-step session leaves them out. */
 const PLAIN_NAMES = new Set(["Work", "Swim", "Run", "Warm up", "Cool down", "Rest", "Recovery"]);
-const unitWord = (body: WorkoutBody) => (body.count === 1 ? body.unit.slice(0, -1) : body.unit);
+/** "Show 8 steps" / "Hide steps" for the button under a strip or rail. */
+function stepToggle(body: WorkoutBody): { show: string; hide: string } {
+  const n = body.count, one = n === 1;
+  switch (body.unit) {
+    case "exercises": return { show: one ? t("Show 1 exercise") : t("Show {n} exercises", { n }), hide: t("Hide exercises") };
+    case "sets": return { show: one ? t("Show 1 set") : t("Show {n} sets", { n }), hide: t("Hide sets") };
+    case "stations": return { show: one ? t("Show 1 station") : t("Show {n} stations", { n }), hide: t("Hide stations") };
+    default: return { show: one ? t("Show 1 step") : t("Show {n} steps", { n }), hide: t("Hide steps") };
+  }
+}
 
 function Row({ row, hue, children }: { row: BodyRow; hue: CoachHue; children?: ReactNode }) {
   return (
@@ -93,7 +104,7 @@ function Strip({ body, hue }: { body: WorkoutBody; hue: CoachHue }) {
     <div role="img" aria-label={body.label} className="cw-strip">
       {(body.strip ?? []).map((g, gi) => {
         const rows = body.list[gi]?.rows ?? [], lead = rows.find((r) => r.kind === "work") ?? rows[0];
-        const drawn = Math.min(g.repeats, 12), weight = g.segs.reduce((t, s) => t + s.weight, 0) * g.repeats;
+        const drawn = Math.min(g.repeats, 12), weight = g.segs.reduce((sum, s) => sum + s.weight, 0) * g.repeats;
         return (
           <div key={gi} className="cw-group" data-rep={g.repeats > 1 ? "" : undefined} style={{ flex: `${weight} 1 0` }}>
             <span className="cw-cap"><b>{g.amount}</b><span>{g.target || lead?.name}</span></span>
@@ -174,10 +185,12 @@ function Extras({ label, items, hue }: { label: string; items: readonly BodyExtr
   );
 }
 
-const liftWords = (l: BodyLift): string => l.kind === "rest"
-  ? `Rest ${l.rest}`
-  : [l.name, `${l.sets} ${l.sets === 1 ? "set" : "sets"} of ${[l.each.value, l.each.unit].filter(Boolean).join(" ")}`,
-    l.load === "bodyweight" ? "bodyweight" : l.load ? `${l.load.value} kg` : "", l.rest ? `${l.rest} rest` : ""].filter(Boolean).join(", ");
+const liftWords = (l: BodyLift): string => {
+  if (l.kind === "rest") return t("Rest {time}", { time: l.rest });
+  const each = [l.each.value, l.each.unit].filter(Boolean).join(" ");
+  return [l.name, l.sets === 1 ? t("1 set of {each}", { each }) : t("{n} sets of {each}", { n: l.sets, each }),
+    l.load === "bodyweight" ? t("bodyweight") : l.load ? `${l.load.value} kg` : "", l.rest ? t("{time} rest", { time: l.rest }) : ""].filter(Boolean).join(", ");
+};
 
 /** What a set is, under the "Reps" heading: 6, 45 s, 1:30, to lap button. */
 const perSet = (n: BodyNumber): BodyNumber => ({ value: n.value, unit: n.unit === "s hold" ? "s" : n.unit === "reps" || n.unit === "rep" || n.unit === "hold" ? "" : n.unit });
@@ -187,12 +200,12 @@ export function StrengthBody({ body, hue }: { body: WorkoutBody; hue: CoachHue }
   const lifts = body.lifts ?? [];
   return (
     <div className="cw-strength">
-      <Extras label={body.before && body.before.length > 1 ? "Warm-ups" : "Warm-up"} items={body.before ?? []} hue="gold" />
+      <Extras label={body.before && body.before.length > 1 ? t("Warm-ups") : t("Warm-up")} items={body.before ?? []} hue="gold" />
       {lifts.length ? (
         <div className="cw-block">
           <div role="group" aria-label={lifts.map(liftWords).join("; ")} className="cw-lifts">
             <div aria-hidden="true" className="cw-lift cw-lift-head">
-              <span className="cw-lift-name">Lifts</span><span>Sets</span><span>Reps</span><span>kg</span><span className="cw-lift-rest">Rest</span>
+              <span className="cw-lift-name">{t("Lifts")}</span><span>{t("Sets")}</span><span>{t("Reps")}</span><span>kg</span><span className="cw-lift-rest">{t("Rest")}</span>
             </div>
             {lifts.map((l, i) => (
               <div key={i} className="cw-lift" data-kind={l.kind}>
@@ -201,7 +214,7 @@ export function StrengthBody({ body, hue }: { body: WorkoutBody; hue: CoachHue }
                   <>
                     <Num n={{ value: String(l.sets), unit: "" }} className="cw-c" />
                     <Num n={perSet(l.each)} up={l.up?.on === "each" ? l.up.by : undefined} className="cw-c cw-x" />
-                    {l.load === "bodyweight" ? <span className="cw-bw">Bodyweight</span> : l.load ? <Num n={{ value: l.load.value, unit: "" }} up={l.up?.on === "load" ? l.up.by : undefined} /> : <span />}
+                    {l.load === "bodyweight" ? <span className="cw-bw">{t("Bodyweight")}</span> : l.load ? <Num n={{ value: l.load.value, unit: "" }} up={l.up?.on === "load" ? l.up.by : undefined} /> : <span />}
                   </>
                 ) : <><span /><span /><span /></>}
                 <span className="cw-lift-rest">{l.rest ? <b className="num">{l.rest}</b> : null}</span>
@@ -210,8 +223,8 @@ export function StrengthBody({ body, hue }: { body: WorkoutBody; hue: CoachHue }
           </div>
         </div>
       ) : null}
-      <Extras label={body.after && body.after.length > 1 ? "Cool-downs" : "Cool-down"} items={body.after ?? []} hue={hue} />
-      {body.works?.length ? <span className="cw-works">Works <b>{body.works.join(", ")}</b></span> : null}
+      <Extras label={body.after && body.after.length > 1 ? t("Cool-downs") : t("Cool-down")} items={body.after ?? []} hue={hue} />
+      {body.works?.length ? <span className="cw-works">{tr("Works {muscles}", { muscles: <b>{body.works.join(", ")}</b> })}</span> : null}
     </div>
   );
 }
@@ -229,7 +242,7 @@ export function SportBody({ body, hue }: { body: WorkoutBody; hue: CoachHue }) {
     return (
       <div className="cw-simple">
         <span className="num">{row.amount}</span>
-        <span><b>{row.target || "No target set"}</b>{row.name && !PLAIN_NAMES.has(row.name) ? <span className="muted">{row.name}</span> : null}</span>
+        <span><b>{row.target || t("No target set")}</b>{row.name && !PLAIN_NAMES.has(row.name) ? <span className="muted">{row.name}</span> : null}</span>
       </div>
     );
   }
@@ -238,7 +251,7 @@ export function SportBody({ body, hue }: { body: WorkoutBody; hue: CoachHue }) {
       <div className="cc-chart" style={{ gap: 8 }}>
         {body.kind === "intervals" ? <Strip body={body} hue={hue} /> : <Rail body={body} hue={hue} />}
         {shares}
-        <Toggle open={open} set={setOpen} show={`Show ${body.count} ${unitWord(body)}`} hide={`Hide ${body.unit}`} />
+        <Toggle open={open} set={setOpen} {...stepToggle(body)} />
         {open ? <StepList groups={body.list} hue={hue} /> : null}
       </div>
     );
@@ -251,7 +264,7 @@ export function SportBody({ body, hue }: { body: WorkoutBody; hue: CoachHue }) {
       <div role="group" aria-label={body.label}>
         {body.kind === "swim" ? <SwimSets groups={body.list} hue={hue} limit={limit} /> : <StepList groups={body.list} hue={hue} limit={limit} pips={body.kind === "climb"} />}
       </div>
-      {cut ? <Toggle open={open} set={setOpen} show={body.kind === "swim" ? `Show all ${body.list.length} sets` : `Show all ${rows} steps`} hide="Show fewer" /> : null}
+      {cut ? <Toggle open={open} set={setOpen} show={body.kind === "swim" ? t("Show all {n} sets", { n: body.list.length }) : t("Show all {n} steps", { n: rows })} hide={t("Show fewer")} /> : null}
       {shares}
     </div>
   );

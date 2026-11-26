@@ -20,6 +20,8 @@ import {
   macroPercents, mealTargetKcal, mealTotals, mean, petalsLit, remaining, removeFood, ROW_PETALS, shiftDay, trim,
 } from "@/lib/fuel";
 import { EstimateDialog } from "./EstimateDialog";
+import { locale, msg, t, tx } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/react";
 import { FoodDialog, MEAL_NAME, type FoodDialogState } from "./FoodDialog";
 import "./fuel.css";
 
@@ -39,9 +41,9 @@ const MEAL_LOOK: Record<MealKey, { rgb: string; hue: string; ink: string; icon: 
 };
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
-const shortDate = (day: string) => parseDay(day).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-const monthDay = (day: string) => parseDay(day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-const weekday = (day: string, width: "short" | "long") => parseDay(day).toLocaleDateString("en-US", { weekday: width });
+const shortDate = (day: string) => parseDay(day).toLocaleDateString(locale("en-US"), { weekday: "short", month: "short", day: "numeric" });
+const monthDay = (day: string) => parseDay(day).toLocaleDateString(locale("en-US"), { month: "short", day: "numeric" });
+const weekday = (day: string, width: "short" | "long") => parseDay(day).toLocaleDateString(locale("en-US"), { weekday: width });
 
 /** The meal to offer first when adding from the page's Add food button: by the clock today, breakfast on other days. */
 function mealForNow(isToday: boolean): MealKey {
@@ -53,7 +55,7 @@ function mealForNow(isToday: boolean): MealKey {
 export default function FuelPage() {
   const fuel = useLoaded(loadFuel);
   if (fuel.status === "loading") return <main className="page"><div className="skeleton" style={{ minHeight: 420 }} /></main>;
-  if (fuel.status === "error") return <main className="page"><p className="notice" role="alert">Fuel could not be loaded. {fuel.error.message}</p></main>;
+  if (fuel.status === "error") return <main className="page"><p className="notice" role="alert">{t("Fuel could not be loaded.")} {fuel.error.message}</p></main>;
   return <Fuel data={fuel.data} synced={fuel.origin === "synced"} />;
 }
 
@@ -84,7 +86,7 @@ function Fuel({ data, synced }: { data: FuelData; synced: boolean }) {
     fuelDays.set((prev) => ({ ...prev, [d]: change(prev[d] ?? data.logs[d] ?? emptyDay(d)) }));
   /** Signed in: the change goes to the account, and the page re-reads once it is in. */
   const sync = (work: Promise<void>) => {
-    work.catch((e: unknown) => setNotWired(e instanceof Error ? e.message : "That did not work. Nothing was changed."));
+    work.catch((e: unknown) => setNotWired(e instanceof Error ? e.message : t("That did not work. Nothing was changed.")));
   };
   const go = (d: string) => setPicked(d >= today ? null : d);
 
@@ -96,7 +98,7 @@ function Fuel({ data, synced }: { data: FuelData; synced: boolean }) {
   const origin = synced ? "synced" : (range === "day" ? saved[day] != null : days.some((d) => saved[d] != null)) ? "browser" : "sample";
 
   const yesterday = shiftDay(day, -1);
-  const title = range === "week" ? "7 days" : range === "month" ? "30 days" : isToday ? "Today" : day === shiftDay(today, -1) ? "Yesterday" : weekday(day, "long");
+  const title = range === "week" ? t("7 days") : range === "month" ? t("30 days") : isToday ? t("Today") : day === shiftDay(today, -1) ? t("Yesterday") : weekday(day, "long");
   const dateText = range === "day" ? shortDate(day) : `${monthDay(days[0])} – ${monthDay(day)}`;
 
   const weight = body.status === "ready"
@@ -112,23 +114,23 @@ function Fuel({ data, synced }: { data: FuelData; synced: boolean }) {
           <h1>{title}</h1>
           <span style={{ fontSize: 14, fontWeight: 600, color: "var(--sand)" }}>{dateText}</span>
           <span className="fuel-daynav">
-            <button type="button" className="step" aria-label="Previous day" onClick={() => go(shiftDay(day, -1))}>
+            <button type="button" className="step" aria-label={t("Previous day")} onClick={() => go(shiftDay(day, -1))}>
               <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 2.6, strokeLinecap: "round", strokeLinejoin: "round" }}><path d="M15 5l-7 7 7 7" /></svg>
             </button>
-            <button type="button" className="step" aria-label="Next day" disabled={isToday} onClick={() => go(shiftDay(day, 1))}>
+            <button type="button" className="step" aria-label={t("Next day")} disabled={isToday} onClick={() => go(shiftDay(day, 1))}>
               <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 2.6, strokeLinecap: "round", strokeLinejoin: "round" }}><path d="M9 5l7 7-7 7" /></svg>
             </button>
-            {isToday ? null : <Button variant="plain" onClick={() => setPicked(null)}>Today</Button>}
+            {isToday ? null : <Button variant="plain" onClick={() => setPicked(null)}>{t("Today")}</Button>}
           </span>
         </div>
         <div className="actions" style={{ gap: 14 }}>
           <OriginBadge origin={origin} />
-          <Segmented label="Range" value={range} onChange={setRange} options={[{ value: "day", label: "Day" }, { value: "week", label: "Week" }, { value: "month", label: "Month" }]} />
+          <Segmented label={t("Range")} value={range} onChange={setRange} options={[{ value: "day", label: t("Day") }, { value: "week", label: t("Week") }, { value: "month", label: t("Month") }]} />
           <div className="fuel-bar">
-            <button type="button" className="add" onClick={() => setDialog({ kind: "add", meal: mealForNow(isToday) })}>+ Add food</button>
-            <button type="button" onClick={() => setEstimate({ meal: mealForNow(isToday), withPhoto: false })}>Describe a meal</button>
+            <button type="button" className="add" onClick={() => setDialog({ kind: "add", meal: mealForNow(isToday) })}>{t("+ Add food")}</button>
+            <button type="button" onClick={() => setEstimate({ meal: mealForNow(isToday), withPhoto: false })}>{t("Describe a meal")}</button>
             <i aria-hidden="true" />
-            <button type="button" onClick={() => setEstimate({ meal: mealForNow(isToday), withPhoto: true })}>Upload a photo</button>
+            <button type="button" onClick={() => setEstimate({ meal: mealForNow(isToday), withPhoto: true })}>{t("Upload a photo")}</button>
           </div>
         </div>
       </div>
@@ -136,11 +138,11 @@ function Fuel({ data, synced }: { data: FuelData; synced: boolean }) {
       {notWired ? (
         <p className="notice" role="status" style={{ margin: 0, justifyContent: "space-between" }}>
           <span>{notWired}</span>
-          <Button variant="plain" onClick={() => setNotWired(null)}>Dismiss</Button>
+          <Button variant="plain" onClick={() => setNotWired(null)}>{t("Dismiss")}</Button>
         </p>
       ) : null}
 
-      {synced && data.targets == null ? <p className="notice" style={{ margin: 0 }}>Set up Fuel in the phone app to see your targets.</p> : null}
+      {synced && data.targets == null ? <p className="notice" style={{ margin: 0 }}>{t("Set up Fuel in the phone app to see your targets.")}</p> : null}
 
       {range === "day" ? (
         <>
@@ -156,16 +158,16 @@ function Fuel({ data, synced }: { data: FuelData; synced: boolean }) {
             </div>
           </div>
 
-          <section aria-label="Meals" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <section aria-label={t("Meals")} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Meals</h2>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{t("Meals")}</h2>
               <Button variant="plain" style={{ fontSize: 14 }} disabled={copyDisabled}
                 onClick={() => {
                   if (synced) { sync(copySyncedDay(isToday ? yesterday : day, today)); setPicked(null); }
                   else if (isToday) edit(day, (l) => copyFoods(logOf(yesterday), l, newId));
                   else { edit(today, (l) => copyFoods(log, l, newId)); setPicked(null); }
                 }}>
-                {isToday ? "Same as yesterday" : "Copy to today"}
+                {isToday ? t("Same as yesterday") : t("Copy to today")}
               </Button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
@@ -184,20 +186,20 @@ function Fuel({ data, synced }: { data: FuelData; synced: boolean }) {
 
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "stretch", gap: 20 }}>
         <EatenBurned rows={rows} today={today} />
-        <section aria-label="Body and goal" style={{ flex: "1 1 320px", minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+        <section aria-label={t("Body and goal")} style={{ flex: "1 1 320px", minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
           <Link className="card fuel-side" href="/body" style={{ borderRadius: 18 }}>
-            <span style={{ fontWeight: 600 }}>Body and goal</span>
+            <span style={{ fontWeight: 600 }}>{t("Body and goal")}</span>
             <span className="muted">{[weight == null ? null : `${oneOrTwo(weight)} kg`, targets ? `${thousands(targets.kcal)} kcal` : null].filter(Boolean).join(" · ")}</span>
           </Link>
           {data.tastes == null ? null : (
             <div className="card fuel-side" style={{ borderRadius: 18 }}>
-              <span style={{ fontWeight: 600 }}>Your tastes</span>
+              <span style={{ fontWeight: 600 }}>{t("Your tastes")}</span>
               <span className="muted">{data.tastes}</span>
             </div>
           )}
           {data.coach && data.coach.day === day && saved[day] == null ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, padding: "16px 18px", borderRadius: 18, background: "rgba(240,176,44,0.10)", border: "1px solid rgba(240,176,44,0.22)" }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--h-amber-ink)" }}>Coach on fuel</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--h-amber-ink)" }}>{t("Coach on fuel")}</span>
               <span style={{ fontSize: 14, lineHeight: "21px" }}>{data.coach.text}</span>
             </div>
           ) : null}
@@ -223,7 +225,7 @@ function Calories({ eatenKcal, targetKcal: target, burn, sampleBurn }: { eatenKc
   const targetKcal = target ?? 0, active = burn?.active ?? 0;
   const d = target == null ? { filled: 0, moved: 0, over: false, count: DIAL_PETALS } : dial(eatenKcal, targetKcal, active);
   const left = target == null ? eatenKcal : Math.round(remaining(targetKcal, eatenKcal).left);
-  const words = target == null ? `${thousands(eatenKcal)} kcal eaten` : `${thousands(Math.abs(left))} kcal ${left >= 0 ? "left" : "over"}`;
+  const words = target == null ? t("{n} kcal eaten", { n: thousands(eatenKcal) }) : left >= 0 ? t("{n} kcal left", { n: thousands(Math.abs(left)) }) : t("{n} kcal over", { n: thousands(Math.abs(left)) });
   const percent = targetKcal > 0 ? Math.round((eatenKcal / targetKcal) * 100) : 0;
   const stat = (value: string, label: string, color: string) => (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
@@ -234,61 +236,62 @@ function Calories({ eatenKcal, targetKcal: target, burn, sampleBurn }: { eatenKc
     </div>
   );
   return (
-    <section aria-label="Calories" style={{ flex: "1 1 340px", maxWidth: 420, minWidth: 0, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
-      <div className="fuel-readout dial" tabIndex={0} role="group" aria-label="Calories eaten against the target" style={{ width: "100%", maxWidth: 320, borderRadius: 999 }}>
+    <section aria-label={t("Calories")} style={{ flex: "1 1 340px", maxWidth: 420, minWidth: 0, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+      <div className="fuel-readout dial" tabIndex={0} role="group" aria-label={t("Calories eaten against the target")} style={{ width: "100%", maxWidth: 320, borderRadius: 999 }}>
         <PetalDial filled={d.filled} moved={d.moved} count={d.count}
-          label={target == null ? words : `${words} of a ${thousands(targetKcal)} kcal target; ${d.filled} of ${d.count} petals filled`}>
+          label={target == null ? words : t("{words} of a {target} kcal target; {filled} of {count} petals filled", { words, target: thousands(targetKcal), filled: d.filled, count: d.count })}>
           <CountUp className="num" style={{ fontSize: 52, fontWeight: 900, letterSpacing: "-0.02em", lineHeight: 1 }} text={thousands(Math.abs(left))} />
-          <span style={{ fontSize: 15, fontWeight: 700, color: d.over ? "var(--h-rose-ink)" : "var(--h-amber-ink)" }}>{target == null ? "kcal eaten" : d.over ? "kcal over" : "kcal left"}</span>
-          {target == null ? null : <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>Target {thousands(targetKcal)} kcal</span>}
+          <span style={{ fontSize: 15, fontWeight: 700, color: d.over ? "var(--h-rose-ink)" : "var(--h-amber-ink)" }}>{target == null ? t("kcal eaten") : d.over ? t("kcal over") : t("kcal left")}</span>
+          {target == null ? null : <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>{t("Target {n} kcal", { n: thousands(targetKcal) })}</span>}
         </PetalDial>
         {target == null ? null : (
           <span className="tip" role="tooltip">
-            {thousands(eatenKcal)} of {thousands(targetKcal)} kcal eaten · {percent}%{d.moved > 0 ? ` · ${thousands(active)} kcal from moving` : ""}
+            {t("{eaten} of {target} kcal eaten", { eaten: thousands(eatenKcal), target: thousands(targetKcal) })} · {percent}%{d.moved > 0 ? ` · ${t("{n} kcal from moving", { n: thousands(active) })}` : ""}
           </span>
         )}
       </div>
       <div style={{ width: "100%", display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", paddingTop: 14, borderTop: "1px solid rgba(var(--fg-rgb), 0.09)", textAlign: "center" }}>
-        {stat(thousands(eatenKcal), "Eaten", "var(--h-gold)")}
-        {stat(burn ? thousands(burn.resting) : "—", "Resting", "var(--h-orange)")}
-        {stat(burn ? signed(burn.active).replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "—", "Active", "var(--h-mint)")}
+        {stat(thousands(eatenKcal), t("Eaten"), "var(--h-gold)")}
+        {stat(burn ? thousands(burn.resting) : "—", tx("energy", "Resting"), "var(--h-orange)")}
+        {stat(burn ? signed(burn.active).replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "—", tx("energy", "Active"), "var(--h-mint)")}
       </div>
-      {sampleBurn ? <span className="origin" data-origin="sample">Resting, Active and the target: sample data</span> : null}
+      {sampleBurn ? <span className="origin" data-origin="sample">{t("Resting, Active and the target: sample data")}</span> : null}
     </section>
   );
 }
 
 const MACROS = [
-  { key: "protein", name: "Protein", color: "var(--h-rose)" },
-  { key: "carbs", name: "Carbs", color: "var(--h-mint)" },
-  { key: "fat", name: "Fat", color: "var(--h-orange)" },
-  { key: "fiber", name: "Fiber", color: "var(--h-violet)" },
+  { key: "protein", name: msg("Protein"), color: "var(--h-rose)" },
+  { key: "carbs", name: msg("Carbs"), color: "var(--h-mint)" },
+  { key: "fat", name: msg("Fat"), color: "var(--h-orange)" },
+  { key: "fiber", name: msg("Fiber"), color: "var(--h-violet)" },
 ] as const;
 
 const EXTRAS = [
-  { key: "sugar", name: "Sugar", unit: "g" },
-  { key: "satFat", name: "Saturated fat", unit: "g" },
-  { key: "sodium", name: "Sodium", unit: "mg" },
-  { key: "cholesterol", name: "Cholesterol", unit: "mg" },
+  { key: "sugar", name: msg("Sugar"), unit: "g" },
+  { key: "satFat", name: msg("Saturated fat"), unit: "g" },
+  { key: "sodium", name: msg("Sodium"), unit: "mg" },
+  { key: "cholesterol", name: msg("Cholesterol"), unit: "mg" },
 ] as const;
 
 function Macros({ eaten, targets }: { eaten: ReturnType<typeof dayTotals>; targets: Targets | null }) {
   const share = macroPercents(eaten);
   return (
-    <Card clip aria-label="Macros">
+    <Card clip aria-label={t("Macros")}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, padding: "22px 16px 18px" }}>
         {MACROS.map((m) => {
           const target = targets?.[m.key] ?? null, r = remaining(target ?? 0, eaten[m.key]);
-          const gap = target == null ? "" : `${trim(r.gap)} g ${r.over ? "over" : "left"}`;
-          const energy = m.key === "fiber" ? "" : ` · ${Math.round(share[m.key])}% of energy`;
+          const gap = target == null ? "" : r.over ? t("{n} g over", { n: trim(r.gap) }) : t("{n} g left", { n: trim(r.gap) });
+          const energy = m.key === "fiber" ? "" : ` · ${t("{n}% of energy", { n: Math.round(share[m.key]) })}`;
+          const name = t(m.name);
           return (
-            <div key={m.key} className="fuel-readout" tabIndex={0} role="group" aria-label={target == null ? `${m.name}: ${trim(eaten[m.key])} g` : `${m.name}: ${trim(eaten[m.key])} g of ${trim(target)} g, ${gap}`}
+            <div key={m.key} className="fuel-readout" tabIndex={0} role="group" aria-label={target == null ? `${name}: ${trim(eaten[m.key])} g` : `${name}: ${t("{eaten} g of {target} g", { eaten: trim(eaten[m.key]), target: trim(target) })}, ${gap}`}
               style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
               <div style={{ width: 114, height: 69 }}><PetalFan lit={target == null ? 0 : petalsLit(r.progress, eaten[m.key] >= 0.5, FAN_PETALS)} color={m.color} /></div>
               <CountUp className="num" style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1 }} text={`${trim(eaten[m.key])} g`} />
-              <span style={{ fontSize: 13, fontWeight: 600 }}>{m.name}</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{name}</span>
               <span className="muted" style={{ fontSize: 12, color: r.over ? "var(--h-rose-ink)" : undefined }}>{gap}</span>
-              {target == null ? null : <span className="tip" role="tooltip">{trim(eaten[m.key])} of {trim(target)} g · {Math.round(r.progress * 100)}%{energy}</span>}
+              {target == null ? null : <span className="tip" role="tooltip">{t("{eaten} of {target} g", { eaten: trim(eaten[m.key]), target: trim(target) })} · {Math.round(r.progress * 100)}%{energy}</span>}
             </div>
           );
         })}
@@ -296,8 +299,8 @@ function Macros({ eaten, targets }: { eaten: ReturnType<typeof dayTotals>; targe
       <div className="fuel-extras">
         {EXTRAS.map((x) => (
           <div key={x.key}>
-            <span className="soft">{x.name}</span>
-            <span style={{ fontWeight: 600 }}>{trim(eaten[x.key])} {x.unit}{targets?.[x.key] == null ? null : <> <span className="muted" style={{ fontWeight: 500 }}>of {trim(targets[x.key]!)}</span></>}</span>
+            <span className="soft">{t(x.name)}</span>
+            <span style={{ fontWeight: 600 }}>{trim(eaten[x.key])} {x.unit}{targets?.[x.key] == null ? null : <> <span className="muted" style={{ fontWeight: 500 }}>{t("of {n}", { n: trim(targets[x.key]!) })}</span></>}</span>
           </div>
         ))}
       </div>
@@ -312,7 +315,7 @@ function MealTile({ meal, foods, targetKcal, idea, onAdd, onEdit }: {
   const look = MEAL_LOOK[meal];
   const kcal = mealTotals(foods).kcal;
   const started = foods.length > 0;
-  const name = MEAL_NAME[meal];
+  const name = t(MEAL_NAME[meal]);
   return (
     <article className="fuel-meal" style={{
       background: `radial-gradient(circle 240px at 0 0, rgba(${look.rgb},var(--fuel-glow)), transparent), var(--fuel-tile-base)`,
@@ -321,12 +324,12 @@ function MealTile({ meal, foods, targetKcal, idea, onAdd, onEdit }: {
       {started ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h3>{look.icon}{name}</h3>
-          <button type="button" className="fuel-plus" aria-label={`Add to ${name.toLowerCase()}`} style={{ background: `rgba(${look.rgb},0.22)`, color: look.ink }} onClick={() => onAdd()}>+</button>
+          <button type="button" className="fuel-plus" aria-label={t("Add to {meal}", { meal: name.toLowerCase() })} style={{ background: `rgba(${look.rgb},0.22)`, color: look.ink }} onClick={() => onAdd()}>+</button>
         </div>
       ) : <h3 style={{ height: 32 }}>{look.icon}{name}</h3>}
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
         <CountUp className="num" style={{ fontSize: 32, fontWeight: 900, lineHeight: 1, color: started ? undefined : "var(--dim)" }} text={thousands(kcal)} />
-        <span className="muted" style={{ fontSize: 12 }}>{targetKcal == null ? "kcal" : `of ${thousands(targetKcal)} kcal`}</span>
+        <span className="muted" style={{ fontSize: 12 }}>{targetKcal == null ? "kcal" : t("of {n} kcal", { n: thousands(targetKcal) })}</span>
       </div>
       <PetalRow lit={targetKcal == null ? 0 : petalsLit(targetKcal > 0 ? kcal / targetKcal : 0, kcal >= 0.5, ROW_PETALS)} color={look.hue} />
       {started ? (
@@ -334,7 +337,7 @@ function MealTile({ meal, foods, targetKcal, idea, onAdd, onEdit }: {
           {foods.map((f) => {
             const label = foodLabel(f), k = thousands(foodNutrients(f).kcal);
             return (
-              <button key={f.id} type="button" className="fuel-food" aria-label={`${label}, ${k} kcal. Change or remove`} onClick={() => onEdit(f)}>
+              <button key={f.id} type="button" className="fuel-food" aria-label={t("{food}, {kcal} kcal. Change or remove", { food: label, kcal: k })} onClick={() => onEdit(f)}>
                 <span>{label}</span><span>{k}</span>
               </button>
             );
@@ -344,11 +347,11 @@ function MealTile({ meal, foods, targetKcal, idea, onAdd, onEdit }: {
         <>
           {idea ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "10px 12px", borderRadius: 14, background: "rgba(var(--fg-rgb), 0.07)", fontSize: 13 }}>
-              <span className="muted">Idea from your kitchen</span>
+              <span className="muted">{t("Idea from your kitchen")}</span>
               <span style={{ fontWeight: 600 }}>{foodLabel(idea)} · {thousands(foodNutrients(idea).kcal)} kcal</span>
             </div>
           ) : null}
-          <button type="button" className="fuel-add-big" aria-label={`Add to ${name.toLowerCase()}`} style={{ background: `rgba(${look.rgb},0.16)`, color: look.ink }} onClick={() => onAdd(idea)}>+ Add</button>
+          <button type="button" className="fuel-add-big" aria-label={t("Add to {meal}", { meal: name.toLowerCase() })} style={{ background: `rgba(${look.rgb},0.16)`, color: look.ink }} onClick={() => onAdd(idea)}>{t("+ Add")}</button>
         </>
       )}
     </article>
@@ -362,19 +365,19 @@ interface DayRow { day: string; eaten: ReturnType<typeof dayTotals>; burned: num
 function DaysTable({ rows, today, onOpen }: { rows: DayRow[]; today: string; onOpen: (day: string) => void }) {
   const cols = "minmax(120px, 1.4fr) repeat(7, minmax(64px, 1fr))";
   return (
-    <Card clip aria-label="Days">
+    <Card clip aria-label={t("Days")}>
       <div className="scroll-x">
         <div role="table" style={{ minWidth: 700 }}>
           <div role="row" className="thead" style={{ gridTemplateColumns: cols }}>
-            {["Day", "Eaten", "Of target", "Burned", "Protein", "Carbs", "Fat", "Fiber"].map((h, k) => (
-              <span key={h} role="columnheader" style={{ textAlign: k ? "right" : "left" }}>{h}</span>
+            {[msg("Day"), msg("Eaten"), msg("Of target"), msg("Burned"), msg("Protein"), msg("Carbs"), msg("Fat"), msg("Fiber")].map((h, k) => (
+              <span key={h} role="columnheader" style={{ textAlign: k ? "right" : "left" }}>{t(h)}</span>
             ))}
           </div>
           {[...rows].reverse().map((r) => {
             const right = { textAlign: "right" } as const;
             return (
               <div key={r.day} role="row" className="row" style={{ gridTemplateColumns: cols }}>
-                <span role="cell"><button type="button" className="sort-btn" style={{ fontWeight: 600, minHeight: 36 }} onClick={() => onOpen(r.day)}>{r.day === today ? "Today" : shortDate(r.day)}</button></span>
+                <span role="cell"><button type="button" className="sort-btn" style={{ fontWeight: 600, minHeight: 36 }} onClick={() => onOpen(r.day)}>{r.day === today ? t("Today") : shortDate(r.day)}</button></span>
                 <span role="cell" style={{ ...right, fontWeight: 600 }}>{thousands(r.eaten.kcal)}</span>
                 <span role="cell" className="muted" style={right}>{r.targetKcal != null && r.targetKcal > 0 ? `${Math.round((r.eaten.kcal / r.targetKcal) * 100)}%` : ""}</span>
                 <span role="cell" style={right}>{r.burned == null ? "—" : thousands(r.burned)}</span>
@@ -425,24 +428,24 @@ function EatenBurned({ rows, today }: { rows: DayRow[]; today: string }) {
     e.preventDefault();
     setAt(Math.max(0, Math.min(n - 1, next)));
   };
-  const readout = shown ? `${shown.day === today ? "Today" : shortDate(shown.day)} · Eaten ${thousands(shown.eaten.kcal)}${shown.burned == null ? " kcal" : ` · Burned ${thousands(shown.burned)} kcal`}` : "";
+  const readout = shown ? `${shown.day === today ? t("Today") : shortDate(shown.day)} · ${shown.burned == null ? t("Eaten {n} kcal", { n: thousands(shown.eaten.kcal) }) : t("Eaten {eaten} · Burned {burned} kcal", { eaten: thousands(shown.eaten.kcal), burned: thousands(shown.burned) })}` : "";
   const leftPct = at == null ? 0 : ((Math.min(at, n - 1) + 0.5) / n) * 100;
 
   return (
-    <Card pad aria-label="Eaten and burned" style={{ flex: "2 1 520px", display: "flex", flexDirection: "column", gap: 14 }}>
+    <Card pad aria-label={t("Eaten and burned")} style={{ flex: "2 1 520px", display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "8px 20px" }}>
-        <h2 className="h2">Eaten and burned</h2>
+        <h2 className="h2">{t("Eaten and burned")}</h2>
         <div className="muted" style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", fontSize: 13 }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 3, background: "var(--h-gold)" }} />Eaten</span>
-          <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span aria-hidden="true" style={{ width: 14, height: 2, background: "var(--soft)" }} />Burned</span>
-          <span>Average <strong style={{ color: "var(--fg)" }}>{thousands(average)} kcal a day</strong></span>
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 3, background: "var(--h-gold)" }} />{t("Eaten")}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span aria-hidden="true" style={{ width: 14, height: 2, background: "var(--soft)" }} />{t("Burned")}</span>
+          <span>{tr("Average {amount}", { amount: <strong style={{ color: "var(--fg)" }}>{t("{n} kcal a day", { n: thousands(average) })}</strong> })}</span>
         </div>
       </div>
-      <div className="fuel-chart" tabIndex={0} role="group" aria-label="Eaten and burned by day. Left and right arrows read each day."
+      <div className="fuel-chart" tabIndex={0} role="group" aria-label={t("Eaten and burned by day. Left and right arrows read each day.")}
         onKeyDown={onKey} onFocus={() => setAt((a) => a ?? n - 1)} onBlur={() => setAt(null)}
         onPointerMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt(Math.max(0, Math.min(n - 1, Math.floor(((e.clientX - r.left) / (r.width || 1)) * n)))); }}
         onPointerLeave={() => setAt(null)}>
-        <svg role="img" aria-label={`Calories eaten each day as bars with calories burned as a line, ${shortDate(rows[0].day)} to ${shortDate(rows[n - 1].day)}; average eaten ${thousands(average)} kcal a day`}
+        <svg role="img" aria-label={t("Calories eaten each day as bars with calories burned as a line, {from} to {to}; average eaten {n} kcal a day", { from: shortDate(rows[0].day), to: shortDate(rows[n - 1].day), n: thousands(average) })}
           width="100%" height={CHART_H} viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="none" style={{ display: "block" }}>
           <path d={`M0 ${(CHART_H / 3).toFixed(1)}H${CHART_W}M0 ${((CHART_H * 2) / 3).toFixed(1)}H${CHART_W}`} fill="none" style={{ stroke: "rgba(var(--fg-rgb), 0.07)", vectorEffect: "non-scaling-stroke" }} />
           <path d={bars} style={{ fill: "var(--h-gold)" }} />
@@ -459,7 +462,7 @@ function EatenBurned({ rows, today }: { rows: DayRow[]; today: string }) {
       <div className="muted" style={{ display: "grid", gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`, fontSize: 12, textAlign: "center" }}>
         {rows.map((r, k) => {
           const isToday = r.day === today;
-          const text = n <= 10 ? (isToday ? "Today" : weekday(r.day, "short")) : (n - 1 - k) % every === 0 ? String(parseDay(r.day).getDate()) : "";
+          const text = n <= 10 ? (isToday ? t("Today") : weekday(r.day, "short")) : (n - 1 - k) % every === 0 ? String(parseDay(r.day).getDate()) : "";
           return <span key={r.day} style={isToday ? { color: "var(--fg)", fontWeight: 600 } : undefined}>{text}</span>;
         })}
       </div>

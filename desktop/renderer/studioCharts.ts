@@ -12,6 +12,7 @@ import {
 } from "../watchface/engine/chartReadouts";
 import { nativePageRule } from "../watchface/engine/nativeData";
 import { templateChartPages } from "../watchface/engine/templateChartPages";
+import { msg, t } from "@/lib/i18n";
 import { pickPreviewResolution, watchfaceFixedMetricDigitSize } from "../watchface/engine/watchfaceStudio";
 import { defaultNativeDataStyle, nativePart, nativeParts } from "../watchface/engine/nativeDataParts";
 import { deriveEditorLayers } from "../watchface/engine/watchfaceEditorModel";
@@ -23,14 +24,14 @@ type Face = { width: number; height: number };
 
 export type ChartGraph = "bars" | "line" | "none";
 export const CHART_PAGE_LABEL: Record<string, string> = {
-  barometer: "Barometer", tide: "Tide", sun: "Sun", moon: "Moon", "daily-a": "Daily stats", "daily-b": "Daily activity",
+  barometer: msg("Barometer"), tide: msg("Tide"), sun: msg("Sun"), moon: msg("Moon"), "daily-a": msg("Daily stats"), "daily-b": msg("Daily activity"),
 };
-export const CHART_GRAPH_SHORT: Record<ChartGraph, string> = { bars: "Bars", line: "Line", none: "Numbers" };
+export const CHART_GRAPH_SHORT: Record<ChartGraph, string> = { bars: msg("Bars"), line: msg("Line"), none: msg("Numbers") };
 export const CHART_GRAPH_ICON: Record<ChartGraph, string> = { bars: "chart", line: "wave", none: "nums" };
-export const CHART_GRAPH_LABEL: Record<ChartGraph, string> = { bars: "Bar graph", line: "Line graph", none: "Numbers, no graph" };
+export const CHART_GRAPH_LABEL: Record<ChartGraph, string> = { bars: msg("Bar graph"), line: msg("Line graph"), none: msg("Numbers, no graph") };
 /** The chart's own names for its readouts, where the catalog's would repeat the page's. */
 const READOUT_LABEL: Record<string, string> = {
-  chart_baro: "Pressure reading", chart_tide: "Tide height", chart_sunrise: "Sunrise and sunset", chart_moonrise: "Moonrise and moonset",
+  chart_baro: msg("Pressure reading"), chart_tide: msg("Tide height"), chart_sunrise: msg("Sunrise and sunset"), chart_moonrise: msg("Moonrise and moonset"),
 };
 export const chartReadoutName = (source: string) => READOUT_LABEL[source] ?? nativeChartReadoutLabel(source);
 
@@ -261,14 +262,14 @@ export function chartStartOptions(design: Design, details: CorosWatchfaceTemplat
   const rows = new Map(chartPageRows(design, details).map((r) => [r.id, r]));
   const one = (id: string, note?: string): ChartStartOption => {
     const row = rows.get(id)!;
-    const names = row.readouts.filter((r) => r.required).map((r) => r.label);
+    const names = row.readouts.filter((r) => r.required).map((r) => t(r.label));
     return { key: `chart:${id}`, label: row.label, graph: row.graph, hides: row.hides, note,
       sub: names.length > 1 ? names.map((n, i) => (i ? n.toLowerCase() : n)).join(", ") : names[0] ?? "" };
   };
   const baro = rows.get("barometer")!;
   return [
-    one("sun"), one("moon"), one("daily-a"), one("daily-b", "Needs Send from Studio"),
-    { key: "chart:bars", label: "Barometer and Tide", sub: "Two pages, always together", graph: "bars", hides: baro.hides, note: "Blank until the phone syncs" },
+    one("sun"), one("moon"), one("daily-a"), one("daily-b", t("Needs Send from Studio")),
+    { key: "chart:bars", label: msg("Barometer and Tide"), sub: t("Two pages, always together"), graph: "bars", hides: baro.hides, note: t("Blank until the phone syncs") },
   ];
 }
 
@@ -281,11 +282,11 @@ export function chartStartOptions(design: Design, details: CorosWatchfaceTemplat
  */
 export function chartFixBlock(design: Design, details: CorosWatchfaceTemplateDetails, source: string): string | null {
   const twin = NATIVE_CHART_FIXED_EQUIVALENTS[source], chart = chartOf(design), label = chartReadoutName(source);
-  if (!twin) return "This one only lives on its page.";
-  if (!chart || !readoutStyle(chart, source)) return "Add it to the page first.";
-  if (layerSources(chart).filter((s) => s !== source).length === 0) return "The chart's last readout stays on it.";
-  if ("nativeData" in twin) return design.nativeData?.[twin.nativeData]?.enabled ? `The face already shows ${label}.` : null;
-  return deriveEditorLayers(details, design).some((l) => l.metricId === twin.metric && l.visible) ? `The face already shows ${label}.` : null;
+  if (!twin) return t("This one only lives on its page.");
+  if (!chart || !readoutStyle(chart, source)) return t("Add it to the page first.");
+  if (layerSources(chart).filter((s) => s !== source).length === 0) return t("The chart's last readout stays on it.");
+  if ("nativeData" in twin) return design.nativeData?.[twin.nativeData]?.enabled ? t("The face already shows {name}.", { name: t(label) }) : null;
+  return deriveEditorLayers(details, design).some((l) => l.metricId === twin.metric && l.visible) ? t("The face already shows {name}.", { name: t(label) }) : null;
 }
 
 /**

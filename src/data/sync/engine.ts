@@ -6,6 +6,7 @@
 // did not get.
 import { useSyncExternalStore } from "react";
 import { idbGet, idbSet } from "./idb";
+import { msg, t } from "@/lib/i18n";
 import type { Collection, SyncBodies } from "./native";
 import {
   applyEdit, applyPull, applyPushed, baseOf, batches, emptyState, visible, visibleOne,
@@ -90,7 +91,7 @@ async function call<T>(path: string, init?: { method: "POST"; body?: unknown }):
       body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
   } catch {
-    throw new SyncError("unreachable", "C-LINK couldn't be reached. Try again.");
+    throw new SyncError("unreachable", t("C-LINK couldn't be reached. Try again."));
   }
   let payload: unknown = null;
   try { payload = await response.json(); } catch {}
@@ -98,14 +99,14 @@ async function call<T>(path: string, init?: { method: "POST"; body?: unknown }):
   const error = (payload as { error?: { code?: unknown; message?: unknown } | string; code?: unknown } | null);
   const inner = error && typeof error.error === "object" ? error.error : null;
   const code = String(inner?.code ?? error?.code ?? (typeof error?.error === "string" ? error.error : "") ?? "") || `http_${response.status}`;
-  throw new SyncError(code, WORDS[code] ?? (typeof inner?.message === "string" ? inner.message : `Sync didn't work (${response.status}).`), response.status);
+  throw new SyncError(code, (WORDS[code] ? t(WORDS[code]) : null) ?? (typeof inner?.message === "string" ? inner.message : t("Sync didn't work ({status}).", { status: response.status })), response.status);
 }
 
 const WORDS: Record<string, string> = {
-  SYNC_QUOTA: "The data on this computer is full. Nothing more can be saved until some of it is removed.",
-  SYNC_TOO_LARGE: "That was too much to save at once.",
-  INVALID_SYNC: "That change couldn't be saved.",
-  unreachable: "C-LINK couldn't be reached. Try again.",
+  SYNC_QUOTA: msg("The data on this computer is full. Nothing more can be saved until some of it is removed."),
+  SYNC_TOO_LARGE: msg("That was too much to save at once."),
+  INVALID_SYNC: msg("That change couldn't be saved."),
+  unreachable: msg("C-LINK couldn't be reached. Try again."),
 };
 
 interface StatusAnswer { items: number; bytes: number; updatedAt: string | null; cursor: number }
@@ -166,7 +167,7 @@ async function pass(): Promise<void> {
       setStatus({ account: "ended", viewer: null, syncing: false, error: null });
       return;
     }
-    setStatus({ syncing: false, error: error instanceof SyncError ? error.message : "Sync didn't work." });
+    setStatus({ syncing: false, error: error instanceof SyncError ? error.message : t("Sync didn't work.") });
     throw error;
   }
 }
@@ -214,7 +215,7 @@ function ensureReady(): Promise<void> {
     ready = boot().catch((error) => {
       ready = null;
       // Not "signedOut": a failed check is not a missing session.
-      if (status.account === "checking") setStatus({ error: error instanceof SyncError ? error.message : "C-LINK couldn't be reached." });
+      if (status.account === "checking") setStatus({ error: error instanceof SyncError ? error.message : t("C-LINK couldn't be reached.") });
       throw error;
     });
   }
@@ -249,13 +250,13 @@ export async function syncView(): Promise<SyncView | null> {
     if (!status.viewer) {
       throw error;
     }
-    throw new SyncError("first_pull", `The data on this computer couldn't be read. ${error instanceof Error ? error.message : ""}`.trim());
+    throw new SyncError("first_pull", error instanceof Error && error.message ? t("The data on this computer couldn't be read. {reason}", { reason: error.message }) : t("The data on this computer couldn't be read."));
   }
   return status.viewer ? view(status.viewer) : null;
 }
 
 function edit(change: Omit<Unsent, "at">): void {
-  if (!status.viewer) throw new SyncError("signed_out", "C-LINK is still starting. Try again in a moment.");
+  if (!status.viewer) throw new SyncError("signed_out", t("C-LINK is still starting. Try again in a moment."));
   state = applyEdit(state, { ...change, at: Date.now() + Math.random() });
   saveSoon();
   bump();

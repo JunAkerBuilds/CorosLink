@@ -15,6 +15,7 @@ import { AreasProblem, MapPackageClient } from "./areas/client";
 import { AreasHistory } from "./areas/history";
 import { modelCode } from "./areas/models";
 import { CopyCancelled, bytesStillNeeded, copyAreas, removeAreaFiles, watchMapFolder, type AreasDrive } from "./areas/usb";
+import { msg, t } from "@/lib/i18n";
 
 /** A saved route as Route Studio keeps it (desktop/main/maps/routes.ts). */
 export interface RouteForSync {
@@ -54,8 +55,8 @@ export function trackIdFor(routeId: string): string {
   return (value === 0n ? 1n : value).toString(16).padStart(16, "0");
 }
 
-const NOT_OVER_USB = "Routes go to the watch over Bluetooth, not its USB cable.";
-const AREAS_ONLY = "Map areas work on PACE 4, PACE 4 Pro, PACE Pro and APEX 4.";
+const NOT_OVER_USB = msg("Routes go to the watch over Bluetooth, not its USB cable.");
+const AREAS_ONLY = msg("Map areas work on PACE 4, PACE 4 Pro, PACE Pro and APEX 4.");
 
 export class AreasService {
   private readonly history: AreasHistory;
@@ -141,17 +142,17 @@ export class AreasService {
   }
 
   private async startSync(routeId: string): Promise<Response> {
-    if (["connecting", "sending", "checking"].includes(this.sync.state)) return problem("A route is already being sent to the watch.", "busy", 409);
+    if (["connecting", "sending", "checking"].includes(this.sync.state)) return problem(t("A route is already being sent to the watch."), "busy", 409);
     const route = await this.host.route(routeId);
-    if (!route) return problem("That route isn't saved any more.", "notFound", 404);
+    if (!route) return problem(t("That route isn't saved any more."), "notFound", 404);
     if (route.points.length < MIN_ROUTE_POINTS || route.points.length > MAX_ROUTE_POINTS) {
-      return problem("A route must contain between 2 and 40,000 GPS points to sync.", "points");
+      return problem(t("A route must contain between 2 and 40,000 GPS points to sync."), "points");
     }
     const local = this.host.watch();
     const link = local?.link();
     if (!local || !link?.usable) {
       const usb = (await this.driveStatus()).status;
-      return problem(usb ? `${NOT_OVER_USB} ${link?.reason ?? "Turn on Local mode and pair your watch on the Watch page."}` : (link?.reason ?? "Turn on Local mode and pair your watch on the Watch page."), "noLink");
+      return problem(usb ? `${t(NOT_OVER_USB)} ${link?.reason ?? t("Turn on Local mode and pair your watch on the Watch page.")}` : (link?.reason ?? t("Turn on Local mode and pair your watch on the Watch page.")), "noLink");
     }
     // Every point as it is; the heights only when every point has one.
     const heights = route.points.every((p) => typeof p[2] === "number" && Number.isFinite(p[2])) ? route.points.map((p) => p[2] as number) : [];
@@ -176,7 +177,7 @@ export class AreasService {
     }, (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       this.sync = this.syncCancelled
-        ? { state: "cancelled", routeId, name: route.name, message: "Stopped. The watch keeps the routes it had." }
+        ? { state: "cancelled", routeId, name: route.name, message: t("Stopped. The watch keeps the routes it had.") }
         : { state: "failed", routeId, name: route.name, message };
     });
     return json(this.sync);
@@ -199,9 +200,9 @@ export class AreasService {
   /** The watch's model code for map packages, or why there's none. */
   private async areaModel(): Promise<{ watch: MapsWatch; model: string }> {
     const watch = await this.watchInfo();
-    if (!watch) throw new AreasProblem("Connect your watch: Local mode over Bluetooth, or its USB cable.", "noWatch");
-    if (!watch.areas) throw new AreasProblem(AREAS_ONLY, "unsupported");
-    if (!watch.model) throw new AreasProblem("C-LINK can't tell which watch this is. Pair it in Local mode so its model is known.", "noModel");
+    if (!watch) throw new AreasProblem(t("Connect your watch: Local mode over Bluetooth, or its USB cable."), "noWatch");
+    if (!watch.areas) throw new AreasProblem(t(AREAS_ONLY), "unsupported");
+    if (!watch.model) throw new AreasProblem(t("C-LINK can't tell which watch this is. Pair it in Local mode so its model is known."), "noModel");
     return { watch, model: watch.model };
   }
 
@@ -253,11 +254,11 @@ export class AreasService {
       this.history.addArea({ id: randomUUID(), label, tiles: preview.tiles, fileCount: preview.fileCount, sizeBytes: preview.sizeBytes, via: "wifi", at: new Date().toISOString(), files: preview.files, taskId, model });
       return this.areas(true);
     }
-    if (body.via !== "usb") throw new AreasProblem("Pick Wi-Fi or USB.");
-    if (this.copy?.state === "copying") throw new AreasProblem("Map areas are already being copied to the watch.", "busy", 409);
+    if (body.via !== "usb") throw new AreasProblem(t("Pick Wi-Fi or USB."));
+    if (this.copy?.state === "copying") throw new AreasProblem(t("Map areas are already being copied to the watch."), "busy", 409);
     const drive = this.host.drive();
     const root = await drive?.root().catch(() => null);
-    if (!drive || !root) throw new AreasProblem("Plug in your watch with its USB cable first.", "noUsb");
+    if (!drive || !root) throw new AreasProblem(t("Plug in your watch with its USB cable first."), "noUsb");
     const status = await drive.status();
     const mapFolder = await watchMapFolder(root);
     const abort = new AbortController();
@@ -274,7 +275,7 @@ export class AreasService {
     }, (error: unknown) => {
       const base = this.copy ?? { label, copiedBytes: 0, totalBytes: 0, files: preview.files.length, filesDone: 0 };
       this.copy = error instanceof CopyCancelled || abort.signal.aborted
-        ? { ...base, state: "cancelled", message: "Stopped. Files already copied stay on the watch." }
+        ? { ...base, state: "cancelled", message: t("Stopped. Files already copied stay on the watch.") }
         : { ...base, state: "failed", message: error instanceof Error ? error.message : String(error) };
     }).finally(() => {
       if (this.copyAbort === abort) this.copyAbort = null;
@@ -287,23 +288,23 @@ export class AreasService {
   private async cancel(body: Record<string, unknown>): Promise<AreasStatus> {
     if (body.taskId !== undefined) {
       // An empty id or eight 0xFF bytes would make the watch drop every download: only a real id goes.
-      if (!isMapTaskId(body.taskId)) throw new AreasProblem("Choose a download from the watch's list.", "taskId");
+      if (!isMapTaskId(body.taskId)) throw new AreasProblem(t("Choose a download from the watch's list."), "taskId");
       await this.linked().removeMapTask(body.taskId);
       return this.areas(true);
     }
-    if (!this.copyAbort) throw new AreasProblem("Nothing is being copied.", "idle");
+    if (!this.copyAbort) throw new AreasProblem(t("Nothing is being copied."), "idle");
     this.copyAbort.abort();
     return this.areas();
   }
 
   private async removeHistory(id: string, forget: boolean): Promise<AreasStatus> {
     const record = this.history.area(id);
-    if (!record) throw new AreasProblem("Those map areas aren't in the list any more.", "notFound", 404);
+    if (!record) throw new AreasProblem(t("Those map areas aren't in the list any more."), "notFound", 404);
     if (!forget) {
-      if (this.copy?.state === "copying") throw new AreasProblem("Wait for the copy to the watch to finish.", "busy", 409);
+      if (this.copy?.state === "copying") throw new AreasProblem(t("Wait for the copy to the watch to finish."), "busy", 409);
       const drive = this.host.drive();
       const root = await drive?.root().catch(() => null);
-      if (!drive || !root) throw new AreasProblem("Plug in your watch with its USB cable to take map areas off it.", "noUsb");
+      if (!drive || !root) throw new AreasProblem(t("Plug in your watch with its USB cable to take map areas off it."), "noUsb");
       const keep = this.history.filesInUseBesides(id);
       const files = record.files.filter((f) => !keep.has(`${f.layer}/${f.name}`));
       const mapFolder = await watchMapFolder(root);
@@ -337,13 +338,13 @@ export class AreasService {
         case "POST /areas/preview": return json(await this.preview((await body()).tiles));
         case "POST /areas/start": return json(await this.start(await body()));
         case "POST /areas/cancel": return json(await this.cancel(await body()));
-        default: return problem("Not a Maps action.", "method", 405);
+        default: return problem(t("Not a Maps action."), "method", 405);
       }
     } catch (error) {
       if (error instanceof AreasProblem) return problem(error.message, error.code, error.status);
       if (error instanceof HelperProblem) return problem(error.message, "watch");
       this.log(`Maps ${method} ${sub} failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
-      return problem("That didn't work.", "internal", 500);
+      return problem(t("That didn't work."), "internal", 500);
     }
   }
 }

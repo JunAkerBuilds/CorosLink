@@ -3,6 +3,7 @@
 // and phone pairings live elsewhere and are never in it.
 import { createCipheriv, createDecipheriv, randomBytes, scrypt } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
+import { t } from "@/lib/i18n";
 import type { Seed } from "./localStore";
 
 const FORMAT = "clink-backup";
@@ -21,7 +22,7 @@ const keyFor = (passphrase: string, salt: Buffer) => new Promise<Buffer>((resolv
 export async function packBackup(items: readonly Seed[], passphrase = "", now = new Date()): Promise<Buffer> {
   const plain = gzipSync(JSON.stringify({ format: FORMAT, version: 1, createdAt: now.toISOString(), items }));
   if (!passphrase) return plain;
-  if (passphrase.length < MIN_PASSPHRASE) throw new BackupProblem(`The passphrase needs at least ${MIN_PASSPHRASE} characters.`, "passphrase");
+  if (passphrase.length < MIN_PASSPHRASE) throw new BackupProblem(t("The passphrase needs at least {n} characters.", { n: MIN_PASSPHRASE }), "passphrase");
   const salt = randomBytes(16), nonce = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", await keyFor(passphrase, salt), nonce);
   const sealed = Buffer.concat([cipher.update(plain), cipher.final()]);
@@ -33,7 +34,7 @@ export const isSealed = (file: Buffer): boolean => file.subarray(0, SEALED.lengt
 export async function unpackBackup(file: Buffer, passphrase = ""): Promise<{ items: Seed[]; createdAt: string }> {
   let plain = file;
   if (isSealed(file)) {
-    if (!passphrase) throw new BackupProblem("This backup has a passphrase.", "passphrase");
+    if (!passphrase) throw new BackupProblem(t("This backup has a passphrase."), "passphrase");
     const at = SEALED.length;
     const salt = file.subarray(at, at + 16), nonce = file.subarray(at + 16, at + 28), tag = file.subarray(at + 28, at + 44);
     const key = await keyFor(passphrase, salt);
@@ -42,12 +43,12 @@ export async function unpackBackup(file: Buffer, passphrase = ""): Promise<{ ite
       decipher.setAuthTag(tag);
       plain = Buffer.concat([decipher.update(file.subarray(at + 44)), decipher.final()]);
     } catch {
-      throw new BackupProblem("That passphrase doesn't open this backup.", "passphrase");
+      throw new BackupProblem(t("That passphrase doesn't open this backup."), "passphrase");
     }
   }
   let parsed: { format?: unknown; items?: unknown; createdAt?: unknown };
-  try { parsed = JSON.parse(gunzipSync(plain).toString("utf8")) as typeof parsed; } catch { throw new BackupProblem("This isn't a C-LINK backup.", "format"); }
-  if (parsed.format !== FORMAT || !Array.isArray(parsed.items)) throw new BackupProblem("This isn't a C-LINK backup.", "format");
+  try { parsed = JSON.parse(gunzipSync(plain).toString("utf8")) as typeof parsed; } catch { throw new BackupProblem(t("This isn't a C-LINK backup."), "format"); }
+  if (parsed.format !== FORMAT || !Array.isArray(parsed.items)) throw new BackupProblem(t("This isn't a C-LINK backup."), "format");
   const items = parsed.items.filter((i): i is Seed => typeof i?.collection === "string" && typeof i?.id === "string" && typeof i?.body === "object" && i.body !== null);
   return { items, createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : "" };
 }

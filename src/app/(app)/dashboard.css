@@ -245,9 +245,10 @@ a.db-latest-chip:hover { color: var(--h-mint-ink); }
 }
 .db-latest-pill > i { width: 6px; height: 6px; border-radius: 999px; background: var(--hue); }
 .db-latest-pill > b { color: var(--fg); font-weight: 700; }
-.db-latest-big { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+/* Columns as wide as their numbers (a time to the tenth is wider than a distance); the numbers shrink in a narrow card. */
+.db-latest-big { display: grid; grid-template-columns: repeat(3, auto); justify-content: space-between; gap: 10px; container-type: inline-size; }
 .db-latest-big > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.db-latest-big .num { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; white-space: nowrap; }
+.db-latest-big .num { font-size: clamp(17px, 7.2cqi, 24px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; white-space: nowrap; }
 .db-latest-big small { font-size: 12.5px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
 .db-latest-big > div > span:last-child { font-size: 12px; color: var(--muted); }
 .db-latest-hr { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }

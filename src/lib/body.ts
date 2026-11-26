@@ -1,6 +1,7 @@
 /** Body maths. Pure: measurements in, trends, monthly averages, derived numbers and arc geometry out. */
 import type { Measurement, OwnMeasurement } from "@/data/body";
 import { dayKey, parseDay } from "@/lib/format";
+import { t } from "@/lib/i18n";
 
 /** A measurement on the page: the sample's, or the person's own (which can be deleted). */
 export interface Entry extends Measurement {
@@ -64,9 +65,9 @@ export function bmi(weightKg: number, heightCm: number): number {
 }
 
 export function bmiBand(value: number): string {
-  if (value < 18.5) return "Below healthy range";
-  if (value < 25) return "Healthy range";
-  return "Above healthy range";
+  if (value < 18.5) return t("Below healthy range");
+  if (value < 25) return t("Healthy range");
+  return t("Above healthy range");
 }
 
 /** Everything that isn't fat. */
@@ -173,8 +174,9 @@ export function arcPoint(deg: number, r: number = ARC.r): [number, number] {
 /** Body age minus age to a tenth: "2.6 years younger", "1.0 years older", "Same as your age". */
 export function ageDifference(bodyAge: number, age: number): string {
   const diff = Math.round((bodyAge - age) * 10) / 10;
-  if (diff === 0) return "Same as your age";
-  return `${Math.abs(diff).toFixed(1)} years ${diff < 0 ? "younger" : "older"}`;
+  if (diff === 0) return t("Same as your age");
+  const years = Math.abs(diff).toFixed(1);
+  return diff < 0 ? t("{years} years younger", { years }) : t("{years} years older", { years });
 }
 
 // MARK: Chart geometry

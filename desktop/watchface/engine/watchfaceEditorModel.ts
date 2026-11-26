@@ -1,3 +1,4 @@
+import { msg } from "@/lib/i18n";
 import { batteryIconRotation, batteryReplacementStateCount, rotatedBatteryFrame, batteryScalesFromArtwork, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates";
 import { NATIVE_DATA_BY_ID, nativeDataBounds } from "./nativeData";
 import type {
@@ -481,7 +482,7 @@ export function deriveEditorLayers(
       layers.push({
         id: groupId,
         kind: "controlBatteryIcon",
-        label: "Control battery icon",
+        label: msg("Control battery icon"),
         visible: isControlComplicationEnabled(details, design, "battery"),
         canHide: true,
         present: true,
@@ -623,7 +624,7 @@ export function deriveEditorLayers(
     const ampmLayer: EditorLayer = {
       id: "ampm",
       kind: "separators",
-      label: "AM/PM indicator",
+      label: msg("AM/PM indicator"),
       ampmIndicator: true,
       visible: style.enabled,
       canHide: true,
@@ -631,7 +632,7 @@ export function deriveEditorLayers(
       // Kept while hidden, as for the separators above.
       bounds: {
         id: "ampm",
-        label: "AM/PM indicator",
+        label: msg("AM/PM indicator"),
         x0: style.x,
         y0: style.y,
         x1: style.x + width,
@@ -674,7 +675,7 @@ export function deriveEditorLayers(
     layers.splice(1, 0, {
       id: "weather",
       kind: "weather",
-      label: "Weather icon",
+      label: msg("Weather icon"),
       weatherIndicator: true,
       visible: style.enabled,
       canHide: true,
@@ -682,7 +683,7 @@ export function deriveEditorLayers(
       bounds: style.enabled
         ? {
             id: "weather",
-            label: "Weather icon",
+            label: msg("Weather icon"),
             x0: style.x,
             y0: style.y,
             x1: style.x + width,
@@ -909,12 +910,12 @@ export function deriveEditorLayers(
   layers.push({
     id: "background",
     kind: "background",
-    label: "Background",
+    label: msg("Background"),
     visible: design.artworkVisible !== false,
     canHide: true,
     present: true,
     bounds: resolution
-      ? { id: "background", label: "Background", x0: 0, y0: 0, x1: resolution.width, y1: resolution.height }
+      ? { id: "background", label: msg("Background"), x0: 0, y0: 0, x1: resolution.width, y1: resolution.height }
       : null,
     capabilities: {
       ...NO_CAPABILITIES,

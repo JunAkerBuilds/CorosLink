@@ -3,6 +3,7 @@ import { moveScheduled, newMove } from "@/server/hub/calendar";
 import { HubInvalid } from "@/server/hub/errors";
 import { hub, hubRoute, readBody, withSession } from "@/server/hub/http";
 import { corosId, day, moveProgress, plainText } from "@/server/hub/validate";
+import { t } from "@/lib/i18n";
 
 /**
  * `{ from, to, idInPlan, name }` starts a move; `{ move }` picks up one that stopped part-way (the `move` a
@@ -14,6 +15,6 @@ export const POST = hubRoute({ write: true }, async (request) => {
     ? moveProgress(body.move)
     : newMove(day(body.from, "from"), day(body.to, "to"), plainText(body.name ?? "", "The workout's name", 200),
         body.idInPlan === undefined || body.idInPlan === null ? null : corosId(body.idInPlan, "The workout"));
-  if (start.idInPlan === null && start.name === "") throw new HubInvalid("Say which workout to move.");
+  if (start.idInPlan === null && start.name === "") throw new HubInvalid(t("Say which workout to move."));
   return { move: await withSession((session) => moveScheduled(hub, session, start)) };
 });

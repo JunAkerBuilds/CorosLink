@@ -17,6 +17,7 @@ import { MusicServices, type ServicesHost } from "./services";
 import { SourceProblem } from "./sources";
 import { lowercaseMp3 } from "./mp3";
 import { WatchDrive, WatchProblem, type WatchStatus, type WatchTrack } from "./watchDrive";
+import { t } from "@/lib/i18n";
 
 export interface Job {
   /** The audiobook being sent, when it's one. */
@@ -121,11 +122,11 @@ export class MediaService {
 
   /** Sends library tracks to the watch, one after another in the order given; tracks already there are skipped. */
   async send(wanted: string[]): Promise<void> {
-    if (this.job?.running) throw new WatchProblem("The watch is already being sent music.", "busy");
+    if (this.job?.running) throw new WatchProblem(t("The watch is already being sent music."), "busy");
     const watch = await this.drive.status();
-    if (!watch.connected) throw new WatchProblem("Plug in your watch first.", "noWatch");
+    if (!watch.connected) throw new WatchProblem(t("Plug in your watch first."), "noWatch");
     const tracks = wanted.map((id) => this.library.get(id)).filter((t): t is LibraryTrack => !!t && !findOnWatch(t, watch.tracks));
-    if (!tracks.length) throw new WatchProblem("Those tracks are already on the watch.", "nothing");
+    if (!tracks.length) throw new WatchProblem(t("Those tracks are already on the watch."), "nothing");
     this.copy(watch.freeBytes, tracks.map((t) => ({ file: this.library.pathOf(t), name: t.file, title: t.title, bytes: t.bytes, done: (name: string) => this.library.markSent(t.id, name) })));
   }
 
@@ -134,9 +135,9 @@ export class MediaService {
    * Music and its folders. Parts before the resume point were listened to and aren't sent again.
    */
   async sendBook(id: string): Promise<{ copying: number; skipped: number }> {
-    if (this.job?.running) throw new WatchProblem("The watch is already being sent music.", "busy");
+    if (this.job?.running) throw new WatchProblem(t("The watch is already being sent music."), "busy");
     const watch = await this.drive.status();
-    if (!watch.connected) throw new WatchProblem("Plug in your watch first.", "noWatch");
+    if (!watch.connected) throw new WatchProblem(t("Plug in your watch first."), "noWatch");
     const { book, parts } = this.books.toSend(id, watch.tracks);
     const toPlay = book.parts.filter((p) => p.index >= book.resume).length;
     if (parts.length) this.copy(watch.freeBytes, parts, id);
@@ -148,7 +149,7 @@ export class MediaService {
     const totalBytes = items.reduce((a, t) => a + t.bytes, 0);
     if (free != null && totalBytes + HEADROOM > free) {
       const over = totalBytes + HEADROOM - free;
-      throw new WatchProblem(`Not enough room on the watch: ${(over / 1e6).toFixed(1)} MB over.`, "full");
+      throw new WatchProblem(t("Not enough room on the watch: {mb} MB over.", { mb: (over / 1e6).toFixed(1) }), "full");
     }
     const job: Job = { ...(book ? { book } : {}), total: items.length, done: 0, current: null, sentBytes: 0, totalBytes, running: true };
     this.job = job;
@@ -164,7 +165,7 @@ export class MediaService {
           job.sentBytes = before + t.bytes;
         }
       } catch (error) {
-        job.error = error instanceof WatchProblem ? error.message : "The copy stopped. Check the cable and try again.";
+        job.error = error instanceof WatchProblem ? error.message : t("The copy stopped. Check the cable and try again.");
         this.log(`Media: sending to the watch failed: ${String(error)}`);
       } finally {
         job.current = null;
@@ -189,7 +190,7 @@ export class MediaService {
     switch (`${method} ${route}`) {
       case "GET /books": return this.booksState();
       case "POST /books/choose": {
-        if (!this.chooseFiles) throw new WatchProblem("Choosing files isn't available here.", "noDialog");
+        if (!this.chooseFiles) throw new WatchProblem(t("Choosing files isn't available here."), "noDialog");
         const files = await this.chooseFiles(BOOK_EXTENSIONS);
         return { draft: files?.length ? await this.books.draft(files) : null };
       }
@@ -201,22 +202,22 @@ export class MediaService {
       case "POST /books/episode": return { book: await this.books.addEpisode(str("show"), str("episode"), asSplit) };
       case "POST /books/cancel": this.books.cancel(str("id")); return this.booksState();
       case "POST /books/delete": {
-        if (this.job?.running && this.job.book === str("id")) throw new WatchProblem("Wait for the send to finish, or stop it first.", "busy");
+        if (this.job?.running && this.job.book === str("id")) throw new WatchProblem(t("Wait for the send to finish, or stop it first."), "busy");
         await this.books.remove(str("id"));
         return this.booksState();
       }
       case "POST /books/send": return { ...(await this.sendBook(str("id"))), ...(await this.booksState()) };
       case "POST /books/unsend": {
-        if (this.job?.running) throw new WatchProblem("Wait for the send to finish first.", "busy");
+        if (this.job?.running) throw new WatchProblem(t("Wait for the send to finish first."), "busy");
         const watch = await this.drive.status();
-        if (!watch.connected) throw new WatchProblem("Plug in your watch first.", "noWatch");
+        if (!watch.connected) throw new WatchProblem(t("Plug in your watch first."), "noWatch");
         const removed = await this.drive.remove(this.books.onWatch(str("id"), watch.tracks).map((t) => t.path));
         return { removed, ...(await this.booksState()) };
       }
       case "POST /books/continue": {
-        if (this.job?.running) throw new WatchProblem("Wait for the send to finish first.", "busy");
+        if (this.job?.running) throw new WatchProblem(t("Wait for the send to finish first."), "busy");
         const watch = await this.drive.status();
-        if (!watch.connected) throw new WatchProblem("Plug in your watch first.", "noWatch");
+        if (!watch.connected) throw new WatchProblem(t("Plug in your watch first."), "noWatch");
         const earlier = this.books.continueFrom(str("id"), Number(body.part), watch.tracks);
         const removed = earlier.length ? await this.drive.remove(earlier.map((t) => t.path)) : 0;
         return { removed, ...(await this.booksState()) };
@@ -238,8 +239,8 @@ export class MediaService {
 
   /** Writes an upload to a temporary file, then adds it to the library. */
   private async upload(request: Request, name: string): Promise<LibraryTrack> {
-    if (!request.body) throw new WatchProblem("Nothing came with that file.", "empty");
-    if (Number(request.headers.get("content-length") ?? 0) > MAX_UPLOAD) throw new WatchProblem("That file is too big for the watch.", "tooBig");
+    if (!request.body) throw new WatchProblem(t("Nothing came with that file."), "empty");
+    if (Number(request.headers.get("content-length") ?? 0) > MAX_UPLOAD) throw new WatchProblem(t("That file is too big for the watch."), "tooBig");
     await mkdir(this.incoming, { recursive: true });
     const temp = path.join(this.incoming, randomUUID());
     const out = createWriteStream(temp);
@@ -250,7 +251,7 @@ export class MediaService {
         const { done, value } = await reader.read();
         if (done) break;
         size += value.length;
-        if (size > MAX_UPLOAD) throw new WatchProblem("That file is too big for the watch.", "tooBig");
+        if (size > MAX_UPLOAD) throw new WatchProblem(t("That file is too big for the watch."), "tooBig");
         if (!out.write(value)) await once(out, "drain");
       }
       out.end();
@@ -266,7 +267,7 @@ export class MediaService {
   async answer(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const route = url.pathname.slice("/api/desktop/media".length) || "/";
-    if (request.method === "POST" && request.headers.get("x-clink-hub") !== "1") return problem("Not from this app.", "forbidden", 403);
+    if (request.method === "POST" && request.headers.get("x-clink-hub") !== "1") return problem(t("Not from this app."), "forbidden", 403);
     try {
       if (request.method === "GET" && route === "/art") return await this.art.answer(url.searchParams.get("u") ?? "");
       if (route === "/books/upload" && request.method === "POST") return json(await this.answerBooks("POST", route, url, {}, request));
@@ -284,7 +285,7 @@ export class MediaService {
         case "POST /refresh": this.drive.invalidate(); return json(await this.state());
         case "POST /library/reveal": {
           const track = this.library.get(String(body.id ?? ""));
-          if (!track) throw new WatchProblem("That track isn't in the library any more.", "missing");
+          if (!track) throw new WatchProblem(t("That track isn't in the library any more."), "missing");
           this.reveal(this.library.pathOf(track));
           return json({ revealed: true });
         }
@@ -295,12 +296,12 @@ export class MediaService {
         case "POST /watch/remove": await this.drive.remove(ids(body.paths)); return json(await this.state());
         case "POST /watch/fix": await this.drive.fixExtension(String(body.path ?? "")); return json(await this.state());
         case "POST /eject": await this.drive.eject(); this.ejected = true; return json(await this.state());
-        default: return problem("Not a media action.", "notFound", 404);
+        default: return problem(t("Not a media action."), "notFound", 404);
       }
     } catch (error) {
       if (error instanceof WatchProblem || error instanceof SourceProblem) return problem(error.message, error.code);
       this.log(`Media ${route} failed: ${String(error)}`);
-      return problem("That didn't work.", "internal", 500);
+      return problem(t("That didn't work."), "internal", 500);
     }
   }
 }

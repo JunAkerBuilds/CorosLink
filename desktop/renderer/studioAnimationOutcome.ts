@@ -1,26 +1,28 @@
 // What the face's watch plays of its animation, worked out with the compiler's own rules (watchfaceAnimationOutcome.ts),
 // in words for the Animation inspector, and which frames it leaves out. CorosLink's animation outcome notice.
 import { useEffect, useState } from "react";
+import { t } from "@/lib/i18n";
 import type { CorosWatchfaceAnimation } from "../watchface/types";
 import { getWatchfaceTarget } from "../watchface/watchfaceTargets";
 import { quickAnimationOutcome, watchAnimationOutcome, type WatchAnimationOutcome } from "../watchface/engine/watchfaceAnimationOutcome";
 
 /** One sentence on what `watch` plays; null while it is being measured. */
 export function animationOutcomeText(outcome: WatchAnimationOutcome | null, watch: string): string {
-  if (!outcome) return `Checking what ${watch} plays…`;
+  if (!outcome) return t("Checking what {watch} plays…", { watch });
   switch (outcome.kind) {
-    case "unsupported": return `${watch} doesn't play animations, so its face is built without this one.`;
-    case "tooLarge": return `One frame alone is too large for ${watch}, so the face is built without it. Use smaller frames.`;
-    case "unmeasured": return `Couldn't check what ${watch} plays. Building the face will say.`;
+    case "unsupported": return t("{watch} doesn't play animations, so its face is built without this one.", { watch });
+    case "tooLarge": return t("One frame alone is too large for {watch}, so the face is built without it. Use smaller frames.", { watch });
+    case "unmeasured": return t("Couldn't check what {watch} plays. Building the face will say.", { watch });
     case "fitted": {
       const { kept, total } = outcome;
-      if (kept.length === 1 && total > 1) return `Too large for ${watch}: it shows the first frame only, as a still.`;
+      if (kept.length === 1 && total > 1) return t("Too large for {watch}: it shows the first frame only, as a still.", { watch });
       if (kept.length < total) {
-        return `Too large for ${watch} with all ${total} frames: it plays ${kept.length}, each held longer so the loop keeps its length.${outcome.capped ? " The loop is shorter too: a frame stays up 65.5 s at most." : ""}`;
+        const text = t("Too large for {watch} with all {total} frames: it plays {kept}, each held longer so the loop keeps its length.", { watch, total, kept: kept.length });
+        return outcome.capped ? `${text} ${t("The loop is shorter too: a frame stays up 65.5 s at most.")}` : text;
       }
-      return `Plays all ${total} frames on ${watch}, in its 64 colors (${Math.max(1, Math.round(outcome.bytes / 65535 * 100))}% of its animation memory).`;
+      return t("Plays all {total} frames on {watch}, in its 64 colors ({percent}% of its animation memory).", { total, watch, percent: Math.max(1, Math.round(outcome.bytes / 65535 * 100)) });
     }
-    default: return `Plays on ${watch} while the face is lit. Always-on shows no animation.`;
+    default: return t("Plays on {watch} while the face is lit. Always-on shows no animation.", { watch });
   }
 }
 

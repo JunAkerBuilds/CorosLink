@@ -6,6 +6,7 @@ import { Card } from "@/components/ui";
 import type { Origin } from "@/data/core";
 import type { SleepData, SleepRecord } from "@/data/sleep";
 import { dayKey, parseDay } from "@/lib/format";
+import { msg, t } from "@/lib/i18n";
 import { clockOfDay, dayLabel } from "@/lib/health";
 import { hm, monthName, nightFacts, period, quality, stageShare, stressStats, summarise } from "@/lib/sleep";
 import { DeltaChip, PAGE_NOTE, SleepHead, scoreInk, scoreVar } from "./common";
@@ -44,9 +45,14 @@ export function YearView({ data, origin }: { data: SleepData; origin: Origin }) 
   });
   const cellDay = cell != null ? days[cell] : null;
   const cellNight = cellDay ? byDay.get(cellDay) : undefined;
-  const readout = cellDay == null ? "Point at a day"
-    : cellNight ? `${dayLabel(parseDay(cellDay))}  ·  score ${cellNight.score ?? "–"}${cellNight.score != null ? `, ${quality(cellNight.score)}` : ""}  ·  ${nightFacts(cellNight).asleep != null ? `${hm(nightFacts(cellNight).asleep!)} asleep` : ""}${stressStats(cellNight) ? `  ·  stress ${stressStats(cellNight)!.average}` : ""}`
-    : `${dayLabel(parseDay(cellDay))}  ·  no night`;
+  const readout = cellDay == null ? t("Point at a day")
+    : cellNight ? [
+      dayLabel(parseDay(cellDay)),
+      cellNight.score != null ? t("score {n}, {quality}", { n: cellNight.score, quality: t(quality(cellNight.score)) }) : t("score {n}", { n: "–" }),
+      nightFacts(cellNight).asleep != null ? t("{time} asleep", { time: hm(nightFacts(cellNight).asleep!) }) : "",
+      ...(stressStats(cellNight) ? [t("stress {n}", { n: stressStats(cellNight)!.average })] : []),
+    ].join("  ·  ")
+    : `${dayLabel(parseDay(cellDay))}  ·  ${t("no night")}`;
   const pickCell = (col: number, row: number) => {
     const i = col * 7 + row - lead;
     setCell(i >= 0 && i < days.length ? i : null);
@@ -86,19 +92,19 @@ export function YearView({ data, origin }: { data: SleepData; origin: Origin }) 
   return (
     <>
       <SleepHead tab="year" origin={origin} title={String(year)}
-        back={{ label: "Previous year", disabled: year <= firstYear, go: () => move(year - 1) }}
-        forward={{ label: "Next year", disabled: year >= thisYear, go: () => move(year + 1) }}
-        latest={{ label: "This year", disabled: year === thisYear, go: () => move(thisYear) }} />
-      {nights.length === 0 ? <div className="notice">No sleep in {year}.</div> : (
+        back={{ label: t("Previous year"), disabled: year <= firstYear, go: () => move(year - 1) }}
+        forward={{ label: t("Next year"), disabled: year >= thisYear, go: () => move(year + 1) }}
+        latest={{ label: t("This year"), disabled: year === thisYear, go: () => move(thisYear) }} />
+      {nights.length === 0 ? <div className="notice">{t("No sleep in {year}.", { year })}</div> : (
         <>
-          <SummarySky s={s} prev={prev} prevWord="year before" />
+          <SummarySky s={s} prev={prev} prevWord="year" />
 
-          <Card aria-label="Every night of the year" className="sl-card">
-            <div className="sl-card-head"><h2 className="h2">Every night</h2><span aria-live="polite" style={{ fontSize: 13, fontWeight: 600 }}>{readout}</span></div>
+          <Card aria-label={t("Every night of the year")} className="sl-card">
+            <div className="sl-card-head"><h2 className="h2">{t("Every night")}</h2><span aria-live="polite" style={{ fontSize: 13, fontWeight: 600 }}>{readout}</span></div>
             <div style={{ display: "flex", gap: 10 }}>
-              <div aria-hidden="true" className="sl-heat-days"><span>Mon</span><span /><span>Wed</span><span /><span>Fri</span><span /><span>Sun</span></div>
+              <div aria-hidden="true" className="sl-heat-days"><span>{t("Mon")}</span><span /><span>{t("Wed")}</span><span /><span>{t("Fri")}</span><span /><span>{t("Sun")}</span></div>
               <div className="sl-chart">
-                <svg role="img" aria-label={`Sleep score for every night of ${year}, coloured Excellent, Good, Fair or Low`} width="100%" height="140" viewBox={`0 0 ${VW} 140`} preserveAspectRatio="none" style={{ display: "block" }}>
+                <svg role="img" aria-label={t("Sleep score for every night of {year}, coloured Excellent, Good, Fair or Low", { year })} width="100%" height="140" viewBox={`0 0 ${VW} 140`} preserveAspectRatio="none" style={{ display: "block" }}>
                   <path d={paths[0]} style={{ fill: "rgba(var(--fg-rgb), 0.08)" }} />
                   <path d={paths[1]} style={{ fill: "var(--h-coral)", opacity: 0.8 }} />
                   <path d={paths[2]} style={{ fill: "var(--h-gold)", opacity: 0.85 }} />
@@ -106,33 +112,33 @@ export function YearView({ data, origin }: { data: SleepData; origin: Origin }) 
                   <path d={paths[4]} style={{ fill: "var(--h-violet)" }} />
                   {cell != null ? <rect x={Math.floor((cell + lead) / 7) * 20} y={((cell + lead) % 7) * 20} width="20" height="20" fill="none" style={{ stroke: "var(--fg)", strokeWidth: 2, vectorEffect: "non-scaling-stroke" }} /> : null}
                 </svg>
-                <div className="chart-hit" role="slider" tabIndex={0} aria-label="Day of the year" aria-valuemin={0} aria-valuemax={days.length - 1}
+                <div className="chart-hit" role="slider" tabIndex={0} aria-label={t("Day of the year")} aria-valuemin={0} aria-valuemax={days.length - 1}
                   aria-valuenow={cell ?? 0} aria-valuetext={readout} onPointerMove={point} onPointerDown={point} onPointerLeave={() => setCell(null)} onKeyDown={key} />
                 <div aria-hidden="true" style={{ position: "relative", height: 16, marginTop: 6, fontSize: 11, color: "var(--dim)" }}>
-                  {ticks.map((t) => <span key={t.text} style={{ position: "absolute", left: `${t.left}%` }}>{t.text}</span>)}
+                  {ticks.map((tk) => <span key={tk.text} style={{ position: "absolute", left: `${tk.left}%` }}>{t(tk.text)}</span>)}
                 </div>
               </div>
             </div>
             <div className="sl-legend">
-              <span><span className="sl-key" style={{ background: "var(--h-violet)" }} />Excellent</span>
-              <span><span className="sl-key" style={{ background: "var(--h-violet)", opacity: 0.55 }} />Good</span>
-              <span><span className="sl-key" style={{ background: "var(--h-gold)" }} />Fair</span>
-              <span><span className="sl-key" style={{ background: "var(--h-coral)" }} />Low</span>
-              <span><span className="sl-key" style={{ background: "rgba(var(--fg-rgb), 0.08)" }} />No night</span>
+              <span><span className="sl-key" style={{ background: "var(--h-violet)" }} />{t("Excellent")}</span>
+              <span><span className="sl-key" style={{ background: "var(--h-violet)", opacity: 0.55 }} />{t("Good")}</span>
+              <span><span className="sl-key" style={{ background: "var(--h-gold)" }} />{t("Fair")}</span>
+              <span><span className="sl-key" style={{ background: "var(--h-coral)" }} />{t("Low")}</span>
+              <span><span className="sl-key" style={{ background: "rgba(var(--fg-rgb), 0.08)" }} />{t("No night")}</span>
             </div>
           </Card>
 
           <div className="sl-two">
-            <Card aria-label="Month by month" className="sl-card" style={{ flex: "3 1 640px" }}>
-              <div className="sl-card-head"><h2 className="h2">Month by month</h2><span className="muted" style={{ fontSize: 12 }}>Average asleep from 5 h, average score on top; open a month</span></div>
+            <Card aria-label={t("Month by month")} className="sl-card" style={{ flex: "3 1 640px" }}>
+              <div className="sl-card-head"><h2 className="h2">{t("Month by month")}</h2><span className="muted" style={{ fontSize: 12 }}>{t("Average asleep from 5 h, average score on top; open a month")}</span></div>
               <div className="sl-months">
                 <div aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: `calc(${((420 - 300) / 240) * 100}% * (240 - 26) / 240)`, borderTop: "1px dashed var(--sl-band-line)", pointerEvents: "none" }} />
                 {months.map((x) => {
                   const sc = x.sum?.score != null ? Math.round(x.sum.score) : null, asl = x.sum?.asleep ?? null;
                   const at = `${year}-${String(x.m + 1).padStart(2, "0")}-01`;
-                  if (!x.nights) return <span key={x.m} aria-label={`${monthName(x.m)}, no nights`} />;
+                  if (!x.nights) return <span key={x.m} aria-label={t("{month}, no nights", { month: t(monthName(x.m)) })} />;
                   return (
-                    <Link key={x.m} href={`/health/sleep/month?at=${at}`} aria-label={`${monthName(x.m)}${sc != null ? `, score ${sc}` : ""}${asl != null ? `, ${hm(asl)} asleep` : ""}`}>
+                    <Link key={x.m} href={`/health/sleep/month?at=${at}`} aria-label={[t(monthName(x.m)), ...(sc != null ? [t("score {n}", { n: sc })] : []), ...(asl != null ? [t("{time} asleep", { time: hm(asl) })] : [])].join(", ")}>
                       <span className="num" style={{ textAlign: "center", fontSize: 15, fontWeight: 800, color: sc != null ? scoreInk(sc) : "var(--dim)" }}>{sc ?? "–"}</span>
                       <span aria-hidden="true" style={{ height: `${Math.max(2, Math.min(100, (((asl ?? 300) - 300) / 240) * 100))}%`, borderRadius: "10px 10px 4px 4px", background: sc != null ? scoreVar(sc) : "rgba(var(--fg-rgb), 0.1)" }} />
                     </Link>
@@ -140,52 +146,52 @@ export function YearView({ data, origin }: { data: SleepData; origin: Origin }) 
                 })}
               </div>
               <div aria-hidden="true" style={{ display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap: 10, textAlign: "center", fontSize: 12, color: "var(--muted)" }}>
-                {months.map((x) => <span key={x.m}>{monthName(x.m, true)}</span>)}
+                {months.map((x) => <span key={x.m}>{t(monthName(x.m, true))}</span>)}
               </div>
-              <div className="sl-legend"><span><span aria-hidden="true" style={{ width: 14, borderTop: "1.5px dashed var(--sl-band-line)" }} />7 hours</span></div>
+              <div className="sl-legend"><span><span aria-hidden="true" style={{ width: 14, borderTop: "1.5px dashed var(--sl-band-line)" }} />{t("7 hours")}</span></div>
             </Card>
-            <Card aria-label="Sleep stress by month" className="sl-card" style={{ flex: "2 1 420px", minWidth: 0 }}>
-              <h2 className="h2">Sleep stress</h2>
-              {sA == null ? <p className="muted" style={{ margin: 0, fontSize: 14 }}>Nothing from your phone yet</p> : (
+            <Card aria-label={t("Sleep stress by month")} className="sl-card" style={{ flex: "2 1 420px", minWidth: 0 }}>
+              <h2 className="h2">{t("Sleep stress")}</h2>
+              {sA == null ? <p className="muted" style={{ margin: 0, fontSize: 14 }}>{t("Nothing from your phone yet")}</p> : (
                 <>
                   <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: "6px 28px" }}>
-                    <span className="sl-fig"><span>Average</span><span><span className="num" style={{ fontSize: 26, fontWeight: 800 }}>{Math.round(sA)}</span><span style={{ fontSize: 13, fontWeight: 700, color: "var(--sl-b0)" }}>{sA <= 25 ? "Rest" : sA <= 50 ? "Low" : "Medium"}</span></span></span>
-                    <span className="sl-fig"><span>Previous year</span><span className="num" style={{ fontSize: 26, fontWeight: 800, color: "var(--dim)" }}>{sP != null ? Math.round(sP) : "–"}</span></span>
-                    <span style={{ marginLeft: "auto" }}><DeltaChip good={sP == null || Math.abs(sA - sP) < 1 ? null : sA < sP}>{sP == null ? "No year before" : Math.abs(sA - sP) < 1 ? "About the same" : sA < sP ? "Down on the year before" : "Up on the year before"}</DeltaChip></span>
+                    <span className="sl-fig"><span>{t("Average")}</span><span><span className="num" style={{ fontSize: 26, fontWeight: 800 }}>{Math.round(sA)}</span><span style={{ fontSize: 13, fontWeight: 700, color: "var(--sl-b0)" }}>{sA <= 25 ? t("Rest") : sA <= 50 ? t("Low") : t("Medium")}</span></span></span>
+                    <span className="sl-fig"><span>{t("Previous year")}</span><span className="num" style={{ fontSize: 26, fontWeight: 800, color: "var(--dim)" }}>{sP != null ? Math.round(sP) : "–"}</span></span>
+                    <span style={{ marginLeft: "auto" }}><DeltaChip good={sP == null || Math.abs(sA - sP) < 1 ? null : sA < sP}>{sP == null ? t("No year before") : Math.abs(sA - sP) < 1 ? t("About the same") : sA < sP ? t("Down on the year before") : t("Up on the year before")}</DeltaChip></span>
                   </div>
-                  <svg role="img" aria-label={`Average sleep stress by month in ${year} against the year before`} width="100%" height="150" viewBox="0 0 240 150" preserveAspectRatio="none" style={{ display: "block" }}>
+                  <svg role="img" aria-label={t("Average sleep stress by month in {year} against the year before", { year })} width="100%" height="150" viewBox="0 0 240 150" preserveAspectRatio="none" style={{ display: "block" }}>
                     <rect x="0" y={Math.max(0, SY(25))} width="240" height={Math.max(0, Math.min(150, 150 - SY(25)))} style={{ fill: "var(--sl-b0)", opacity: 0.1 }} />
                     <path d={lineOf(pPts)} fill="none" style={{ stroke: "var(--dim)", strokeWidth: 1.5, strokeDasharray: "4 4", vectorEffect: "non-scaling-stroke" }} />
                     <path d={lineOf(sPts)} fill="none" style={{ stroke: "var(--h-coral)", strokeWidth: 2.4, strokeLinejoin: "round", vectorEffect: "non-scaling-stroke" }} />
                     <path d={sPts.map((v, i) => (v == null ? "" : `M${i * 20 + 10} ${SY(v).toFixed(1)}h0.01`)).join("")} fill="none" style={{ stroke: "var(--h-coral)", strokeWidth: 7, strokeLinecap: "round", vectorEffect: "non-scaling-stroke" }} />
                   </svg>
                   <div aria-hidden="true" style={{ display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", textAlign: "center", fontSize: 11, color: "var(--dim)" }}>
-                    {months.map((x) => <span key={x.m}>{monthName(x.m).charAt(0)}</span>)}
+                    {months.map((x) => <span key={x.m}>{t(monthName(x.m)).charAt(0)}</span>)}
                   </div>
                   <div className="sl-legend">
                     <span><span aria-hidden="true" style={{ width: 14, borderTop: "2px solid var(--h-coral)" }} />{year}</span>
-                    <span><span aria-hidden="true" style={{ width: 14, borderTop: "1.5px dashed var(--dim)" }} />Year before</span>
-                    <span><span className="sl-key" style={{ background: "var(--sl-b0)", opacity: 0.4 }} />Rest band</span>
+                    <span><span aria-hidden="true" style={{ width: 14, borderTop: "1.5px dashed var(--dim)" }} />{t("Year before")}</span>
+                    <span><span className="sl-key" style={{ background: "var(--sl-b0)", opacity: 0.4 }} />{t("Rest band")}</span>
                   </div>
                 </>
               )}
             </Card>
           </div>
 
-          <Card clip aria-label="Months" className="sl-table">
-            <div style={{ padding: "18px 20px 12px" }}><h2 className="h2">Months</h2></div>
+          <Card clip aria-label={t("Months")} className="sl-table">
+            <div style={{ padding: "18px 20px 12px" }}><h2 className="h2">{t("Months")}</h2></div>
             <div className="scroll-x">
-              <div role="table" aria-label="Months" style={{ minWidth: 960 }}>
+              <div role="table" aria-label={t("Months")} style={{ minWidth: 960 }}>
                 <div role="row" className="thead" style={{ gridTemplateColumns: MONTH_COLS, gap: 12 }}>
-                  {["Month", "Nights", "Score", "Asleep", "Bedtime", "Wake time", "Deep", "REM", "Stress", "HRV"].map((h, i) => (
-                    <span key={h} role="columnheader" style={{ textAlign: i ? "right" : undefined }}>{h}</span>
+                  {[msg("Month"), msg("Nights"), msg("Score"), msg("Asleep"), msg("Bedtime"), msg("Wake time"), msg("Deep"), "REM", msg("Stress"), "HRV"].map((h, i) => (
+                    <span key={h} role="columnheader" style={{ textAlign: i ? "right" : undefined }}>{t(h)}</span>
                   ))}
                 </div>
                 {[...months].reverse().filter((x) => x.nights > 0).map((x) => {
                   const sc = x.sum?.score != null ? Math.round(x.sum.score) : null;
                   return (
                     <Link key={x.m} role="row" className="row" href={`/health/sleep/month?at=${year}-${String(x.m + 1).padStart(2, "0")}-01`} style={{ gridTemplateColumns: MONTH_COLS, gap: 12, minHeight: 44 }}>
-                      <span role="cell" style={{ fontWeight: 600 }}>{monthName(x.m)}</span>
+                      <span role="cell" style={{ fontWeight: 600 }}>{t(monthName(x.m))}</span>
                       <span role="cell" className="muted" style={{ textAlign: "right" }}>{x.nights}</span>
                       <span role="cell" style={{ textAlign: "right", fontWeight: 800, color: sc != null ? scoreInk(sc) : "var(--dim)" }}>{sc ?? "–"}</span>
                       <span role="cell" style={{ textAlign: "right", fontWeight: 600 }}>{x.sum?.asleep != null ? hm(x.sum.asleep) : "–"}</span>
@@ -203,7 +209,7 @@ export function YearView({ data, origin }: { data: SleepData; origin: Origin }) 
           </Card>
         </>
       )}
-      <p className="sl-note">{PAGE_NOTE}</p>
+      <p className="sl-note">{t(PAGE_NOTE)}</p>
     </>
   );
 }

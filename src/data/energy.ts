@@ -1,5 +1,6 @@
 import { fromSample, fromSynced, type Loaded } from "./core";
 import { syncView } from "./sync";
+import { t, tx } from "@/lib/i18n";
 
 export type EnergyEventKind = "sleep" | "workout" | "rest" | "stress" | "awake";
 export type EnergyBandKind = Exclude<EnergyEventKind, "awake">;
@@ -67,5 +68,19 @@ export async function loadEnergy(): Promise<Loaded<EnergyData>> {
     return fromSynced({ days: energyFromItems(view.all("energy.day"), view.all("health.night"), new Date()) });
   }
   const { sampleEnergy } = await import("./sample/energy");
-  return fromSample(sampleEnergy);
+  return fromSample(sampleInLanguage(sampleEnergy));
+}
+
+/** The sample's words in the app's language; the workouts keep the names the athlete gave them. */
+function sampleInLanguage(data: EnergyData): EnergyData {
+  return {
+    days: data.days.map((d) => ({
+      ...d,
+      bands: d.bands.map((b) => ({ ...b, label: t(b.label) })),
+      events: d.events.map((e) => ({ ...e, name: t(e.name), detail: t(e.detail), ...(e.when ? { when: t(e.when) } : {}) })),
+      ...(d.pace ? { pace: { ...d.pace, label: tx("energy", d.pace.label) } } : {}),
+      ...(d.note ? { note: t(d.note) } : {}),
+      ...(d.headline ? { headline: t(d.headline) } : {}),
+    })),
+  };
 }

@@ -4,6 +4,7 @@
 // OpenRouteService with a key), kept on this computer and sent to the watch over Bluetooth.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as maplibregl from "maplibre-gl";
+import { msg, t, tx } from "@/lib/i18n";
 import type {
   Elevation, LatLon, MapsWatch, Place, RouteCandidate, RouteGeometry, RouteKind, RouteSport, RouteSync, RoutingConfig, SavedRoute,
   SavedRouteSummary, Surface, TrailRoute,
@@ -13,25 +14,31 @@ import {
   routeLeg, routeSync, routingConfig, said, saveRoute, searchPlaces, setRouting, shortDate, sketch, syncRoute, trail, trailsIn,
 } from "../../maps";
 import { MapsIcon } from "./MapsIcon";
-import { BASE_MAPS, baseStyle, lngLat, overlayColor, setOverlays, useMap, type BaseMap, type Overlay } from "./basemap";
+import { BASE_MAPS, baseMapName, baseStyle, lngLat, overlayColor, setOverlays, useMap, type BaseMap, type Overlay } from "./basemap";
 import { clock, estimate, joinLegs, pointAt, profile, shares, straightLeg, SURFACE_LABEL, terrain, WAY_LABEL } from "./routeMath";
-import { place, SHAPES, shapeOutline, TEXT_CHARS, textOutline, type ShapeId, type Unit } from "./sketchShapes";
+import { place, SHAPES, shapeName, shapeOutline, TEXT_CHARS, textOutline, type ShapeId, type Unit } from "./sketchShapes";
 
 type Mode = "generate" | "draw" | "sketch" | "explore";
 const MODES: { value: Mode; label: string; icon: string }[] = [
-  { value: "generate", label: "Generate", icon: "sparkle" },
-  { value: "draw", label: "Draw", icon: "pen" },
-  { value: "sketch", label: "Sketch", icon: "scribble" },
-  { value: "explore", label: "Explore", icon: "compass" },
+  { value: "generate", label: msg("Generate"), icon: "sparkle" },
+  { value: "draw", label: msg("Draw"), icon: "pen" },
+  { value: "sketch", label: msg("Sketch"), icon: "scribble" },
+  { value: "explore", label: msg("Explore"), icon: "compass" },
 ];
-const SPORTS: { value: RouteSport; label: string; icon: string }[] = [
-  { value: "run", label: "Run", icon: "run" }, { value: "walk", label: "Walk", icon: "walk" }, { value: "hike", label: "Hike", icon: "hike" },
-  { value: "road", label: "Road", icon: "bike" }, { value: "mtb", label: "MTB", icon: "mtb" },
+const SPORTS: { value: RouteSport; icon: string }[] = [
+  { value: "run", icon: "run" }, { value: "walk", icon: "walk" }, { value: "hike", icon: "hike" }, { value: "road", icon: "bike" }, { value: "mtb", icon: "mtb" },
 ];
-const SPORT_LABEL: Record<RouteSport, string> = { run: "Run", walk: "Walk", hike: "Hike", road: "Road", mtb: "MTB" };
-const SURFACES: { value: Surface; label: string }[] = [{ value: "road", label: "Road" }, { value: "mixed", label: "Mixed" }, { value: "trail", label: "Trail" }];
-const ELEVATIONS: { value: Elevation; label: string }[] = [{ value: "any", label: "Any" }, { value: "flat", label: "Flatter" }, { value: "hilly", label: "Hilly" }];
-const ELEVATION_LINE: Record<Elevation, string> = { any: "Any elevation", flat: "Flatter", hilly: "Hilly" };
+/** A sport's name, in the app's language (read when shown). */
+const sportName = (s: RouteSport) => ({
+  run: tx("route sport", "Run"), walk: tx("route sport", "Walk"), hike: tx("route sport", "Hike"), road: tx("route sport", "Road"), mtb: tx("route sport", "MTB"),
+})[s];
+const kindName = (k: RouteKind) => (k === "loop" ? t("Loop") : "A → B");
+/** The main process names its candidates in English (desktop/main/maps/routing/loop.ts). */
+const candidateName = (label: string) => (label === "Best match" ? t("Best match") : label === "More trail" ? t("More trail") : label === "Flatter" ? t("Flatter") : label);
+const SURFACES: { value: Surface; label: string }[] = [{ value: "road", label: msg("Road") }, { value: "mixed", label: msg("Mixed") }, { value: "trail", label: msg("Trail") }];
+const ELEVATIONS: { value: Elevation; label: string }[] = [{ value: "any", label: msg("Any") }, { value: "flat", label: msg("Flatter") }, { value: "hilly", label: msg("Hilly") }];
+const ELEVATION_LINE: Record<Elevation, string> = { any: msg("Any elevation"), flat: msg("Flatter"), hilly: msg("Hilly") };
+const translated = <T extends string>(options: { value: T; label: string }[]) => options.map((o) => ({ ...o, label: t(o.label) }));
 const PRESETS = [5, 10, 21.1, 42.2];
 const PAGE = 6;
 const START_VIEW = { center: [-122.335, 47.608] as [number, number], zoom: 12 };
@@ -200,7 +207,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
       points.forEach((p, i) => {
         const el = dot(`mp-pin mp-pin-point${i === 0 ? " mp-pin-start" : ""}`, String(i + 1));
         el.setAttribute("role", "button");
-        el.setAttribute("aria-label", `Point ${i + 1}`);
+        el.setAttribute("aria-label", t("Point {n}", { n: i + 1 }));
         const marker = new L.Marker({ element: el, draggable: true }).setLngLat([p[1], p[0]]).addTo(map);
         el.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -313,34 +320,34 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
   }
 
   const locate = (forWhat: "start" | "view") => {
-    if (!navigator.geolocation) { setProblem("This computer can't tell where it is."); return; }
+    if (!navigator.geolocation) { setProblem(t("This computer can't tell where it is.")); return; }
     navigator.geolocation.getCurrentPosition((pos) => {
       const ll: LatLon = [pos.coords.latitude, pos.coords.longitude];
       map?.flyTo({ center: [ll[1], ll[0]], zoom: 14 });
       if (forWhat === "start") {
-        setStart({ name: "My location", lat: ll[0], lon: ll[1] });
+        setStart({ name: t("My location"), lat: ll[0], lon: ll[1] });
         placeAt(ll[0], ll[1]).then((p) => setStart({ ...p, lat: ll[0], lon: ll[1] }), () => {});
       }
-    }, () => setProblem("Location is off for C-LINK. Pick the start on the map instead."), { timeout: 10_000 });
+    }, () => setProblem(t("Location is off for C-LINK. Pick the start on the map instead.")), { timeout: 10_000 });
   };
 
   const runGenerate = (variation = false) => act("generating", async () => {
-    if (!start) { setProblem("Pick where to start first."); return; }
-    if (kind === "ab" && !end) { setProblem("Pick where to finish."); return; }
+    if (!start) { setProblem(t("Pick where to start first.")); return; }
+    if (kind === "ab" && !end) { setProblem(t("Pick where to finish.")); return; }
     if (variation) seed.current += 1;
     const { candidates: found } = await generate({
       sport, kind, start: [start.lat, start.lon], end: end ? [end.lat, end.lon] : undefined, distanceKm, surface, elevation, seed: seed.current,
     });
-    if (!found.length) { setProblem("No route found here. Try another start or distance."); return; }
+    if (!found.length) { setProblem(t("No route found here. Try another start or distance.")); return; }
     setCandidates(found); setChosen(0); setSettingsOpen(false);
-    const c: Current = { route: found[0], source: "generate", kind, sport, name: `${start.name.split(",")[0]} ${kind === "loop" ? "loop" : "to " + (end?.name.split(",")[0] ?? "")}`.trim() };
+    const c: Current = { route: found[0], source: "generate", kind, sport, name: (kind === "loop" ? t("{start} loop", { start: start.name.split(",")[0] }) : t("{start} to {end}", { start: start.name.split(",")[0], end: end?.name.split(",")[0] ?? "" })).trim() };
     show(c);
     await keep(c, true);
   });
 
   const pickCandidate = (i: number) => {
     setChosen(i);
-    const base = current ?? { source: "generate" as const, kind, sport, name: "Route" };
+    const base = current ?? { source: "generate" as const, kind, sport, name: t("Route") };
     const c: Current = { ...base, route: candidates[i], savedId: undefined };
     show(c, false);
     void keep(c, true).catch(fail);
@@ -393,7 +400,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
 
   // Sketch
   const runSketch = (auto = false) => act(auto ? "fitting" : "snapping", async () => {
-    if (placed.length < 3 || !sketchCenter) { setProblem(sketchTool === "text" ? "Write something to draw first." : "Draw a shape on the map first."); return; }
+    if (placed.length < 3 || !sketchCenter) { setProblem(sketchTool === "text" ? t("Write something to draw first.") : t("Draw a shape on the map first.")); return; }
     const tries = auto ? [[1, 0], [0.9, 0], [1.1, 0], [1, -5], [1, 5]] : [[1, 0]];
     let best: { answer: Awaited<ReturnType<typeof sketch>>; scale: number; turn: number } | null = null;
     for (const [scale, turn] of tries) {
@@ -402,16 +409,16 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
     }
     if (!best) return;
     const outlineM = Math.round(sizeM * best.scale);
-    setMatch({ score: best.answer.match, note: auto ? `Best fit: ×${best.scale.toFixed(1)} size, ${best.turn >= 0 ? "+" : ""}${best.turn}° rotation` : "" });
+    setMatch({ score: best.answer.match, note: auto ? t("Best fit: ×{scale} size, {turn}° rotation", { scale: best.scale.toFixed(1), turn: `${best.turn >= 0 ? "+" : ""}${best.turn}` }) : "" });
     if (auto) { setSizeM(outlineM); setRotation((r) => (r + best.turn + 360) % 360); }
-    const c: Current = { route: best.answer.route, source: "sketch", kind: "loop", sport, name: sketchTool === "text" ? `“${text}” sketch` : `${SHAPES.find((s) => s.id === shape)?.label ?? "Freehand"} sketch` };
+    const c: Current = { route: best.answer.route, source: "sketch", kind: "loop", sport, name: sketchTool === "text" ? t("“{text}” sketch", { text }) : t("{shape} sketch", { shape: shapeName(shape) }) };
     show(c);
   });
 
   // Explore
-  const follow = (t: TrailRoute) => act("loading", async () => {
-    const route = await trail(t.id);
-    show({ route, source: "explore", kind: "ab", sport: t.kind === "hike" ? "hike" : t.kind === "mtb" ? "mtb" : "road", name: t.name });
+  const follow = (marked: TrailRoute) => act("loading", async () => {
+    const route = await trail(marked.id);
+    show({ route, source: "explore", kind: "ab", sport: marked.kind === "hike" ? "hike" : marked.kind === "mtb" ? "mtb" : "road", name: marked.name });
   });
 
   // Saved routes
@@ -439,7 +446,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
   const pollSync = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => () => { if (pollSync.current) clearInterval(pollSync.current); }, []);
   const startSync = (id?: string) => act("syncing", async () => {
-    const routeId = id ?? (current ? await keep(current) : mode === "draw" && shown ? await keep({ route: shown, source: "draw", kind: "loop", sport, name: "Drawn route" }) : null);
+    const routeId = id ?? (current ? await keep(current) : mode === "draw" && shown ? await keep({ route: shown, source: "draw", kind: "loop", sport, name: t("Drawn route") }) : null);
     if (!routeId) return;
     setSync(await syncRoute(routeId));
     if (pollSync.current) clearInterval(pollSync.current);
@@ -452,7 +459,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
   });
 
   const exportGpx = () => act("saving", async () => {
-    const source = current ?? (shown ? { route: shown, source: "draw" as const, kind: "loop" as const, sport, name: "Drawn route" } : null);
+    const source = current ?? (shown ? { route: shown, source: "draw" as const, kind: "loop" as const, sport, name: t("Drawn route") } : null);
     if (!source) return;
     const id = await keep(source);
     const a = document.createElement("a");
@@ -461,7 +468,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
 
   const saveDrawn = () => act("saving", async () => {
     if (!shown) return;
-    await keep({ route: shown, source: mode === "sketch" ? "sketch" : "draw", kind: points.length > 2 && points[0] === points.at(-1) ? "loop" : "ab", sport, name: mode === "sketch" ? current?.name ?? "Sketch" : "Drawn route" });
+    await keep({ route: shown, source: mode === "sketch" ? "sketch" : "draw", kind: points.length > 2 && points[0] === points.at(-1) ? "loop" : "ab", sport, name: mode === "sketch" ? current?.name ?? t("Sketch") : t("Drawn route") });
   });
 
   // ---------- derived ----------
@@ -469,7 +476,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
   const est = shown ? estimate(current?.sport ?? sport, shown.distanceM, shown.ascentM) : null;
   const share = shares(shown?.makeup);
   const isSaved = Boolean(current?.savedId);
-  const routeTag = `${SPORT_LABEL[current?.sport ?? sport]} · ${(current?.kind ?? kind) === "loop" ? "Loop" : "A → B"}`;
+  const routeTag = `${sportName(current?.sport ?? sport)} · ${kindName(current?.kind ?? kind)}`;
   const syncing = sync && ["connecting", "sending", "checking"].includes(sync.state);
   const syncShown = sync && sync.state !== "idle";
 
@@ -482,163 +489,163 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
   const hoverElevation = hover != null && shown ? shown.points[hover]?.[2] : undefined;
 
   return (
-    <section className="mp-studio" aria-label="Route Studio map" data-route={shown ? "" : undefined}>
+    <section className="mp-studio" aria-label={t("Route Studio map")} data-route={shown ? "" : undefined}>
       <div ref={box} className="mp-studio-map" data-picking={picking ?? undefined} data-free={mode === "sketch" && sketchTool === "free" ? "" : undefined} />
       {mapProblem && <div className="mp-map-problem card"><MapsIcon name="map" size={22} /><span>{mapProblem}</span></div>}
 
-      {mode === "sketch" && placed.length > 1 && sketchTool !== "free" && <span className="mp-float-hint">Click the map to move the shape</span>}
+      {mode === "sketch" && placed.length > 1 && sketchTool !== "free" && <span className="mp-float-hint">{t("Click the map to move the shape")}</span>}
       {mode === "draw" && pointMenu && (
-        <div className="mp-pop mp-point-menu" role="menu" aria-label={`Point ${pointMenu.index + 1}`} style={{ left: pointMenu.x, top: pointMenu.y }}>
-          <span>Point {pointMenu.index + 1} · drag to adjust</span>
-          <button type="button" role="menuitem" onClick={() => removePoint(pointMenu.index)}><MapsIcon name="trash" size={15} />Remove point</button>
-          <button type="button" role="menuitem" onClick={() => { setPointMenu(null); closeLoop(); }} disabled={points.length < 3}><MapsIcon name="loop" size={15} />Close loop</button>
-          <button type="button" role="menuitem" onClick={() => startHere(pointMenu.index)}><MapsIcon name="pin" size={15} />Start here</button>
+        <div className="mp-pop mp-point-menu" role="menu" aria-label={t("Point {n}", { n: pointMenu.index + 1 })} style={{ left: pointMenu.x, top: pointMenu.y }}>
+          <span>{t("Point {n} · drag to adjust", { n: pointMenu.index + 1 })}</span>
+          <button type="button" role="menuitem" onClick={() => removePoint(pointMenu.index)}><MapsIcon name="trash" size={15} />{t("Remove point")}</button>
+          <button type="button" role="menuitem" onClick={() => { setPointMenu(null); closeLoop(); }} disabled={points.length < 3}><MapsIcon name="loop" size={15} />{t("Close loop")}</button>
+          <button type="button" role="menuitem" onClick={() => startHere(pointMenu.index)}><MapsIcon name="pin" size={15} />{t("Start here")}</button>
         </div>
       )}
 
       <div className="mp-studio-top">
-        <div className="seg mp-modes" role="tablist" aria-label="Route Studio modes">
+        <div className="seg mp-modes" role="tablist" aria-label={t("Route Studio modes")}>
           {MODES.map((m) => (
             <button key={m.value} type="button" role="tab" aria-selected={mode === m.value} aria-pressed={mode === m.value}
               onClick={() => {
                 setMode(m.value); setPointMenu(null); setPicking(null);
                 if (m.value === "sketch" && map && !sketchCenter) { const c = map.getCenter(); setSketchCenter([c.lat, c.lng]); }
               }}>
-              <MapsIcon name={m.icon} size={15} />{m.label}
+              <MapsIcon name={m.icon} size={15} />{t(m.label)}
             </button>
           ))}
         </div>
         <span className="mp-grow" />
         <div className="mp-glass mp-top-tools">
-          <button type="button" className="mp-tool" title="Import one or more GPX files as routes" onClick={() => fileInput.current?.click()}><MapsIcon name="upload" size={15} />Import GPX</button>
+          <button type="button" className="mp-tool" title={t("Import one or more GPX files as routes")} onClick={() => fileInput.current?.click()}><MapsIcon name="upload" size={15} />{t("Import GPX")}</button>
           <input ref={fileInput} type="file" accept=".gpx,application/gpx+xml" multiple hidden onChange={(e) => { void onImport(e.target.files); e.target.value = ""; }} />
-          <button type="button" className="mp-tool mp-tgl" aria-pressed={savedOpen} onClick={() => setSavedOpen((o) => !o)}><MapsIcon name="bookmark" size={15} />Saved<span className="mp-badge">{saved.total}</span></button>
+          <button type="button" className="mp-tool mp-tgl" aria-pressed={savedOpen} onClick={() => setSavedOpen((o) => !o)}><MapsIcon name="bookmark" size={15} />{t("Saved")}<span className="mp-badge">{saved.total}</span></button>
         </div>
       </div>
 
-      <aside className="mp-glass mp-tools" aria-label="Route tools">
-        <h2>{mode === "generate" ? "Generate a route" : mode === "draw" ? "Draw a route" : mode === "sketch" ? "Sketch GPS art" : "Explore trails"}</h2>
+      <aside className="mp-glass mp-tools" aria-label={t("Route tools")}>
+        <h2>{mode === "generate" ? t("Generate a route") : mode === "draw" ? t("Draw a route") : mode === "sketch" ? t("Sketch GPS art") : t("Explore trails")}</h2>
 
         {mode === "generate" && (settingsOpen || !candidates.length ? (
           <div className="mp-steps">
             <div className="mp-step">
-              <div className="mp-step-head"><span className="mp-step-n">1</span>Sport &amp; route type</div>
-              <div className="mp-opts" role="group" aria-label="Sport">
-                {SPORTS.map((s) => <button key={s.value} type="button" className="mp-opt" aria-pressed={sport === s.value} onClick={() => setSport(s.value)}><MapsIcon name={s.icon} size={18} />{s.label}</button>)}
+              <div className="mp-step-head"><span className="mp-step-n">1</span>{t("Sport & route type")}</div>
+              <div className="mp-opts" role="group" aria-label={t("Sport")}>
+                {SPORTS.map((s) => <button key={s.value} type="button" className="mp-opt" aria-pressed={sport === s.value} onClick={() => setSport(s.value)}><MapsIcon name={s.icon} size={18} />{sportName(s.value)}</button>)}
               </div>
-              <Seg label="Route type" value={kind} onChange={setKind} options={[{ value: "loop", label: "Loop", icon: "loop" }, { value: "ab", label: "A → B" }]} icons />
+              <Seg label={t("Route type")} value={kind} onChange={setKind} options={[{ value: "loop", label: t("Loop"), icon: "loop" }, { value: "ab", label: "A → B" }]} icons />
             </div>
             <div className="mp-step">
-              <div className="mp-step-head"><span className="mp-step-n">2</span>{kind === "loop" ? "Where to start?" : "Start and finish"}</div>
-              <PlaceField key={start ? `${start.lat},${start.lon},${start.name}` : "none"} label="Start" value={start} onPick={setStart} picking={picking === "start"} onPickMap={() => setPicking(picking === "start" ? null : "start")} onLocate={() => locate("start")} />
-              {kind === "ab" && <PlaceField key={end ? `${end.lat},${end.lon},${end.name}` : "none"} label="Finish" value={end} onPick={setEnd} picking={picking === "end"} onPickMap={() => setPicking(picking === "end" ? null : "end")} />}
+              <div className="mp-step-head"><span className="mp-step-n">2</span>{kind === "loop" ? t("Where to start?") : t("Start and finish")}</div>
+              <PlaceField key={start ? `${start.lat},${start.lon},${start.name}` : "none"} label={tx("route place", "Start")} placeholder={t("Search a place to start")} value={start} onPick={setStart} picking={picking === "start"} onPickMap={() => setPicking(picking === "start" ? null : "start")} onLocate={() => locate("start")} />
+              {kind === "ab" && <PlaceField key={end ? `${end.lat},${end.lon},${end.name}` : "none"} label={tx("route place", "Finish")} placeholder={t("Search where to finish")} value={end} onPick={setEnd} picking={picking === "end"} onPickMap={() => setPicking(picking === "end" ? null : "end")} />}
             </div>
             <div className="mp-step">
-              <div className="mp-step-head"><span className="mp-step-n">3</span>Distance &amp; terrain</div>
+              <div className="mp-step-head"><span className="mp-step-n">3</span>{t("Distance & terrain")}</div>
               <div className="mp-dist"><span>{distanceKm}</span>km</div>
-              <input type="range" min={1} max={sport === "road" || sport === "mtb" ? 150 : 50} step={0.5} value={distanceKm} onChange={(e) => setDistanceKm(Number(e.target.value))} aria-label="Distance" />
-              <div className="mp-chips" role="group" aria-label="Distance presets">
+              <input type="range" min={1} max={sport === "road" || sport === "mtb" ? 150 : 50} step={0.5} value={distanceKm} onChange={(e) => setDistanceKm(Number(e.target.value))} aria-label={t("Distance")} />
+              <div className="mp-chips" role="group" aria-label={t("Distance presets")}>
                 {PRESETS.map((p) => <button key={p} type="button" className="chip" aria-pressed={distanceKm === p} onClick={() => setDistanceKm(p)}>{p === 21.1 ? "21K" : p === 42.2 ? "42K" : `${p}K`}</button>)}
               </div>
-              <span className="mp-label">Surface</span>
-              <Seg label="Surface" value={surface} onChange={setSurface} options={SURFACES} />
-              <span className="mp-label">Elevation</span>
-              <Seg label="Elevation" value={elevation} onChange={setElevation} options={ELEVATIONS} />
+              <span className="mp-label">{t("Surface")}</span>
+              <Seg label={t("Surface")} value={surface} onChange={setSurface} options={SURFACES.map((s) => ({ ...s, label: tx("surface", s.label) }))} />
+              <span className="mp-label">{t("Elevation")}</span>
+              <Seg label={t("Elevation")} value={elevation} onChange={setElevation} options={translated(ELEVATIONS)} />
             </div>
             <div className="mp-row">
               <button type="button" className="btn btn-primary mp-wide" onClick={() => void runGenerate()} disabled={busy === "generating"}>
-                <MapsIcon name="sparkle" size={16} />{busy === "generating" ? "Finding routes…" : "Generate route"}
+                <MapsIcon name="sparkle" size={16} />{busy === "generating" ? t("Finding routes…") : t("Generate route")}
               </button>
-              {candidates.length > 0 && <button type="button" className="btn btn-glass mp-icon-btn" aria-label="New variation" title="Try a different loop with the same settings" onClick={() => void runGenerate(true)}><MapsIcon name="refresh" size={16} /></button>}
+              {candidates.length > 0 && <button type="button" className="btn btn-glass mp-icon-btn" aria-label={t("New variation")} title={t("Try a different loop with the same settings")} onClick={() => void runGenerate(true)}><MapsIcon name="refresh" size={16} /></button>}
             </div>
           </div>
         ) : (
           <div className="mp-steps">
             <div className="mp-summary">
               <span className="mp-summary-icon"><MapsIcon name={SPORTS.find((s) => s.value === sport)!.icon} size={18} /></span>
-              <span><b>{SPORT_LABEL[sport]} · {kind === "loop" ? "Loop" : "A → B"} · {distanceKm} km</b><small>{start?.name.split(",")[0]} · {SURFACES.find((s) => s.value === surface)!.label} · {ELEVATION_LINE[elevation]}</small></span>
-              <button type="button" className="mp-link" onClick={() => setSettingsOpen(true)}>Edit</button>
+              <span><b>{sportName(sport)} · {kindName(kind)} · {distanceKm} km</b><small>{start?.name.split(",")[0]} · {tx("surface", SURFACES.find((s) => s.value === surface)!.label)} · {t(ELEVATION_LINE[elevation])}</small></span>
+              <button type="button" className="mp-link" onClick={() => setSettingsOpen(true)}>{t("Edit")}</button>
             </div>
-            <div className="mp-pick-head"><span>Pick your loop</span><span className="mp-grow" />
-              <button type="button" className="mp-link" title="Try a different loop with the same settings" onClick={() => void runGenerate(true)} disabled={busy === "generating"}><MapsIcon name="refresh" size={14} />New variation</button>
+            <div className="mp-pick-head"><span>{t("Pick your loop")}</span><span className="mp-grow" />
+              <button type="button" className="mp-link" title={t("Try a different loop with the same settings")} onClick={() => void runGenerate(true)} disabled={busy === "generating"}><MapsIcon name="refresh" size={14} />{t("New variation")}</button>
             </div>
             {candidates.map((c, i) => (
               <button key={c.id} type="button" className="mp-opt mp-cand" aria-pressed={chosen === i} onClick={() => pickCandidate(i)} onMouseEnter={() => setPeek(i)} onMouseLeave={() => setPeek(null)}>
                 <MapsIcon name={i === 0 ? "sparkle" : c.label === "Flatter" ? "minus" : "mountain"} size={18} />
-                <span><b>{c.label}</b><span>{km(c.distanceM)} km <small>↑ {Math.round(c.ascentM)} m</small></span><small>{Math.round(c.carFree * 100)}% car-free · {Math.round(c.paved * 100)}% paved</small></span>
+                <span><b>{candidateName(c.label)}</b><span>{km(c.distanceM)} km <small>↑ {Math.round(c.ascentM)} m</small></span><small>{t("{carFree}% car-free · {paved}% paved", { carFree: Math.round(c.carFree * 100), paved: Math.round(c.paved * 100) })}</small></span>
               </button>
             ))}
-            <span className="mp-note"><MapsIcon name="info" size={14} />Hover a loop to see it on the map. Saved automatically.</span>
+            <span className="mp-note"><MapsIcon name="info" size={14} />{t("Hover a loop to see it on the map. Saved automatically.")}</span>
           </div>
         ))}
 
         {mode === "draw" && (
           <div className="mp-steps">
-            <span className="mp-note">Click the map to drop points. Drag any point to reshape, click a point for options.</span>
-            <span className="mp-label">Follow paths</span>
-            <Seg label="Follow paths" value={snap ? "road" : "free"} onChange={(v) => setSnap(v === "road")} options={[{ value: "road", label: "Snap to roads", icon: "route" }, { value: "free", label: "Freehand", icon: "pen" }]} icons />
-            {snap && <><span className="mp-label">Surface</span><Seg label="Surface" value={surface} onChange={setSurface} options={SURFACES} /></>}
+            <span className="mp-note">{t("Click the map to drop points. Drag any point to reshape, click a point for options.")}</span>
+            <span className="mp-label">{t("Follow paths")}</span>
+            <Seg label={t("Follow paths")} value={snap ? "road" : "free"} onChange={(v) => setSnap(v === "road")} options={[{ value: "road", label: t("Snap to roads"), icon: "route" }, { value: "free", label: t("Freehand"), icon: "pen" }]} icons />
+            {snap && <><span className="mp-label">{t("Surface")}</span><Seg label={t("Surface")} value={surface} onChange={setSurface} options={SURFACES.map((s) => ({ ...s, label: tx("surface", s.label) }))} /></>}
             <div className="mp-draw-tools">
-              <ToolButton icon="undo" onClick={undo} disabled={!history.undo.length}>Undo</ToolButton>
-              <ToolButton icon="redo" onClick={redo} disabled={!history.redo.length}>Redo</ToolButton>
-              <ToolButton icon="loop" onClick={closeLoop} disabled={points.length < 3}>Close loop</ToolButton>
-              <ToolButton icon="outBack" onClick={outAndBack} disabled={points.length < 2}>Out and back</ToolButton>
-              <ToolButton icon="reverse" onClick={reverse} disabled={points.length < 2}>Reverse</ToolButton>
-              <ToolButton icon="trash" onClick={clearDraw} disabled={!points.length}>Clear</ToolButton>
+              <ToolButton icon="undo" onClick={undo} disabled={!history.undo.length}>{t("Undo")}</ToolButton>
+              <ToolButton icon="redo" onClick={redo} disabled={!history.redo.length}>{t("Redo")}</ToolButton>
+              <ToolButton icon="loop" onClick={closeLoop} disabled={points.length < 3}>{t("Close loop")}</ToolButton>
+              <ToolButton icon="outBack" onClick={outAndBack} disabled={points.length < 2}>{t("Out and back")}</ToolButton>
+              <ToolButton icon="reverse" onClick={reverse} disabled={points.length < 2}>{t("Reverse")}</ToolButton>
+              <ToolButton icon="trash" onClick={clearDraw} disabled={!points.length}>{t("Clear")}</ToolButton>
             </div>
-            <div className="mp-draw-state"><span><b>{points.length} {points.length === 1 ? "point" : "points"}</b>{busy === "routing" ? " · routing…" : points.length > 1 ? " · last change routed" : ""}</span><span className="mp-tag">{snap ? "Snapped" : "Freehand"}</span></div>
+            <div className="mp-draw-state"><span><b>{points.length === 1 ? t("1 point") : t("{n} points", { n: points.length })}</b>{busy === "routing" ? ` · ${t("routing…")}` : points.length > 1 ? ` · ${t("last change routed")}` : ""}</span><span className="mp-tag">{snap ? t("Snapped") : t("Freehand")}</span></div>
           </div>
         )}
 
         {mode === "sketch" && (
           <div className="mp-steps">
-            <Seg label="Sketch tool" value={sketchTool} onChange={(v) => { setSketchTool(v); setMatch(null); }} options={[{ value: "free", label: "Freehand", icon: "pen" }, { value: "shapes", label: "Shapes", icon: "heart" }, { value: "text", label: "Text", icon: "text" }]} icons />
+            <Seg label={t("Sketch tool")} value={sketchTool} onChange={(v) => { setSketchTool(v); setMatch(null); }} options={[{ value: "free", label: t("Freehand"), icon: "pen" }, { value: "shapes", label: t("Shapes"), icon: "heart" }, { value: "text", label: t("Text"), icon: "text" }]} icons />
             {sketchTool === "shapes" && (
-              <div className="mp-opts mp-shapes" role="group" aria-label="Shape">
-                {SHAPES.map((s) => <button key={s.id} type="button" className="mp-opt" aria-label={s.label} title={s.label} aria-pressed={shape === s.id} onClick={() => setShape(s.id)}><MapsIcon name={s.id} size={20} /></button>)}
+              <div className="mp-opts mp-shapes" role="group" aria-label={t("Shape")}>
+                {SHAPES.map((s) => <button key={s} type="button" className="mp-opt" aria-label={shapeName(s)} title={shapeName(s)} aria-pressed={shape === s} onClick={() => setShape(s)}><MapsIcon name={s} size={20} /></button>)}
               </div>
             )}
-            {sketchTool === "text" && <input className="field" type="text" aria-label="Text to draw" maxLength={16} placeholder="Write something… (A–Z, 0–9)" value={text} onChange={(e) => { const v = e.target.value.toUpperCase(); if (TEXT_CHARS.test(v)) setText(v); }} />}
-            {sketchTool === "free" && <span className="mp-note">Drag on the map. The stroke snaps to streets when you press Snap to streets.</span>}
-            <div className="mp-slider"><div><span>Size</span><b>{(sizeM / 1000).toFixed(1)} km</b></div><input type="range" min={200} max={8000} step={100} value={sizeM} onChange={(e) => setSizeM(Number(e.target.value))} aria-label="Size" /></div>
-            <div className="mp-slider"><div><span>Rotation</span><b>{rotation}°</b></div><input type="range" min={0} max={355} step={5} value={rotation} onChange={(e) => setRotation(Number(e.target.value))} aria-label="Rotation" /></div>
-            <span className="mp-label">Fidelity</span>
-            <Seg label="Fidelity" value={fidelity} onChange={setFidelity} options={[{ value: "loose", label: "Loose" }, { value: "balanced", label: "Balanced" }, { value: "strict", label: "Strict" }]} />
+            {sketchTool === "text" && <input className="field" type="text" aria-label={t("Text to draw")} maxLength={16} placeholder={t("Write something… (A–Z, 0–9)")} value={text} onChange={(e) => { const v = e.target.value.toUpperCase(); if (TEXT_CHARS.test(v)) setText(v); }} />}
+            {sketchTool === "free" && <span className="mp-note">{t("Drag on the map. The stroke snaps to streets when you press Snap to streets.")}</span>}
+            <div className="mp-slider"><div><span>{t("Size")}</span><b>{(sizeM / 1000).toFixed(1)} km</b></div><input type="range" min={200} max={8000} step={100} value={sizeM} onChange={(e) => setSizeM(Number(e.target.value))} aria-label={t("Size")} /></div>
+            <div className="mp-slider"><div><span>{t("Rotation")}</span><b>{rotation}°</b></div><input type="range" min={0} max={355} step={5} value={rotation} onChange={(e) => setRotation(Number(e.target.value))} aria-label={t("Rotation")} /></div>
+            <span className="mp-label">{t("Fidelity")}</span>
+            <Seg label={t("Fidelity")} value={fidelity} onChange={setFidelity} options={[{ value: "loose", label: t("Loose") }, { value: "balanced", label: tx("fidelity", "Balanced") }, { value: "strict", label: t("Strict") }]} />
             {match && (
               <div className="mp-match">
-                <div><span>Shape match</span><span className="mp-grow" /><b>≈ {Math.round(match.score * 100)}%</b></div>
+                <div><span>{t("Shape match")}</span><span className="mp-grow" /><b>≈ {Math.round(match.score * 100)}%</b></div>
                 <div className="mp-bar"><span style={{ width: `${Math.round(match.score * 100)}%` }} /></div>
                 {match.note && <small>{match.note}</small>}
               </div>
             )}
             <div className="mp-row">
-              <button type="button" className="btn btn-primary mp-wide" onClick={() => void runSketch()} disabled={busy === "snapping" || busy === "fitting"}><MapsIcon name="route" size={16} />{busy === "snapping" ? "Snapping…" : "Snap to streets"}</button>
-              <button type="button" className="btn btn-glass" title="Try nearby sizes and rotations, keep the best-matching route" onClick={() => void runSketch(true)} disabled={busy === "snapping" || busy === "fitting"}><MapsIcon name="sparkle" size={16} />{busy === "fitting" ? "Fitting…" : "Auto fit"}</button>
+              <button type="button" className="btn btn-primary mp-wide" onClick={() => void runSketch()} disabled={busy === "snapping" || busy === "fitting"}><MapsIcon name="route" size={16} />{busy === "snapping" ? t("Snapping…") : t("Snap to streets")}</button>
+              <button type="button" className="btn btn-glass" title={t("Try nearby sizes and rotations, keep the best-matching route")} onClick={() => void runSketch(true)} disabled={busy === "snapping" || busy === "fitting"}><MapsIcon name="sparkle" size={16} />{busy === "fitting" ? t("Fitting…") : t("Auto fit")}</button>
             </div>
           </div>
         )}
 
         {mode === "explore" && (
           <div className="mp-steps">
-            <span className="mp-note">Marked routes from OpenStreetMap.</span>
+            <span className="mp-note">{t("Marked routes from OpenStreetMap.")}</span>
             {(["hike", "cycle", "mtb"] as Overlay[]).map((k) => {
-              const n = trails?.filter((t) => t.kind === k).length;
+              const n = trails?.filter((m) => m.kind === k).length;
               return (
                 <button key={k} type="button" className="mp-overlay" aria-pressed={overlays[k]} onClick={() => setOverlayState((o) => ({ ...o, [k]: !o[k] }))}>
                   <i style={{ background: overlayColor[k] }} aria-hidden="true" />
-                  <span>{k === "hike" ? "Hiking routes" : k === "cycle" ? "Cycle routes" : "MTB routes"}</span>
-                  <small>{!overlays[k] ? "Off" : trails == null ? "Zoom in" : n ? `${n} in view` : "None here"}</small>
+                  <span>{k === "hike" ? t("Hiking routes") : k === "cycle" ? t("Cycle routes") : t("MTB routes")}</span>
+                  <small>{!overlays[k] ? t("Off") : trails == null ? t("Zoom in") : n ? t("{n} in view", { n }) : t("None here")}</small>
                 </button>
               );
             })}
-            <span className="mp-label">In view</span>
-            {trails == null ? <span className="mp-note">Zoom in to list the marked routes here.</span> : !trails.length ? <span className="mp-note">No marked routes in view.</span> : (
+            <span className="mp-label">{t("In view")}</span>
+            {trails == null ? <span className="mp-note">{t("Zoom in to list the marked routes here.")}</span> : !trails.length ? <span className="mp-note">{t("No marked routes in view.")}</span> : (
               <ul className="mp-trails">
-                {trails.slice(0, 30).map((t) => (
-                  <li key={t.id}>
-                    <i style={{ background: overlayColor[t.kind] }} aria-hidden="true" />
-                    <span><b>{t.name}</b><small>{[t.distanceKm ? `${t.distanceKm.toFixed(1)} km` : null, t.kind === "hike" ? "hiking" : t.kind === "cycle" ? "cycling" : "MTB", t.network].filter(Boolean).join(" · ")}</small></span>
-                    <button type="button" className="mp-link" onClick={() => void follow(t)} disabled={busy === "loading"}>Follow</button>
+                {trails.slice(0, 30).map((m) => (
+                  <li key={m.id}>
+                    <i style={{ background: overlayColor[m.kind] }} aria-hidden="true" />
+                    <span><b>{m.name}</b><small>{[m.distanceKm ? `${m.distanceKm.toFixed(1)} km` : null, m.kind === "hike" ? t("hiking") : m.kind === "cycle" ? t("cycling") : "MTB", m.network].filter(Boolean).join(" · ")}</small></span>
+                    <button type="button" className="mp-link" onClick={() => void follow(m)} disabled={busy === "loading"}>{t("Follow")}</button>
                   </li>
                 ))}
               </ul>
@@ -648,13 +655,13 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
 
         {mode !== "explore" && routing && (
           <details className="mp-advanced">
-            <summary><MapsIcon name="gear" size={15} />Advanced routing<span className="mp-grow" /><span className="mp-tag">{routing.engine === "ors" ? "OpenRouteService" : "Keyless"}</span><span className="mp-chev"><MapsIcon name="chevD" size={14} /></span></summary>
-            <Seg label="Routing engine" value={routing.engine} onChange={(engine) => { if (engine === "keyless" || routing.hasOrsKey) void setRouting(engine).then(setRoutingState, fail); else setRoutingState({ ...routing, engine }); }}
-              options={[{ value: "keyless", label: "Keyless" }, { value: "ors", label: "OpenRouteService" }]} />
-            {routing.engine === "keyless" ? <span className="mp-note">Keyless routing uses BRouter &amp; Nominatim — free, no signup.</span> : (
+            <summary><MapsIcon name="gear" size={15} />{t("Advanced routing")}<span className="mp-grow" /><span className="mp-tag">{routing.engine === "ors" ? "OpenRouteService" : t("Keyless")}</span><span className="mp-chev"><MapsIcon name="chevD" size={14} /></span></summary>
+            <Seg label={t("Routing engine")} value={routing.engine} onChange={(engine) => { if (engine === "keyless" || routing.hasOrsKey) void setRouting(engine).then(setRoutingState, fail); else setRoutingState({ ...routing, engine }); }}
+              options={[{ value: "keyless", label: t("Keyless") }, { value: "ors", label: "OpenRouteService" }]} />
+            {routing.engine === "keyless" ? <span className="mp-note">{t("Keyless routing uses BRouter & Nominatim — free, no signup.")}</span> : (
               <div className="mp-row">
-                <input className="field" type="password" placeholder={routing.hasOrsKey ? "Key saved" : "OpenRouteService key"} value={orsKey} onChange={(e) => setOrsKey(e.target.value)} aria-label="OpenRouteService key" />
-                <button type="button" className="btn btn-glass" disabled={!orsKey.trim()} onClick={() => void setRouting("ors", orsKey.trim()).then((r) => { setRoutingState(r); setOrsKey(""); }, fail)}>Save</button>
+                <input className="field" type="password" placeholder={routing.hasOrsKey ? t("Key saved") : t("OpenRouteService key")} value={orsKey} onChange={(e) => setOrsKey(e.target.value)} aria-label={t("OpenRouteService key")} />
+                <button type="button" className="btn btn-glass" disabled={!orsKey.trim()} onClick={() => void setRouting("ors", orsKey.trim()).then((r) => { setRoutingState(r); setOrsKey(""); }, fail)}>{t("Save")}</button>
               </div>
             )}
           </details>
@@ -664,70 +671,70 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
 
       <div className="mp-map-controls">
         <div className="mp-glass mp-ctl-col">
-          <button type="button" className="mp-ib" aria-label="Zoom in" onClick={() => map?.zoomIn()}><MapsIcon name="plus" size={17} /></button>
+          <button type="button" className="mp-ib" aria-label={t("Zoom in")} onClick={() => map?.zoomIn()}><MapsIcon name="plus" size={17} /></button>
           <span aria-hidden="true" />
-          <button type="button" className="mp-ib" aria-label="Zoom out" onClick={() => map?.zoomOut()}><MapsIcon name="minus" size={17} /></button>
+          <button type="button" className="mp-ib" aria-label={t("Zoom out")} onClick={() => map?.zoomOut()}><MapsIcon name="minus" size={17} /></button>
         </div>
         <div className="mp-glass mp-ctl-col">
-          <button type="button" className="mp-ib" aria-label="Fit route to view" onClick={() => fit()} disabled={!shown}><MapsIcon name="fit" size={17} /></button>
+          <button type="button" className="mp-ib" aria-label={t("Fit route to view")} onClick={() => fit()} disabled={!shown}><MapsIcon name="fit" size={17} /></button>
           <span aria-hidden="true" />
-          <button type="button" className="mp-ib" aria-label="Use my location" onClick={() => locate("view")}><MapsIcon name="locate" size={17} /></button>
+          <button type="button" className="mp-ib" aria-label={t("Use my location")} onClick={() => locate("view")}><MapsIcon name="locate" size={17} /></button>
         </div>
-        <button type="button" className="mp-glass mp-base-btn" aria-label="Change base map" aria-expanded={baseOpen} onClick={() => setBaseOpen((o) => !o)}>
-          <MapsIcon name="layers" size={16} />{BASE_MAPS.find((b) => b.value === base)!.label}
+        <button type="button" className="mp-glass mp-base-btn" aria-label={t("Change base map")} aria-expanded={baseOpen} onClick={() => setBaseOpen((o) => !o)}>
+          <MapsIcon name="layers" size={16} />{baseMapName(base)}
         </button>
       </div>
       {baseOpen && (
-        <div className="mp-pop mp-base" role="dialog" aria-label="Base map">
-          <span className="mp-label">Base map</span>
+        <div className="mp-pop mp-base" role="dialog" aria-label={t("Base map")}>
+          <span className="mp-label">{t("Base map")}</span>
           <div className="mp-base-grid">
-            {BASE_MAPS.map((b) => <button key={b.value} type="button" className="mp-opt" aria-pressed={base === b.value} onClick={() => pickBase(b.value)}><i style={{ background: b.swatch }} aria-hidden="true" />{b.label}</button>)}
+            {BASE_MAPS.map((b) => <button key={b.value} type="button" className="mp-opt" aria-pressed={base === b.value} onClick={() => pickBase(b.value)}><i style={{ background: b.swatch }} aria-hidden="true" />{baseMapName(b.value)}</button>)}
           </div>
-          <span className="mp-label">Trail overlays</span>
+          <span className="mp-label">{t("Trail overlays")}</span>
           {(["hike", "cycle", "mtb"] as Overlay[]).map((k) => (
-            <label key={k} className="mp-check"><input type="checkbox" checked={overlays[k]} onChange={() => setOverlayState((o) => ({ ...o, [k]: !o[k] }))} />{k === "hike" ? "Hiking routes" : k === "cycle" ? "Cycle routes" : "MTB routes"}</label>
+            <label key={k} className="mp-check"><input type="checkbox" checked={overlays[k]} onChange={() => setOverlayState((o) => ({ ...o, [k]: !o[k] }))} />{k === "hike" ? t("Hiking routes") : k === "cycle" ? t("Cycle routes") : t("MTB routes")}</label>
           ))}
         </div>
       )}
 
       {savedOpen && (
-        <aside className="mp-pop mp-saved" aria-label="Saved routes">
+        <aside className="mp-pop mp-saved" aria-label={t("Saved routes")}>
           <div className="mp-saved-head">
-            <span><b>Saved routes</b><small>{saved.total} {saved.total === 1 ? "route" : "routes"}</small></span>
+            <span><b>{t("Saved routes")}</b><small>{saved.total === 1 ? t("1 route") : t("{n} routes", { n: saved.total })}</small></span>
             <span className="mp-grow" />
-            <button type="button" className="mp-link" disabled={!saved.total} onClick={() => { if (confirm("Delete every saved route on this computer? Routes already on your watch stay there.")) void act("deleting", async () => { await deleteAllRoutes(); setSavedPage(0); await loadSaved(0); }); }}>Clear all</button>
-            <button type="button" className="mp-ib" aria-label="Close saved routes" onClick={() => setSavedOpen(false)}><MapsIcon name="close" size={16} /></button>
+            <button type="button" className="mp-link" disabled={!saved.total} onClick={() => { if (confirm(t("Delete every saved route on this computer? Routes already on your watch stay there."))) void act("deleting", async () => { await deleteAllRoutes(); setSavedPage(0); await loadSaved(0); }); }}>{t("Clear all")}</button>
+            <button type="button" className="mp-ib" aria-label={t("Close saved routes")} onClick={() => setSavedOpen(false)}><MapsIcon name="close" size={16} /></button>
           </div>
-          <label className="mp-search"><MapsIcon name="search" size={15} /><input type="search" aria-label="Search saved routes" placeholder="Search saved routes" value={savedQuery} onChange={(e) => { setSavedQuery(e.target.value); setSavedPage(0); }} /></label>
+          <label className="mp-search"><MapsIcon name="search" size={15} /><input type="search" aria-label={t("Search saved routes")} placeholder={t("Search saved routes")} value={savedQuery} onChange={(e) => { setSavedQuery(e.target.value); setSavedPage(0); }} /></label>
           {saved.routes.length ? (
             <ul className="mp-saved-list">
               {saved.routes.map((r) => (
                 <li key={r.id}>
                   <button type="button" className="mp-saved-open" onClick={() => void open(r.id)}>
                     <span className="mp-saved-icon"><MapsIcon name={SPORTS.find((s) => s.value === r.sport)?.icon ?? "route"} size={17} /></span>
-                    <span><b>{r.name}</b><small>{km(r.distanceM)} km · {SPORT_LABEL[r.sport]} · {r.kind === "loop" ? "Loop" : "A → B"} · {shortDate(r.createdAt)}</small>
-                      {r.onWatch && <small className="mp-on-watch"><MapsIcon name="check" size={12} />On your watch</small>}</span>
+                    <span><b>{r.name}</b><small>{km(r.distanceM)} km · {sportName(r.sport)} · {kindName(r.kind)} · {shortDate(r.createdAt)}</small>
+                      {r.onWatch && <small className="mp-on-watch"><MapsIcon name="check" size={12} />{t("On your watch")}</small>}</span>
                   </button>
                   <span className="mp-row-actions">
-                    <button type="button" className="mp-ib" aria-label="Sync to watch" title="Sync to watch" onClick={() => void startSync(r.id)} disabled={Boolean(syncing)}><MapsIcon name="watch" size={16} /></button>
-                    <button type="button" className="mp-ib" aria-label="More" aria-expanded={rowMenu === r.id} onClick={() => setRowMenu(rowMenu === r.id ? null : r.id)}><MapsIcon name="more" size={16} /></button>
+                    <button type="button" className="mp-ib" aria-label={t("Sync to watch")} title={t("Sync to watch")} onClick={() => void startSync(r.id)} disabled={Boolean(syncing)}><MapsIcon name="watch" size={16} /></button>
+                    <button type="button" className="mp-ib" aria-label={t("More")} aria-expanded={rowMenu === r.id} onClick={() => setRowMenu(rowMenu === r.id ? null : r.id)}><MapsIcon name="more" size={16} /></button>
                     {rowMenu === r.id && (
                       <div className="mp-pop mp-row-menu" role="menu">
-                        <button type="button" role="menuitem" onClick={() => { setRowMenu(null); void open(r.id); }}><MapsIcon name="map" size={15} />Show on map</button>
-                        <button type="button" role="menuitem" onClick={() => { setRowMenu(null); const name = prompt("Route name", r.name)?.trim(); if (name) void renameRoute(r.id, name).then(() => loadSaved(), fail); }}><MapsIcon name="pen" size={15} />Rename</button>
-                        <a role="menuitem" href={gpxHref(r.id)} download onClick={() => setRowMenu(null)}><MapsIcon name="download" size={15} />Export GPX</a>
-                        <button type="button" role="menuitem" onClick={() => { setRowMenu(null); void deleteRoute(r.id).then(() => loadSaved(), fail); if (current?.savedId === r.id) setCurrent({ ...current, savedId: undefined }); }}><MapsIcon name="trash" size={15} />Delete</button>
+                        <button type="button" role="menuitem" onClick={() => { setRowMenu(null); void open(r.id); }}><MapsIcon name="map" size={15} />{t("Show on map")}</button>
+                        <button type="button" role="menuitem" onClick={() => { setRowMenu(null); const name = prompt(t("Route name"), r.name)?.trim(); if (name) void renameRoute(r.id, name).then(() => loadSaved(), fail); }}><MapsIcon name="pen" size={15} />{t("Rename")}</button>
+                        <a role="menuitem" href={gpxHref(r.id)} download onClick={() => setRowMenu(null)}><MapsIcon name="download" size={15} />{t("Export GPX")}</a>
+                        <button type="button" role="menuitem" onClick={() => { setRowMenu(null); void deleteRoute(r.id).then(() => loadSaved(), fail); if (current?.savedId === r.id) setCurrent({ ...current, savedId: undefined }); }}><MapsIcon name="trash" size={15} />{t("Delete")}</button>
                       </div>
                     )}
                   </span>
                 </li>
               ))}
             </ul>
-          ) : <p className="mp-note mp-empty">{savedQuery ? "No routes match." : "Routes you generate, draw or import are kept here."}</p>}
+          ) : <p className="mp-note mp-empty">{savedQuery ? t("No routes match.") : t("Routes you generate, draw or import are kept here.")}</p>}
           {saved.total > PAGE && (
-            <div className="mp-pager"><span>{savedPage * PAGE + 1}–{Math.min(saved.total, (savedPage + 1) * PAGE)} of {saved.total}</span>
-              <span><button type="button" className="mp-ib" aria-label="Previous" disabled={!savedPage} onClick={() => setSavedPage((p) => p - 1)}><MapsIcon name="chevL" size={16} /></button>
-                <button type="button" className="mp-ib" aria-label="Next" disabled={(savedPage + 1) * PAGE >= saved.total} onClick={() => setSavedPage((p) => p + 1)}><MapsIcon name="chevR" size={16} /></button></span>
+            <div className="mp-pager"><span>{t("{from}–{to} of {total}", { from: savedPage * PAGE + 1, to: Math.min(saved.total, (savedPage + 1) * PAGE), total: saved.total })}</span>
+              <span><button type="button" className="mp-ib" aria-label={tx("page", "Previous")} disabled={!savedPage} onClick={() => setSavedPage((p) => p - 1)}><MapsIcon name="chevL" size={16} /></button>
+                <button type="button" className="mp-ib" aria-label={tx("page", "Next")} disabled={(savedPage + 1) * PAGE >= saved.total} onClick={() => setSavedPage((p) => p + 1)}><MapsIcon name="chevR" size={16} /></button></span>
             </div>
           )}
         </aside>
@@ -737,52 +744,52 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
         <div className="mp-pop mp-sync" role="status">
           <div>
             <span className="mp-sync-icon" data-state={sync.state}><MapsIcon name={sync.state === "done" ? "check" : sync.state === "failed" ? "warn" : "watch"} size={17} /></span>
-            <span><b>{sync.state === "done" ? (sync.already ? "Already on your watch" : "On your watch") : sync.state === "failed" ? "Couldn't send the route" : sync.state === "cancelled" ? "Stopped" : `Sending to ${watch?.name ?? "your watch"}`}</b>
+            <span><b>{sync.state === "done" ? (sync.already ? t("Already on your watch") : t("On your watch")) : sync.state === "failed" ? t("Couldn't send the route") : sync.state === "cancelled" ? t("Stopped") : t("Sending to {model}", { model: watch?.name ?? t("your watch") })}</b>
               <small>{sync.message ?? sync.name ?? ""}{syncing && sync.percent != null ? ` · ${Math.round(sync.percent)}%` : ""}</small></span>
-            <button type="button" className="mp-link" onClick={() => (syncing ? void cancelRouteSync().then(setSync, fail) : setSync(null))}>{syncing ? "Cancel" : "Done"}</button>
+            <button type="button" className="mp-link" onClick={() => (syncing ? void cancelRouteSync().then(setSync, fail) : setSync(null))}>{syncing ? t("Cancel") : t("Done")}</button>
           </div>
-          {syncing && <div className="mp-bar" role="progressbar" aria-label="Route sync" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(sync.percent ?? 0)}><span style={{ width: `${sync.percent ?? 0}%` }} /></div>}
+          {syncing && <div className="mp-bar" role="progressbar" aria-label={t("Route sync")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(sync.percent ?? 0)}><span style={{ width: `${sync.percent ?? 0}%` }} /></div>}
         </div>
       )}
 
-      <section className="mp-glass mp-stats" aria-label="Route stats">
+      <section className="mp-glass mp-stats" aria-label={t("Route stats")}>
         {shown ? (
           <>
             <div className="mp-stats-row">
-              <div className="mp-stat mp-stat-name"><span><MapsIcon name={SPORTS.find((s) => s.value === (current?.sport ?? sport))!.icon} size={14} />{routeTag}</span><b title={current?.name}>{current?.name ?? (mode === "draw" ? "Drawn route" : "Route")}</b></div>
-              <Stat label="Distance" value={km(shown.distanceM)} unit=" km" />
-              <Stat label="Est. time" value={est!.time} />
-              <Stat label={est!.paceUnit.includes("km/h") ? "Speed" : "Pace"} value={est!.pace} unit={est!.paceUnit} />
-              <Stat label="Ascent" value={`↑ ${Math.round(shown.ascentM)}`} unit=" m" />
-              <Stat label="Descent" value={`↓ ${Math.round(shown.descentM)}`} unit=" m" />
-              <Stat label="Terrain" value={terrain(shown.makeup)} />
+              <div className="mp-stat mp-stat-name"><span><MapsIcon name={SPORTS.find((s) => s.value === (current?.sport ?? sport))!.icon} size={14} />{routeTag}</span><b title={current?.name}>{current?.name ?? (mode === "draw" ? t("Drawn route") : t("Route"))}</b></div>
+              <Stat label={t("Distance")} value={km(shown.distanceM)} unit=" km" />
+              <Stat label={t("Est. time")} value={est!.time} />
+              <Stat label={est!.paceUnit.includes("km/h") ? t("Speed") : t("Pace")} value={est!.pace} unit={est!.paceUnit} />
+              <Stat label={t("Ascent")} value={`↑ ${Math.round(shown.ascentM)}`} unit=" m" />
+              <Stat label={t("Descent")} value={`↓ ${Math.round(shown.descentM)}`} unit=" m" />
+              <Stat label={t("Terrain")} value={terrain(shown.makeup)} />
               {share && (
                 <div className="mp-makeup-wrap">
-                  <button type="button" className="mp-tgl mp-makeup-btn" aria-pressed={makeupOpen} aria-label="Route makeup" onClick={() => setMakeupOpen((o) => !o)}>
-                    <span>Route makeup</span><b>{Math.round(share.carFree * 100)}% car-free</b>
+                  <button type="button" className="mp-tgl mp-makeup-btn" aria-pressed={makeupOpen} aria-label={t("Route makeup")} onClick={() => setMakeupOpen((o) => !o)}>
+                    <span>{t("Route makeup")}</span><b>{t("{n}% car-free", { n: Math.round(share.carFree * 100) })}</b>
                   </button>
                   {makeupOpen && shown.makeup && (
-                    <div className="mp-pop mp-makeup" role="dialog" aria-label="Route makeup">
-                      <span className="mp-label">Way types</span>
-                      {shown.makeup.ways.filter((w) => w.meters > 0).sort((a, b) => b.meters - a.meters).map((w) => <Share key={w.kind} label={WAY_LABEL[w.kind]} part={w.meters / share.total} />)}
-                      <span className="mp-label">Surfaces</span>
-                      {shown.makeup.surfaces.filter((s) => s.meters > 0).sort((a, b) => b.meters - a.meters).map((s) => <Share key={s.kind} label={SURFACE_LABEL[s.kind]} part={s.meters / share.surfTotal} />)}
-                      <div className="mp-makeup-foot"><span>{shown.makeup.busyMeters < 1000 ? "Low-traffic route" : "Some busy roads"}</span><small>{(shown.makeup.busyMeters / 1000).toFixed(1)} km on busy roads</small><small>{(shown.makeup.retracedMeters / 1000).toFixed(1)} km out-and-back</small></div>
+                    <div className="mp-pop mp-makeup" role="dialog" aria-label={t("Route makeup")}>
+                      <span className="mp-label">{t("Way types")}</span>
+                      {shown.makeup.ways.filter((w) => w.meters > 0).sort((a, b) => b.meters - a.meters).map((w) => <Share key={w.kind} label={t(WAY_LABEL[w.kind])} part={w.meters / share.total} />)}
+                      <span className="mp-label">{t("Surfaces")}</span>
+                      {shown.makeup.surfaces.filter((s) => s.meters > 0).sort((a, b) => b.meters - a.meters).map((s) => <Share key={s.kind} label={t(SURFACE_LABEL[s.kind])} part={s.meters / share.surfTotal} />)}
+                      <div className="mp-makeup-foot"><span>{shown.makeup.busyMeters < 1000 ? t("Low-traffic route") : t("Some busy roads")}</span><small>{t("{km} km on busy roads", { km: (shown.makeup.busyMeters / 1000).toFixed(1) })}</small><small>{t("{km} km out-and-back", { km: (shown.makeup.retracedMeters / 1000).toFixed(1) })}</small></div>
                     </div>
                   )}
                 </div>
               )}
               <span className="mp-grow" />
               <div className="mp-stat-actions">
-                {(mode === "draw" || mode === "sketch") && !isSaved && <button type="button" className="btn btn-glass" onClick={() => void saveDrawn()} disabled={busy === "saving"}><MapsIcon name="bookmark" size={16} />Save route</button>}
-                <button type="button" className="btn btn-primary" onClick={() => void startSync()} disabled={Boolean(syncing) || busy === "syncing"} title={watch?.linked ? undefined : "Turn on Local mode on the Watch page to send routes over Bluetooth"}><MapsIcon name="watch" size={16} />Sync to watch</button>
-                <button type="button" className="btn btn-glass mp-icon-btn" aria-label="Export GPX" title="Export GPX" onClick={() => void exportGpx()}><MapsIcon name="download" size={16} /></button>
+                {(mode === "draw" || mode === "sketch") && !isSaved && <button type="button" className="btn btn-glass" onClick={() => void saveDrawn()} disabled={busy === "saving"}><MapsIcon name="bookmark" size={16} />{t("Save route")}</button>}
+                <button type="button" className="btn btn-primary" onClick={() => void startSync()} disabled={Boolean(syncing) || busy === "syncing"} title={watch?.linked ? undefined : t("Turn on Local mode on the Watch page to send routes over Bluetooth")}><MapsIcon name="watch" size={16} />{t("Sync to watch")}</button>
+                <button type="button" className="btn btn-glass mp-icon-btn" aria-label={t("Export GPX")} title={t("Export GPX")} onClick={() => void exportGpx()}><MapsIcon name="download" size={16} /></button>
               </div>
             </div>
             {prof && profilePath ? (
               <div className="mp-elev">
-                <div className="mp-elev-head"><span>Elevation</span><small>{Math.round(prof.min)}–{Math.round(prof.max)} m</small><span className="mp-grow" />
-                  <small>{hover != null && hoverElevation != null ? `${(prof.total * (hover / Math.max(1, shown.points.length - 1)) / 1000).toFixed(1)} km · ${Math.round(hoverElevation)} m` : `${clock(est!.seconds)} at an easy effort`}</small></div>
+                <div className="mp-elev-head"><span>{t("Elevation")}</span><small>{Math.round(prof.min)}–{Math.round(prof.max)} m</small><span className="mp-grow" />
+                  <small>{hover != null && hoverElevation != null ? `${(prof.total * (hover / Math.max(1, shown.points.length - 1)) / 1000).toFixed(1)} km · ${Math.round(hoverElevation)} m` : t("{time} at an easy effort", { time: clock(est!.seconds) })}</small></div>
                 <div className="mp-elev-chart" onMouseLeave={() => setHover(null)}
                   onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHover(pointAt(shown.points, ((e.clientX - r.left) / r.width) * prof.total)); }}>
                   <svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
@@ -795,7 +802,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
             ) : null}
           </>
         ) : (
-          <div className="mp-stats-empty"><MapsIcon name="route" size={18} />{mode === "explore" ? "Follow a marked route to see live stats" : "Pick a start point or draw a route to see live stats"}</div>
+          <div className="mp-stats-empty"><MapsIcon name="route" size={18} />{mode === "explore" ? t("Follow a marked route to see live stats") : t("Pick a start point or draw a route to see live stats")}</div>
         )}
       </section>
     </section>
@@ -827,8 +834,8 @@ function ToolButton({ icon, onClick, disabled, children }: { icon: string; onCli
 }
 
 /** A place picked by name (Nominatim, arrows + Enter), on the map, or from this computer's location. */
-function PlaceField({ label, value, onPick, picking, onPickMap, onLocate }: {
-  label: string; value: Place | null; onPick: (p: Place) => void; picking: boolean; onPickMap: () => void; onLocate?: () => void;
+function PlaceField({ label, placeholder, value, onPick, picking, onPickMap, onLocate }: {
+  label: string; placeholder: string; value: Place | null; onPick: (p: Place) => void; picking: boolean; onPickMap: () => void; onLocate?: () => void;
 }) {
   const [q, setQ] = useState(value?.name ?? "");
   const [found, setFound] = useState<Place[]>([]);
@@ -845,17 +852,17 @@ function PlaceField({ label, value, onPick, picking, onPickMap, onLocate }: {
   return (
     <div className="mp-place">
       <span className="mp-place-icon" aria-hidden="true"><MapsIcon name="pin" size={16} /></span>
-      <input type="text" aria-label={label} placeholder={label === "Start" ? "Search a place to start" : "Search where to finish"} value={q}
+      <input type="text" aria-label={label} placeholder={placeholder} value={q}
         onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") { e.preventDefault(); setAt((i) => Math.min(list.length - 1, i + 1)); }
           if (e.key === "ArrowUp") { e.preventDefault(); setAt((i) => Math.max(0, i - 1)); }
           if (e.key === "Enter" && list[at]) { e.preventDefault(); choose(list[at]); }
         }} />
-      {onLocate && <button type="button" className="mp-ib" aria-label="Use my location" title="Use my location" onClick={onLocate}><MapsIcon name="locate" size={16} /></button>}
-      <button type="button" className="mp-ib" aria-label="Pick on map" title="Pick on map" aria-pressed={picking} onClick={onPickMap}><MapsIcon name="target" size={16} /></button>
+      {onLocate && <button type="button" className="mp-ib" aria-label={t("Use my location")} title={t("Use my location")} onClick={onLocate}><MapsIcon name="locate" size={16} /></button>}
+      <button type="button" className="mp-ib" aria-label={t("Pick on map")} title={t("Pick on map")} aria-pressed={picking} onClick={onPickMap}><MapsIcon name="target" size={16} /></button>
       {list.length > 0 && (
-        <ul className="mp-pop mp-place-list" role="listbox" aria-label={`${label} suggestions`}>
+        <ul className="mp-pop mp-place-list" role="listbox" aria-label={t("{field} suggestions", { field: label })}>
           {list.map((p, i) => (
             <li key={`${p.lat},${p.lon}`} role="option" aria-selected={i === at} onMouseDown={(e) => { e.preventDefault(); choose(p); }}>
               <b>{p.name.split(",")[0]}</b><small>{p.detail ?? p.name.split(",").slice(1).join(",").trim()}</small>

@@ -4,6 +4,7 @@
 import type { LatLon, RouteGeometry, TrackPoint } from "../../../maps/types";
 import { lengthOf, lineGeometry, meters, trackPoint } from "./geo";
 import { asProblem, RoutingProblem, type Net } from "./net";
+import { t } from "@/lib/i18n";
 
 const ENDPOINT = "https://api.open-meteo.com/v1/elevation";
 export const ELEVATION_BATCH = 100;
@@ -27,8 +28,8 @@ export class Elevations {
       } catch (e) {
         throw asProblem(e, "The heights service");
       }
-      if (res.status === 429) throw new RoutingProblem("The heights service is busy. Try again later.", "busy", 503);
-      if (!res.ok) throw new RoutingProblem(`The heights service had a problem (${res.status}).`, "elevation", 502);
+      if (res.status === 429) throw new RoutingProblem(t("The heights service is busy. Try again later."), "busy", 503);
+      if (!res.ok) throw new RoutingProblem(t("The heights service had a problem ({status}).", { status: res.status }), "elevation", 502);
       const body = (await res.json()) as { elevation?: unknown[] };
       const got = Array.isArray(body.elevation) ? body.elevation : [];
       out.push(...batch.map((_, j) => (typeof got[j] === "number" ? (got[j] as number) : NaN)));
@@ -38,8 +39,8 @@ export class Elevations {
 
   /** The line with heights, ascent and descent. */
   async line(points: LatLon[]): Promise<RouteGeometry> {
-    if (points.length < 2) throw new RoutingProblem("Add at least two points.", "points");
-    if (points.length > MAX_POINTS) throw new RoutingProblem("A route can have up to 40,000 points.", "points");
+    if (points.length < 2) throw new RoutingProblem(t("Add at least two points."), "points");
+    if (points.length > MAX_POINTS) throw new RoutingProblem(t("A route can have up to 40,000 points."), "points");
     const dense = densify(points);
     const along = [0];
     for (let i = 1; i < dense.length; i++) along.push(along[i - 1] + meters(dense[i - 1], dense[i]));

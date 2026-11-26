@@ -1,18 +1,23 @@
 // First-run setup: Coach walks you through where your data comes from, pairing the phone, your sports, Coach's AI
-// and this Mac. The step lives in the address (setupFlow.ts). Everything here uses the app's own calls: the phone
+// and this computer. The step lives in the address (setupFlow.ts). Everything here uses the app's own calls: the phone
 // pairing of Connections, the sample store of Developer, the backup restore of Settings and the AI of Coach settings.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Field, Select, Switch } from "@/components/ui";
 import { AIProblem, connectAI, detectLocalAI, pickAI, readAI, signInAI, type AIStatus } from "../ai";
 import { readDeveloper } from "../developer";
+import { language, locale, msg, t, tx } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/react";
+import { computerWord } from "../computer";
 import { navigate, useLocation } from "../router";
 import { changeSetup, readSetup, type SetupState, type SportTile } from "../setup";
-import { backStep, coachSays, countdown, LIST, listIndex, nextStep, placeHref, readPlace, stepNote, type Place, type Source } from "../setupFlow";
+import { backStep, coachSays, countdown, LIST, listIndex, listLabel, nextStep, placeHref, readPlace, stepNote, type Place, type Source } from "../setupFlow";
 import { restoreBackup, SettingsProblem } from "../settings";
+import { useCorosImport } from "../corosImport";
+import { CorosAccountPart } from "../parts/CorosImport";
 import "../parts/localMode.css";
 import "./setup.css";
 
-const said = (e: unknown) => (e instanceof AIProblem || e instanceof SettingsProblem || e instanceof Error ? e.message : "That didn't work.");
+const said = (e: unknown) => (e instanceof AIProblem || e instanceof SettingsProblem || e instanceof Error ? e.message : t("That didn't work."));
 
 /** Sample data on or off; the window then starts over on the store it now reads (main.ts). */
 async function setSample(on: boolean): Promise<void> {
@@ -34,17 +39,19 @@ export default function Setup() {
     ask<PhoneStatus>("/api/desktop/phones").then((s) => setPhone(s.phones.slice().sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))[0]?.label ?? null), () => {});
   }, [step]);
 
+  const account = useCorosImport();
+  const accountOn = !!account && account.connected && !account.signIn;
   const hasData = !!setup && Object.keys(setup.found).length > 0;
-  const coach = coachSays(step, { paired: !!phone, hasData });
+  const coach = coachSays(step, source === "coros" ? { paired: accountOn, hasData, coros: true } : { paired: !!phone, hasData });
   const coachName = ai?.providers.find((p) => p.id === ai.picked && p.ready)?.name ?? null;
   const at = listIndex(step);
-  const notes = { phone, sports: setup?.sports?.length ?? 0, coach: coachName };
+  const notes = { phone, sports: setup?.sports?.length ?? 0, coach: coachName, account: accountOn ? t("Connected") : null };
 
   return (
     <div className="ob">
       <header className="ob-bar">
         <span className="ob-brand"><img className="ob-mark" src="/img/clink-mark.png" alt="" />C-LINK</span>
-        {step !== "done" ? <button type="button" className="ob-link ob-skip" onClick={() => go({ step: "done" })}>Skip setup</button> : null}
+        {step !== "done" ? <button type="button" className="ob-link ob-skip" onClick={() => go({ step: "done" })}>{t("Skip setup")}</button> : null}
       </header>
       <div className="ob-main">
         <aside className="ob-side">
@@ -52,11 +59,11 @@ export default function Setup() {
             <img src={`/img/coach-${coach.pose}.webp`} alt="" />
             <div className="ob-bubble" role="status">{coach.line}</div>
           </div>
-          <ol className="ob-steps" aria-label="Setup steps">
+          <ol className="ob-steps" aria-label={t("Setup steps")}>
             {LIST.map((item, i) => (
               <li key={item.id} data-now={i === at ? "" : undefined} data-done={i < at ? "" : undefined} aria-current={i === at ? "step" : undefined}>
                 <span className="ob-num">{i < at ? <Check size={13} /> : i + 1}</span>
-                {item.label}
+                {listLabel(item)}
                 <small>{i < at ? stepNote(item.id, source, notes) : ""}</small>
               </li>
             ))}
@@ -64,7 +71,8 @@ export default function Setup() {
         </aside>
         <section className="card ob-panel" aria-labelledby="ob-title">
           {step === "source" ? <SourceStep source={source} onNext={(s) => go({ step: nextStep("source", s), source: s })} /> : null}
-          {step === "phone" ? <PhoneStep onPaired={setPhone} onBack={() => go({ step: "source" })} onNext={() => go({ step: "sports" })} /> : null}
+          {step === "phone" && source === "coros" ? <CorosStep onBack={() => go({ step: "source" })} onNext={() => go({ step: "sports" })} /> : null}
+          {step === "phone" && source !== "coros" ? <PhoneStep onPaired={setPhone} onBack={() => go({ step: "source" })} onNext={() => go({ step: "sports" })} /> : null}
           {step === "sports" ? <SportsStep setup={setup} hasData={hasData} onSaved={setSetup} onBack={() => go({ step: backStep("sports", source) })} onNext={() => go({ step: "coach" })} /> : null}
           {step === "coach" ? <CoachStep ai={ai} onChange={setAI} onBack={() => go({ step: "sports" })} onNext={() => go({ step: "mac" })} /> : null}
           {step === "mac" ? <MacStep setup={setup} onSaved={setSetup} onBack={() => go({ step: "coach" })} onNext={() => go({ step: "done" })} /> : null}
@@ -78,7 +86,9 @@ export default function Setup() {
 /* ───────────── Your data ───────────── */
 
 function SourceStep({ source, onNext }: { source: Source; onNext: (s: Source) => void }) {
-  const [picked, setPicked] = useState<"phone" | "look">(source === "look" ? "look" : "phone");
+  const [picked, setPicked] = useState<"phone" | "coros" | "look">(source === "look" || source === "coros" ? source : "phone");
+  // The COROS account import needs the Mac helper; elsewhere the choice isn't offered.
+  const corosHere = !!useCorosImport()?.available;
   const [sample, setSampleOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -119,27 +129,48 @@ function SourceStep({ source, onNext }: { source: Source; onNext: (s: Source) =>
 
   return (
     <>
-      <h1 id="ob-title">Where should your data come from?</h1>
-      <div className="ob-sources" role="radiogroup" aria-label="Where your data comes from">
+      <h1 id="ob-title">{t("Where should your data come from?")}</h1>
+      <div className="ob-sources" role="radiogroup" aria-label={t("Where your data comes from")}>
         <button type="button" role="radio" className="ob-source" aria-checked={picked === "phone"} onClick={() => setPicked("phone")}>
           <span className="ob-art" aria-hidden="true"><Glyph d={WATCH} size={22} /><Dots /><Glyph d={PHONE} size={22} /><Dots /><Glyph d={MAC} size={22} /></span>
-          <span className="ob-src-text"><strong>C-LINK on my phone <span className="ob-tag">Recommended</span></strong><span>Your phone keeps syncing the watch and copies everything here. Works with the COROS app too.</span></span>
+          <span className="ob-src-text"><strong>{t("C-LINK on my phone")} <span className="ob-tag">{t("Recommended")}</span></strong><span>{t("Your phone keeps syncing the watch and copies everything here. Works with the COROS app too.")}</span></span>
           <span className="ob-radio" aria-hidden="true" />
         </button>
+        {corosHere ? (
+          <button type="button" role="radio" className="ob-source" aria-checked={picked === "coros"} onClick={() => setPicked("coros")}>
+            <span className="ob-art" aria-hidden="true"><Glyph d={WATCH} size={22} /><Dots /><Glyph d={CLOUD} size={22} /><Dots /><Glyph d={MAC} size={22} /></span>
+            <span className="ob-src-text"><strong>{t("My COROS account")}</strong><span>{t("Keep the watch on the COROS app. Your workouts, health and sleep come here from your COROS account.")}</span></span>
+            <span className="ob-radio" aria-hidden="true" />
+          </button>
+        ) : null}
         <button type="button" role="radio" className="ob-source" aria-checked={picked === "look"} disabled={sample === null} onClick={() => setPicked("look")}>
           <span className="ob-art" aria-hidden="true"><Glyph d={EYE} size={22} /></span>
-          <span className="ob-src-text"><strong>Just look around</strong><span>A sample athlete's year. Pair your phone later on Connections.</span></span>
+          <span className="ob-src-text"><strong>{t("Just look around")}</strong><span>{t("A sample athlete's year. Pair your phone later on Connections.")}</span></span>
           <span className="ob-radio" aria-hidden="true" />
         </button>
       </div>
       <div className="ob-restore">
         <Glyph d={FOLDER} size={15} />
-        <span>Moving from another computer?</span>
-        {needsPassphrase ? <Field type="password" className="ob-pass" aria-label="Backup passphrase" placeholder="Passphrase" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} /> : null}
-        <button type="button" className="ob-text-link" disabled={busy || (needsPassphrase && !passphrase)} onClick={() => void restore()}>Restore a backup</button>
+        <span>{t("Moving from another computer?")}</span>
+        {needsPassphrase ? <Field type="password" className="ob-pass" aria-label={t("Backup passphrase")} placeholder={t("Passphrase")} value={passphrase} onChange={(e) => setPassphrase(e.target.value)} /> : null}
+        <button type="button" className="ob-text-link" disabled={busy || (needsPassphrase && !passphrase)} onClick={() => void restore()}>{t("Restore a backup")}</button>
       </div>
       {problem ? <p className="notice" role="alert">{problem}</p> : null}
-      <Foot><Button variant="primary" disabled={busy} onClick={() => void next()}>Continue</Button></Foot>
+      <Foot><Button variant="primary" disabled={busy} onClick={() => void next()}>{t("Continue")}</Button></Foot>
+    </>
+  );
+}
+
+/* ───────────── Connect the COROS account ───────────── */
+
+function CorosStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+  return (
+    <>
+      <h1 id="ob-title">{t("Connect your COROS account")}</h1>
+      <p className="ob-note">{t("Your watch stays on the COROS app. Sign in to COROS in your browser, and your activities, health and sleep come here.")}{" "}
+        {t("Add Training Hub on Connections later for full recordings, your calendar and workouts.")}</p>
+      <div className="ob-sync"><CorosAccountPart /></div>
+      <Foot onBack={onBack}><Button variant="primary" onClick={onNext}>{t("Continue")}</Button></Foot>
     </>
   );
 }
@@ -153,16 +184,16 @@ interface Pairing { link: string; qr: string; expiresAt: string }
 async function ask<T>(path: string, init?: RequestInit): Promise<T> {
   const answer = await fetch(path, { cache: "no-store", ...init });
   const body = (await answer.json()) as T & { error?: { message: string } };
-  if (!answer.ok) throw new Error(body.error?.message ?? "That didn't work.");
+  if (!answer.ok) throw new Error(body.error?.message ?? t("That didn't work."));
   return body;
 }
 
 const ago = (iso: string, now: number): string => {
   const minutes = Math.round((now - Date.parse(iso)) / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return t("just now");
+  if (minutes < 60) return t("{n} min ago", { n: minutes });
   const hours = Math.round(minutes / 60);
-  return hours < 24 ? `${hours} h ago` : new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return hours < 24 ? t("{n} h ago", { n: hours }) : new Date(iso).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
 };
 
 function PhoneStep({ onPaired, onBack, onNext }: { onPaired: (label: string | null) => void; onBack: () => void; onNext: () => void }) {
@@ -221,52 +252,52 @@ function PhoneStep({ onPaired, onBack, onNext }: { onPaired: (label: string | nu
 
   return (
     <>
-      <h1 id="ob-title">{newest ? "Paired with your phone" : "Pair with C-LINK on your phone"}</h1>
+      <h1 id="ob-title">{newest ? t("Paired with your phone") : t("Pair with C-LINK on your phone")}</h1>
       {newest ? (
         <>
           <div className="ob-got">
             <span className="ob-phone" aria-hidden="true" />
-            <span className="lm-row-text"><strong>{newest.label}</strong><span>Paired {ago(newest.createdAt, now)} · syncs on the same Wi-Fi</span></span>
-            <span className="lm-done ob-end"><Check size={15} />Paired</span>
+            <span className="lm-row-text"><strong>{newest.label}</strong><span>{t("Paired {when} · syncs on the same Wi-Fi", { when: ago(newest.createdAt, now) })}</span></span>
+            <span className="lm-done ob-end"><Check size={15} />{t("Paired")}</span>
           </div>
-          {status && !status.listening ? <p className="notice" role="alert">Phones can't reach this computer right now.</p> : null}
+          {status && !status.listening ? <p className="notice" role="alert">{t("Phones can't reach this computer right now.")}</p> : null}
           <div className="ob-sync" role="status">
-            <div className="ob-sync-head"><span>{copying ? "Copying from your phone" : "Up to date"}</span><span className="muted">{copying ? "" : `Synced ${ago(newest.lastUsedAt, now)}`}</span></div>
+            <div className="ob-sync-head"><span>{copying ? t("Copying from your phone") : t("Up to date")}</span><span className="muted">{copying ? "" : t("Synced {when}", { when: ago(newest.lastUsedAt, now) })}</span></div>
             <span className="lm-step-bar" aria-hidden="true"><i className={copying ? "lm-indeterminate" : undefined} style={copying ? undefined : { width: "100%" }} /></span>
           </div>
           <div className="lm-rows">
-            <Row icon={PULSE} hue="mint" title="Activities" detail="Every workout with its FIT file" end={data ? data.activities.toLocaleString() : "…"} />
-            <Row icon={MOON} hue="violet" title="Sleep and health" detail="Sleep, HRV, resting HR, Energy, steps" end={data ? `${data.healthDays.toLocaleString()} days` : "…"} />
-            <Row icon={CALENDAR} hue="gold" title="Gym log, plans and Fuel" detail="Workouts, routines, meals" end={data ? data.other.toLocaleString() : "…"} />
+            <Row icon={PULSE} hue="mint" title={t("Activities")} detail={t("Every workout with its FIT file")} end={data ? data.activities.toLocaleString(locale("en-GB")) : "…"} />
+            <Row icon={MOON} hue="violet" title={t("Sleep and health")} detail={t("Sleep, HRV, resting HR, Energy, steps")} end={data ? (data.healthDays === 1 ? t("1 day") : t("{n} days", { n: data.healthDays.toLocaleString(locale("en-GB")) })) : "…"} />
+            <Row icon={CALENDAR} hue="gold" title={t("Gym log, plans and Fuel")} detail={t("Workouts, routines, meals")} end={data ? data.other.toLocaleString(locale("en-GB")) : "…"} />
           </div>
         </>
       ) : (
         <div className="ob-pair">
           <div className="ob-qr">
-            <div className="ob-qr-box">{pairing ? <span role="img" aria-label="Pairing code for your phone" dangerouslySetInnerHTML={{ __html: pairing.qr }} /> : <span className="ob-qr-empty" />}</div>
-            <span className="ob-qr-time">{pairing ? `Code works for ${countdown(left)}` : problem ? "No code" : "Making a code…"}</span>
+            <div className="ob-qr-box">{pairing ? <span role="img" aria-label={t("Pairing code for your phone")} dangerouslySetInnerHTML={{ __html: pairing.qr }} /> : <span className="ob-qr-empty" />}</div>
+            <span className="ob-qr-time">{pairing ? t("Code works for {time}", { time: countdown(left) }) : problem ? t("No code") : t("Making a code…")}</span>
           </div>
           <div className="ob-pair-side">
             <ol className="ob-howto">
-              <li><span>Open <b>C-LINK</b> on your phone</span></li>
-              <li><span>Go to <b>Settings → Computers</b></span></li>
-              <li><span>Tap <b>Add a computer</b> and scan this code</span></li>
+              <li><span>{tr("Open {app} on your phone", { app: <b>C-LINK</b> })}</span></li>
+              <li><span>{tr("Go to {place}", { place: <b>{t("Settings → Computers")}</b> })}</span></li>
+              <li><span>{tr("Tap {button} and scan this code", { button: <b>{t("Add a computer")}</b> })}</span></li>
             </ol>
-            {problem ? <div className="notice ob-problem" role="alert">{problem}<Button onClick={pair}>Try again</Button></div>
-              : <div className="ob-wait" role="status"><Dots />Waiting for your phone</div>}
-            <Note icon={WIFI} hue="blue">On the same Wi-Fi it syncs straight to this Mac.</Note>
+            {problem ? <div className="notice ob-problem" role="alert">{problem}<Button onClick={pair}>{t("Try again")}</Button></div>
+              : <div className="ob-wait" role="status"><Dots />{t("Waiting for your phone")}</div>}
+            <Note icon={WIFI} hue="blue">{t("On the same Wi-Fi it syncs straight to this {computer}.", { computer: computerWord() })}</Note>
             {pairing ? (
               <Note icon={KEY}>
-                Can&apos;t scan? Copy the code and paste it into C-LINK on your phone.
-                <button type="button" className="ob-text-link" onClick={() => void navigator.clipboard.writeText(pairing.link).then(() => setCopied(true))}>{copied ? "Copied" : "Copy code"}</button>
+                {t("Can't scan? Copy the code and paste it into C-LINK on your phone.")}
+                <button type="button" className="ob-text-link" onClick={() => void navigator.clipboard.writeText(pairing.link).then(() => setCopied(true))}>{copied ? t("Copied") : t("Copy code")}</button>
               </Note>
             ) : null}
           </div>
         </div>
       )}
       <Foot onBack={onBack}>
-        {!newest ? <button type="button" className="ob-link" onClick={onNext}>Do this later</button> : null}
-        <Button variant="primary" disabled={!newest} onClick={onNext}>Continue</Button>
+        {!newest ? <button type="button" className="ob-link" onClick={onNext}>{t("Do this later")}</button> : null}
+        <Button variant="primary" disabled={!newest} onClick={onNext}>{t("Continue")}</Button>
       </Foot>
     </>
   );
@@ -275,20 +306,20 @@ function PhoneStep({ onPaired, onBack, onNext }: { onPaired: (label: string | nu
 /* ───────────── Your sports ───────────── */
 
 const SPORTS: { id: SportTile; name: string; d: string }[] = [
-  { id: "run", name: "Running", d: "M13 4a2 2 0 1 0 0 .01M9 20l3-6 3 3v4M6 12l3-4 4 1 3 4 3-1" },
-  { id: "trail", name: "Trail running", d: "M3 20l6-10 4 6 3-4 5 8zM13 4a2 2 0 1 0 0 .01" },
-  { id: "ride", name: "Riding", d: "M6 18a3 3 0 1 0 0-.01M18 18a3 3 0 1 0 0-.01M6 18l4-8h5l3 8M10 10l-1-3h3M15 10l-2 8" },
-  { id: "swim", name: "Swimming", d: "M2 18c2 0 2-1.5 4-1.5S8 18 10 18s2-1.5 4-1.5 2 1.5 4 1.5 2-1.5 4-1.5M7 13l4-5 4 3 3-3M17 6a2 2 0 1 0 0 .01" },
-  { id: "lift", name: "Strength", d: "M4 9v6M7.5 6.5v11M16.5 6.5v11M20 9v6M7.5 12h9" },
-  { id: "hike", name: "Hiking", d: "M12 4a2 2 0 1 0 0 .01M9 21l2-7 3 3v4M7 11l3-3 3 1 2 3M18 9v12" },
-  { id: "tri", name: "Triathlon", d: "M12 3l9 16H3zM12 9v5" },
-  { id: "ski", name: "Skiing", d: "M4 20l16-6M9 5a2 2 0 1 0 0 .01M8 9l4 2-2 4 4 2" },
-  { id: "row", name: "Rowing", d: "M3 16h18M6 16l4-6h4l4 6M12 4a2 2 0 1 0 0 .01" },
-  { id: "climb", name: "Climbing", d: "M6 21l3-9 4-2 2-6M14 4a2 2 0 1 0 0 .01M9 12l-3-2M13 10l4 3" },
-  { id: "yoga", name: "Yoga", d: "M12 4a2 2 0 1 0 0 .01M4 12h16M12 8v6l-4 6M12 14l4 6" },
-  { id: "hybrid", name: "Hybrid fitness", d: "M4 12h3l2-5 3 10 2-5h6M18 7l2 2-2 2" },
+  { id: "run", name: msg("Running"), d: "M13 4a2 2 0 1 0 0 .01M9 20l3-6 3 3v4M6 12l3-4 4 1 3 4 3-1" },
+  { id: "trail", name: msg("Trail running"), d: "M3 20l6-10 4 6 3-4 5 8zM13 4a2 2 0 1 0 0 .01" },
+  { id: "ride", name: msg("Riding"), d: "M6 18a3 3 0 1 0 0-.01M18 18a3 3 0 1 0 0-.01M6 18l4-8h5l3 8M10 10l-1-3h3M15 10l-2 8" },
+  { id: "swim", name: msg("Swimming"), d: "M2 18c2 0 2-1.5 4-1.5S8 18 10 18s2-1.5 4-1.5 2 1.5 4 1.5 2-1.5 4-1.5M7 13l4-5 4 3 3-3M17 6a2 2 0 1 0 0 .01" },
+  { id: "lift", name: msg("Strength"), d: "M4 9v6M7.5 6.5v11M16.5 6.5v11M20 9v6M7.5 12h9" },
+  { id: "hike", name: msg("Hiking"), d: "M12 4a2 2 0 1 0 0 .01M9 21l2-7 3 3v4M7 11l3-3 3 1 2 3M18 9v12" },
+  { id: "tri", name: msg("Triathlon"), d: "M12 3l9 16H3zM12 9v5" },
+  { id: "ski", name: msg("Skiing"), d: "M4 20l16-6M9 5a2 2 0 1 0 0 .01M8 9l4 2-2 4 4 2" },
+  { id: "row", name: msg("Rowing"), d: "M3 16h18M6 16l4-6h4l4 6M12 4a2 2 0 1 0 0 .01" },
+  { id: "climb", name: msg("Climbing"), d: "M6 21l3-9 4-2 2-6M14 4a2 2 0 1 0 0 .01M9 12l-3-2M13 10l4 3" },
+  { id: "yoga", name: msg("Yoga"), d: "M12 4a2 2 0 1 0 0 .01M4 12h16M12 8v6l-4 6M12 14l4 6" },
+  { id: "hybrid", name: msg("Hybrid fitness"), d: "M4 12h3l2-5 3 10 2-5h6M18 7l2 2-2 2" },
 ];
-const sportNames = (ids: readonly SportTile[]) => SPORTS.filter((s) => ids.includes(s.id)).map((s) => s.name);
+const sportNames = (ids: readonly SportTile[]) => SPORTS.filter((s) => ids.includes(s.id)).map((s) => tx("sport", s.name));
 
 function SportsStep({ setup, hasData, onSaved, onBack, onNext }: { setup: SetupState | null; hasData: boolean; onSaved: (s: SetupState) => void; onBack: () => void; onNext: () => void }) {
   const [picks, setPicks] = useState<SportTile[] | null>(null);
@@ -298,31 +329,33 @@ function SportsStep({ setup, hasData, onSaved, onBack, onNext }: { setup: SetupS
   const save = () => { setBusy(true); changeSetup({ sports: shown }).then((s) => { onSaved(s); onNext(); }, () => setBusy(false)); };
   return (
     <>
-      <h1 id="ob-title">Which sports do you do?</h1>
-      <p>Coach follows what you pick.</p>
-      {hasData ? <div className="ob-found"><span className="lm-done"><Glyph d={SPARK} size={15} />Worked out from your workouts</span>Counts are from the last 6 months.</div> : null}
+      <h1 id="ob-title">{t("Which sports do you do?")}</h1>
+      <p>{t("Coach follows what you pick.")}</p>
+      {hasData ? <div className="ob-found"><span className="lm-done"><Glyph d={SPARK} size={15} />{t("Worked out from your workouts")}</span>{t("Counts are from the last 6 months.")}</div> : null}
       <div className="ob-sports">
         {SPORTS.map((s) => (
           <button key={s.id} type="button" className="ob-sport" aria-pressed={shown.includes(s.id)} disabled={!setup} onClick={() => flip(s.id)}>
-            <Glyph d={s.d} size={20} />{s.name}<small className="num">{setup?.found[s.id] ?? ""}</small>
+            <Glyph d={s.d} size={20} />{tx("sport", s.name)}<small className="num">{setup?.found[s.id] ?? ""}</small>
           </button>
         ))}
       </div>
-      <Foot onBack={onBack}><Button variant="primary" disabled={!setup || busy} onClick={save}>Continue</Button></Foot>
+      <Foot onBack={onBack}><Button variant="primary" disabled={!setup || busy} onClick={save}>{t("Continue")}</Button></Foot>
     </>
   );
 }
 
 /* ───────────── Coach ───────────── */
 
+/** Names and lines are English with {computer} for "Mac" / "PC" / "computer"; `say` gives them on screen. */
 type Choice = "chatgpt" | "claude-code" | "gemini-cli" | "key" | "local";
 const CHOICES: { id: Choice; mono: string; tone: string; name: string; line: string }[] = [
-  { id: "chatgpt", mono: "C", tone: "mint", name: "ChatGPT", line: "Sign in with your ChatGPT plan" },
-  { id: "claude-code", mono: "C", tone: "orange", name: "Claude Code", line: "Uses Claude Code on this Mac" },
-  { id: "gemini-cli", mono: "G", tone: "cyan", name: "Gemini", line: "Sign in with Google" },
-  { id: "key", mono: "", tone: "violet", name: "Your own API key", line: "OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter" },
-  { id: "local", mono: "PC", tone: "honey", name: "A model on this Mac", line: "Ollama or LM Studio. Nothing leaves the Mac" },
+  { id: "chatgpt", mono: "C", tone: "mint", name: "ChatGPT", line: msg("Sign in with your ChatGPT plan") },
+  { id: "claude-code", mono: "C", tone: "orange", name: "Claude Code", line: msg("Uses Claude Code on this {computer}") },
+  { id: "gemini-cli", mono: "G", tone: "cyan", name: "Gemini", line: msg("Sign in with Google") },
+  { id: "key", mono: "", tone: "violet", name: msg("Your own API key"), line: "OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter" },
+  { id: "local", mono: "PC", tone: "honey", name: msg("A model on this {computer}"), line: msg("Ollama or LM Studio. Nothing leaves the {computer}") },
 ];
+const say = (text: string) => t(text, { computer: computerWord() });
 
 function CoachStep({ ai, onChange, onBack, onNext }: { ai: AIStatus | null; onChange: (s: AIStatus) => void; onBack: () => void; onNext: () => void }) {
   const pickedNow = ai?.providers.find((p) => p.id === ai.picked);
@@ -337,8 +370,9 @@ function CoachStep({ ai, onChange, onBack, onNext }: { ai: AIStatus | null; onCh
 
   const id = shown === "key" ? provider : shown;
   const p = ai?.providers.find((x) => x.id === id);
-  const cta = p?.ready ? `Use ${shown === "key" ? p.name : CHOICES.find((c) => c.id === shown)?.name}`
-    : { chatgpt: "Sign in with ChatGPT", "claude-code": "Use Claude Code", "gemini-cli": "Sign in with Google", key: "Save key", local: "Find models" }[shown];
+  const choiceName = CHOICES.find((c) => c.id === shown)?.name;
+  const cta = p?.ready ? t("Use {name}", { name: shown === "key" ? p.name : choiceName ? say(choiceName) : "" })
+    : { chatgpt: t("Sign in with ChatGPT"), "claude-code": t("Use Claude Code"), "gemini-cli": t("Sign in with Google"), key: t("Save key"), local: t("Find models") }[shown];
 
   // The calls Coach settings makes: sign in, a key checked by asking the provider, or the local server found.
   const go = async () => {
@@ -362,60 +396,60 @@ function CoachStep({ ai, onChange, onBack, onNext }: { ai: AIStatus | null; onCh
 
   return (
     <>
-      <h1 id="ob-title">Who answers as Coach?</h1>
-      <p>Coach reads your workouts, sleep and plan. Only what you ask about goes to the AI you pick.</p>
-      <div className="ob-ais" role="radiogroup" aria-label="Coach's AI">
+      <h1 id="ob-title">{t("Who answers as Coach?")}</h1>
+      <p>{t("Coach reads your workouts, sleep and plan. Only what you ask about goes to the AI you pick.")}</p>
+      <div className="ob-ais" role="radiogroup" aria-label={t("Coach's AI")}>
         {CHOICES.map((c) => {
           const ready = c.id === "key" ? keyed.some((k) => k.ready) : ai?.providers.find((x) => x.id === c.id)?.ready;
           return (
             <button key={c.id} type="button" role="radio" className="ob-ai" aria-checked={shown === c.id} disabled={busy} onClick={() => { setChoice(c.id); setProblem(null); }}>
               <span className="ob-tile" data-tone={c.tone} aria-hidden="true">{c.mono || <Glyph d={KEY} size={15} />}</span>
-              <span className="lm-row-text"><strong>{c.name}</strong><span>{ready ? (c.id === "key" ? `${keyed.filter((k) => k.ready).map((k) => k.name).join(", ")} saved` : "Ready on this Mac") : c.line}</span></span>
+              <span className="lm-row-text"><strong>{say(c.name)}</strong><span>{ready ? (c.id === "key" ? t("{names} saved", { names: keyed.filter((k) => k.ready).map((k) => k.name).join(", ") }) : t("Ready on this {computer}", { computer: computerWord() })) : say(c.line)}</span></span>
             </button>
           );
         })}
       </div>
       {shown === "key" ? (
         <div className="ob-keyrow">
-          <Select aria-label="Provider" value={provider} onChange={(e) => { setKeyProvider(e.target.value); setProblem(null); }}>
+          <Select aria-label={t("Provider")} value={provider} onChange={(e) => { setKeyProvider(e.target.value); setProblem(null); }}>
             {keyed.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
           </Select>
-          {p?.ready ? <Field readOnly aria-label="API key" value="Saved on this computer" />
-            : <Field type="password" aria-label="API key" autoComplete="off" spellCheck={false} placeholder={p?.keyHint ? `Paste your API key (${p.keyHint})` : "Paste your API key"} value={key} onChange={(e) => setKey(e.target.value)} />}
+          {p?.ready ? <Field readOnly aria-label={t("API key")} value={t("Saved on this computer")} />
+            : <Field type="password" aria-label={t("API key")} autoComplete="off" spellCheck={false} placeholder={p?.keyHint ? t("Paste your API key ({hint})", { hint: p.keyHint }) : t("Paste your API key")} value={key} onChange={(e) => setKey(e.target.value)} />}
         </div>
       ) : null}
       {problem ? <p className="notice" role="alert">{problem}</p> : null}
       <Foot onBack={onBack}>
-        <button type="button" className="ob-link" onClick={onNext}>Not now</button>
+        <button type="button" className="ob-link" onClick={onNext}>{t("Not now")}</button>
         <Button variant="primary" disabled={!p || busy || (shown === "key" && !p.ready && !key.trim())} onClick={() => void go()}>
-          {busy ? (p?.group === "account" ? "Waiting for sign-in…" : "Checking…") : cta}
+          {busy ? (p?.group === "account" ? t("Waiting for sign-in…") : t("Checking…")) : cta}
         </Button>
       </Foot>
     </>
   );
 }
 
-/* ───────────── This Mac ───────────── */
+/* ───────────── This computer ───────────── */
 
 function MacStep({ setup, onSaved, onBack, onNext }: { setup: SetupState | null; onSaved: (s: SetupState) => void; onBack: () => void; onNext: () => void }) {
   const flip = (change: Parameters<typeof changeSetup>[0]) => void changeSetup(change).then(onSaved);
   return (
     <>
-      <h1 id="ob-title">How C-LINK runs on this Mac</h1>
+      <h1 id="ob-title">{t("How C-LINK runs on this {computer}", { computer: computerWord() })}</h1>
       <div className="ob-switches">
         <div className="lm-option">
           <span className="lm-ico" data-hue="mint" aria-hidden="true"><Glyph d={POWER} size={18} /></span>
-          <span className="lm-row-text"><strong>Open at login</strong>{setup?.openAtLogin !== null && <span>Starts with your Mac so phone syncs keep coming in</span>}</span>
-          <Switch label="Open at login" checked={!!setup?.openAtLogin} disabled={!setup || setup.openAtLogin === null} onChange={(on) => flip({ openAtLogin: on })} />
+          <span className="lm-row-text"><strong>{t("Open at login")}</strong>{setup?.openAtLogin !== null && <span>{t("Starts with your {computer} so phone syncs keep coming in", { computer: computerWord() })}</span>}</span>
+          <Switch label={t("Open at login")} checked={!!setup?.openAtLogin} disabled={!setup || setup.openAtLogin === null} onChange={(on) => flip({ openAtLogin: on })} />
         </div>
         <div className="lm-option">
           <span className="lm-ico" data-hue="violet" aria-hidden="true"><Glyph d={FOLDER} size={18} /></span>
-          <span className="lm-row-text"><strong>Weekly backup</strong><span>{setup ? `Once a week to ${setup.backupFolder}, the last four kept` : ""}</span></span>
-          <Switch label="Weekly backup" checked={!!setup?.weeklyBackup} disabled={!setup} onChange={(on) => flip({ weeklyBackup: on })} />
+          <span className="lm-row-text"><strong>{t("Weekly backup")}</strong><span>{setup ? t("Once a week to {folder}, the last four kept", { folder: setup.backupFolder }) : ""}</span></span>
+          <Switch label={t("Weekly backup")} checked={!!setup?.weeklyBackup} disabled={!setup} onChange={(on) => flip({ weeklyBackup: on })} />
         </div>
       </div>
-      <Note icon={SHIELD}>Everything stays in this Mac&apos;s C-LINK folder. Settings → Privacy &amp; local data shows what&apos;s kept.</Note>
-      <Foot onBack={onBack}><Button variant="primary" onClick={onNext}>Finish</Button></Foot>
+      <Note icon={SHIELD}>{t("Everything stays in this {computer}'s C-LINK folder. Settings → Privacy & local data shows what's kept.", { computer: computerWord() })}</Note>
+      <Foot onBack={onBack}><Button variant="primary" onClick={onNext}>{t("Finish")}</Button></Foot>
     </>
   );
 }
@@ -427,25 +461,26 @@ function DoneStep({ setup, source, coach, onStartOver }: { setup: SetupState | n
   const [phones, setPhones] = useState<Phone[] | null>(null);
   useEffect(() => { ask<PhoneStatus>("/api/desktop/phones").then((s) => setPhones(s.phones), () => setPhones([])); }, []);
   const phone = phones?.slice().sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))[0];
-  const counts = setup?.data ? `${setup.data.activities.toLocaleString()} activities, ${setup.data.healthDays.toLocaleString()} days of health` : "";
-  const data = source === "look" ? { title: "Sample data", detail: "Pair your phone on Connections when you're ready" }
-    : source === "backup" ? { title: "Restored from a backup", detail: counts }
-    : phone ? { title: `Syncing with ${phone.label}`, detail: counts }
-    : { title: "No phone paired yet", detail: "Pair it any time on Connections" };
+  const counts = setup?.data ? t("{activities} activities, {days} days of health", { activities: setup.data.activities.toLocaleString(locale("en-GB")), days: setup.data.healthDays.toLocaleString(locale("en-GB")) }) : "";
+  const data = source === "look" ? { title: t("Sample data"), detail: t("Pair your phone on Connections when you're ready") }
+    : source === "backup" ? { title: t("Restored from a backup"), detail: counts }
+    : source === "coros" ? { title: t("Reading your COROS account"), detail: counts || t("Change it any time on the Watch page") }
+    : phone ? { title: t("Syncing with {phone}", { phone: phone.label }), detail: counts }
+    : { title: t("No phone paired yet"), detail: t("Pair it any time on Connections") };
   const sports = setup?.sports ?? [];
   const open = () => { setBusy(true); void changeSetup({ setupDone: true }).then(() => navigate("/", { replace: true }), () => setBusy(false)); };
   return (
     <>
-      <h1 id="ob-title">You&apos;re all set!</h1>
+      <h1 id="ob-title">{t("You're all set!")}</h1>
       <div className="ob-done">
         <Row icon={CHECK} hue="mint" title={data.title} detail={data.detail} />
-        <Row icon={PULSE} hue="blue" title={sports.length ? sportNames(sports).join(", ") : "None picked"} detail="Your sports" />
-        <Row icon={CHAT} hue="violet" title={coach ?? "Set up later in Coach settings"} detail="Coach" />
+        <Row icon={PULSE} hue="blue" title={sports.length ? sportNames(sports).join(tx("list", ", ")) : t("None picked")} detail={t("Your sports")} />
+        <Row icon={CHAT} hue="violet" title={coach ?? t("Set up later in Coach settings")} detail={t("Coach")} />
       </div>
       <div className="ob-foot">
-        <button type="button" className="ob-link" onClick={onStartOver}>Start over</button>
+        <button type="button" className="ob-link" onClick={onStartOver}>{t("Start over")}</button>
         <span className="ob-grow" />
-        <Button variant="primary" disabled={busy} onClick={open}>Open Dashboard</Button>
+        <Button variant="primary" disabled={busy} onClick={open}>{t("Open Dashboard")}</Button>
       </div>
     </>
   );
@@ -454,7 +489,7 @@ function DoneStep({ setup, source, coach, onStartOver }: { setup: SetupState | n
 /* ───────────── Pieces ───────────── */
 
 function Foot({ onBack, children }: { onBack?: () => void; children: ReactNode }) {
-  return <div className="ob-foot">{onBack ? <Button onClick={onBack}>Back</Button> : null}<span className="ob-grow" />{children}</div>;
+  return <div className="ob-foot">{onBack ? <Button onClick={onBack}>{t("Back")}</Button> : null}<span className="ob-grow" />{children}</div>;
 }
 
 function Row({ icon, hue, title, detail, end }: { icon: string; hue: string; title: string; detail: string; end?: string }) {
@@ -481,6 +516,7 @@ const CHECK = "M5 12l4 4 10-10";
 const WATCH = "M12 7a5 5 0 1 0 0 10a5 5 0 0 0 0-10zM9.4 7.7l.8-4.2h3.6l.8 4.2M9.4 16.3l.8 4.2h3.6l.8-4.2";
 const PHONE = "M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2";
 const MAC = "M3 5h18v11H3zM8 20h8M12 16v4";
+const CLOUD = "M7 18h10a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.2 9.1 4.5 4.5 0 0 0 7 18z";
 const EYE = "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6a3 3 0 0 0 0-6z";
 const FOLDER = "M3 6h6l2 2h10v11H3z";
 const WIFI = "M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01";

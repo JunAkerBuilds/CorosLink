@@ -1,6 +1,7 @@
 // The maths of the Sports pages, ported from the phone app (CorosKit: SportsProfile.swift, SportSections.swift,
 // TrainingTrends.swift, RideFindings.swift, SwimHistory.swift). Pure: activities and recordings in, readings out.
 // Weeks run Monday to Sunday, as everywhere on the web.
+import { language, locale, msg, t } from "@/lib/i18n";
 
 export type Family = "run" | "ride" | "swim" | "strength" | "walk" | "other";
 export const FAMILIES: readonly Family[] = ["run", "ride", "swim", "strength", "walk", "other"];
@@ -448,14 +449,16 @@ export function ftpTrend(rides: readonly Recording[], now: Date, blocks = 4): { 
 
 export interface PowerZone { zone: number; name: string; /** Watts; null where the zone is open-ended. */ from: number | null; to: number | null }
 
-const COGGAN: [string, number][] = [["Active recovery", 0.55], ["Endurance", 0.75], ["Tempo", 0.9], ["Threshold", 1.05], ["VO₂ max", 1.2], ["Anaerobic", 1.5], ["Neuromuscular", Infinity]];
+const COGGAN: [string, number][] = [
+  [msg("Active recovery"), 0.55], [msg("Endurance"), 0.75], [msg("Tempo"), 0.9], [msg("Threshold"), 1.05], ["VO₂ max", 1.2], [msg("Anaerobic"), 1.5], [msg("Neuromuscular"), Infinity],
+];
 
 /** Coggan's seven zones as shares of FTP: up to 55%, 75%, 90%, 105%, 120%, 150%, and over. */
 export function cogganZones(ftp: number): PowerZone[] {
   let from: number | null = null;
   return COGGAN.map(([name, top], k) => {
     const to = Number.isFinite(top) ? Math.round(ftp * top) : null;
-    const zone = { zone: k + 1, name, from, to };
+    const zone = { zone: k + 1, name: t(name), from, to };
     from = to == null ? null : to + 1;
     return zone;
   });
@@ -537,10 +540,13 @@ export const kmText = (meters: number): string => `${(meters / 1000).toFixed(1)}
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-export const dayMonthOf = (d: Date): string => `${d.getDate()} ${MONTHS[d.getMonth()]}`;
-export const monthOf = (d: Date): string => MONTHS[d.getMonth()];
-export const weekdayOf = (d: Date): string => DAYS[d.getDay()];
-export const weekdayLong = (d: Date): string => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()];
+const LONG_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+/** A date in the app's language; English keeps the words above. */
+const dated = (d: Date, options: Intl.DateTimeFormatOptions): string => new Intl.DateTimeFormat(locale(), options).format(d);
+export const dayMonthOf = (d: Date): string => (language() === "en" ? `${d.getDate()} ${MONTHS[d.getMonth()]}` : dated(d, { day: "numeric", month: "short" }));
+export const monthOf = (d: Date): string => (language() === "en" ? MONTHS[d.getMonth()] : dated(d, { month: "short" }));
+export const weekdayOf = (d: Date): string => (language() === "en" ? DAYS[d.getDay()] : dated(d, { weekday: "short" }));
+export const weekdayLong = (d: Date): string => (language() === "en" ? LONG_DAYS[d.getDay()] : dated(d, { weekday: "long" }));
 
 /** "5 s", "1 min", "20 min". */
 export const durationName = (seconds: number): string => (seconds < 60 ? `${seconds} s` : `${Math.round(seconds / 60)} min`);

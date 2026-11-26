@@ -9,6 +9,7 @@ import type { Work } from "./downloads";
 import type { Source } from "./library";
 import { safeName } from "./mp3";
 import { concatArgs, progressOf, run, ytDlpArgs } from "./tools";
+import { t } from "@/lib/i18n";
 
 export const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 const VERSION = 1;
@@ -70,11 +71,11 @@ export const combinedOrigin = (id: string) => `combined:${id}`;
 
 export function combinedWork(c: Combine): Work {
   return async ({ dir: jobDir, progress, note, signal }) => {
-    if (!c.tracks.length) throw new Error("That playlist has nothing to download.");
+    if (!c.tracks.length) throw new Error(t("That playlist has nothing to download."));
     await mkdir(c.cacheRoot, { recursive: true });
     await pruneCache(c.cacheRoot, c.active);
     const key = cacheKey(c.id, c.tracks.map((t) => t.input));
-    if (c.active.has(key)) throw new Error("This combined MP3 is already being made.");
+    if (c.active.has(key)) throw new Error(t("This combined MP3 is already being made."));
     c.active.add(key);
     const dir = path.join(c.cacheRoot, key);
     let keep = true;
@@ -84,25 +85,25 @@ export function combinedWork(c: Combine): Work {
       const files: string[] = [];
       const failed: { title: string; why: string }[] = [];
       const n = c.tracks.length;
-      for (const [i, t] of c.tracks.entries()) {
-        if (signal.aborted) throw new Error("Cancelled.");
+      for (const [i, track] of c.tracks.entries()) {
+        if (signal.aborted) throw new Error(t("Cancelled."));
         const file = path.join(dir, `${String(i).padStart(4, "0")}.mp3`);
         if (await isDone(file)) { files.push(file); progress(((i + 1) / n) * 0.9); continue; }
         await rm(file, { force: true });
         await rm(marker(file), { force: true });
         try {
-          await c.fetchTrack(t.input, file, (p) => progress(((i + p) / n) * 0.9), signal);
+          await c.fetchTrack(track.input, file, (p) => progress(((i + p) / n) * 0.9), signal);
           await access(file);
           await writeFile(marker(file), "complete\n");
           await touch(dir);
           files.push(file);
         } catch (error) {
           if (signal.aborted) throw error;
-          failed.push({ title: t.title, why: error instanceof Error ? error.message : String(error) });
+          failed.push({ title: track.title, why: error instanceof Error ? error.message : String(error) });
         }
       }
-      if (!files.length) throw new Error(`None of the ${n} tracks downloaded. ${failed[0]?.why ?? ""}`.trim());
-      const name = `${(c.name.trim() || "Combined playlist").slice(0, 140)}.mp3`;
+      if (!files.length) throw new Error(`${t("None of the {n} tracks downloaded.", { n })} ${failed[0]?.why ?? ""}`.trim());
+      const name = `${(c.name.trim() || t("Combined playlist")).slice(0, 140)}.mp3`;
       const output = path.join(jobDir, safeName(name));
       if (files.length === 1) await copyFile(files[0], output);
       else await c.join(files, output, path.join(dir, "concat.txt"), signal);
@@ -110,7 +111,7 @@ export function combinedWork(c: Combine): Work {
       if (failed.length) note(`${files.length} of ${n} tracks. Left out: ${failed.slice(0, 3).map((f) => f.title).join(", ")}${failed.length > 3 ? "…" : ""}`);
       // A complete combine has nothing to come back for.
       keep = failed.length > 0;
-      return [{ file: output, name, extra: { title: c.name.trim() || "Combined playlist", artist: null, album: null, source: c.source, origin: combinedOrigin(c.id), replace: true } }];
+      return [{ file: output, name, extra: { title: c.name.trim() || t("Combined playlist"), artist: null, album: null, source: c.source, origin: combinedOrigin(c.id), replace: true } }];
     } finally {
       c.active.delete(key);
       if (keep) await touch(dir);
@@ -123,7 +124,7 @@ export function combinedWork(c: Combine): Work {
 export function ytDlpTrack(ytDlp: () => string | null, ffmpeg: () => string | null): Combine["fetchTrack"] {
   return async (input, file, progress, signal) => {
     const bin = ytDlp();
-    if (!bin) throw new Error("Downloading needs yt-dlp.");
+    if (!bin) throw new Error(t("Downloading needs yt-dlp."));
     await run(bin, ytDlpArgs(input, path.dirname(file), ffmpeg(), path.basename(file, ".mp3")), (line) => {
       const p = progressOf(line);
       if (p != null) progress(p);
@@ -135,7 +136,7 @@ export function ytDlpTrack(ytDlp: () => string | null, ffmpeg: () => string | nu
 export function ffmpegJoin(ffmpeg: () => string | null): Combine["join"] {
   return async (files, output, list, signal) => {
     const bin = ffmpeg();
-    if (!bin) throw new Error("Joining tracks needs ffmpeg.");
+    if (!bin) throw new Error(t("Joining tracks needs ffmpeg."));
     const { args, listText } = concatArgs(files, list, output);
     await writeFile(list, listText);
     await run(bin, args, () => {}, signal);

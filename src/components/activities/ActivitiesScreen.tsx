@@ -11,6 +11,8 @@ import {
   formatTime, formatTotals, groupByWeek, nextSort, parseFilters, sortActivities, toCsv, totals, weekTitle, type DateRange, type DistanceBand, type Filters, type SortKey,
 } from "@/lib/activities";
 import { dayKey, thousands } from "@/lib/format";
+import { locale, msg, t } from "@/lib/i18n";
+import { sportWord } from "./parts";
 import "@/app/(app)/activities/activities.css";
 
 const PAGE_SIZE = 25;
@@ -20,20 +22,19 @@ const SPORT_HUE: Record<Sport, string> = { Run: "var(--sport-run)", Ride: "var(-
 interface Column { key: SortKey; label: string; right?: boolean; fixed?: boolean; cell: (a: Activity) => string | number }
 
 const COLUMNS: Column[] = [
-  { key: "date", label: "Date", fixed: true, cell: (a) => formatDay(a.start) },
-  { key: "name", label: "Activity", fixed: true, cell: (a) => a.name },
-  { key: "sport", label: "Sport", cell: (a) => a.sportName ?? a.sport },
-  { key: "distance", label: "Distance", right: true, cell: formatDistance },
-  { key: "time", label: "Time", right: true, cell: (a) => (a.durationS > 0 ? formatTime(a.durationS) : "—") },
-  { key: "pace", label: "Pace / speed", right: true, cell: formatPace },
-  { key: "hr", label: "Avg HR", right: true, cell: (a) => a.avgHr ?? "—" },
-  { key: "elevation", label: "Elevation", right: true, cell: (a) => formatElevation(a.elevationGainM) },
-  { key: "cadence", label: "Cadence", right: true, cell: (a) => a.cadence ?? "—" },
-  { key: "load", label: "Load", right: true, cell: (a) => a.load ?? "—" },
+  { key: "date", label: msg("Date"), fixed: true, cell: (a) => formatDay(a.start) },
+  { key: "name", label: msg("Activity"), fixed: true, cell: (a) => a.name },
+  { key: "sport", label: msg("Sport"), cell: (a) => a.sportName ?? sportWord(a.sport) },
+  { key: "distance", label: msg("Distance"), right: true, cell: formatDistance },
+  { key: "time", label: msg("Time"), right: true, cell: (a) => (a.durationS > 0 ? formatTime(a.durationS) : "—") },
+  { key: "pace", label: msg("Pace / speed"), right: true, cell: formatPace },
+  { key: "hr", label: msg("Avg HR"), right: true, cell: (a) => a.avgHr ?? "—" },
+  { key: "elevation", label: msg("Elevation"), right: true, cell: (a) => formatElevation(a.elevationGainM) },
+  { key: "cadence", label: msg("Cadence"), right: true, cell: (a) => a.cadence ?? "—" },
+  { key: "load", label: msg("Load"), right: true, cell: (a) => a.load ?? "—" },
 ];
 
 const NO_HIDDEN: string[] = [];
-const WEEKDAY_LETTER = ["S", "M", "T", "W", "T", "F", "S"];
 /** The load that fills a row's bar and the strip's height: the sample athlete's hardest day. */
 const FULL_LOAD = 120;
 
@@ -138,26 +139,26 @@ export function ActivitiesScreen() {
 
   return (
     <main className="page" style={{ gap: 18 }}>
-      <PageHead title="Activities">
+      <PageHead title={t("Activities")}>
         {state.status === "ready" ? <OriginBadge origin={state.origin} /> : null}
-        <Button onClick={exportCsv} disabled={rows.length === 0}>Export CSV</Button>
-        <LinkButton variant="primary" href="/activities/import">Import from intervals.icu</LinkButton>
+        <Button onClick={exportCsv} disabled={rows.length === 0}>{t("Export CSV")}</Button>
+        <LinkButton variant="primary" href="/activities/import">{t("Import from intervals.icu")}</LinkButton>
       </PageHead>
 
       {state.status === "ready" ? (
-        <Card aria-label="Last 30 days" className="act-summary-card" onMouseLeave={() => setHover(null)}>
+        <Card aria-label={t("Last 30 days")} className="act-summary-card" onMouseLeave={() => setHover(null)}>
           <div className="act-tiles">
-            <div><span>Activities</span><CountUp className="num" text={String(sum.count)} /></div>
-            <div><span>Distance</span><span><CountUp className="num" text={(sum.distanceM / 1000).toFixed(1)} /> <small>km</small></span></div>
-            <div><span>Time</span><CountUp className="num" text={formatTime(sum.durationS)} /></div>
-            <div><span>Load</span><CountUp className="num" text={thousands(sum.load)} /></div>
+            <div><span>{t("Activities")}</span><CountUp className="num" text={String(sum.count)} /></div>
+            <div><span>{t("Distance")}</span><span><CountUp className="num" text={(sum.distanceM / 1000).toFixed(1)} /> <small>km</small></span></div>
+            <div><span>{t("Time")}</span><CountUp className="num" text={formatTime(sum.durationS)} /></div>
+            <div><span>{t("Load")}</span><CountUp className="num" text={thousands(sum.load)} /></div>
           </div>
           <div className="act-strip-wrap">
             <div className="act-strip-read" role="status" aria-live="polite">
-              <strong>{hovered ? formatDay(hovered.start) : "Last 30 days"}</strong>
-              <span className="soft">{hovered ? `${hovered.name} · ${hovered.distanceM ? `${formatDistance(hovered)} · ` : ""}${formatTime(hovered.durationS)}${hovered.load != null ? ` · Load ${hovered.load}` : ""}` : ""}</span>
+              <strong>{hovered ? formatDay(hovered.start) : t("Last 30 days")}</strong>
+              <span className="soft">{hovered ? `${hovered.name} · ${hovered.distanceM ? `${formatDistance(hovered)} · ` : ""}${formatTime(hovered.durationS)}${hovered.load != null ? ` · ${t("Load {n}", { n: hovered.load })}` : ""}` : ""}</span>
             </div>
-            <div className="act-strip" role="img" aria-label="One bar for each of the last 30 days, as tall as that day's load and coloured by sport">
+            <div className="act-strip" role="img" aria-label={t("One bar for each of the last 30 days, as tall as that day's load and coloured by sport")}>
               {strip.map((d, k) => {
                 const a = d.activities[0];
                 const on = a ? kept.has(a.id) : false;
@@ -167,7 +168,7 @@ export function ActivitiesScreen() {
                       data-rest={a ? undefined : "true"} data-hover={a && hover === a.id ? "true" : undefined}
                       style={a ? { height: Math.round(10 + Math.min(1, d.load / fullLoad) * 78), background: SPORT_HUE[a.sport], opacity: on ? (hover && hover !== a.id ? 0.45 : 1) : 0.18 } : undefined}
                     />
-                    <span>{WEEKDAY_LETTER[d.date.getDay()]}</span>
+                    <span>{d.date.toLocaleDateString(locale("en-GB"), { weekday: "narrow" })}</span>
                     <b data-today={k === strip.length - 1 ? "true" : undefined}>{d.date.getDate()}</b>
                   </div>
                 );
@@ -178,11 +179,11 @@ export function ActivitiesScreen() {
       ) : null}
 
       <div className="act-filters">
-        <div role="group" aria-label="Sport" className="act-chips">
+        <div role="group" aria-label={t("Sport")} className="act-chips">
           {(["all", ...SPORTS] as const).filter((sp) => sp !== "Other" || filters.sport === "Other" || (state.status === "ready" && counts("Other") > 0)).map((sp) => (
             <button key={sp} type="button" className="act-sport" aria-pressed={filters.sport === sp} onClick={() => update({ sport: sp })}>
               {sp === "all" ? null : <i aria-hidden="true" style={{ background: SPORT_HUE[sp] }} />}
-              {sp === "all" ? "All sports" : sp}
+              {sp === "all" ? t("All sports") : sportWord(sp)}
               <span>{state.status === "ready" ? counts(sp) : ""}</span>
             </button>
           ))}
@@ -191,18 +192,18 @@ export function ActivitiesScreen() {
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 2, strokeLinecap: "round", flex: "none" }}>
             <circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" />
           </svg>
-          <input type="search" aria-label="Filter by name" placeholder="Filter by name" value={filters.q} onChange={(e) => update({ q: e.target.value })} />
+          <input type="search" aria-label={t("Filter by name")} placeholder={t("Filter by name")} value={filters.q} onChange={(e) => update({ q: e.target.value })} />
         </label>
-        <Select aria-label="Dates" value={filters.dates} onChange={(e) => update({ dates: e.target.value as DateRange })}>
-          {DATE_RANGES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+        <Select aria-label={t("Dates")} value={filters.dates} onChange={(e) => update({ dates: e.target.value as DateRange })}>
+          {DATE_RANGES.map((r) => <option key={r.value} value={r.value}>{t(r.label)}</option>)}
         </Select>
-        <Select aria-label="Distance" value={filters.distance} onChange={(e) => update({ distance: e.target.value as DistanceBand })}>
-          {DISTANCE_BANDS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+        <Select aria-label={t("Distance")} value={filters.distance} onChange={(e) => update({ distance: e.target.value as DistanceBand })}>
+          {DISTANCE_BANDS.map((b) => <option key={b.value} value={b.value}>{t(b.label)}</option>)}
         </Select>
         <div ref={menuRef} className="act-columns" style={{ position: "relative" }}>
-          <Button aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>Columns</Button>
+          <Button aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>{t("Columns")}</Button>
           {menuOpen ? (
-            <div className="popover" role="menu" aria-label="Columns shown">
+            <div className="popover" role="menu" aria-label={t("Columns shown")}>
               {COLUMNS.filter((c) => !c.fixed).map((c) => {
                 const on = !hidden.includes(c.key);
                 return (
@@ -210,7 +211,7 @@ export function ActivitiesScreen() {
                     key={c.key} type="button" role="menuitemcheckbox" aria-checked={on}
                     onClick={() => hiddenColumnsStore.set((prev) => (on ? [...prev, c.key] : prev.filter((k) => k !== c.key)))}
                   >
-                    {c.label}<span aria-hidden="true" className="act-menu-check">{on ? "✓" : ""}</span>
+                    {t(c.label)}<span aria-hidden="true" className="act-menu-check">{on ? "✓" : ""}</span>
                   </button>
                 );
               })}
@@ -221,30 +222,30 @@ export function ActivitiesScreen() {
 
       {picked.length > 0 ? (
         <div className="act-bulk" role="status">
-          <strong>{picked.length} selected</strong>
+          <strong>{t("{n} selected", { n: picked.length })}</strong>
           <span>{formatTotals(totals(picked)).split(" · ").slice(1).join(" · ")}</span>
           <div>
-            <button type="button" onClick={exportCsv}>Export CSV</button>
-            <button type="button" onClick={() => setSelected(new Set())}>Clear</button>
+            <button type="button" onClick={exportCsv}>{t("Export CSV")}</button>
+            <button type="button" onClick={() => setSelected(new Set())}>{t("Clear")}</button>
           </div>
         </div>
       ) : null}
 
-      {state.status === "loading" ? <div className="skeleton" style={{ minHeight: 420 }} aria-busy="true" aria-label="Loading activities" /> : null}
+      {state.status === "loading" ? <div className="skeleton" style={{ minHeight: 420 }} aria-busy="true" aria-label={t("Loading activities")} /> : null}
       {state.status === "error" ? (
         <div className="notice" role="alert">
           <span style={{ flex: 1, minWidth: 0 }}>{state.error.message}</span>
-          <Button onClick={state.reload}>Try again</Button>
+          <Button onClick={state.reload}>{t("Try again")}</Button>
         </div>
       ) : null}
 
       {state.status === "ready" ? (
         <Card className="scroll-x">
-          <div className="act-table" role="table" aria-label="Activities" aria-rowcount={rows.length + 1} style={{ minWidth }} onMouseLeave={() => setHover(null)}>
-            <div className="thead" role="row" style={{ gridTemplateColumns: template, gap: 8, alignItems: "center", height: 40, padding: "0 16px", borderBottomColor: "rgba(var(--fg-rgb), 0.1)" }}>
+          <div className="act-table" role="table" aria-label={t("Activities")} aria-rowcount={rows.length + 1} style={{ minWidth }} onMouseLeave={() => setHover(null)}>
+            <div className="thead" role="row" style={{ gridTemplateColumns: template, gap: 8, alignItems: "center", minHeight: 40, padding: "4px 16px", borderBottomColor: "rgba(var(--fg-rgb), 0.1)" }}>
               <span role="columnheader" style={{ display: "flex" }}>
                 <input
-                  type="checkbox" className="act-check" aria-label="Select all" checked={allPicked} disabled={shown.length === 0}
+                  type="checkbox" className="act-check" aria-label={t("Select all")} checked={allPicked} disabled={shown.length === 0}
                   ref={(el) => { if (el) el.indeterminate = somePicked && !allPicked; }} onChange={toggleAll}
                 />
               </span>
@@ -252,8 +253,8 @@ export function ActivitiesScreen() {
                 const active = filters.sort === c.key;
                 return (
                   <span key={c.key} role="columnheader" aria-sort={active ? (filters.dir === "asc" ? "ascending" : "descending") : "none"} className={c.right ? "act-right" : undefined} style={{ display: "flex", minWidth: 0 }}>
-                    <button type="button" className="sort-btn" style={{ color: active ? "var(--fg)" : undefined, whiteSpace: "nowrap" }} onClick={() => update(nextSort(filters, c.key))}>
-                      {c.label}{active ? <Chevron up={filters.dir === "asc"} /> : null}
+                    <button type="button" className="sort-btn" style={{ color: active ? "var(--fg)" : undefined, minWidth: 0, lineHeight: 1.2, textAlign: c.right ? "right" : "left" }} onClick={() => update(nextSort(filters, c.key))}>
+                      {t(c.label)}{active ? <Chevron up={filters.dir === "asc"} /> : null}
                     </button>
                   </span>
                 );
@@ -274,7 +275,7 @@ export function ActivitiesScreen() {
                 onClick={() => open(a)} onMouseEnter={() => setHover(a.id)}
               >
                 <span role="cell" style={{ display: "flex" }} onClick={(e) => e.stopPropagation()}>
-                  <input type="checkbox" className="act-check" aria-label={`Select ${a.name}, ${formatDay(a.start)}`} checked={selected.has(a.id)} onChange={() => toggle(a.id)} />
+                  <input type="checkbox" className="act-check" aria-label={t("Select {name}, {day}", { name: a.name, day: formatDay(a.start) })} checked={selected.has(a.id)} onChange={() => toggle(a.id)} />
                 </span>
                 {columns.map((c) => {
                   if (c.key === "date") return <span key={c.key} role="cell" className="muted">{c.cell(a)}</span>;
@@ -291,7 +292,7 @@ export function ActivitiesScreen() {
                         <svg aria-hidden="true" width="8" height="8" viewBox="0 0 8 8" style={{ flex: "none" }}>
                           <circle cx="4" cy="4" r="4" style={{ fill: SPORT_HUE[a.sport] }} />
                         </svg>
-                        {a.sportName ?? a.sport}
+                        {a.sportName ?? sportWord(a.sport)}
                       </span>
                     );
                   }
@@ -311,15 +312,15 @@ export function ActivitiesScreen() {
 
             {rows.length === 0 ? (
               <div className="act-empty">
-                <span>{synced && list?.length === 0 ? "Nothing from your phone yet." : "No activities match these filters."}</span>
-                {filtered ? <Button onClick={() => update({ q: "", sport: "all", dates: DEFAULT_FILTERS.dates, distance: "any" })}>Clear filters</Button> : null}
+                <span>{synced && list?.length === 0 ? t("Nothing from your phone yet.") : t("No activities match these filters.")}</span>
+                {filtered ? <Button onClick={() => update({ q: "", sport: "all", dates: DEFAULT_FILTERS.dates, distance: "any" })}>{t("Clear filters")}</Button> : null}
               </div>
             ) : (
               <div className="act-foot">
-                <span>{(page - 1) * PAGE_SIZE + 1} to {(page - 1) * PAGE_SIZE + shown.length} of {rows.length}{tail ? ` ${tail}` : ""}</span>
+                <span>{t("{from} to {to} of {total}", { from: (page - 1) * PAGE_SIZE + 1, to: (page - 1) * PAGE_SIZE + shown.length, total: rows.length })}{tail ? ` ${t(tail)}` : ""}</span>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button type="button" className="act-page-btn" disabled={page <= 1} onClick={() => update({ page: page - 1 })}>Previous</button>
-                  <button type="button" className="act-page-btn" disabled={page >= pages} onClick={() => update({ page: page + 1 })}>Next</button>
+                  <button type="button" className="act-page-btn" disabled={page <= 1} onClick={() => update({ page: page - 1 })}>{t("Previous")}</button>
+                  <button type="button" className="act-page-btn" disabled={page >= pages} onClick={() => update({ page: page + 1 })}>{t("Next")}</button>
                 </div>
               </div>
             )}

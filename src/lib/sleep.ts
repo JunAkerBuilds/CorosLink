@@ -2,6 +2,7 @@
 import type { SleepStage } from "@/data/health";
 import type { SleepRecord } from "@/data/sleep";
 import { dayKey, parseDay } from "./format";
+import { language, locale, msg, t } from "./i18n";
 import { addDays, mean, nightTotals, stageSpans } from "./health";
 
 /* ---------- Words and colours ---------- */
@@ -10,7 +11,7 @@ export type Quality = "Excellent" | "Good" | "Fair" | "Low";
 
 /** C-LINK's words for score ranges: 85+, 70–84, 55–69, below. */
 export function quality(score: number): Quality {
-  return score >= 85 ? "Excellent" : score >= 70 ? "Good" : score >= 55 ? "Fair" : "Low";
+  return score >= 85 ? msg("Excellent") : score >= 70 ? msg("Good") : score >= 55 ? msg("Fair") : msg("Low");
 }
 
 /** Hue token name for a score: violet when good, gold when fair, coral when low. */
@@ -66,13 +67,13 @@ export interface NightFacts {
 }
 
 export function nightFacts(n: SleepRecord): NightFacts {
-  const t = nightTotals(n);
+  const tot = nightTotals(n);
   const bed = n.startMinute != null ? eveningMinute(n.startMinute) : null;
   const awakes = n.segments.filter((s) => s.stage === "awake").map((s) => s.minutes);
   return {
-    asleep: t.asleep, inBed: t.inBed, awake: t.awake, deep: t.deep, light: t.light, rem: t.rem,
-    bed, wake: bed != null && t.inBed != null ? bed + t.inBed : null,
-    efficiency: t.asleep != null && t.inBed ? (t.asleep / t.inBed) * 100 : null,
+    asleep: tot.asleep, inBed: tot.inBed, awake: tot.awake, deep: tot.deep, light: tot.light, rem: tot.rem,
+    bed, wake: bed != null && tot.inBed != null ? bed + tot.inBed : null,
+    efficiency: tot.asleep != null && tot.inBed ? (tot.asleep / tot.inBed) * 100 : null,
     wakings: n.segments.length ? awakes.filter((m) => m >= 3).length : null,
     longestAwake: awakes.length ? Math.max(...awakes) : n.segments.length ? 0 : null,
     napMinutes: n.naps.reduce((p, x) => p + x.minutes, 0),
@@ -86,7 +87,7 @@ export function stageShare(f: NightFacts, stage: Exclude<SleepStage, "awake">): 
 }
 
 export type StressBand = 0 | 1 | 2 | 3;
-export const STRESS_BANDS = ["Rest", "Low", "Medium", "High"] as const;
+export const STRESS_BANDS = [msg("Rest"), msg("Low"), msg("Medium"), msg("High")] as const;
 /** COROS's bands: rest 0–25, low 26–50, medium 51–75, high 76–100. */
 export function stressBand(v: number): StressBand {
   return v <= 25 ? 0 : v <= 50 ? 1 : v <= 75 ? 2 : 3;
@@ -206,12 +207,16 @@ export function period(range: Range, anchor: string, offset: number): Period {
     const monday = addDays(a, -((a.getDay() + 6) % 7) + offset * 7);
     const days = Array.from({ length: 7 }, (_, i) => dayKey(addDays(monday, i)));
     const s = parseDay(days[0]), e = parseDay(days[6]);
+    if (language() !== "en") {
+      const short = (x: Date, year: boolean) => x.toLocaleDateString(locale(), { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}) });
+      return { range, days, title: `${short(s, false)} – ${short(e, e.getFullYear() !== a.getFullYear())}` };
+    }
     return { range, days, title: `${s.getDate()}${s.getMonth() !== e.getMonth() ? ` ${MON[s.getMonth()]}` : ""}–${e.getDate()} ${MON[e.getMonth()]}${e.getFullYear() !== a.getFullYear() ? ` ${e.getFullYear()}` : ""}` };
   }
   if (range === "month") {
     const first = new Date(a.getFullYear(), a.getMonth() + offset, 1);
     const len = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
-    return { range, days: Array.from({ length: len }, (_, i) => dayKey(new Date(first.getFullYear(), first.getMonth(), i + 1))), title: `${MONTHS[first.getMonth()]} ${first.getFullYear()}` };
+    return { range, days: Array.from({ length: len }, (_, i) => dayKey(new Date(first.getFullYear(), first.getMonth(), i + 1))), title: language() !== "en" ? first.toLocaleDateString(locale(), { month: "long", year: "numeric" }) : `${MONTHS[first.getMonth()]} ${first.getFullYear()}` };
   }
   const y = a.getFullYear() + offset;
   const days: string[] = [];
@@ -254,7 +259,7 @@ export function summarise(nights: readonly SleepRecord[]): PeriodSummary {
     asleep: avgOf(facts, (f) => f.asleep),
     bed, wake: avgOf(facts, (f) => f.wake),
     bedSpread: spread,
-    regularity: spread == null ? null : spread < 20 ? "Steady" : spread < 40 ? "Fairly steady" : "Irregular",
+    regularity: spread == null ? null : spread < 20 ? msg("Steady") : spread < 40 ? msg("Fairly steady") : msg("Irregular"),
     napMinutes: facts.reduce((p, f) => p + f.napMinutes, 0),
     debt: facts.reduce((p, f) => p + (f.asleep != null ? Math.max(0, 420 - f.asleep) : 0), 0),
     shortNights: facts.filter((f) => f.asleep != null && f.asleep < 360).length,
@@ -287,6 +292,7 @@ export function perDay(days: readonly string[], byDay: ReadonlyMap<string, Sleep
 }
 
 export function monthName(m: number, short = false): string {
+  if (language() !== "en") return new Date(2000, m, 1).toLocaleDateString(locale(), { month: short ? "short" : "long" });
   return short ? MON[m] : MONTHS[m];
 }
 
@@ -305,18 +311,18 @@ export interface CoachQuestion {
  */
 export function coachQuestions(n: SleepRecord, usualAsleep: number | null, nightName: string): CoachQuestion[] {
   const f = nightFacts(n), stress = stressStats(n), out: CoachQuestion[] = [];
-  const about = (q: string) => `About my sleep on the night to ${nightName}: ${q}`;
+  const about = (q: string) => t("About my sleep on the night to {night}: {question}", { night: nightName, question: q });
   const deep = stageShare(f, "deep");
-  if (deep != null && deep < TYPICAL_SHARE.deep[0]) out.push({ label: "Why was deep sleep short?", ask: about("why was my deep sleep short, and what can I change?") });
+  if (deep != null && deep < TYPICAL_SHARE.deep[0]) out.push({ label: t("Why was deep sleep short?"), ask: about(t("why was my deep sleep short, and what can I change?")) });
   if (stress && stress.peak >= 50 && f.bed != null) {
     const at = clockLabel(f.bed + stress.peakOffset);
-    out.push({ label: `What raised stress at ${at}?`, ask: about(`what could have raised my stress to ${stress.peak} at ${at}?`) });
+    out.push({ label: t("What raised stress at {time}?", { time: at }), ask: about(t("what could have raised my stress to {stress} at {time}?", { stress: stress.peak, time: at })) });
   }
-  if (f.asleep != null && usualAsleep != null && f.asleep < usualAsleep - 30) out.push({ label: "How do I catch up tonight?", ask: about("I slept less than usual. How should I catch up tonight?") });
-  else if (f.wakings != null && f.wakings >= 4) out.push({ label: `Why did I wake ${f.wakings} times?`, ask: about(`why did I wake ${f.wakings} times?`) });
-  else if (n.score != null && n.score >= 80) out.push({ label: "What went right?", ask: about("what went right, so I can repeat it?") });
+  if (f.asleep != null && usualAsleep != null && f.asleep < usualAsleep - 30) out.push({ label: t("How do I catch up tonight?"), ask: about(t("I slept less than usual. How should I catch up tonight?")) });
+  else if (f.wakings != null && f.wakings >= 4) out.push({ label: t("Why did I wake {n} times?", { n: f.wakings }), ask: about(t("why did I wake {n} times?", { n: f.wakings })) });
+  else if (n.score != null && n.score >= 80) out.push({ label: t("What went right?"), ask: about(t("what went right, so I can repeat it?")) });
   out.splice(2);
-  out.push({ label: "How was this night?", ask: about("how was it, and does it change today's training?") });
+  out.push({ label: t("How was this night?"), ask: about(t("how was it, and does it change today's training?")) });
   return out;
 }
 

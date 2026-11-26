@@ -7,6 +7,7 @@ import { CoachModelError } from "@/server/coach/anthropic";
 import { LOCAL_SERVERS, localBase, provider, PROVIDERS, type Provider, type ProviderId } from "./catalog";
 import { checkReach, keyedModel, listModels } from "./keyed";
 import type { AIVault } from "./vault";
+import { t } from "@/lib/i18n";
 
 /** The power levels a model takes, lowest first, and the one it uses when none is picked. */
 export interface EffortLevels { levels: string[]; default?: string }
@@ -44,7 +45,7 @@ export interface ProviderView {
 export interface AIStatus { picked: ProviderId | null; localUrl: string | null; providers: ProviderView[] }
 
 const said = (error: unknown): { code: string; message: string } =>
-  error instanceof CoachModelError ? { code: error.code, message: error.message } : { code: "failed", message: error instanceof Error ? error.message : "That didn't work." };
+  error instanceof CoachModelError ? { code: error.code, message: error.message } : { code: "failed", message: error instanceof Error ? error.message : t("That didn't work.") };
 
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
@@ -71,10 +72,10 @@ export class AIService implements HostAI {
 
   async status(): Promise<AIStatus> {
     const views = await Promise.all(PROVIDERS.map(async (p): Promise<ProviderView> => {
-      const base = { id: p.id, name: p.name, group: p.group, model: this.modelOf(p), keyHint: p.keyHint, keyPage: p.keyPage, canForget: p.group !== "account" || this.accounts[p.id]?.canSignOut !== false, effort: this.vault.current.efforts[p.id] ?? "" };
+      const base = { id: p.id, name: t(p.name), group: p.group, model: this.modelOf(p), keyHint: p.keyHint, keyPage: p.keyPage, canForget: p.group !== "account" || this.accounts[p.id]?.canSignOut !== false, effort: this.vault.current.efforts[p.id] ?? "" };
       if (p.group !== "account") return { ...base, ready: await this.ready(p) };
       const account = this.accounts[p.id];
-      if (!account) return { ...base, ready: false, problem: "Not in this build yet." };
+      if (!account) return { ...base, ready: false, problem: t("Not in this build yet.") };
       const s = await account.status().catch((error: unknown) => ({ ready: false, problem: said(error).message }));
       return { ...base, ...s };
     }));
@@ -92,7 +93,7 @@ export class AIService implements HostAI {
   private async modelFor(p: Provider): Promise<HostModel | null> {
     if (!(await this.ready(p))) return null;
     const model = this.modelOf(p);
-    const label = model ? `${p.name} · ${model}` : p.name;
+    const label = model ? `${t(p.name)} · ${model}` : t(p.name);
     if (p.group === "account") {
       const account = this.accounts[p.id];
       if (!account) return null;
@@ -129,9 +130,9 @@ export class AIService implements HostAI {
           const found = await fetch(`${url}/models`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok, () => false);
           if (found) return reply({ url });
         }
-        return reply({ error: "not_found", message: "No Ollama or LM Studio is running on this computer." }, 404);
+        return reply({ error: "not_found", message: t("No Ollama or LM Studio is running on this computer.") }, 404);
       }
-      if (!p) return reply({ error: "invalid", message: "Pick a provider." }, 400);
+      if (!p) return reply({ error: "invalid", message: t("Pick a provider.") }, 400);
 
       if (request.method === "GET" && action === "models") return reply({ models: await this.models(p), model: this.modelOf(p) });
 
@@ -143,21 +144,21 @@ export class AIService implements HostAI {
 
       if (request.method === "POST" && action === "effort") {
         const effort = typeof body.effort === "string" ? body.effort : "";
-        if (effort && !EFFORT.test(effort)) return reply({ error: "invalid", message: "Pick a level." }, 400);
+        if (effort && !EFFORT.test(effort)) return reply({ error: "invalid", message: t("Pick a level.") }, 400);
         this.vault.choose({ efforts: { [p.id]: effort } });
         return reply(await this.status());
       }
 
       if (request.method === "POST" && action === "connect") {
         // A key or a local server: checked by asking it, then kept and picked.
-        if (p.group === "account") return reply({ error: "invalid", message: "Sign in instead." }, 400);
+        if (p.group === "account") return reply({ error: "invalid", message: t("Sign in instead.") }, 400);
         const key = typeof body.key === "string" ? body.key.trim() : "";
         let localUrl: string | null = null;
         if (p.group === "computer") {
           localUrl = localBase(body.url);
-          if (!localUrl) return reply({ error: "invalid", message: "Use an http address on this computer or network, or https." }, 400);
+          if (!localUrl) return reply({ error: "invalid", message: t("Use an http address on this computer or network, or https.") }, 400);
         } else if (!/^[\x21-\x7e]{8,400}$/.test(key)) {
-          return reply({ error: "invalid", message: "That doesn't look like a key." }, 400);
+          return reply({ error: "invalid", message: t("That doesn't look like a key.") }, 400);
         }
         const wanted = typeof body.model === "string" && body.model ? body.model : null;
         const { model } = await checkReach(p, { key: key || (p.group === "computer" ? await this.vault.secret(p.id) : null), localUrl }, wanted);
@@ -167,7 +168,7 @@ export class AIService implements HostAI {
       }
 
       if (request.method === "POST" && action === "pick") {
-        if (!(await this.ready(p))) return reply({ error: "not_ready", message: `Set up ${p.name} first.` }, 400);
+        if (!(await this.ready(p))) return reply({ error: "not_ready", message: t("Set up {name} first.", { name: p.name }) }, 400);
         const model = typeof body.model === "string" ? body.model.slice(0, 200) : this.modelOf(p);
         this.vault.choose({ picked: p.id, models: { [p.id]: model } });
         return reply(await this.status());
@@ -175,7 +176,7 @@ export class AIService implements HostAI {
 
       // A provider's model, without changing which provider Coach uses.
       if (request.method === "POST" && action === "model") {
-        if (typeof body.model !== "string") return reply({ error: "invalid", message: "Pick a model." }, 400);
+        if (typeof body.model !== "string") return reply({ error: "invalid", message: t("Pick a model.") }, 400);
         this.vault.choose({ models: { [p.id]: body.model.slice(0, 200) } });
         return reply(await this.status());
       }
@@ -183,7 +184,7 @@ export class AIService implements HostAI {
       // One short answer, to show the provider works as set up.
       if (request.method === "POST" && action === "test") {
         const host = await this.modelFor(p);
-        if (!host) return reply({ error: "not_ready", message: `Set up ${p.name} first.` }, 400);
+        if (!host) return reply({ error: "not_ready", message: t("Set up {name} first.", { name: p.name }) }, 400);
         const started = Date.now();
         await answerOnce(host.model, { instructions: "Reply with the single word OK.", prompt: "OK?", signal: AbortSignal.timeout(120_000) });
         return reply({ ok: true, ms: Date.now() - started, label: host.label });
@@ -191,7 +192,7 @@ export class AIService implements HostAI {
 
       if (request.method === "POST" && action === "signin") {
         const account = this.accounts[p.id];
-        if (!account) return reply({ error: "invalid", message: `${p.name} isn't in this build yet.` }, 400);
+        if (!account) return reply({ error: "invalid", message: t("{name} isn't in this build yet.", { name: p.name }) }, 400);
         await account.signIn();
         if (!this.vault.current.picked || this.vault.current.picked === p.id) this.vault.choose({ picked: p.id });
         return reply(await this.status());

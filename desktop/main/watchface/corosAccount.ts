@@ -19,6 +19,7 @@ import {
   MOBILE_HOSTS, normalizeCorosWatchfaceThemes, parseCorosMobileJson, regionOf, suggestRegion, themeListBody, themeListEndpoint,
   type CorosCatalog, type CorosRegion,
 } from "./corosMobile";
+import { t } from "@/lib/i18n";
 
 export const MAX_OFFICIAL_PACKAGE = 25 * 1024 * 1024;
 
@@ -66,7 +67,7 @@ export interface CorosShareAnswer { templateId: string; url?: string; expireTime
 
 /** The createLink body COROS's app sends, with both template IDs as raw JSON numbers. */
 export function buildCreateLinkBody(input: { backgroundImageId: number; firmwareType: string; sourceTemplateId: string; templateId: string; name: string }): string {
-  if (!/^\d+$/.test(input.templateId) || !/^\d+$/.test(input.sourceTemplateId)) throw new AccountProblem("Invalid COROS watch face template ID.", "badInput");
+  if (!/^\d+$/.test(input.templateId) || !/^\d+$/.test(input.sourceTemplateId)) throw new AccountProblem(t("Invalid COROS watch face template ID."), "badInput");
   return `{"type":2,"watchFaceTemplateUserCustom":{"backgroundImageId":${input.backgroundImageId},"firmwareType":${JSON.stringify(input.firmwareType)},"srcWatchFaceTemplateId":${input.sourceTemplateId},"watchFaceTemplateId":${input.templateId},"watchFaceTemplateName":${JSON.stringify(input.name)}}}`;
 }
 
@@ -164,18 +165,18 @@ export class CorosAccount {
         headers: { ...mobileHeaders(installId, token, init.session?.userId), ...init.extraHeaders, ...(typeof init.body === "string" ? { "Content-Type": "application/json" } : {}) },
         body: init.body,
       });
-    } catch { throw new AccountProblem("COROS couldn't be reached. Check the connection and try again.", "offline", 502); }
+    } catch { throw new AccountProblem(t("COROS couldn't be reached. Check the connection and try again."), "offline", 502); }
     const raw = await answer.text();
-    if (!answer.ok) throw new AccountProblem(`COROS answered ${answer.status}.`, "coros", 502);
+    if (!answer.ok) throw new AccountProblem(t("COROS answered {status}.", { status: answer.status }), "coros", 502);
     let payload: { result?: unknown; apiCode?: unknown; message?: string; data?: T };
-    try { payload = parseCorosMobileJson(raw) as typeof payload; } catch { throw new AccountProblem("COROS sent an answer that couldn't be read.", "coros", 502); }
+    try { payload = parseCorosMobileJson(raw) as typeof payload; } catch { throw new AccountProblem(t("COROS sent an answer that couldn't be read."), "coros", 502); }
     const result = String(payload.result ?? payload.apiCode ?? "");
     if (result !== API_SUCCESS && !init.allow?.includes(result)) {
       if (result === "1019") {
         await this.signOut();
-        throw new AccountProblem("Your COROS sign-in expired. Sign in again.", "signedOut", 401);
+        throw new AccountProblem(t("Your COROS sign-in expired. Sign in again."), "signedOut", 401);
       }
-      throw new AccountProblem(`${payload.message?.trim() || "COROS refused that."}${result && result !== "LOCAL" ? ` (COROS ${result})` : ""}`, result === "LOCAL" ? "localOnly" : "coros", result === "LOCAL" ? 403 : 400);
+      throw new AccountProblem(`${payload.message?.trim() || t("COROS refused that.")}${result && result !== "LOCAL" ? ` (COROS ${result})` : ""}`, result === "LOCAL" ? "localOnly" : "coros", result === "LOCAL" ? 403 : 400);
     }
     return { result, message: payload.message, data: payload.data, raw };
   }
@@ -186,8 +187,8 @@ export class CorosAccount {
     // 1115 "User logged in" is the client's session-conflict checkpoint; retrying with checkStatus 0 is the app's own next step.
     if (envelope.result === "1115") envelope = await this.request("/user/login", { region, body: JSON.stringify(buildMobileLoginPayload(account, pwdHash, 0)) });
     const accessToken = envelope.data?.accessToken?.trim();
-    if (!accessToken) throw new AccountProblem("COROS didn't return a session. Try again.", "coros", 502);
-    if (revision !== this.revision) throw new AccountProblem("The COROS sign-in changed meanwhile. Sign in again.", "changed", 409);
+    if (!accessToken) throw new AccountProblem(t("COROS didn't return a session. Try again."), "coros", 502);
+    if (revision !== this.revision) throw new AccountProblem(t("The COROS sign-in changed meanwhile. Sign in again."), "changed", 409);
     const userId = extractDecimalProperty(envelope.raw, "userId") ?? (typeof envelope.data?.userId === "string" ? envelope.data.userId : undefined);
     this.known.clear();
     await this.update((s) => ({ ...s, session: { accessToken, ...(userId ? { userId } : {}), region, email: account } }));
@@ -196,7 +197,7 @@ export class CorosAccount {
   async signIn(input: { email?: unknown; password?: unknown; region?: unknown; remember?: unknown }): Promise<AccountStatus> {
     const account = typeof input.email === "string" ? input.email.trim() : "";
     const password = typeof input.password === "string" ? input.password : "";
-    if (!account || !password || account.length > 200 || CONTROL.test(account)) throw new AccountProblem("Enter your COROS email and password.", "badInput");
+    if (!account || !password || account.length > 200 || CONTROL.test(account)) throw new AccountProblem(t("Enter your COROS email and password."), "badInput");
     const pwdHash = hashCorosPassword(password);
     await this.establish(account, pwdHash, regionOf(input.region));
     if (input.remember === true && (await this.options.secure())) await this.update((s) => ({ ...s, saved: { account, pwdHash } }));
@@ -207,7 +208,7 @@ export class CorosAccount {
   /** Signs in again with the saved account. */
   async signInSaved(input: { region?: unknown }): Promise<AccountStatus> {
     const { saved } = await this.load();
-    if (!saved) throw new AccountProblem("No COROS account is saved here. Enter your email and password.", "noSaved");
+    if (!saved) throw new AccountProblem(t("No COROS account is saved here. Enter your email and password."), "noSaved");
     await this.establish(saved.account, saved.pwdHash, regionOf(input.region));
     return this.status();
   }
@@ -248,16 +249,16 @@ export class CorosAccount {
   /** A COROS face list for a watch. Official and saved faces need the session; templates do too when asked live. */
   async themes(catalog: CorosCatalog, query: ThemeQuery): Promise<CorosWatchfaceTheme[]> {
     const { session } = await this.load();
-    if (!session) throw new AccountProblem("Sign in to your COROS account first.", "signedOut", 401);
+    if (!session) throw new AccountProblem(t("Sign in to your COROS account first."), "signedOut", 401);
     const firmwareType = query.firmwareType.trim();
     const language = (query.language || "en-US").trim();
     const maxWatchFaceVersion = query.maxWatchFaceVersion ?? 5;
     const snCode = (query.snCode ?? "").trim();
     const modelVersion = (query.modelVersion ?? "").trim();
-    if (!firmwareType || firmwareType.length > 120 || CONTROL.test(firmwareType)) throw new AccountProblem("Enter a COROS firmware type.", "badInput");
-    if (!/^[a-z]{2,3}-[A-Z]{2}$/.test(language)) throw new AccountProblem("Language must be a locale such as en-US.", "badInput");
-    if (!Number.isSafeInteger(maxWatchFaceVersion) || maxWatchFaceVersion < 0 || maxWatchFaceVersion > 999) throw new AccountProblem("Maximum version is a whole number from 0 to 999.", "badInput");
-    if (snCode.length > 80 || CONTROL.test(snCode) || modelVersion.length > 120 || CONTROL.test(modelVersion)) throw new AccountProblem("Enter a valid watch serial.", "badInput");
+    if (!firmwareType || firmwareType.length > 120 || CONTROL.test(firmwareType)) throw new AccountProblem(t("Enter a COROS firmware type."), "badInput");
+    if (!/^[a-z]{2,3}-[A-Z]{2}$/.test(language)) throw new AccountProblem(t("Language must be a locale such as en-US."), "badInput");
+    if (!Number.isSafeInteger(maxWatchFaceVersion) || maxWatchFaceVersion < 0 || maxWatchFaceVersion > 999) throw new AccountProblem(t("Maximum version is a whole number from 0 to 999."), "badInput");
+    if (snCode.length > 80 || CONTROL.test(snCode) || modelVersion.length > 120 || CONTROL.test(modelVersion)) throw new AccountProblem(t("Enter a valid watch serial."), "badInput");
     const answer = await this.request<unknown>(themeListEndpoint(catalog), {
       region: session.region, session,
       body: themeListBody(catalog, session.accessToken, { firmwareType, language, maxWatchFaceVersion, snCode }),
@@ -275,8 +276,8 @@ export class CorosAccount {
    */
   async publishFace(face: PublishedFace): Promise<CorosShareAnswer> {
     const { session } = await this.load();
-    if (!session) throw new AccountProblem("Sign in to your COROS account first.", "signedOut", 401);
-    if (!/^\d{1,20}$/.test(face.sourceTemplateId)) throw new AccountProblem("This face has no valid COROS template ID.", "badInput");
+    if (!session) throw new AccountProblem(t("Sign in to your COROS account first."), "signedOut", 401);
+    if (!/^\d{1,20}$/.test(face.sourceTemplateId)) throw new AccountProblem(t("This face has no valid COROS template ID."), "badInput");
     const saveBody = {
       accessToken: session.accessToken, backgroundImageId: face.backgroundImageId, firmwareType: face.firmwareType, language: face.language,
       maxWatchFaceVersion: face.watchFaceVersion, releaseType: 1, saveOrUpdate: 1, srcWatchFaceTemplateId: "__SRC_TEMPLATE_ID__", version: 2,
@@ -289,7 +290,7 @@ export class CorosAccount {
     const saved = await this.request<{ watchFaceTemplateId?: unknown }>("/watchFaceTemplateUserCustom/saveOrUpdateV2", { region: session.region, session, body: form });
     const id = saved.data?.watchFaceTemplateId;
     const templateId = extractDecimalProperty(saved.raw, "watchFaceTemplateId") ?? (typeof id === "string" && /^\d{1,20}$/.test(id) ? id : undefined);
-    if (!templateId) throw new AccountProblem("COROS saved the face but didn't return its ID.", "coros", 502);
+    if (!templateId) throw new AccountProblem(t("COROS saved the face but didn't return its ID."), "coros", 502);
     const link = await this.request<{ url?: unknown; expireTimestamp?: unknown; previewImageUrl?: unknown }>("/watchface/share/createLink", {
       region: session.region, session,
       body: buildCreateLinkBody({ backgroundImageId: face.backgroundImageId, firmwareType: face.firmwareType, sourceTemplateId: face.sourceTemplateId, templateId, name: face.name }),
@@ -316,15 +317,15 @@ export class CorosAccount {
     const { session, installId } = await this.load();
     const get = async (target: string): Promise<Buffer> => {
       const u = new URL(target);
-      if (u.protocol !== "https:" || !isCorosHost(u.hostname)) throw new AccountProblem("Faces only come from COROS.", "badUrl");
+      if (u.protocol !== "https:" || !isCorosHost(u.hostname)) throw new AccountProblem(t("Faces only come from COROS."), "badUrl");
       if (session && MOBILE_HOSTS.includes(u.hostname) && !u.searchParams.has("accessToken")) u.searchParams.set("accessToken", session.accessToken);
       let answer: Response;
       try { answer = await this.fetch(u, { headers: mobileHeaders(installId, session?.accessToken, session?.userId) }); } catch {
-        throw new AccountProblem("COROS couldn't be reached. Check the connection and try again.", "offline", 502);
+        throw new AccountProblem(t("COROS couldn't be reached. Check the connection and try again."), "offline", 502);
       }
-      if (!answer.ok) throw new AccountProblem(`COROS answered ${answer.status} for that face.`, "download", 502);
+      if (!answer.ok) throw new AccountProblem(t("COROS answered {status} for that face.", { status: answer.status }), "download", 502);
       const bytes = Buffer.from(await answer.arrayBuffer());
-      if (!bytes.length || bytes.length > MAX_OFFICIAL_PACKAGE) throw new AccountProblem("That face's package must be between 1 byte and 25 MB.", "download", 502);
+      if (!bytes.length || bytes.length > MAX_OFFICIAL_PACKAGE) throw new AccountProblem(t("That face's package must be between 1 byte and 25 MB."), "download", 502);
       return bytes;
     };
     let bytes = await get(packageUrl);

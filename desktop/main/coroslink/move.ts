@@ -26,6 +26,7 @@ import {
 import { corosLinkKeychain, type OldKeychain } from "./oldKeychain";
 import { localWorkouts, planDocs, type PlanRow } from "./plans";
 import { Snapshot } from "./snapshot";
+import { locale, t } from "@/lib/i18n";
 
 export type TileId = "acts" | "health" | "plans" | "lift" | "coach" | "watch" | "phones" | "faces" | "routes" | "links" | "cals" | "media" | "prefs";
 
@@ -83,8 +84,7 @@ export interface MoveHost extends Omit<DetectOptions, "ownData"> {
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const problem = (message: string, code = "problem", status = 400) => json({ error: { code, message } }, status);
 const gb = (bytes: number) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : bytes >= 1e6 ? `${Math.round(bytes / 1e6)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`);
-const fmt = (n: number) => n.toLocaleString("en-US");
-const plural = (n: number, one: string, many = `${one}s`) => `${fmt(n)} ${n === 1 ? one : many}`;
+const fmt = (n: number) => n.toLocaleString(locale("en-US"));
 /** Copies a file, as a clone where the disk can (APFS, Btrfs, ReFS): no second copy of the bytes until one changes. */
 const clone = (from: string, to: string) => copyFile(from, to, constants.COPYFILE_FICLONE);
 const parse = <T>(text: string | null): T | null => { try { return text ? (JSON.parse(text) as T) : null; } catch { return null; } };
@@ -234,25 +234,25 @@ export class CorosLinkMove {
         media,
       };
       const tiles: Tile[] = [
-        { id: "acts", label: "Activities", detail: "Every workout, with its FIT file when the watch gave one", figure: fmt(activities), ready: true, on: activities > 0 },
-        { id: "health", label: "Sleep and health", detail: "Nights, steps and the watch's daily figures", figure: plural(healthDays, "day"), ready: true, on: healthDays > 0 },
-        { id: "plans", label: "Plans and races", detail: "Your own plans and workouts. Race goals are kept for later", figure: fmt(plans + ownWorkouts + races), ready: true, on: plans + ownWorkouts + races > 0 },
-        { id: "lift", label: "Strength and gear", detail: "COROS and Hevy send these again once you're signed in", figure: fmt(lift), ready: false, on: false, instead: "coros" },
-        { id: "coach", label: "Coach chats", detail: "Conversations, what Coach remembers, workout briefs", figure: fmt(chats), ready: true, on: chats + memory + journal > 0 },
+        { id: "acts", label: t("Activities"), detail: t("Every workout, with its FIT file when the watch gave one"), figure: fmt(activities), ready: true, on: activities > 0 },
+        { id: "health", label: t("Sleep and health"), detail: t("Nights, steps and the watch's daily figures"), figure: healthDays === 1 ? t("1 day") : t("{n} days", { n: fmt(healthDays) }), ready: true, on: healthDays > 0 },
+        { id: "plans", label: t("Plans and races"), detail: t("Your own plans and workouts. Race goals are kept for later"), figure: fmt(plans + ownWorkouts + races), ready: true, on: plans + ownWorkouts + races > 0 },
+        { id: "lift", label: t("Strength and gear"), detail: t("COROS and Hevy send these again once you're signed in"), figure: fmt(lift), ready: false, on: false, instead: "coros" },
+        { id: "coach", label: t("Coach chats"), detail: t("Conversations, what Coach remembers, workout briefs"), figure: fmt(chats), ready: true, on: chats + memory + journal > 0 },
         {
-          id: "watch", label: "Watch key", detail: hasKey ? "Your watch stays paired. Local mode works at once" : "Pair the watch in C-LINK",
-          figure: watchName ?? "None", ready: hasKey && !!this.host.watch, on: hasKey && !!this.host.watch, ...(hasKey ? {} : { instead: "again" as const }),
+          id: "watch", label: t("Watch key"), detail: hasKey ? t("Your watch stays paired. Local mode works at once") : t("Pair the watch in C-LINK"),
+          figure: watchName ?? t("None"), ready: hasKey && !!this.host.watch, on: hasKey && !!this.host.watch, ...(hasKey ? {} : { instead: "again" as const }),
         },
         // CorosLink's remote pairing is a different link from C-LINK's phone sync, so phones pair again with C-LINK's QR code.
-        { id: "phones", label: "Paired phones", detail: "Scan C-LINK's code on your phone once", figure: fmt(phones), ready: false, on: false, instead: "again" },
-        { id: "faces", label: "Faces and Studio", detail: "Your designs, drafts and imports", figure: fmt(projects.length), ready: true, on: projects.length > 0 },
-        { id: "routes", label: "Routes", detail: "Saved routes. Map areas download again", figure: fmt(routes), ready: true, on: routes > 0 },
-        { id: "links", label: "Accounts", detail: strava ? "COROS, Hevy and intervals.icu. Connect Strava again later" : "COROS, Hevy and intervals.icu, still signed in", figure: fmt(accounts), ready: true, on: accounts > 0 },
+        { id: "phones", label: t("Paired phones"), detail: t("Scan C-LINK's code on your phone once"), figure: fmt(phones), ready: false, on: false, instead: "again" },
+        { id: "faces", label: t("Faces and Studio"), detail: t("Your designs, drafts and imports"), figure: fmt(projects.length), ready: true, on: projects.length > 0 },
+        { id: "routes", label: t("Routes"), detail: t("Saved routes. Map areas download again"), figure: fmt(routes), ready: true, on: routes > 0 },
+        { id: "links", label: t("Accounts"), detail: strava ? t("COROS, Hevy and intervals.icu. Connect Strava again later") : t("COROS, Hevy and intervals.icu, still signed in"), figure: fmt(accounts), ready: true, on: accounts > 0 },
         // Calendar sync isn't in C-LINK yet. The event IDs are worked out from the workouts (docs/coroslink-move.md), so
         // once it is, the same events are found again instead of added twice.
-        { id: "cals", label: "Calendars", detail: "Not in C-LINK yet. Events stay where they are", figure: fmt(calendars), ready: false, on: false, instead: "later" },
-        { id: "media", label: "Media library", detail: "Downloaded music", figure: tracks.length ? gb(media) : "0", ready: !!this.host.media, on: tracks.length > 0 && !!this.host.media },
-        { id: "prefs", label: "Settings", detail: "Coach's AI and keys, MCP servers, routing key", figure: fmt(settings), ready: true, on: settings > 0 },
+        { id: "cals", label: t("Calendars"), detail: t("Not in C-LINK yet. Events stay where they are"), figure: fmt(calendars), ready: false, on: false, instead: "later" },
+        { id: "media", label: t("Media library"), detail: t("Downloaded music"), figure: tracks.length ? gb(media) : "0", ready: !!this.host.media, on: tracks.length > 0 && !!this.host.media },
+        { id: "prefs", label: t("Settings"), detail: t("Coach's AI and keys, MCP servers, routing key"), figure: fmt(settings), ready: true, on: settings > 0 },
       ];
       return { found, free: freeBytes(this.host.data), counts: { activities, healthDays, chats, faces: projects.length }, tiles, bytes };
     } finally {
@@ -305,7 +305,7 @@ export class CorosLinkMove {
   async start(picked: TileId[]): Promise<{ job: MoveJob }> {
     if (this.job?.stage === "moving") return { job: this.job };
     const survey = await this.look(true);
-    if (!survey) throw new Error("CorosLink's data wasn't found.");
+    if (!survey) throw new Error(t("CorosLink's data wasn't found."));
     const tiles = survey.tiles.filter((t) => t.ready && picked.includes(t.id));
     const bytes = tiles.reduce((sum, t) => sum + (survey.bytes[t.id] ?? 0), 0);
     this.job = { stage: "moving", pct: 0, startedAt: new Date().toISOString(), finishedAt: null, bytes, tiles: Object.fromEntries(tiles.map((t) => [t.id, { state: "wait", pct: 0, done: 0, total: 0 }])) };
@@ -340,7 +340,7 @@ export class CorosLinkMove {
           if (note) tile.note = note;
         } catch (e) {
           tile.state = "failed";
-          tile.note = "This one didn't copy. Try again from Settings.";
+          tile.note = t("This one didn't copy. Try again from Settings.");
           // Never the error's text: it could quote what was being copied.
           this.host.log(`Move: ${id} failed (${e instanceof Error ? e.name : "error"})`);
         }
@@ -365,7 +365,7 @@ export class CorosLinkMove {
   /** Writes items the store doesn't have yet, in batches, so the window stays responsive. */
   private async writeNew(changes: Change[], tick: (done: number, total: number) => void): Promise<number> {
     const store = this.host.store();
-    if (!store) throw new Error("There is no store on this computer.");
+    if (!store) throw new Error(t("There is no store on this computer."));
     const have = new Map<string, Set<string>>();
     const fresh = changes.filter((c) => {
       const ids = have.get(c.collection) ?? have.set(c.collection, new Set(store.list(c.collection).map((i) => i.id))).get(c.collection)!;
@@ -432,7 +432,7 @@ export class CorosLinkMove {
         // are made of these): the only copy once CorosLink is gone. In-progress transfers aren't.
         await copyTree(path.join(found.folder, "local-archive"), path.join(this.keptFolder, "local-archive"), (name) => name === "partial");
         await this.keep("activityFiles", db.all("SELECT activity_id, device_id, watch_activity_id, source, provenance, file_path, format, sha256, sport_type, name, start_time, duration, distance, original_name, imported_at FROM local_activity_files"));
-        return `${fmt(added)} added${fits ? `, ${plural(fits, "FIT file")}` : ""}`;
+        return !fits ? t("{n} added", { n: fmt(added) }) : fits === 1 ? t("{n} added, 1 FIT file", { n: fmt(added) }) : t("{n} added, {fits} FIT files", { n: fmt(added), fits: fmt(fits) });
       }
       case "health": {
         const added = await this.writeNew(healthChanges(
@@ -445,7 +445,7 @@ export class CorosLinkMove {
         await this.keep("healthChecks", db.all("SELECT * FROM local_health_checks"));
         await this.keep("workoutRecovery", db.all("SELECT * FROM local_workout_recovery"));
         await this.keep("sleepRanges", db.all("SELECT device_id, start_ts, ranges FROM local_sleep_sessions"));
-        return `${fmt(added)} added`;
+        return t("{n} added", { n: fmt(added) });
       }
       case "plans": {
         const made = this.planChanges(db);
@@ -461,9 +461,13 @@ export class CorosLinkMove {
         const calendar = db.all<{ key: string; value: string }>("SELECT key, value FROM app_settings WHERE key LIKE 'calendar.workoutEvents.%' OR key LIKE 'calendar.scheduleRevision.%'");
         await this.keep("calendarState", calendar.length ? Object.fromEntries(calendar.map((r) => [r.key, r.value])) : null);
         const races = db.count("SELECT COUNT(*) AS n FROM race_targets") + db.count("SELECT COUNT(*) AS n FROM race_entries");
-        const note = [plural(made.plans, "plan"), made.workouts ? plural(made.workouts, "workout") : "", races ? `${plural(races, "race")} kept` : ""].filter(Boolean).join(", ");
-        if (made.tooLarge) return { note: `${note}. ${plural(made.tooLarge, "plan")} too large to keep`, attn: true };
-        return added || !made.changes.length ? note : `${note} (already here)`;
+        const note = [
+          made.plans === 1 ? t("1 plan") : t("{n} plans", { n: fmt(made.plans) }),
+          !made.workouts ? "" : made.workouts === 1 ? t("1 workout") : t("{n} workouts", { n: fmt(made.workouts) }),
+          !races ? "" : races === 1 ? t("1 race kept") : t("{n} races kept", { n: fmt(races) }),
+        ].filter(Boolean).join(", ");
+        if (made.tooLarge) return { note: `${note}. ${made.tooLarge === 1 ? t("1 plan too large to keep") : t("{n} plans too large to keep", { n: fmt(made.tooLarge) })}`, attn: true };
+        return added || !made.changes.length ? note : t("{note} (already here)", { note });
       }
       case "coach": {
         const chats = chatChanges(db.all<ChatRow>("SELECT * FROM chat_sessions"));
@@ -476,14 +480,14 @@ export class CorosLinkMove {
         await this.keep("coachInstructions", db.setting("chat.customInstructions"));
         await this.keep("pinnedCharts", parse(db.setting("coach.pinnedCharts")));
         await copyTree(path.join(found.folder, "coach-attachments"), path.join(this.keptFolder, "coach-attachments"));
-        return `${fmt(added)} added`;
+        return t("{n} added", { n: fmt(added) });
       }
       case "watch": {
         tick(0, 1);
         let opened: string | null = null;
         for (const key of WATCH_KEYS) if ((opened = await this.secret(db, key))) break;
         const key = opened ? watchKeyText(opened) : null;
-        if (!key) return { note: "The key didn't open here. Pair the watch again", attn: true };
+        if (!key) return { note: t("The key didn't open here. Pair the watch again"), attn: true };
         const device = db.one<{ name: string | null; model: string | null }>("SELECT name, model FROM local_devices ORDER BY last_seen_at DESC");
         const weather = parse<{ latitude?: unknown; longitude?: unknown; place?: unknown }>(db.setting("watch.weatherLocation"));
         const autoSync = parse<{ enabled?: unknown; intervalHours?: unknown }>(db.setting("watch.autoSync"));
@@ -496,7 +500,7 @@ export class CorosLinkMove {
         });
         // CorosLink ran Local-Only: so does C-LINK, or the watch would sit unused.
         if (wasLocalOnly(found.folder) && this.host.localMode && !this.host.localMode.on()) await this.host.localMode.enter();
-        return adopted ? "Paired, Local mode ready" : "A watch key was already saved here";
+        return adopted ? t("Paired, Local mode ready") : t("A watch key was already saved here");
       }
       case "faces": {
         const ids = await projectsIn(found.folder);
@@ -526,7 +530,7 @@ export class CorosLinkMove {
         }
         // Studio's AI chats about faces: C-LINK's Watchmaker keeps none yet.
         await copyTree(path.join(found.folder, "watchface-ai-chats"), path.join(this.keptFolder, "watchface-ai-chats"));
-        return `${fmt(added)} added`;
+        return t("{n} added", { n: fmt(added) });
       }
       case "routes": {
         const rows = db.all<RouteRow>("SELECT * FROM generated_routes ORDER BY created_at");
@@ -545,7 +549,7 @@ export class CorosLinkMove {
           tick(i + 1, rows.length);
           await this.pause();
         }
-        return `${fmt(added)} added`;
+        return t("{n} added", { n: fmt(added) });
       }
       case "links": {
         tick(0, 4);
@@ -579,9 +583,9 @@ export class CorosLinkMove {
         tick(3, 4);
         const intervals = await open("intervals.apiKey"), athleteId = db.setting("intervals.athleteId");
         if (store && intervals && athleteId && !has("connection", "intervals")) { store.write([{ collection: "connection", id: "intervals", body: { apiKey: intervals, athleteId } }]); came.push("intervals.icu"); }
-        const strava = db.setting("strava.secureState") ? "Connect Strava again later" : "";
-        if (unopened) return { note: `${came.length ? `${came.join(", ")} signed in. ` : ""}Some sign-ins didn't open here. Sign in again`, attn: true };
-        return [came.length ? `${came.join(", ")} signed in` : "Nothing new", strava].filter(Boolean).join(". ");
+        const strava = db.setting("strava.secureState") ? t("Connect Strava again later") : "";
+        if (unopened) return { note: [came.length ? t("{names} signed in", { names: came.join(", ") }) : "", t("Some sign-ins didn't open here. Sign in again")].filter(Boolean).join(". "), attn: true };
+        return [came.length ? t("{names} signed in", { names: came.join(", ") }) : t("Nothing new"), strava].filter(Boolean).join(". ");
       }
       case "media": {
         const names = await mp3sIn(found.folder);
@@ -613,15 +617,15 @@ export class CorosLinkMove {
           ...(provider && AI_KEYS[provider] && !now.picked ? { picked: provider } : {}), models, efforts,
           ...(localUrl && !now.localUrl ? { localUrl } : {}),
         });
-        if (provider && AI_KEYS[provider]) came.push("Coach's AI");
+        if (provider && AI_KEYS[provider]) came.push(t("Coach's AI"));
         const keys: [string, string, (v: string) => string | null][] = [
           ["openrouter", "chat.openRouter.apiKey", (v) => v],
           ["local", "chat.local.apiKey", (v) => v],
           // ChatGPT's sign-in, in C-LINK's shape (ai/chatgpt.ts ChatGPTToken).
           ["chatgpt", "chat.oauthToken", (v) => {
-            const t = parse<{ access_token?: unknown; refresh_token?: unknown; expires_at?: unknown; account_id?: unknown; email?: unknown }>(v);
-            return t && typeof t.access_token === "string" && typeof t.refresh_token === "string"
-              ? JSON.stringify({ access: t.access_token, refresh: t.refresh_token, expiresAt: typeof t.expires_at === "number" ? t.expires_at * 1000 : 0, accountId: typeof t.account_id === "string" ? t.account_id : null, email: typeof t.email === "string" ? t.email : null })
+            const tok = parse<{ access_token?: unknown; refresh_token?: unknown; expires_at?: unknown; account_id?: unknown; email?: unknown }>(v);
+            return tok && typeof tok.access_token === "string" && typeof tok.refresh_token === "string"
+              ? JSON.stringify({ access: tok.access_token, refresh: tok.refresh_token, expiresAt: typeof tok.expires_at === "number" ? tok.expires_at * 1000 : 0, accountId: typeof tok.account_id === "string" ? tok.account_id : null, email: typeof tok.email === "string" ? tok.email : null })
               : null;
           }],
         ];
@@ -654,13 +658,13 @@ export class CorosLinkMove {
             } catch { /* a server C-LINK refuses (stdio aside, CorosLink only had http) is left */ }
           }
         }
-        if (mcp) came.push(plural(mcp, "MCP server"));
+        if (mcp) came.push(mcp === 1 ? t("1 MCP server") : t("{n} MCP servers", { n: fmt(mcp) }));
         tick(2, 3);
         const ors = db.setting("maps.openRouteServiceApiKey");
-        if (ors && this.host.adoptOrsKey && (await this.host.adoptOrsKey(ors))) came.push("routing key");
+        if (ors && this.host.adoptOrsKey && (await this.host.adoptOrsKey(ors))) came.push(t("routing key"));
         // Settings C-LINK has no place for yet (language, units, Claude Code's data permissions).
         await this.keep("settings", Object.fromEntries(db.all<{ key: string; value: string }>("SELECT key, value FROM app_settings WHERE key IN ('app.language', 'coach.unitSystem', 'chat.visualizations.enabled') OR key LIKE 'chat.claudeCode.permissions.%'").map((r) => [r.key, r.value])));
-        return came.length ? came.join(", ") : "Nothing new";
+        return came.length ? came.join(", ") : t("Nothing new");
       }
       default:
         return null;
@@ -685,14 +689,14 @@ export class CorosLinkMove {
         case "POST /start": {
           const body = (await request.json().catch(() => ({}))) as { tiles?: unknown };
           const picked = Array.isArray(body.tiles) ? body.tiles.filter((t): t is TileId => typeof t === "string") as TileId[] : [];
-          if (!this.find()) return problem("CorosLink's data isn't on this computer.", "missing", 404);
+          if (!this.find()) return problem(t("CorosLink's data isn't on this computer."), "missing", 404);
           return json(await this.start(picked));
         }
-        default: return problem("Not part of the move.", "notFound", 404);
+        default: return problem(t("Not part of the move."), "notFound", 404);
       }
     } catch (error) {
       this.host.log(`Move ${route} failed (${error instanceof Error ? error.name : "error"})`);
-      return problem("That didn't work.", "internal", 500);
+      return problem(t("That didn't work."), "internal", 500);
     }
   }
 }

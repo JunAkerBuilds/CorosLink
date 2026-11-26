@@ -6,6 +6,7 @@ import { HubInvalid } from "@/server/hub/errors";
 import { open, seal } from "@/server/hub/seal";
 import { shareConnection } from "@/server/connections";
 import { Intervals, intervalsAthlete, intervalsKey, type IntervalsLogin } from "./client";
+import { t } from "@/lib/i18n";
 
 const LOGIN_COOKIE = "clink_intervals";
 const LOGIN_SECONDS = 180 * 24 * 3600;
@@ -29,7 +30,7 @@ export async function readLogin(): Promise<IntervalsLogin | null> {
 
 export async function writeLogin(login: IntervalsLogin): Promise<void> {
   const owner = (await readAccount())?.viewer.id;
-  if (!owner) throw new HubInvalid("C-LINK is still starting. Try again in a moment.");
+  if (!owner) throw new HubInvalid(t("C-LINK is still starting. Try again in a moment."));
   const sealed: SealedLogin = { apiKey: login.apiKey, athleteId: login.athleteId, owner };
   (await cookies()).set(LOGIN_COOKIE, seal(LOGIN_COOKIE, sealed, LOGIN_SECONDS), cookieOptions(LOGIN_SECONDS));
 }
@@ -56,7 +57,7 @@ export const shareLogin = (login: IntervalsLogin | null): Promise<void> =>
 /** Runs `work` with the saved connection; a plain "connect first" without one. */
 export async function withLogin<T>(work: (login: IntervalsLogin) => Promise<T>): Promise<T> {
   const login = await readLogin();
-  if (!login) throw new HubInvalid("Connect your intervals.icu account first.");
+  if (!login) throw new HubInvalid(t("Connect your intervals.icu account first."));
   return work(login);
 }
 

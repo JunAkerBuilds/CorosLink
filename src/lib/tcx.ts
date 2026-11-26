@@ -1,5 +1,6 @@
 // A hand-entered activity as a one-lap TCX file, the format COROS takes for an activity logged after the fact.
 // Ported from the desktop app (CorosLink electron/tcxBuilder.ts): same elements, same order, same rounding.
+import { t } from "@/lib/i18n";
 
 /** TCX knows three sports. Everything that is not a run or a ride is "Other". */
 export type TcxSport = "run" | "bike" | "other";
@@ -54,13 +55,13 @@ export function buildManualTcx(input: ManualActivity): string {
 export function cleanManualActivity(raw: { sport?: unknown; startTimeIso?: unknown; durationSec?: unknown; distanceM?: unknown; calories?: unknown; avgHr?: unknown }, now: number = Date.now()):
   ManualActivity | string {
   const sport = raw.sport === "run" || raw.sport === "bike" || raw.sport === "other" ? raw.sport : null;
-  if (!sport) return "That activity type isn't one this app knows.";
+  if (!sport) return t("That activity type isn't one this app knows.");
   const started = typeof raw.startTimeIso === "string" && raw.startTimeIso.length <= 40 ? Date.parse(raw.startTimeIso) : NaN;
-  if (!Number.isFinite(started)) return "The start time isn't valid.";
-  if (started > now) return "Logging is for activities that have already started.";
+  if (!Number.isFinite(started)) return t("The start time isn't valid.");
+  if (started > now) return t("Logging is for activities that have already started.");
   const duration = Number(raw.durationSec);
-  if (!Number.isFinite(duration) || !(duration > 0)) return "Add a duration to log this activity.";
-  if (duration > 24 * 3600) return "A logged activity can be at most 24 hours long.";
+  if (!Number.isFinite(duration) || !(duration > 0)) return t("Add a duration to log this activity.");
+  if (duration > 24 * 3600) return t("A logged activity can be at most 24 hours long.");
   const positive = (value: unknown, max: number): number => {
     const n = Number(value);
     return Number.isFinite(n) && n > 0 ? Math.min(n, max) : 0;

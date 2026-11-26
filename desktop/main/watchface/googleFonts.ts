@@ -15,6 +15,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { Limiter } from "./officialAssets";
+import { t } from "@/lib/i18n";
 
 export const GOOGLE_LIST_URL = "https://fonts.google.com/metadata/fonts";
 export const GOOGLE_CSS_URL = "https://fonts.googleapis.com/css2";
@@ -227,7 +228,7 @@ export class GoogleFonts {
 
   private async load(name: unknown, preview: boolean): Promise<GoogleFamilyFaces> {
     const family = await this.find(name);
-    if (!family) throw new GoogleFontsProblem("Google Fonts has no family by that name.", "unknownFamily", 404);
+    if (!family) throw new GoogleFontsProblem(t("Google Fonts has no family by that name."), "unknownFamily", 404);
     const manifest = path.join(this.folder, "families", `${this.key(family.family, preview)}.json`);
     const read = async (file: string) => {
       const saved = await this.readJson<GoogleFamilyFaces>(file);
@@ -243,7 +244,7 @@ export class GoogleFonts {
       return fetched;
     }
     if (saved) return { ...saved, saved: true };
-    throw new GoogleFontsProblem(`Google Fonts couldn't be reached, and ${family.family} isn't saved on this computer yet.`, "offline");
+    throw new GoogleFontsProblem(t("Google Fonts couldn't be reached, and {font} isn't saved on this computer yet.", { font: family.family }), "offline");
   }
 
   private async fetchFamily(family: GoogleFamily, preview: boolean): Promise<GoogleFamilyFaces | null> {
@@ -276,8 +277,8 @@ export class GoogleFonts {
 
   /** A cached font file, by the name a family's faces gave it. */
   async file(name: string): Promise<Buffer> {
-    if (!/^[a-f0-9]{40}\.woff2$/.test(name)) throw new GoogleFontsProblem("No such font file.", "missing", 404);
-    try { return await fs.promises.readFile(path.join(this.folder, "files", name)); } catch { throw new GoogleFontsProblem("No such font file.", "missing", 404); }
+    if (!/^[a-f0-9]{40}\.woff2$/.test(name)) throw new GoogleFontsProblem(t("No such font file."), "missing", 404);
+    try { return await fs.promises.readFile(path.join(this.folder, "files", name)); } catch { throw new GoogleFontsProblem(t("No such font file."), "missing", 404); }
   }
 
   /**
@@ -289,7 +290,7 @@ export class GoogleFonts {
     const loaded: GoogleFamilyFaces[] = [], failed: { family: string; message: string }[] = [];
     const found = (await Promise.all(list.map((name) => this.find(name)))).filter((f): f is GoogleFamily => !!f);
     await Promise.all([...new Map(found.map((f) => [f.family, f])).values()].map(async (family) => {
-      try { loaded.push(await this.faces(family.family)); } catch (e) { failed.push({ family: family.family, message: e instanceof Error ? e.message : "It couldn't be loaded." }); }
+      try { loaded.push(await this.faces(family.family)); } catch (e) { failed.push({ family: family.family, message: e instanceof Error ? e.message : t("It couldn't be loaded.") }); }
     }));
     return { loaded, failed };
   }
@@ -304,6 +305,6 @@ export class GoogleFonts {
     // A file is named by its Google URL, which changes with the font's version: it never changes under one name.
     if (get && m) return new Response(new Uint8Array(await this.file(m[1])), { headers: { "Content-Type": "font/woff2", "Cache-Control": "max-age=31536000, immutable" } });
     if (!get && route === "/fonts/google/resolve") return json(await this.resolve(((await request.json().catch(() => ({}))) as { families?: unknown }).families));
-    return Response.json({ error: { code: "notFound", message: "Not a Studio action." } }, { status: 404 });
+    return Response.json({ error: { code: "notFound", message: t("Not a Studio action.") } }, { status: 404 });
   }
 }

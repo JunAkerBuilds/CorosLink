@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { once } from "node:events";
 import { WatchProblem } from "./watchDrive";
+import { t } from "@/lib/i18n";
 
 export interface FreeBook {
   id: string; title: string; author: string | null; language: string | null; secs: number | null; downloads: number | null;
@@ -93,10 +94,10 @@ export class LibriVox {
     try {
       answer = await this.get(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
     } catch {
-      throw new WatchProblem(`${what} couldn't be reached. Check the connection and try again.`, "librivox");
+      throw new WatchProblem(t("{service} couldn't be reached. Check the connection and try again.", { service: what }), "librivox");
     }
-    if (!answer.ok) throw new WatchProblem(`${what} didn't answer (${answer.status}). Try again in a moment.`, "librivox");
-    try { return (await answer.json()) as T; } catch { throw new WatchProblem(`${what} sent something unreadable.`, "librivox"); }
+    if (!answer.ok) throw new WatchProblem(t("{service} didn't answer ({status}). Try again in a moment.", { service: what, status: answer.status }), "librivox");
+    try { return (await answer.json()) as T; } catch { throw new WatchProblem(t("{service} sent something unreadable.", { service: what }), "librivox"); }
   }
 
   private async search(q: string): Promise<FreeBook[]> {
@@ -128,10 +129,10 @@ export class LibriVox {
 
   /** One recording with its MP3 sections in play order. Called again at import, so addresses never come from the page. */
   async load(id: string): Promise<FreeBookDetail> {
-    if (!ID.test(id)) throw new WatchProblem("That isn't a LibriVox recording.", "notFound");
+    if (!ID.test(id)) throw new WatchProblem(t("That isn't a LibriVox recording."), "notFound");
     const data = await this.json<{ metadata?: Record<string, unknown>; files?: Record<string, unknown>[] }>(`${BASE}/metadata/${encodeURIComponent(id)}`, "LibriVox");
     const meta = data.metadata ?? {};
-    if (!list(meta.collection).includes(COLLECTION)) throw new WatchProblem("That isn't a LibriVox recording.", "notFound");
+    if (!list(meta.collection).includes(COLLECTION)) throw new WatchProblem(t("That isn't a LibriVox recording."), "notFound");
     const files = data.files ?? [];
     const format = FORMATS.find((f) => files.some((x) => x.format === f));
     const sections = format ? files
@@ -148,9 +149,9 @@ export class LibriVox {
       })
       .sort((a, b) => (a.track ?? Number.MAX_SAFE_INTEGER) - (b.track ?? Number.MAX_SAFE_INTEGER) || a.name.localeCompare(b.name, undefined, { numeric: true }))
       .map(({ track: _t, ...s }) => s) : [];
-    if (!sections.length) throw new WatchProblem("This recording has no MP3s to download.", "noAudio");
+    if (!sections.length) throw new WatchProblem(t("This recording has no MP3s to download."), "noAudio");
     const book = toBook({ identifier: id, title: meta.title, creator: meta.creator, runtime: meta.runtime, language: meta.language });
-    if (!book) throw new WatchProblem("LibriVox sent an incomplete record for that book.", "librivox");
+    if (!book) throw new WatchProblem(t("LibriVox sent an incomplete record for that book."), "librivox");
     return {
       ...book,
       secs: book.secs ?? (sections.every((s) => s.secs) ? sections.reduce((a, s) => a + (s.secs ?? 0), 0) : null),
@@ -172,7 +173,7 @@ export class LibriVox {
       let url = section.url;
       let answer: Response | null = null;
       for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-        if (!isArchiveUrl(url)) throw new Error("The download left archive.org, so it was stopped.");
+        if (!isArchiveUrl(url)) throw new Error(t("The download left archive.org, so it was stopped."));
         answer = await this.get(url, { redirect: "manual", signal: both });
         const location = answer.headers.get("location");
         if (answer.status >= 300 && answer.status < 400 && location) {
@@ -184,9 +185,9 @@ export class LibriVox {
         }
         break;
       }
-      if (!answer) throw new Error("The download redirected too many times.");
-      if (!answer.ok || !answer.body) throw new Error(`A section didn't download (${answer.status}).`);
-      if (Number(answer.headers.get("content-length")) > MAX_SECTION) { await answer.body.cancel(); throw new Error("A section is bigger than LibriVox said, so it was stopped."); }
+      if (!answer) throw new Error(t("The download redirected too many times."));
+      if (!answer.ok || !answer.body) throw new Error(t("A section didn't download ({status}).", { status: answer.status }));
+      if (Number(answer.headers.get("content-length")) > MAX_SECTION) { await answer.body.cancel(); throw new Error(t("A section is bigger than LibriVox said, so it was stopped.")); }
       const hash = createHash("sha1");
       const out = createWriteStream(target);
       let bytes = 0;
@@ -197,7 +198,7 @@ export class LibriVox {
           if (done) break;
           touch();
           bytes += value.length;
-          if (bytes > MAX_SECTION) throw new Error("A section is bigger than LibriVox said, so it was stopped.");
+          if (bytes > MAX_SECTION) throw new Error(t("A section is bigger than LibriVox said, so it was stopped."));
           hash.update(value);
           if (!out.write(value)) await once(out, "drain");
           onBytes(bytes);
@@ -208,11 +209,11 @@ export class LibriVox {
         out.destroy();
         throw error;
       }
-      if (section.bytes && bytes !== section.bytes) throw new Error("A section downloaded incompletely. Try again.");
-      if (section.sha1 && hash.digest("hex") !== section.sha1) throw new Error("A section failed its checksum. Try again.");
+      if (section.bytes && bytes !== section.bytes) throw new Error(t("A section downloaded incompletely. Try again."));
+      if (section.sha1 && hash.digest("hex") !== section.sha1) throw new Error(t("A section failed its checksum. Try again."));
       return bytes;
     } catch (error) {
-      if (stall.signal.aborted && !signal.aborted) throw new Error("The download stalled. Try again.");
+      if (stall.signal.aborted && !signal.aborted) throw new Error(t("The download stalled. Try again."));
       throw error;
     } finally {
       clearTimeout(timer);

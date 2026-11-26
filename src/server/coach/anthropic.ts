@@ -4,6 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { CoachModel, ModelMessage, ModelRequest, ModelTurn } from "@/lib/coach/loop";
 import { textFileBlock, type UserPart } from "@/lib/coach/files";
+import { t } from "@/lib/i18n";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
 const MAX_TOKENS = 16_000;
@@ -19,12 +20,12 @@ export class CoachModelError extends Error {
 
 export function modelError(error: unknown): CoachModelError {
   if (error instanceof CoachModelError) return error;
-  if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) return new CoachModelError("bad_key", "Anthropic didn't accept the AI key.");
-  if (error instanceof Anthropic.RateLimitError) return new CoachModelError("rate_limited", "The AI key has hit its rate limit. Try again in a minute.");
-  if (error instanceof Anthropic.BadRequestError) return new CoachModelError("refused_request", "Anthropic refused the request, so Coach couldn't answer.");
-  if (error instanceof Anthropic.APIConnectionError) return new CoachModelError("unreachable", "Anthropic couldn't be reached.");
-  if (error instanceof Anthropic.APIError) return new CoachModelError("overloaded", "Anthropic is having trouble right now. Try again shortly.");
-  return new CoachModelError("unreachable", "Coach's model couldn't be reached.");
+  if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) return new CoachModelError("bad_key", t("Anthropic didn't accept the AI key."));
+  if (error instanceof Anthropic.RateLimitError) return new CoachModelError("rate_limited", t("The AI key has hit its rate limit. Try again in a minute."));
+  if (error instanceof Anthropic.BadRequestError) return new CoachModelError("refused_request", t("Anthropic refused the request, so Coach couldn't answer."));
+  if (error instanceof Anthropic.APIConnectionError) return new CoachModelError("unreachable", t("Anthropic couldn't be reached."));
+  if (error instanceof Anthropic.APIError) return new CoachModelError("overloaded", t("Anthropic is having trouble right now. Try again shortly."));
+  return new CoachModelError("unreachable", t("Coach's model couldn't be reached."));
 }
 
 /** Files in the athlete's question as Claude's image, document and text blocks; everything else unchanged. */

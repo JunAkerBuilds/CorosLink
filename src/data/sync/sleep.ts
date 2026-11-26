@@ -6,6 +6,7 @@ import { calendarDayKey, refToDate } from "./native";
 import { nightFromItem } from "./health";
 import { dayKey, parseDay } from "@/lib/format";
 import { addDays } from "@/lib/health";
+import { t } from "@/lib/i18n";
 
 interface Item<B> { id: string; body: B }
 
@@ -61,5 +62,5 @@ export function plannedOn(planned: readonly NativeGymPlanned[], routines: readon
   const key = dayKey(day);
   const first = planned.find((p) => p.day && calendarDayKey(p.day) === key);
   if (!first) return null;
-  return routines.find((r) => r.id === first.routineID)?.name || "Gym workout";
+  return routines.find((r) => r.id === first.routineID)?.name || t("Gym workout");
 }

@@ -3,6 +3,7 @@
 // and the status spots. CorosLink's Simulation panel, on C-LINK's number fields. Nothing here is saved with the face.
 import { useState } from "react";
 import { Segmented, Select } from "@/components/ui";
+import { language, locale, t, tx } from "@/lib/i18n";
 import {
   advanceSimulationDateTime, createWatchfaceSimulation, parseSimulationDateTime, simulationDateTime, simulationPreset,
   type WatchfaceSimulation,
@@ -44,7 +45,7 @@ function SampleValue({ label, value, time, onCommit }: { label: string; value: s
   };
   return (
     <label className="st-sim-field"><span>{label}</span>
-      <input className="field st-sim-value" type="text" inputMode={time ? "text" : "decimal"} aria-label={`${label} sample`} maxLength={12} value={draft ?? value}
+      <input className="field st-sim-value" type="text" inputMode={time ? "text" : "decimal"} aria-label={t("{label} sample", { label })} maxLength={12} value={draft ?? value}
         onChange={(e) => setDraft(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
     </label>
   );
@@ -54,12 +55,12 @@ function SampleValue({ label, value, time, onCommit }: { label: string; value: s
 function SimDateTime({ dateTime, onChange }: { dateTime: string; onChange: (v: string) => void }) {
   const [date, setDate] = useState<string | null>(null);
   const [time, setTime] = useState<string | null>(null);
-  const d = date ?? dateTime.slice(0, 10), t = time ?? dateTime.slice(11, 19);
+  const d = date ?? dateTime.slice(0, 10), tm = time ?? dateTime.slice(11, 19);
   const commit = (nd: string, nt: string) => { try { onChange(simulationDateTime(parseSimulationDateTime(`${nd}T${nt.length === 5 ? `${nt}:00` : nt}`))); } catch { /* not a date yet */ } };
   return <>
-    <input className="field st-sim-date" type="date" min="1900-01-01" max="9999-12-31" aria-label="Date" value={d}
-      onChange={(e) => { setDate(e.target.value); commit(e.target.value, t); }} onBlur={() => setDate(null)} />
-    <input className="field st-sim-time" type="time" step={1} aria-label="Time" value={t}
+    <input className="field st-sim-date" type="date" min="1900-01-01" max="9999-12-31" aria-label={t("Date")} value={d}
+      onChange={(e) => { setDate(e.target.value); commit(e.target.value, tm); }} onBlur={() => setDate(null)} />
+    <input className="field st-sim-time" type="time" step={1} aria-label={tx("clock", "Time")} value={tm}
       onChange={(e) => { setTime(e.target.value); commit(d, e.target.value); }} onBlur={() => setTime(null)} />
   </>;
 }
@@ -84,7 +85,7 @@ export interface SimPanelProps {
 
 export function SimPanel({ sim, setSim, speed, setSpeed, design, layers, spots, choice, setChoice, slot, slotShown, onSlot }: SimPanelProps) {
   const [more, setMore] = useState(false);
-  const slotType = slot.find((t) => t.id === slotShown);
+  const slotType = slot.find((x) => x.id === slotShown);
   // A spot's states the face has an image for; one state alone has nothing to switch.
   const switches = spots.map((spot) => ({ spot, states: spot.states.filter((s) => s.layer.present) })).filter((x) => x.states.length > 1);
   const at = parseSimulationDateTime(sim.dateTime);
@@ -102,80 +103,80 @@ export function SimPanel({ sim, setSim, speed, setSpeed, design, layers, spots, 
   const valueCount = metrics.length + natives.length + (kcal ? 1 : 0) + (exercise ? 1 : 0);
 
   return (
-    <section className="st-sim" aria-label="Simulation">
+    <section className="st-sim" aria-label={t("Simulation")}>
       <div className="st-sim-row">
-        <button type="button" className="st-play" aria-label={sim.playing ? "Pause" : "Play"} onClick={() => setSim((s) => ({ ...s, playing: !s.playing }))}><Icon name={sim.playing ? "pause" : "play"} size={18} width={2.3} /></button>
-        <div className="st-sim-clock"><b>{sim.dateTime.slice(11, 19)}</b><small>{at.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</small></div>
+        <button type="button" className="st-play" aria-label={sim.playing ? t("Pause") : t("Play")} onClick={() => setSim((s) => ({ ...s, playing: !s.playing }))}><Icon name={sim.playing ? "pause" : "play"} size={18} width={2.3} /></button>
+        <div className="st-sim-clock"><b>{sim.dateTime.slice(11, 19)}</b><small>{at.toLocaleDateString(language() === "en" ? undefined : locale(), { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</small></div>
         <SimDateTime dateTime={sim.dateTime} onChange={(dateTime) => setSim((s) => ({ ...s, dateTime, playing: false }))} />
         <span className="st-chips st-sim-steps">
-          <button type="button" className="chip" onClick={() => setSim((s) => ({ ...s, dateTime: simulationDateTime(new Date()), playing: false }))}>Now</button>
+          <button type="button" className="chip" onClick={() => setSim((s) => ({ ...s, dateTime: simulationDateTime(new Date()), playing: false }))}>{t("Now")}</button>
           <button type="button" className="chip" onClick={() => step(1)}>+1 s</button>
           <button type="button" className="chip" onClick={() => step(60)}>+1 min</button>
-          <button type="button" className="chip" onClick={() => step(86400)}>+1 day</button>
+          <button type="button" className="chip" onClick={() => step(86400)}>{t("+1 day")}</button>
         </span>
-        <Segmented small label="Speed" value={speed} onChange={setSpeed} options={[{ value: "real", label: "Real time" }, { value: "min", label: "1 min/s" }, { value: "hour", label: "1 h/s" }, { value: "day", label: "1 day/s" }]} />
-        <button type="button" className="st-icon-btn" aria-label="Close the simulation" onClick={() => setSim((s) => ({ ...s, enabled: false, playing: false }))}><Icon name="close" /></button>
+        <Segmented small label={t("Speed")} value={speed} onChange={setSpeed} options={[{ value: "real", label: t("Real time") }, { value: "min", label: "1 min/s" }, { value: "hour", label: "1 h/s" }, { value: "day", label: t("1 day/s") }]} />
+        <button type="button" className="st-icon-btn" aria-label={t("Close the simulation")} onClick={() => setSim((s) => ({ ...s, enabled: false, playing: false }))}><Icon name="close" /></button>
       </div>
       <div className="st-chips">
-        <button type="button" className="chip" onClick={() => preset("lowBattery")}>Low battery</button>
-        <button type="button" className="chip" onClick={() => preset("fullBattery")}>Full battery</button>
-        <button type="button" className="chip" onClick={() => preset("midnight")}>Midnight</button>
-        <button type="button" className="chip" onClick={() => preset("yearEnd")}>New year</button>
-        <button type="button" className="chip" onClick={() => preset("leapDay")}>Leap day 2028</button>
-        <button type="button" className="chip" onClick={() => preset("wide")}>Widest values</button>
-        <button type="button" className="chip" onClick={() => setSim(() => ({ ...createWatchfaceSimulation(), enabled: true }))}>Reset</button>
+        <button type="button" className="chip" onClick={() => preset("lowBattery")}>{t("Low battery")}</button>
+        <button type="button" className="chip" onClick={() => preset("fullBattery")}>{t("Full battery")}</button>
+        <button type="button" className="chip" onClick={() => preset("midnight")}>{t("Midnight")}</button>
+        <button type="button" className="chip" onClick={() => preset("yearEnd")}>{t("New year")}</button>
+        <button type="button" className="chip" onClick={() => preset("leapDay")}>{t("Leap day 2028")}</button>
+        <button type="button" className="chip" onClick={() => preset("wide")}>{t("Widest values")}</button>
+        <button type="button" className="chip" onClick={() => setSim(() => ({ ...createWatchfaceSimulation(), enabled: true }))}>{t("Reset")}</button>
       </div>
       <div className="st-sim-row st-sim-more">
-        <span className="st-sim-num"><NumberField label="Battery" unit="%" value={battery} min={0} max={100} onChange={(v) => setValue("battery", String(v))} /></span>
-        <label className="st-range"><span>Weather</span>
-          <Select field aria-label="Weather state" value={sim.weather?.condition ?? 0} onChange={(e) => setSim((s) => ({ ...s, weather: { condition: Number(e.target.value), night: s.weather?.night ?? false } }))}>
-            {Array.from({ length: 41 }, (_, i) => <option key={i} value={i}>State {String(i).padStart(2, "0")}</option>)}
+        <span className="st-sim-num"><NumberField label={t("Battery")} unit="%" value={battery} min={0} max={100} onChange={(v) => setValue("battery", String(v))} /></span>
+        <label className="st-range"><span>{t("Weather")}</span>
+          <Select field aria-label={t("Weather state")} value={sim.weather?.condition ?? 0} onChange={(e) => setSim((s) => ({ ...s, weather: { condition: Number(e.target.value), night: s.weather?.night ?? false } }))}>
+            {Array.from({ length: 41 }, (_, i) => <option key={i} value={i}>{t("State {n}", { n: String(i).padStart(2, "0") })}</option>)}
           </Select></label>
-        <Segmented small label="Day or night" value={sim.weather?.night ? "night" : "day"} onChange={(v) => setSim((s) => ({ ...s, weather: { condition: s.weather?.condition ?? 0, night: v === "night" } }))}
-          options={[{ value: "day", label: "Day" }, { value: "night", label: "Night" }]} />
+        <Segmented small label={t("Day or night")} value={sim.weather?.night ? "night" : "day"} onChange={(v) => setSim((s) => ({ ...s, weather: { condition: s.weather?.condition ?? 0, night: v === "night" } }))}
+          options={[{ value: "day", label: tx("daylight", "Day") }, { value: "night", label: t("Night") }]} />
         {chart ? (
-          <label className="st-range"><span>Chart</span>
-            <Select field aria-label="Chart history" value={historyOf(sim.chartHistory)} onChange={(e) => setSim((s) => ({ ...s, chartHistory: HISTORY[e.target.value] }))}>
-              <option value="sample">Sample</option><option value="rising">Rising</option><option value="falling">Falling</option><option value="zero">Zero</option>
+          <label className="st-range"><span>{t("Chart")}</span>
+            <Select field aria-label={t("Chart history")} value={historyOf(sim.chartHistory)} onChange={(e) => setSim((s) => ({ ...s, chartHistory: HISTORY[e.target.value] }))}>
+              <option value="sample">{t("Sample")}</option><option value="rising">{t("Rising")}</option><option value="falling">{t("Falling")}</option><option value="zero">{t("Zero")}</option>
             </Select></label>
         ) : null}
         {valueCount ? (
           <button type="button" className="st-link st-sim-toggle" aria-expanded={more} onClick={() => setMore((m) => !m)}>
-            Values<Icon name="chevD" size={13} />
+            {t("Values")}<Icon name="chevD" size={13} />
           </button>
         ) : null}
       </div>
       {more && valueCount ? (
         <div className="st-sim-values">
-          {kcal ? <span className="st-sim-num"><NumberField label="Calorie goal" unit="%" value={Math.round(Number(sim.values.kcalProgress ?? design.kcalProgress?.previewPercent ?? 63))} min={0} max={100} onChange={(v) => setValue("kcalProgress", String(v))} /></span> : null}
-          {exercise ? <span className="st-sim-num"><NumberField label="Exercise goal" unit="%" value={Math.round(Number(sim.values.exerciseProgress ?? design.exerciseProgress?.previewPercent ?? 63))} min={0} max={100} onChange={(v) => setValue("exerciseProgress", String(v))} /></span> : null}
+          {kcal ? <span className="st-sim-num"><NumberField label={t("Calorie goal")} unit="%" value={Math.round(Number(sim.values.kcalProgress ?? design.kcalProgress?.previewPercent ?? 63))} min={0} max={100} onChange={(v) => setValue("kcalProgress", String(v))} /></span> : null}
+          {exercise ? <span className="st-sim-num"><NumberField label={t("Exercise goal")} unit="%" value={Math.round(Number(sim.values.exerciseProgress ?? design.exerciseProgress?.previewPercent ?? 63))} min={0} max={100} onChange={(v) => setValue("exerciseProgress", String(v))} /></span> : null}
           {metrics.map(([id, label]) => {
             const fallback = METRIC_SAMPLE[id] ?? "0";
-            return <SampleValue key={`m:${id}`} label={label} time={fallback.includes(":")} value={sim.values[id] ?? fallback} onCommit={(v) => setValue(id, v)} />;
+            return <SampleValue key={`m:${id}`} label={t(label)} time={fallback.includes(":")} value={sim.values[id] ?? fallback} onCommit={(v) => setValue(id, v)} />;
           })}
           {natives.map((field) => {
             const style = design.nativeData![field.id]!;
             const key = field.id === "chart" ? style.chartSource ?? "chart_stress" : field.id;
             const fallback = nativeDataPreviewValue(field.id, style);
             const states = field.kind === "state" ? style.stateCount ?? field.stateCount : key === "chart_moon" ? 30 : undefined;
-            const label = field.id === "chart" ? NATIVE_CHART_SOURCES.find((s) => s.id === key)?.label ?? field.label : field.label;
+            const label = t(field.id === "chart" ? NATIVE_CHART_SOURCES.find((s) => s.id === key)?.label ?? field.label : field.label);
             return states ? (
-              <span key={`n:${key}`} className="st-sim-num"><NumberField label={`${label} state`} value={Math.round(Number(sim.values[key] ?? fallback) || 0)} min={0} max={states - 1} onChange={(v) => setValue(key, String(v))} /></span>
+              <span key={`n:${key}`} className="st-sim-num"><NumberField label={t("{label} state", { label })} value={Math.round(Number(sim.values[key] ?? fallback) || 0)} min={0} max={states - 1} onChange={(v) => setValue(key, String(v))} /></span>
             ) : <SampleValue key={`n:${key}`} label={label} time={fallback.includes(":")} value={sim.values[key] ?? fallback} onCommit={(v) => setValue(key, v)} />;
           })}
         </div>
       ) : null}
       {slotType ? (
         <div className="st-sim-row st-sim-more">
-          <label className="st-range"><span>Wearer picks</span>
-            <button type="button" className="st-icon-btn" aria-label="The type before" disabled={slot.length < 2} onClick={() => onSlot(nextSlotPreview(slot, slotShown, -1))}><Icon name="chevL" size={16} width={2.2} /></button>
-            <Select field aria-label="Type the slot shows" value={slotShown} onChange={(e) => onSlot(e.target.value)}>
-              {slot.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          <label className="st-range"><span>{t("Wearer picks")}</span>
+            <button type="button" className="st-icon-btn" aria-label={t("The type before")} disabled={slot.length < 2} onClick={() => onSlot(nextSlotPreview(slot, slotShown, -1))}><Icon name="chevL" size={16} width={2.2} /></button>
+            <Select field aria-label={t("Type the slot shows")} value={slotShown} onChange={(e) => onSlot(e.target.value)}>
+              {slot.map((x) => <option key={x.id} value={x.id}>{t(x.label)}</option>)}
             </Select>
-            <button type="button" className="st-icon-btn" aria-label="The next type" disabled={slot.length < 2} onClick={() => onSlot(nextSlotPreview(slot, slotShown, 1))}><Icon name="chevR" size={16} width={2.2} /></button></label>
+            <button type="button" className="st-icon-btn" aria-label={t("The next type")} disabled={slot.length < 2} onClick={() => onSlot(nextSlotPreview(slot, slotShown, 1))}><Icon name="chevR" size={16} width={2.2} /></button></label>
           {slotType.id !== "battery" && slotType.id !== "date" ? (
-            <label className="st-range"><span>Value</span>
-              <input className="field st-sim-value" type="text" aria-label={`${slotType.label} sample value`} maxLength={12} placeholder={slotType.sample} value={sim.values[slotType.id] ?? ""}
+            <label className="st-range"><span>{t("Value")}</span>
+              <input className="field st-sim-value" type="text" aria-label={t("{label} sample value", { label: t(slotType.label) })} maxLength={12} placeholder={slotType.sample} value={sim.values[slotType.id] ?? ""}
                 onChange={(e) => { const value = e.target.value; setSim((s) => { const values = { ...s.values }; if (value.trim()) values[slotType.id] = value; else delete values[slotType.id]; return { ...s, values }; }); }} /></label>
           ) : null}
         </div>
@@ -183,9 +184,9 @@ export function SimPanel({ sim, setSim, speed, setSpeed, design, layers, spots, 
       {switches.length ? (
         <div className="st-sim-row st-sim-more">
           {switches.map(({ spot, states }) => (
-            <label key={spot.id} className="st-range"><span>{spot.label}</span>
-              <Segmented small label={`${spot.label} state`} value={spotActive(spot, choice).key} onChange={(key) => setChoice((c) => ({ ...c, [spot.id]: key }))}
-                options={states.map((s) => ({ value: s.key, label: s.label }))} /></label>
+            <label key={spot.id} className="st-range"><span>{t(spot.label)}</span>
+              <Segmented small label={t("{label} state", { label: t(spot.label) })} value={spotActive(spot, choice).key} onChange={(key) => setChoice((c) => ({ ...c, [spot.id]: key }))}
+                options={states.map((s) => ({ value: s.key, label: t(s.label) }))} /></label>
           ))}
         </div>
       ) : null}

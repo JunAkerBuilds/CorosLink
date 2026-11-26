@@ -1,6 +1,7 @@
 // Synced gym items → the Strength screen. Pure: plain bodies and `now` in, the screen's type out.
 // The workout maths follows CorosKit's GymLog.swift: a set is done when `doneAt` is there, working sets are the
 // done ones that are not warm-ups, volume is Σ weight × reps over working sets (a missing weight or reps counts 0).
+import { language, locale, msg, t } from "@/lib/i18n";
 import type { GymWorkout, Lift, LiftedRange, Muscle, Strength, Suggestion } from "../strength";
 import { refToDate, refToMs, type NativeGymSet, type NativeGymWorkout, type ViewStrengthBody } from "./native";
 
@@ -8,7 +9,8 @@ const DAY_MS = 86_400_000;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export const NOTHING_YET = "Nothing from your phone yet";
+/** English; translate where shown: `t(NOTHING_YET)`. */
+export const NOTHING_YET = msg("Nothing from your phone yet");
 
 /* ───────────── One workout ───────────── */
 
@@ -37,6 +39,7 @@ const kg = (v: number): string => String(Math.round(v * 100) / 100);
 
 /** "Tue 17 Nov". */
 export function dateText(d: Date): string {
+  if (language() !== "en") return new Intl.DateTimeFormat(locale(), { weekday: "short", day: "numeric", month: "short" }).format(d);
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
@@ -70,7 +73,7 @@ export function workoutRows(workouts: readonly NativeGymWorkout[], names: Record
     id: w.id,
     ...(fromHevy?.has(w.id) ? { source: "hevy" as const } : {}),
     date: dateText(refToDate(w.start)),
-    name: w.name?.trim() || "Workout",
+    name: w.name?.trim() || t("Workout"),
     top: topLine(w, names),
     sets: workingSets(w).length,
     liftedKg: Math.round(volumeKg(w)),
@@ -122,9 +125,9 @@ function range(
 /** 4 weeks, 12 weeks (Monday-start weeks ending with this one) and 12 calendar months ending with this one. */
 export function liftedRanges(workouts: readonly NativeGymWorkout[], now: Date): LiftedRange[] {
   return [
-    range("4w", "4 weeks", "week", 4, workouts, (d) => weeksAgo(d, now)),
-    range("12w", "12 weeks", "week", 12, workouts, (d) => weeksAgo(d, now)),
-    range("year", "Year", "month", 12, workouts, (d) => monthsAgo(d, now)),
+    range("4w", t("4 weeks"), "week", 4, workouts, (d) => weeksAgo(d, now)),
+    range("12w", t("12 weeks"), "week", 12, workouts, (d) => weeksAgo(d, now)),
+    range("year", t("Year"), "month", 12, workouts, (d) => monthsAgo(d, now)),
   ];
 }
 
@@ -144,14 +147,14 @@ export function liftNote(weekly: readonly (number | null)[], bestBefore: number 
   const at = weekly.map((v, i) => (v == null ? -1 : i)).filter((i) => i >= 0);
   if (!at.length) return "";
   const lastAt = at[at.length - 1], last = weekly[lastAt]!;
-  if (lastAt >= weekly.length - 2 && bestBefore != null && last > bestBefore) return `New best, +${kg(last - bestBefore)} kg`;
+  if (lastAt >= weekly.length - 2 && bestBefore != null && last > bestBefore) return t("New best, +{kg} kg", { kg: kg(last - bestBefore) });
   let runStart = lastAt;
   for (let k = at.length - 2; k >= 0 && weekly[at[k]] === last; k--) runStart = at[k];
   const held = lastAt - runStart + 1;
-  if (held >= 3) return `Holding for ${held} weeks`;
+  if (held >= 3) return t("Holding for {n} weeks", { n: held });
   const firstAt = at[0], diff = last - weekly[firstAt]!;
   if (firstAt === lastAt || diff === 0) return "";
-  return `${diff > 0 ? "+" : "−"}${kg(Math.abs(diff))} kg in ${lastAt - firstAt + 1} weeks`;
+  return t("{change} kg in {n} weeks", { change: `${diff > 0 ? "+" : "−"}${kg(Math.abs(diff))}`, n: lastAt - firstAt + 1 });
 }
 
 /**
@@ -218,30 +221,30 @@ export function muscleRow(m: NonNullable<ViewStrengthBody["muscles"]>[number], n
     const hours = Math.max(1, Math.ceil((at.getTime() - nowMs) / 3_600_000));
     const sameDay = at.getFullYear() === now.getFullYear() && at.getMonth() === now.getMonth() && at.getDate() === now.getDate();
     const days = Math.round(hours / 24);
-    const note = sameDay && at.getHours() >= 18 ? "Ready tonight"
-      : hours < 24 ? `Ready in ${hours} ${hours === 1 ? "hour" : "hours"}`
-        : `Ready in ${days} ${days === 1 ? "day" : "days"}`;
+    const note = sameDay && at.getHours() >= 18 ? t("Ready tonight")
+      : hours < 24 ? (hours === 1 ? t("Ready in 1 hour") : t("Ready in {n} hours", { n: hours }))
+        : days === 1 ? t("Ready in 1 day") : t("Ready in {n} days", { n: days });
     return { name: m.name, fatigue, state: "recovering", note };
   }
   if (m.lastTrainedAt != null) {
     const days = Math.floor((nowMs - refToMs(m.lastTrainedAt)) / DAY_MS);
     // The phone's own verdict wins when it sent one; the fixed 14 days is only for bodies without it.
-    if (m.state != null) return m.state === "overdue" ? { name: m.name, fatigue, state: "overdue", note: `Not trained in ${days} days` } : { name: m.name, fatigue, state: "ready", note: "Ready" };
-    if (days >= OVERDUE_FROM_DAYS && days <= OVERDUE_TO_DAYS) return { name: m.name, fatigue, state: "overdue", note: `Not trained in ${days} days` };
+    if (m.state != null) return m.state === "overdue" ? { name: m.name, fatigue, state: "overdue", note: t("Not trained in {n} days", { n: days }) } : { name: m.name, fatigue, state: "ready", note: t("Ready") };
+    if (days >= OVERDUE_FROM_DAYS && days <= OVERDUE_TO_DAYS) return { name: m.name, fatigue, state: "overdue", note: t("Not trained in {n} days", { n: days }) };
   }
-  return { name: m.name, fatigue, state: "ready", note: "Ready" };
+  return { name: m.name, fatigue, state: "ready", note: t("Ready") };
 }
 
 /* ───────────── Suggestion ───────────── */
 
-const FIGURE_ALT = "The muscle figure's torso, close up";
+const FIGURE_ALT = msg("The muscle figure's torso, close up");
 
 export function suggestionCard(s: ViewStrengthBody["suggestion"]): Suggestion {
-  if (!s?.title) return { title: "No suggestion yet", text: "", figureAlt: FIGURE_ALT };
+  if (!s?.title) return { title: t("No suggestion yet"), text: "", figureAlt: t(FIGURE_ALT) };
   const names = (s.exercises ?? []).map((e) => e.name).filter(Boolean);
   const count = names.length;
-  const text = count ? `${count} ${count === 1 ? "exercise" : "exercises"}: ${names.join(", ")}.` : "";
-  return { title: s.title, text, figureAlt: FIGURE_ALT };
+  const text = !count ? "" : count === 1 ? t("1 exercise: {names}.", { names: names.join(", ") }) : t("{n} exercises: {names}.", { n: count, names: names.join(", ") });
+  return { title: s.title, text, figureAlt: t(FIGURE_ALT) };
 }
 
 /* ───────────── The screen ───────────── */

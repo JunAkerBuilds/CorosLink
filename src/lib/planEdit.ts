@@ -3,6 +3,7 @@
 // same way a generated plan does. Pure.
 import type { HubSport } from "@/data/hub";
 import { docFromHub, legacyDoc, type BuilderDoc } from "@/lib/builder";
+import { t } from "@/lib/i18n";
 import type { MadeWorkout, PlanDraft, PlanEditOp } from "@/lib/coach/plans";
 import {
   addTrainingPlanWeek, moveTrainingPlanEntry, PHASE_LABELS, planEntryFromWorkout, planEnv,
@@ -17,11 +18,11 @@ const docOf = (w: MadeWorkout, nextId: () => string): BuilderDoc | null =>
 export function applyPlanEdit(plan: TrainingPlanDocument, ops: readonly PlanEditOp[], nextId: () => string, env: PlanEnv = planEnv): TrainingPlanDocument {
   let p = plan;
   const has = (id: string) => {
-    if (!p.entries.some((e) => e.id === id)) throw new Error("This plan changed after Coach read it, so a workout it names isn't there any more. Ask Coach again.");
+    if (!p.entries.some((e) => e.id === id)) throw new Error(t("This plan changed after Coach read it, so a workout it names isn't there any more. Ask Coach again."));
   };
   const entry = (w: MadeWorkout, week: number, day: number) => {
     const doc = docOf(w, nextId);
-    if (!doc) throw new Error(`Coach's “${w.name}” came without steps.`);
+    if (!doc) throw new Error(t("Coach's “{name}” came without steps.", { name: w.name }));
     const made = planEntryFromWorkout({ key: `coach-${nextId()}`, name: w.name, sport: doc.sport as HubSport, doc: { ...doc, name: w.name } }, week, day, undefined, env);
     return w.load ? { ...made, plannedTrainingLoad: w.load } : made;
   };
@@ -37,7 +38,7 @@ export function applyPlanEdit(plan: TrainingPlanDocument, ops: readonly PlanEdit
         break;
       }
       case "add": {
-        if (op.week >= p.weekCount) throw new Error(`Week ${op.week + 1} isn't in this plan any more. Ask Coach again.`);
+        if (op.week >= p.weekCount) throw new Error(t("Week {week} isn't in this plan any more. Ask Coach again.", { week: op.week + 1 }));
         p = { ...p, entries: [...p.entries, { ...entry(op, op.week, op.day), sortOrder: p.entries.length }] };
         break;
       }
@@ -51,12 +52,12 @@ export function applyPlanEdit(plan: TrainingPlanDocument, ops: readonly PlanEdit
           p = { ...p, entries: [...p.entries, ...copies] };
         }
         if (target < last) p = reorderTrainingPlanWeek(p, last, target, env);
-        if (op.recovery) p = { ...p, phases: [...p.phases.filter((ph) => !(ph.startWeek === target + 1 && ph.endWeek === target + 1)), { id: env.newId("phase"), name: "Recovery", kind: "recovery", startWeek: target + 1, endWeek: target + 1 }] };
+        if (op.recovery) p = { ...p, phases: [...p.phases.filter((ph) => !(ph.startWeek === target + 1 && ph.endWeek === target + 1)), { id: env.newId("phase"), name: t("Recovery"), kind: "recovery", startWeek: target + 1, endWeek: target + 1 }] };
         break;
       }
       case "remove_week": p = removeTrainingPlanWeek(p, op.week, env); break;
       case "phases":
-        p = { ...p, phases: op.phases.map((ph) => ({ id: env.newId("phase"), name: PHASE_LABELS[ph.kind], kind: ph.kind, startWeek: ph.startWeek, endWeek: Math.min(ph.endWeek, p.weekCount) })) };
+        p = { ...p, phases: op.phases.map((ph) => ({ id: env.newId("phase"), name: t(PHASE_LABELS[ph.kind]), kind: ph.kind, startWeek: ph.startWeek, endWeek: Math.min(ph.endWeek, p.weekCount) })) };
         break;
       case "rename": p = { ...p, name: op.name }; break;
       case "goal": p = { ...p, goal: op.goal }; break;
@@ -76,7 +77,7 @@ export function planFromDraft(draft: PlanDraft, nextId: () => string, env: PlanE
     kind: "plan", id: "draft", title: draft.name, note: draft.overview, rows: [], week: { label: "", before: 0, after: 0, done: 0 },
     ops: draft.workouts.map((w) => ({ op: "add_workout" as const, day: day(w.offset), name: w.name, sport: "run" as const, workout: w.workout, hub: w.hub, detail: w.detail, ...(w.load ? { load: w.load } : {}) })),
   }], nextId);
-  if (!made) throw new Error("Coach's plan has no workouts.");
+  if (!made) throw new Error(t("Coach's plan has no workouts."));
   const sports = [...new Set(made.workouts.map((w) => w.sport))];
   const { plan } = trainingPlanFromGenerated(made, {
     goal: draft.goal || draft.name, sports, difficulty: "intermediate", weeks: draft.weeks, startDate: draft.start,

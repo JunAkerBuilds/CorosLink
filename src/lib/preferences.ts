@@ -1,6 +1,7 @@
 "use client";
 // Look-and-feel choices kept in this browser: which sidebar items show, and the colour of each sport.
 import { createStore } from "@/data/local/store";
+import { msg } from "@/lib/i18n";
 
 /** Sidebar items the person hid (their hrefs). Dashboard and Watch always show. */
 export const hiddenNavStore = createStore<string[]>("shell.hidden", []);
@@ -8,11 +9,11 @@ export const ALWAYS_SHOWN: readonly string[] = ["/", "/watch"];
 
 /** The sports that have a colour, the CSS variable that carries it, and the theme colour it starts as. */
 export const SPORT_COLORS = [
-  { id: "run", label: "Running", token: "--sport-run", base: "--h-mint" },
-  { id: "ride", label: "Cycling", token: "--sport-ride", base: "--h-blue" },
-  { id: "swim", label: "Swimming", token: "--sport-swim", base: "--h-cyan" },
-  { id: "strength", label: "Strength", token: "--sport-strength", base: "--h-orange" },
-  { id: "other", label: "Other", token: "--sport-other", base: "--h-violet" },
+  { id: "run", label: msg("Running"), token: "--sport-run", base: "--h-mint" },
+  { id: "ride", label: msg("Cycling"), token: "--sport-ride", base: "--h-blue" },
+  { id: "swim", label: msg("Swimming"), token: "--sport-swim", base: "--h-cyan" },
+  { id: "strength", label: msg("Strength"), token: "--sport-strength", base: "--h-orange" },
+  { id: "other", label: msg("Other"), token: "--sport-other", base: "--h-violet" },
 ] as const;
 export type SportColorId = (typeof SPORT_COLORS)[number]["id"];
 

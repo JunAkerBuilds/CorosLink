@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { CardStat, CoachHue } from "@/data/coach";
 import { CARDS_EMPTY, cardStore, setFolded } from "@/data/local/coach";
 import { useStore } from "@/data/local/store";
+import { t } from "@/lib/i18n";
 
 export const hueVar = (h: CoachHue) => `var(--h-${h})`;
 export const inkVar = (h: CoachHue) => `var(--h-${h}-ink)`;
@@ -105,7 +106,7 @@ export function CardShell({ id, hue, icon, eyebrow, title, subtitle, label, fold
         </div>
         {folded ? null : head}
         {foldable ? (
-          <button type="button" className="cc-icon" aria-expanded={!folded} aria-label={folded ? `Show ${title}` : `Fold ${title}`} onClick={() => setFolded(id, !folded)}>
+          <button type="button" className="cc-icon" aria-expanded={!folded} aria-label={folded ? t("Show {title}", { title }) : t("Fold {title}", { title })} onClick={() => setFolded(id, !folded)}>
             <span style={{ transform: folded ? "rotate(-90deg)" : undefined }}><Icon d="M6 9l6 6 6-6" size={18} width={2.2} /></span>
           </button>
         ) : null}

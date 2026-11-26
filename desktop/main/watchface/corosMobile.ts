@@ -2,6 +2,7 @@
 // state, no Electron), moved from CorosLink's electron/corosWatchfaceService.ts with its tests.
 import { createCipheriv, createHash } from "node:crypto";
 import type { CorosWatchfaceTheme } from "../../watchface/types";
+import { t } from "@/lib/i18n";
 
 export type CorosRegion = "eu" | "us" | "cn" | "sg";
 export const COROS_REGIONS: readonly CorosRegion[] = ["us", "eu", "sg", "cn"];
@@ -61,7 +62,7 @@ export function buildMobileLoginRegion(options: { locale?: string; timeZone?: st
 }
 
 export function buildMobileLoginPayload(account: string, pwdHash: string, checkStatus: 0 | 1, region = buildMobileLoginRegion()): Record<string, string | number | boolean> {
-  if (!/^[a-f0-9]{32}$/i.test(pwdHash)) throw new Error("COROS password digest is invalid.");
+  if (!/^[a-f0-9]{32}$/i.test(pwdHash)) throw new Error(t("COROS password digest is invalid."));
   return {
     account: encryptMobileLoginField(account), accountType: 2, appKey: APP_KEY, checkStatus, clientType: 1, hasHrCalibrated: 0, kbValidity: 0,
     // The Android client passes the MD5 digest through the field cipher.
@@ -206,7 +207,7 @@ export function normalizeCorosWatchfaceThemes(data: unknown, catalog: CorosCatal
     const category = readString(r, ["categoryName", "watchFaceCategoryName", "category", "styleName"]);
     themes.push({
       ...(id ? { id } : {}), ...(sourceTemplateId ? { sourceTemplateId } : {}),
-      name: name || (id ? `COROS theme ${id}` : "Untitled COROS theme"),
+      name: name || (id ? t("COROS theme {id}", { id }) : t("Untitled COROS theme")),
       ...(previewImageUrl ? { previewImageUrl } : {}), ...(packageUrl ? { packageUrl } : {}), ...(firmwareType ? { firmwareType } : {}),
       ...(backgroundImageId !== undefined ? { backgroundImageId } : {}), ...(watchFaceVersion !== undefined ? { watchFaceVersion } : {}),
       ...(diyVersion !== undefined ? { diyVersion } : {}), ...(templateType !== undefined ? { templateType } : {}), ...(category ? { category } : {}),

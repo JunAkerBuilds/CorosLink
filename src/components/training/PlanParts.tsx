@@ -4,6 +4,7 @@ import { Button } from "@/components/ui";
 import { addPlanToCalendar, removePlanFromCalendar } from "@/data/plans";
 import { shortDay } from "@/lib/calendar";
 import { installStanding, planCalendarPreview, upcomingTrainingPlanCalendarWorkoutCount, type InstallProgress, type PlanView, type TrainingPlanDocument } from "@/lib/plan";
+import { t } from "@/lib/i18n";
 
 export function Icon({ d, size = 18, width = 1.9 }: { d: string; size?: number; width?: number }) {
   return (
@@ -42,12 +43,12 @@ export function PlanOverviewChart({ bars, label, peak, onWeek }: { bars: PlanVie
     <div className="pe-chart">
       <div role="img" aria-label={label} className="pe-bars">
         {bars.map((bar, i) => (
-          <button key={i} type="button" tabIndex={-1} data-phase={bar.phase ?? "none"} title={`Week ${i + 1}: ${Math.round(bar.value)}`} onClick={() => onWeek?.(i)}
+          <button key={i} type="button" tabIndex={-1} data-phase={bar.phase ?? "none"} title={t("Week {n}: {load}", { n: i + 1, load: Math.round(bar.value) })} onClick={() => onWeek?.(i)}
             style={{ height: `${Math.max(4, Math.round(bar.share * 100))}%`, animationDelay: `${i * 30}ms` }} />
         ))}
       </div>
       <div aria-hidden="true" className="pe-weeks">
-        {bars.map((bar, i) => <span key={i} data-peak={i === peak || undefined}>{many ? i + 1 : `W${i + 1}`}{i === peak && !many ? ` · ${Math.round(bar.value)}` : ""}</span>)}
+        {bars.map((bar, i) => <span key={i} data-peak={i === peak || undefined}>{many ? i + 1 : t("W{n}", { n: i + 1 })}{i === peak && !many ? ` · ${Math.round(bar.value)}` : ""}</span>)}
       </div>
     </div>
   );
@@ -59,7 +60,7 @@ export function PhaseRibbon({ ribbon }: { ribbon: PlanView["ribbon"] }) {
   return (
     <div className="pl-ribbon">
       {/* With many phases, a one-week band (a recovery week) keeps its colour but not a label it has no room for. */}
-      {ribbon.map((phase) => <span key={phase.id} data-phase={phase.kind} title={phase.label} style={{ flex: `${phase.weeks} 1 0` }}>{phase.weeks > 1 || ribbon.length <= 6 ? phase.label : "\u00a0"}</span>)}
+      {ribbon.map((phase) => <span key={phase.id} data-phase={phase.kind} title={t(phase.label)} style={{ flex: `${phase.weeks} 1 0` }}>{phase.weeks > 1 || ribbon.length <= 6 ? t(phase.label) : "\u00a0"}</span>)}
     </div>
   );
 }
@@ -86,7 +87,6 @@ export function PlanDialog({ title, children, actions, onClose, busy }: { title:
   );
 }
 
-const plural = (n: number) => `${n} ${n === 1 ? "workout" : "workouts"}`;
 
 /**
  * "Add to calendar" and "Remove from calendar" for a saved plan: what would be written, then the writes one
@@ -103,23 +103,22 @@ export function PlanCalendarDialog({ plan, operation, today, toCoros, onClose, o
   const preview = planCalendarPreview(plan, today), standing = installStanding(plan, today);
   const upcoming = upcomingTrainingPlanCalendarWorkoutCount(plan, today);
   const left = operation === "install" ? preview.targets.length - (standing.retrying ? standing.added : 0) : upcoming;
-  const where = toCoros ? "your COROS calendar" : "this computer’s calendar";
 
   const run = () => {
     setBusy(true);
     (operation === "install" ? addPlanToCalendar(plan.id, setProgress) : removePlanFromCalendar(plan.id, setProgress)).then(
       (result) => { setBusy(false); onChanged(result.plan); if (result.problem) setOutcome(result); else onClose(); },
-      (e: unknown) => { setBusy(false); setOutcome({ plan, problem: e instanceof Error ? e.message : "It didn't work." }); },
+      (e: unknown) => { setBusy(false); setOutcome({ plan, problem: e instanceof Error ? e.message : t("It didn’t work.") }); },
     );
   };
 
-  const title = operation === "install" ? (standing.retrying ? "Retry calendar install" : "Add to calendar") : standing.retrying ? "Remove partial install" : "Remove from calendar";
+  const title = operation === "install" ? (standing.retrying ? t("Retry calendar install") : t("Add to calendar")) : standing.retrying ? t("Remove partial install") : t("Remove from calendar");
   if (outcome) {
     const after = installStanding(outcome.plan, today);
     return (
-      <PlanDialog title={operation === "install" ? "Calendar install incomplete" : "Not everything was removed"} onClose={onClose}
-        actions={<Button data-first onClick={onClose}>Close</Button>}>
-        <p role="alert">{operation === "install" ? `${after.added} of ${after.total} workouts added.` : `${upcomingTrainingPlanCalendarWorkoutCount(outcome.plan, today)} of this plan’s workouts are still on the calendar.`}</p>
+      <PlanDialog title={operation === "install" ? t("Calendar install incomplete") : t("Not everything was removed")} onClose={onClose}
+        actions={<Button data-first onClick={onClose}>{t("Close")}</Button>}>
+        <p role="alert">{operation === "install" ? t("{added} of {total} workouts added.", { added: after.added, total: after.total }) : t("{n} of this plan’s workouts are still on the calendar.", { n: upcomingTrainingPlanCalendarWorkoutCount(outcome.plan, today) })}</p>
         <p className="pl-bad" style={{ fontWeight: 600 }}>{outcome.problem}</p>
       </PlanDialog>
     );
@@ -127,24 +126,28 @@ export function PlanCalendarDialog({ plan, operation, today, toCoros, onClose, o
   return (
     <PlanDialog title={title} onClose={onClose} busy={busy}
       actions={<>
-        <Button data-first disabled={busy} onClick={onClose}>Cancel</Button>
+        <Button data-first disabled={busy} onClick={onClose}>{t("Cancel")}</Button>
         <Button variant="primary" disabled={busy || left <= 0 || (operation === "install" && Boolean(preview.blocker))} onClick={run}>
-          {busy ? (operation === "install" ? "Adding…" : "Removing…") : operation === "install" ? `Add ${plural(left)}` : `Remove ${plural(left)}`}
+          {busy ? (operation === "install" ? t("Adding…") : t("Removing…")) : operation === "install" ? (left === 1 ? t("Add 1 workout") : t("Add {n} workouts", { n: left })) : left === 1 ? t("Remove 1 workout") : t("Remove {n} workouts", { n: left })}
         </Button>
       </>}>
       {operation === "install" ? (
         preview.blocker ? <p role="alert">{preview.blocker}</p> : (
           <>
-            <p>“{plan.name}” goes on {where}, one workout at a time: {plural(left)} from {shortDay(preview.targets[0].day)} to {shortDay(preview.targets[preview.targets.length - 1].day)}.</p>
-            {standing.retrying ? <p>{standing.added} of {standing.total} are on the calendar already.</p> : null}
-            {preview.skipped.length ? <p>{plural(preview.skipped.length)} on days that have passed {preview.skipped.length === 1 ? "stays" : "stay"} off the calendar.</p> : null}
+            <p>{(() => {
+              const vars = { name: plan.name, n: left, from: shortDay(preview.targets[0].day), to: shortDay(preview.targets[preview.targets.length - 1].day) };
+              if (toCoros) return left === 1 ? t("“{name}” goes on your COROS calendar: 1 workout on {from}.", vars) : t("“{name}” goes on your COROS calendar, one workout at a time: {n} workouts from {from} to {to}.", vars);
+              return left === 1 ? t("“{name}” goes on this computer’s calendar: 1 workout on {from}.", vars) : t("“{name}” goes on this computer’s calendar, one workout at a time: {n} workouts from {from} to {to}.", vars);
+            })()}</p>
+            {standing.retrying ? <p>{t("{added} of {total} are on the calendar already.", { added: standing.added, total: standing.total })}</p> : null}
+            {preview.skipped.length ? <p>{preview.skipped.length === 1 ? t("1 workout on a day that has passed stays off the calendar.") : t("{n} workouts on days that have passed stay off the calendar.", { n: preview.skipped.length })}</p> : null}
           </>
         )
-      ) : <p>{plural(left)} of “{plan.name}” from today on {left === 1 ? "comes" : "come"} off the calendar. Past days stay.</p>}
+      ) : <p>{left === 1 ? t("1 workout of “{name}” from today on comes off the calendar. Past days stay.", { name: plan.name }) : t("{n} workouts of “{name}” from today on come off the calendar. Past days stay.", { n: left, name: plan.name })}</p>}
       {busy && progress ? (
         <div aria-live="polite" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div className="pl-meter"><span style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 0}%` }} /></div>
-          <span className="muted" style={{ fontSize: 13 }}>{progress.done} of {progress.total}{progress.name ? ` · ${progress.name}` : ""}</span>
+          <span className="muted" style={{ fontSize: 13 }}>{t("{done} of {total}", { done: progress.done, total: progress.total })}{progress.name ? ` · ${progress.name}` : ""}</span>
         </div>
       ) : null}
     </PlanDialog>

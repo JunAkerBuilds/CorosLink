@@ -6,6 +6,7 @@ import type { HubIntensity, HubSport, HubStroke, HubWorkout, HubWorkoutStep } fr
 import gymMuscles from "@/data/sync/gymMuscles.json";
 import { muscleWork } from "@/lib/activityDetail";
 import { clock as clockText, thousands } from "@/lib/format";
+import { msg, t, tx } from "@/lib/i18n";
 import { formatClock, paceIntensity, ZONE_INTENSITY, type Pacing } from "@/lib/workout";
 import { strengthLines, type LiftHistory } from "./strengthCard";
 import type { AthleteZones } from "./zones";
@@ -26,9 +27,15 @@ export function bodyKindFor(sport: HubSport, steps: number): WorkoutBodyKind {
   return sport === "swim" ? "swim" : "intervals";
 }
 
-const KIND_WORDS: Record<BodyStepKind, string> = { warmup: "Warm up", work: "Work", recovery: "Recovery", rest: "Rest", cooldown: "Cool down" };
+const KIND_WORDS: Record<BodyStepKind, string> = { warmup: msg("Warm up"), work: msg("Work"), recovery: msg("Recovery"), rest: msg("Rest"), cooldown: msg("Cool down") };
 const KIND_HEIGHT: Record<BodyStepKind, number> = { warmup: 0.42, cooldown: 0.42, work: 0.7, recovery: 0.28, rest: 0.15 };
-const STROKE_WORDS: Record<HubStroke, string> = { freestyle: "freestyle", breaststroke: "breaststroke", backstroke: "backstroke", butterfly: "butterfly", mix: "mixed", individualMedley: "medley", drills: "drills" };
+const STROKE_WORDS: Record<HubStroke, string> = {
+  freestyle: msg("freestyle"), breaststroke: msg("breaststroke"), backstroke: msg("backstroke"), butterfly: msg("butterfly"), mix: msg("mixed"), individualMedley: msg("medley"), drills: msg("drills"),
+};
+/** Stroke names as a share's title. */
+const STROKE_TITLES: Record<HubStroke | "any", string> = {
+  freestyle: msg("Freestyle"), breaststroke: msg("Breaststroke"), backstroke: msg("Backstroke"), butterfly: msg("Butterfly"), mix: msg("Mixed"), individualMedley: msg("Medley"), drills: msg("Drills"), any: msg("Any stroke"),
+};
 
 const kindOf = (s: HubWorkoutStep): BodyStepKind =>
   s.kind === "warmup" ? "warmup" : s.kind === "cooldown" ? "cooldown" : s.kind === "training" ? "work" : s.target === "distance" || (s.intensity.kind !== "none" && s.intensity.kind !== "grade") ? "recovery" : "rest";
@@ -39,6 +46,7 @@ const mid = (i: HubIntensity): number | null => (i.low == null ? null : i.high !
 const metresText = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`);
 /** A rest in the fewest words: 20 s, 1:30. */
 const restText = (seconds: number) => (seconds < 60 ? `${seconds} s` : formatClock(seconds));
+const restWords = (seconds: number) => t("{time} rest", { time: restText(seconds) });
 
 function hrZone(bpm: number, zones: AthleteZones | null | undefined): number | null {
   for (const z of zones?.hr ?? []) if ((z.fromBpm === null || bpm >= z.fromBpm) && (z.toBpm === null || bpm <= z.toBpm)) return z.zone;
@@ -53,13 +61,13 @@ const powerZone = (share: number) => POWER_ZONES.findIndex(([, to]) => share <= 
 export function targetWords(i: HubIntensity, ath: BodyAthlete = {}): string {
   switch (i.kind) {
     case "none": case "kept": return "";
-    case "bodyweight": return "Bodyweight";
-    case "stroke": return i.stroke ? STROKE_WORDS[i.stroke] : "";
-    case "grade": return i.grade ?? (i.gradeOffset == null ? "" : i.gradeOffset === 0 ? "Onsight grade" : `Onsight ${i.gradeOffset > 0 ? "+" : "−"}${Math.abs(i.gradeOffset)}`);
+    case "bodyweight": return t("Bodyweight");
+    case "stroke": return i.stroke ? t(STROKE_WORDS[i.stroke]) : "";
+    case "grade": return i.grade ?? (i.gradeOffset == null ? "" : i.gradeOffset === 0 ? t("Onsight grade") : t("Onsight {offset}", { offset: `${i.gradeOffset > 0 ? "+" : "−"}${Math.abs(i.gradeOffset)}` }));
   }
   if (i.low == null) return "";
   switch (i.kind) {
-    case "pace": return i.low > 0 ? `${range({ ...i, low: Math.min(i.low, i.high ?? i.low), high: Math.max(i.low, i.high ?? i.low) }, paceText, " to ")} /km` : "";
+    case "pace": return i.low > 0 ? `${range({ ...i, low: Math.min(i.low, i.high ?? i.low), high: Math.max(i.low, i.high ?? i.low) }, paceText, t(" to "))} /km` : "";
     case "heartRate": { const z = hrZone(mid(i)!, ath.zones); return `${z ? `Z${z} · ` : ""}${range(i)} bpm`; }
     case "power": { const ftp = ath.zones?.ftp; return `${range(i)} W${ftp ? ` · ${range(i, (w) => String(Math.round((w / ftp) * 100)))} % FTP` : ""}`; }
     case "speed": return `${range(i)} km/h`;
@@ -76,12 +84,12 @@ function amountWords(s: HubWorkoutStep, sport: HubSport): string {
   switch (s.target) {
     case "time": return gym && s.kind === "training" ? `${sets} × ${formatClock(s.seconds ?? 0)}` : formatClock(s.seconds ?? 0);
     case "distance": return sport === "swim" ? `${thousands(Math.round(s.meters ?? 0))} m` : metresText(s.meters ?? 0);
-    case "reps": return gym || sets > 1 ? `${sets} × ${s.count ?? 0}` : `${s.count ?? 0} reps`;
-    case "routes": return `${s.count ?? 0} ${s.count === 1 ? "route" : "routes"}`;
-    case "load": return `Load ${s.load ?? 0}`;
-    case "hrRecovery": return `Until ${s.bpm ?? 0} bpm`;
-    case "elevationGain": return `+${Math.round(s.meters ?? 0)} m climb`;
-    case "open": return gym && s.kind === "training" ? `${sets} × to lap` : "To lap button";
+    case "reps": return gym || sets > 1 ? `${sets} × ${s.count ?? 0}` : s.count === 1 ? t("1 rep") : t("{n} reps", { n: s.count ?? 0 });
+    case "routes": return s.count === 1 ? tx("climbing", "1 route") : tx("climbing", "{n} routes", { n: s.count ?? 0 });
+    case "load": return t("Load {n}", { n: s.load ?? 0 });
+    case "hrRecovery": return t("Until {n} bpm", { n: s.bpm ?? 0 });
+    case "elevationGain": return t("+{n} m climb", { n: Math.round(s.meters ?? 0) });
+    case "open": return gym && s.kind === "training" ? t("{sets} × to lap", { sets }) : t("To lap button");
   }
 }
 
@@ -169,18 +177,22 @@ export function musclesFor(name: string): [string, number][] | null {
   return null;
 }
 
-const MUSCLE_TITLE: Record<string, string> = { upperBack: "Upper back", lowerBack: "Lower back" };
-const muscleTitle = (key: string) => MUSCLE_TITLE[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
+const MUSCLE_TITLE: Record<string, string> = {
+  upperBack: msg("Upper back"), lowerBack: msg("Lower back"), chest: msg("Chest"), shoulders: msg("Shoulders"), biceps: msg("Biceps"), triceps: msg("Triceps"),
+  forearms: msg("Forearms"), lats: msg("Lats"), traps: msg("Traps"), abs: msg("Abs"), obliques: msg("Obliques"), core: msg("Core"), glutes: msg("Glutes"),
+  quads: msg("Quads"), hamstrings: msg("Hamstrings"), calves: msg("Calves"), adductors: msg("Adductors"), abductors: msg("Abductors"), neck: msg("Neck"),
+};
+const muscleTitle = (key: string) => t(MUSCLE_TITLE[key] ?? key.charAt(0).toUpperCase() + key.slice(1));
 
 /* ───────────── The body ───────────── */
 
 const stepName = (s: HubWorkoutStep, sport: HubSport): string => {
   const kind = kindOf(s);
   if (s.exercise?.name ?? s.name) return (s.exercise?.name ?? s.name)!;
-  if (sport === "hyrox" && kind === "work") return s.target === "distance" ? "Run" : "Station";
-  if ((sport === "indoorClimb" || sport === "bouldering") && kind === "work") return sport === "bouldering" ? "Boulders" : "Climb";
-  if (sport === "swim" && kind === "work") return "Swim";
-  return KIND_WORDS[kind];
+  if (sport === "hyrox" && kind === "work") return s.target === "distance" ? tx("step", "Run") : t("Station");
+  if ((sport === "indoorClimb" || sport === "bouldering") && kind === "work") return sport === "bouldering" ? t("Boulders") : tx("step", "Climb");
+  if (sport === "swim" && kind === "work") return tx("step", "Swim");
+  return t(KIND_WORDS[kind]);
 };
 
 /** A HYROX station is a training step with an exercise or a name; a run is one without. */
@@ -202,9 +214,9 @@ export function workoutBody(w: HubWorkout, ath: BodyAthlete = {}): WorkoutBody {
       const k = kindOf(s), swim = sport === "swim";
       const stroke = swim && s.intensity.kind === "stroke" ? targetWords(s.intensity) : "";
       const row: BodyRow = {
-        kind: k, name: swim && k === "work" && !s.name ? stroke || "Swim" : stepName(s, sport), amount: amountWords(s, sport),
+        kind: k, name: swim && k === "work" && !s.name ? stroke || tx("step", "Swim") : stepName(s, sport), amount: amountWords(s, sport),
         // COROS has every climbing step carry a grade, rests too; a rest's grade says nothing.
-        target: (swim && k === "work" && !s.name) || (climbing && s.kind === "rest") ? "" : targetWords(s.intensity, ath), rest: s.restSeconds ? `${restText(s.restSeconds)} rest` : "",
+        target: (swim && k === "work" && !s.name) || (climbing && s.kind === "rest") ? "" : targetWords(s.intensity, ath), rest: s.restSeconds ? restWords(s.restSeconds) : "",
       };
       if (sport === "hyrox" && isStation(s)) row.mark = ++station;
       if (s.target === "routes") row.mark = s.count ?? 0;
@@ -217,15 +229,19 @@ export function workoutBody(w: HubWorkout, ath: BodyAthlete = {}): WorkoutBody {
     const kept = sport !== "swim" ? rows : rows.filter((r, i) => {
       const s = b.steps[i], before = i > 0 ? rows[i - 1] : null;
       if (!(before && s.kind === "rest" && s.target === "time" && s.intensity.kind === "none" && before.kind !== "rest")) return true;
-      before.rest = `${restText(s.seconds ?? 0)} rest`;
+      before.rest = restWords(s.seconds ?? 0);
       return false;
     });
     list.push({ repeats, rows: kept });
   }
 
   const body: WorkoutBody = { kind, unit: "steps", count: flat.length, list, label: "" };
-  const said = (g: BodyGroup) => `${g.repeats > 1 ? `${g.repeats} times: ` : ""}${g.rows.map((r) => [r.name, r.amount, r.target, r.rest].filter(Boolean).join(" ")).join(", ")}`;
-  body.label = `${kind === "strength" ? "Exercises" : kind === "swim" ? "Sets" : "The workout"}: ${list.map(said).join("; ")}`;
+  const said = (g: BodyGroup) => {
+    const rows = g.rows.map((r) => [r.name, r.amount, r.target, r.rest].filter(Boolean).join(" ")).join(", ");
+    return g.repeats > 1 ? t("{n} times: {steps}", { n: g.repeats, steps: rows }) : rows;
+  };
+  const all = list.map(said).join("; ");
+  body.label = kind === "strength" ? t("Exercises: {list}", { list: all }) : kind === "swim" ? t("Sets: {list}", { list: all }) : t("The workout: {list}", { list: all });
 
   if (kind === "strength") {
     const work = w.blocks.flatMap((b) => b.steps.filter((s) => s.kind === "training").map((s) => ({ s, times: b.repeats ?? 1 })));
@@ -237,13 +253,13 @@ export function workoutBody(w: HubWorkout, ath: BodyAthlete = {}): WorkoutBody {
       const worked = muscleWork(known.map((k) => ({ workingSets: k.workingSets, muscles: k.muscles! })));
       const top = worked[0]?.sets ?? 1;
       body.shares = worked.slice(0, 8).map((m) => ({ name: muscleTitle(m.name), value: String(Number(m.sets.toFixed(1))), share: m.sets / top }));
-      body.sharesLabel = "Muscles, by sets";
+      body.sharesLabel = t("Muscles, by sets");
       body.works = worked.slice(0, 3).map((m) => muscleTitle(m.name).toLowerCase());
     }
     Object.assign(body, strengthLines(w, ath.lifts ?? null));
     const sets = work.reduce((n, { s, times }) => n + (s.sets ?? 1) * times, 0);
     const about = Math.round(w.blocks.reduce((sum, b) => sum + b.steps.reduce((t, s) => t + secondsOf(s, sport, ath), 0) * (b.repeats ?? 1), 0) / 60);
-    body.line = [`${work.length} ${work.length === 1 ? "lift" : "lifts"}`, `${sets} ${sets === 1 ? "set" : "sets"}`, about > 0 ? `about ${about} min` : ""].filter(Boolean).join(" · ");
+    body.line = [work.length === 1 ? t("1 lift") : t("{n} lifts", { n: work.length }), sets === 1 ? t("1 set") : t("{n} sets", { n: sets }), about > 0 ? t("about {n} min", { n: about }) : ""].filter(Boolean).join(" · ");
   } else if (kind === "intervals") {
     body.strip = strip;
     const ftp = sport === "bike" ? ath.zones?.ftp : undefined;
@@ -259,7 +275,7 @@ export function workoutBody(w: HubWorkout, ath: BodyAthlete = {}): WorkoutBody {
       }));
       if (all > 0) {
         body.shares = POWER_ZONES.map(([name], i) => ({ name, value: formatClock(time[i]), share: time[i] / all })).filter((z) => z.share > 0);
-        body.sharesLabel = `Time in power zones, FTP ${ftp} W`;
+        body.sharesLabel = t("Time in power zones, FTP {ftp} W", { ftp });
       }
     }
   } else if (kind === "swim") {
@@ -273,7 +289,7 @@ export function workoutBody(w: HubWorkout, ath: BodyAthlete = {}): WorkoutBody {
         if (s.target !== "distance") continue;
         const m = (s.meters ?? 0) * (b.repeats ?? 1);
         metres += m;
-        const stroke = s.intensity.kind === "stroke" && s.intensity.stroke ? STROKE_WORDS[s.intensity.stroke] : "any stroke";
+        const stroke: HubStroke | "any" = s.intensity.kind === "stroke" && s.intensity.stroke ? s.intensity.stroke : "any";
         by.set(stroke, (by.get(stroke) ?? 0) + m);
       }
       list[bi].rows[0].bar = metres;
@@ -282,8 +298,8 @@ export function workoutBody(w: HubWorkout, ath: BodyAthlete = {}): WorkoutBody {
     for (const g of list) g.rows[0].bar = (g.rows[0].bar ?? 0) / longest;
     const total = [...by.values()].reduce((a, b) => a + b, 0);
     if (total > 0 && by.size > 1) {
-      body.shares = [...by].sort((a, b) => b[1] - a[1]).map(([name, m]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value: `${thousands(Math.round(m))} m`, share: m / total }));
-      body.sharesLabel = "Metres by stroke";
+      body.shares = [...by].sort((a, b) => b[1] - a[1]).map(([name, m]) => ({ name: t(STROKE_TITLES[name as HubStroke | "any"]), value: `${thousands(Math.round(m))} m`, share: m / total }));
+      body.sharesLabel = t("Metres by stroke");
     }
   } else if (kind === "hyrox") {
     body.unit = station ? "stations" : "steps";
@@ -315,25 +331,25 @@ export function sportStats(w: HubWorkout, body: WorkoutBody, ath: BodyAthlete = 
   const c = workoutCounts(w);
   const about = (): number => w.blocks.reduce((sum, b) => sum + b.steps.reduce((t, s) => t + secondsOf(s, w.sport, ath), 0) * (b.repeats ?? 1), 0);
   if (body.kind === "strength") {
-    return [{ label: "Exercises", value: String(body.count) }, { label: "Sets", value: String(c.sets) }, { label: "Time, about", value: formatClock(Math.round(about())) }];
+    return [{ label: t("Exercises"), value: String(body.count) }, { label: t("Sets"), value: String(c.sets) }, { label: t("Time, about"), value: formatClock(Math.round(about())) }];
   }
   if (w.sport === "swim" && c.metres > 0) {
     const pool = w.poolLength ?? 25, lengths = c.metres / pool;
-    const stats: CardStat[] = [{ label: "Distance", value: thousands(Math.round(c.metres)), unit: "m" }];
-    if (Number.isInteger(lengths)) stats.push({ label: `Lengths, ${pool} m pool`, value: String(lengths) });
-    if (ath.pacing) stats.push({ label: "Time, about", value: formatClock(Math.round(about())) });
+    const stats: CardStat[] = [{ label: t("Distance"), value: thousands(Math.round(c.metres)), unit: "m" }];
+    if (Number.isInteger(lengths)) stats.push({ label: t("Lengths, {pool} m pool", { pool }), value: String(lengths) });
+    if (ath.pacing) stats.push({ label: t("Time, about"), value: formatClock(Math.round(about())) });
     return stats;
   }
   if (body.kind === "climb") {
     const stats: CardStat[] = [];
-    if (c.routes > 0) stats.push({ label: "Routes", value: String(c.routes) });
-    if (c.seconds > 0) stats.push({ label: c.routes > 0 || c.open ? "Timed steps" : "Time", value: formatClock(c.seconds) });
+    if (c.routes > 0) stats.push({ label: tx("climbing", "Routes"), value: String(c.routes) });
+    if (c.seconds > 0) stats.push({ label: c.routes > 0 || c.open ? t("Timed steps") : t("Time"), value: formatClock(c.seconds) });
     return stats;
   }
   if (body.kind === "hyrox") {
     const stats: CardStat[] = [];
-    if (body.unit === "stations") stats.push({ label: "Stations", value: String(body.count) });
-    if (c.runMetres > 0) stats.push({ label: "Running", value: (c.runMetres / 1000).toFixed(2), unit: "km" });
+    if (body.unit === "stations") stats.push({ label: t("Stations"), value: String(body.count) });
+    if (c.runMetres > 0) stats.push({ label: t("Running"), value: (c.runMetres / 1000).toFixed(2), unit: "km" });
     return stats;
   }
   return null;

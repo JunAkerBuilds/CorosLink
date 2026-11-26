@@ -5,6 +5,7 @@ import { Button, Card } from "@/components/ui";
 // It sits in the Connections page's profile card and uses that page's styles; it brings them where it is reused.
 import "@/app/(app)/connect/connect.css";
 import "./thisComputer.css";
+import { language, locale, t } from "@/lib/i18n";
 
 interface Phone { id: string; label: string; createdAt: string; lastUsedAt: string }
 interface Status { name: string; listening: boolean; addresses: string[]; items: number; pairing: boolean; phones: Phone[] }
@@ -12,17 +13,17 @@ interface Pairing { link: string; qr: string; expiresAt: string }
 
 const ago = (iso: string): string => {
   const minutes = Math.round((Date.now() - Date.parse(iso)) / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return t("just now");
+  if (minutes < 60) return t("{n} min ago", { n: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (hours < 24) return t("{n} h ago", { n: hours });
+  return new Date(iso).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
 };
 
 async function ask<T>(path: string, init?: RequestInit): Promise<T> {
   const answer = await fetch(path, { cache: "no-store", ...init });
   const body = (await answer.json()) as T & { error?: { message: string } };
-  if (!answer.ok) throw new Error(body.error?.message ?? "That didn't work.");
+  if (!answer.ok) throw new Error(body.error?.message ?? t("That didn't work."));
   return body;
 }
 
@@ -52,45 +53,45 @@ export function ThisComputer() {
   const remove = (id: string) => { void ask(`/api/desktop/phones?id=${encodeURIComponent(id)}`, { method: "DELETE" }).then(read); };
 
   return (
-    <section className="cn-profile tc" aria-label="This computer">
+    <section className="cn-profile tc" aria-label={t("This computer")}>
       <span aria-hidden="true" className="cn-avatar tc-mark">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 1.9, strokeLinecap: "round", strokeLinejoin: "round" }}><path d="M3 5h18v11H3zM8 20h8M12 16v4" /></svg>
       </span>
       <div className="cn-who">
-        <h1>{status?.name ?? "This computer"}</h1>
+        <h1>{status?.name ?? t("This computer")}</h1>
         <span className="cn-who-line">
-          <span className="cn-pill" data-tone="ok">Stored here</span>
-          {status ? <span>{status.items.toLocaleString()} items</span> : null}
+          <span className="cn-pill" data-tone="ok">{t("Stored here")}</span>
+          {status ? <span>{status.items === 1 ? t("1 item") : t("{n} items", { n: status.items.toLocaleString(locale("en-GB")) })}</span> : null}
         </span>
       </div>
       <div className="cn-profile-actions">
-        <Button variant="primary" onClick={pair} disabled={!!pairing}>Pair a phone</Button>
+        <Button variant="primary" onClick={pair} disabled={!!pairing}>{t("Pair a phone")}</Button>
       </div>
 
       {problem ? <p role="alert" className="cn-problem cn-wide">{problem}</p> : null}
 
       {pairing ? (
-        <div className="tc-pair cn-wide" role="dialog" aria-label="Pair a phone">
+        <div className="tc-pair cn-wide" role="dialog" aria-label={t("Pair a phone")}>
           <div className="tc-qr" dangerouslySetInnerHTML={{ __html: pairing.qr }} />
           <div className="tc-steps">
-            <h2>Scan this with C-LINK</h2>
+            <h2>{t("Scan this with C-LINK")}</h2>
             <ol>
-              <li>Point your phone's camera at this code, or in C-LINK open Settings → Computers → Pair a computer.</li>
-              <li>Tap Pair on the phone.</li>
-              <li>Keep the phone on the same Wi-Fi as this computer.</li>
+              <li>{t("Point your phone's camera at this code, or in C-LINK open Settings → Computers → Pair a computer.")}</li>
+              <li>{t("Tap Pair on the phone.")}</li>
+              <li>{t("Keep the phone on the same Wi-Fi as this computer.")}</li>
             </ol>
-            <span className="muted">Works once · {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")} left</span>
+            <span className="muted">{t("Works once · {time} left", { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` })}</span>
             <div className="tc-actions">
-              <Button onClick={() => void navigator.clipboard.writeText(pairing.link)}>Copy code</Button>
-              <Button variant="plain" onClick={() => setPairing(null)}>Cancel</Button>
+              <Button onClick={() => void navigator.clipboard.writeText(pairing.link)}>{t("Copy code")}</Button>
+              <Button variant="plain" onClick={() => setPairing(null)}>{t("Cancel")}</Button>
             </div>
           </div>
         </div>
       ) : null}
 
-      <Card className="cn-list tc-phones cn-wide" aria-label="Phones">
-        <h3>Phones{status?.phones.length ? <span className="tc-count">{status.phones.length}</span> : null}</h3>
-        {status && status.phones.length === 0 ? <p className="cn-note">No phone syncs here yet.</p> : null}
+      <Card className="cn-list tc-phones cn-wide" aria-label={t("Phones")}>
+        <h3>{t("Phones")}{status?.phones.length ? <span className="tc-count">{status.phones.length}</span> : null}</h3>
+        {status && status.phones.length === 0 ? <p className="cn-note">{t("No phone syncs here yet.")}</p> : null}
         {status?.phones.length ? (
           <ul>
             {status.phones.map((phone) => (
@@ -99,14 +100,14 @@ export function ThisComputer() {
                   <span aria-hidden="true" className="cn-mono" data-hue={status.listening ? "mint" : "grey"}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 1.9, strokeLinecap: "round", strokeLinejoin: "round" }}><rect x="6.5" y="2.5" width="11" height="19" rx="2.5" /><path d="M11 18.5h2" /></svg>
                   </span>
-                  <span><b>{phone.label}</b><small>Synced {ago(phone.lastUsedAt)}</small></span>
+                  <span><b>{phone.label}</b><small>{t("Synced {when}", { when: ago(phone.lastUsedAt) })}</small></span>
                 </span>
-                <button type="button" className="tc-remove" onClick={() => remove(phone.id)} aria-label={`Remove ${phone.label}`}>Remove</button>
+                <button type="button" className="tc-remove" onClick={() => remove(phone.id)} aria-label={t("Remove {name}", { name: phone.label })}>{t("Remove")}</button>
               </li>
             ))}
           </ul>
         ) : null}
-        {status && status.phones.length > 0 && !status.listening ? <p role="alert" className="cn-problem">Phones can't reach this computer right now.</p> : null}
+        {status && status.phones.length > 0 && !status.listening ? <p role="alert" className="cn-problem">{t("Phones can't reach this computer right now.")}</p> : null}
       </Card>
     </section>
   );

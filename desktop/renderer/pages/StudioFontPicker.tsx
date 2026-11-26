@@ -6,6 +6,7 @@
 // Each list is one listbox: arrows, Home / End and Enter work from the search field or the list, Escape closes.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Segmented, Switch } from "@/components/ui";
+import { msg, t } from "@/lib/i18n";
 import type { CorosWatchfaceRasterFont, CorosWatchfaceRasterFontFolder, CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateAsset } from "../../watchface/types";
 import { templateFontGlyphsForLayer } from "../../watchface/engine/watchfaceSpritePreview";
 import { createRasterFontFolderReplacement } from "../../watchface/engine/watchfaceRasterFolder";
@@ -159,16 +160,17 @@ export function FontPicker(p: FontPickerProps) {
   const close = () => { setOpen(false); button.current?.focus(); };
   const font = p.family ? { fontFamily: `"${p.family}"`, fontWeight: p.weight, fontStyle: p.style } : undefined;
   // An empty family draws the template's digits where the layer has them, else the system font (text, separators).
-  const empty = p.empty ?? (p.template ? "Template" : "System font");
+  const empty = p.empty ?? (p.template ? msg("Template") : msg("System font"));
+  const emptyName = t(empty);
   const tpl = empty === "System font" ? <span style={{ fontFamily: "system-ui, sans-serif" }}>{p.sample}</span>
     : <TemplateSample resolution={p.resolution} layerId={p.layerId} loadAssets={p.loadAssets} text="10" />;
   const source = p.source ?? (!p.raster && isGoogleFamily(p.family) ? "Google Fonts" : undefined);
   return (
     <div className="st-fp">
       <span className="st-label" aria-hidden="true">{p.label}</span>
-      <button ref={button} type="button" className="st-pick" aria-expanded={open} aria-label={`${p.label}: ${p.raster?.label ?? (p.family || empty)}`} onClick={() => setOpen((o) => !o)}>
+      <button ref={button} type="button" className="st-pick" aria-expanded={open} aria-label={`${p.label}: ${p.raster?.label ?? (p.family || emptyName)}`} onClick={() => setOpen((o) => !o)}>
         <span className="st-pick-prev" style={font}>{p.raster ? <img src={p.raster.dataUrl} alt="" /> : p.family ? "10" : tpl}</span>
-        <span className="st-pick-name"><b>{p.raster?.label ?? (p.family || empty)}</b>{source ? <small>{source}</small> : null}</span>
+        <span className="st-pick-name"><b>{p.raster?.label ?? (p.family || emptyName)}</b>{source ? <small>{t(source)}</small> : null}</span>
         <Icon name={open ? "chevD" : "chevR"} size={15} />
       </button>
       {open ? <FontSheet {...p} close={close} /> : null}
@@ -180,10 +182,10 @@ type Tab = "fonts" | "google" | "png";
 
 function FontSheet(p: FontPickerProps & { close: () => void }) {
   const [tab, setTab] = useState<Tab>(p.raster && p.png ? "png" : isGoogleFamily(p.family) ? "google" : "fonts");
-  const options: { value: Tab; label: string }[] = [{ value: "fonts", label: "Fonts" }, { value: "google", label: "Google" }, ...(p.png ? [{ value: "png" as const, label: "PNG set" }] : [])];
+  const options: { value: Tab; label: string }[] = [{ value: "fonts", label: t("Fonts") }, { value: "google", label: "Google" }, ...(p.png ? [{ value: "png" as const, label: t("PNG set") }] : [])];
   return (
     <div className="st-sheet st-fp-sheet" role="dialog" aria-label={p.label} onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); p.close(); } }}>
-      <Segmented small label="Font source" className="st-fp-src" value={tab} onChange={setTab} options={options} />
+      <Segmented small label={t("Font source")} className="st-fp-src" value={tab} onChange={setTab} options={options} />
       {tab === "fonts" ? <LocalPane {...p} /> : tab === "google" ? <GooglePane {...p} /> : p.png}
     </div>
   );
@@ -217,12 +219,12 @@ function Listing({ choices, selected, onPick, close, label, query, setQuery, sea
   return <>
     {search ? (
       <label className="st-search"><Icon name="search" size={15} />
-        <input ref={input} type="search" placeholder={placeholder} aria-label={`Search ${label.toLowerCase()}`} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={keys}
+        <input ref={input} type="search" placeholder={placeholder} aria-label={t("Search {what}", { what: label.toLowerCase() })} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={keys}
           role="combobox" aria-expanded="true" aria-autocomplete="list" aria-activedescendant={active >= 0 && choices[active] ? `st-fp-${active}` : undefined} /></label>
     ) : null}
     {!ready ? <div className="st-fp-wait" aria-busy="true" /> : choices.length ? (
       <ChoiceList choices={choices} selected={selected} onPick={onPick} label={label} active={active} setActive={setActive} onKeyDown={keys} listRef={list} />
-    ) : <p className="st-note">No match.</p>}
+    ) : <p className="st-note">{t("No match.")}</p>}
   </>;
 }
 
@@ -234,11 +236,11 @@ function LocalPane(p: FontPickerProps & { close: () => void }) {
     const q = query.trim().toLowerCase();
     const font = (f: string) => ({ fontFamily: `"${f}"`, fontWeight: p.weight, fontStyle: p.style });
     const own: Choice[] = p.template && (!q || "template".includes(q))
-      ? [{ key: "", name: "Template", sample: <TemplateSample resolution={p.resolution} layerId={p.layerId} loadAssets={p.loadAssets} text={p.sample} /> }] : [];
+      ? [{ key: "", name: t("Template"), sample: <TemplateSample resolution={p.resolution} layerId={p.layerId} loadAssets={p.loadAssets} text={p.sample} /> }] : [];
     return [...own, ...(families ?? []).filter((f) => !q || f.toLowerCase().includes(q)).map((f) => ({ key: f, name: f, sample: <span style={font(f)}>{p.sample}</span> }))];
   }, [families, query, p.template, p.resolution, p.layerId, p.loadAssets, p.sample, p.weight, p.style]);
-  return <Listing choices={choices} selected={p.raster ? null : p.family} onPick={(f) => p.onFamily(f)} close={p.close} label="Fonts"
-    query={query} setQuery={setQuery} search={!!families && families.length > 8} placeholder="Search" ready={families !== null} />;
+  return <Listing choices={choices} selected={p.raster ? null : p.family} onPick={(f) => p.onFamily(f)} close={p.close} label={t("Fonts")}
+    query={query} setQuery={setQuery} search={!!families && families.length > 8} placeholder={t("Search")} ready={families !== null} />;
 }
 
 /* ───────────── Google Fonts ───────────── */
@@ -282,10 +284,10 @@ function GooglePane(p: FontPickerProps & { close: () => void }) {
 
   return <>
     <Listing choices={choices} selected={p.raster ? null : p.family} onPick={(f) => void pick(f)} close={p.close} label="Google Fonts"
-      query={query} setQuery={setQuery} search placeholder="Search Google Fonts" ready={fonts !== null} />
-    {picking ? <p className="st-note" role="status">Downloading {picking}…</p> : null}
+      query={query} setQuery={setQuery} search placeholder={t("Search Google Fonts")} ready={fonts !== null} />
+    {picking ? <p className="st-note" role="status">{t("Downloading {name}…", { name: picking })}</p> : null}
     {problem ? <p className="st-note st-fp-problem" role="alert">{problem}</p>
-      : fonts && fonts.source !== "google" ? <p className="st-note" role="status">Google Fonts can't be reached. {fonts.source === "saved" ? "This is the list saved on this computer" : "This is a short built-in list"}; fonts already downloaded still work.</p> : null}
+      : fonts && fonts.source !== "google" ? <p className="st-note" role="status">{fonts.source === "saved" ? t("Google Fonts can't be reached. This is the list saved on this computer; fonts already downloaded still work.") : t("Google Fonts can't be reached. This is a short built-in list; fonts already downloaded still work.")}</p> : null}
   </>;
 }
 
@@ -293,20 +295,20 @@ function GooglePane(p: FontPickerProps & { close: () => void }) {
 
 /** The source line under a layer's font name: only when the name doesn't say it. */
 function layerSource(design: Design, layer: EditorLayer): string | undefined {
-  const t = typoOf(design, layer);
-  if (t?.rasterFont) return "PNG set";
-  if (t?.fontFamily === undefined && (design.fontFamily || design.rasterFont)) return "Face font";
+  const tt = typoOf(design, layer);
+  if (tt?.rasterFont) return msg("PNG set");
+  if (tt?.fontFamily === undefined && (design.fontFamily || design.rasterFont)) return msg("Face font");
   return undefined;
 }
 
 export function LayerFontPicker({ design, layer, edit, resolution, loadAssets, fail, watch }: { design: Design; layer: EditorLayer; edit: Edit; resolution: CorosWatchfaceResolutionDetails | null; loadAssets?: LoadAssets; fail: (e: unknown) => void; watch: string }) {
   const kind = panelOf(layer, design);
-  const t = typoOf(design, layer);
+  const tt = typoOf(design, layer);
   const ty = typographyOf(design, layer);
-  const raster = t?.rasterFont ?? (t?.fontFamily === undefined ? design.rasterFont : undefined);
+  const raster = tt?.rasterFont ?? (tt?.fontFamily === undefined ? design.rasterFont : undefined);
   const canPng = kind === "time" || kind === "metric" || kind === "date" || kind === "selectable" || kind === "ampm";
   return (
-    <FontPicker label="Font" family={familyOf(design, layer) ?? ""} raster={raster} source={layerSource(design, layer)} weight={ty.fontWeight} style={ty.fontStyle}
+    <FontPicker label={t("Font")} family={familyOf(design, layer) ?? ""} raster={raster} source={layerSource(design, layer)} weight={ty.fontWeight} style={ty.fontStyle}
       sample={sampleOf(kind)} template={kind !== "separator" && kind !== "ampm"} empty={kind === "ampm" ? "Template" : undefined} resolution={resolution} layerId={layer.id} loadAssets={loadAssets}
       onFamily={(f, weight) => edit((x) => setTypo(x, layer, { fontFamily: f, rasterFont: undefined, ...(weight ? { fontWeight: weight } : {}) }))}
       png={canPng ? <PngPane design={design} layer={layer} edit={edit} fail={fail} watch={watch} kind={kind} /> : undefined} />
@@ -314,11 +316,11 @@ export function LayerFontPicker({ design, layer, edit, resolution, loadAssets, f
 }
 
 function PngPane({ design, layer, edit, fail, watch, kind }: { design: Design; layer: EditorLayer; edit: Edit; fail: (e: unknown) => void; watch: string; kind: PanelKind }) {
-  const t = typoOf(design, layer);
+  const tt = typoOf(design, layer);
   const [scope, setScope] = useState<"layer" | "face">("layer");
   const [official, setOfficial] = useState(false);
   const folder = useRef<HTMLInputElement>(null);
-  const raster = t?.rasterFont ?? design.rasterFont;
+  const raster = tt?.rasterFont ?? design.rasterFont;
 
   /** A folder of numbered PNGs (chosen on this computer, or a set from the official library) becomes the PNG set. */
   const applyFolder = async (picked: CorosWatchfaceRasterFontFolder) => {
@@ -344,24 +346,24 @@ function PngPane({ design, layer, edit, fail, watch, kind }: { design: Design; l
 
   return <>
     {raster ? <div className="st-png-now"><img src={raster.dataUrl} alt="" /><span>{raster.label}</span></div> : null}
-    <div className="st-row"><span>Applies to</span><Segmented small label="PNG set applies to" value={scope} onChange={setScope} options={[{ value: "layer", label: "Layer" }, { value: "face", label: "Face" }]} /></div>
-    <button type="button" className="chip st-chip-btn" onClick={() => folder.current?.click()}><Icon name="folder" size={15} />{raster ? "Choose another folder" : "Choose a folder"}</button>
-    <button type="button" className="chip st-chip-btn" onClick={() => setOfficial(true)}><Icon name="spark" size={15} />Official COROS font</button>
+    <div className="st-row"><span>{t("Applies to")}</span><Segmented small label={t("PNG set applies to")} value={scope} onChange={setScope} options={[{ value: "layer", label: t("Layer") }, { value: "face", label: t("Face") }]} /></div>
+    <button type="button" className="chip st-chip-btn" onClick={() => folder.current?.click()}><Icon name="folder" size={15} />{raster ? t("Choose another folder") : t("Choose a folder")}</button>
+    <button type="button" className="chip st-chip-btn" onClick={() => setOfficial(true)}><Icon name="spark" size={15} />{t("Official COROS font")}</button>
     {official ? <OfficialPicker watch={watch} request={officialFontRequest(layer, kind, scope)} onClose={() => setOfficial(false)} onPick={(set) => applyFolder(officialFolder(set))} /> : null}
     <input ref={folder} type="file" hidden multiple accept="image/png" {...{ webkitdirectory: "" }} onChange={(e) => { void importFolder(e.target.files); e.target.value = ""; }} />
-    {raster ? <div className="st-row"><span>Layer color</span><Switch label="Recolor with layer color" checked={raster.tint} onChange={(v) => edit((x) => (t?.rasterFont ? setTypo(x, layer, { rasterFont: { ...t.rasterFont, tint: v } }) : x.rasterFont ? { ...x, rasterFont: { ...x.rasterFont, tint: v } } : x))} /></div> : null}
-    <span className="st-note">00.png to 09.png, up to 5 MB each.</span>
+    {raster ? <div className="st-row"><span>{t("Layer color")}</span><Switch label={t("Recolor with layer color")} checked={raster.tint} onChange={(v) => edit((x) => (tt?.rasterFont ? setTypo(x, layer, { rasterFont: { ...tt.rasterFont, tint: v } }) : x.rasterFont ? { ...x, rasterFont: { ...x.rasterFont, tint: v } } : x))} /></div> : null}
+    <span className="st-note">{t("00.png to 09.png, up to 5 MB each.")}</span>
   </>;
 }
 
 export function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error("A PNG in the folder couldn't be opened.")); img.src = src; });
+  return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error(t("A PNG in the folder couldn't be opened."))); img.src = src; });
 }
 
 /** Digit PNGs side by side on one canvas, each centred in its cell (CorosLink's createAtlasFromSprites). */
 async function atlasFromSprites(digits: Map<string, string>): Promise<Pick<CorosWatchfaceRasterFont, "dataUrl" | "glyphs" | "columns" | "atlasSize">> {
   const glyphs = [...digits.keys()].sort();
-  if (!glyphs.length) throw new Error("Choose a folder with digit PNGs named 00.png to 09.png.");
+  if (!glyphs.length) throw new Error(t("Choose a folder with digit PNGs named 00.png to 09.png."));
   const images = await Promise.all(glyphs.map((g) => loadImage(digits.get(g)!)));
   const w = Math.max(...images.map((i) => i.naturalWidth)), h = Math.max(...images.map((i) => i.naturalHeight));
   const canvas = document.createElement("canvas");

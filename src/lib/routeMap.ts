@@ -1,15 +1,16 @@
 // How the activity map looks: its type, and the light at the activity's start. Ported from the phone app's
 // RouteMapView.swift (RouteMapType, RouteMapLight, RouteMapLook), so both draw the same map for the same choice.
+import { msg } from "@/lib/i18n";
 
 export type RouteMapType = "standard" | "city3d" | "monochrome" | "outdoors" | "satellite" | "hybrid";
 
 export const ROUTE_MAP_TYPES: readonly { value: RouteMapType; label: string }[] = [
-  { value: "standard", label: "Standard" },
-  { value: "city3d", label: "3D city" },
-  { value: "monochrome", label: "Monochrome" },
-  { value: "outdoors", label: "Outdoors" },
-  { value: "satellite", label: "Satellite" },
-  { value: "hybrid", label: "Hybrid" },
+  { value: "standard", label: msg("Standard") },
+  { value: "city3d", label: msg("3D city") },
+  { value: "monochrome", label: msg("Monochrome") },
+  { value: "outdoors", label: msg("Outdoors") },
+  { value: "satellite", label: msg("Satellite") },
+  { value: "hybrid", label: msg("Hybrid") },
 ];
 
 /** Mapbox Standard for the drawn maps, Standard Satellite for imagery, and the classic Outdoors. */

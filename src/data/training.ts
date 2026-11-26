@@ -2,8 +2,9 @@ import { fromCoros, fromSample, fromSynced, type Loaded } from "@/data/core";
 import { hubCalendar, hubSession, type HubCalendarDay, type HubSport, type HubWorkout } from "@/data/hub";
 import type { NativeGymPlanned } from "@/data/sync/native";
 import { clock, dayKey, km } from "@/lib/format";
+import { msg, t } from "@/lib/i18n";
 import { corosWorkoutId } from "@/lib/hubWorkout";
-import { sampleCalendar, sampleDashboard } from "@/data/sample/training";
+import { sampleCalendar, sampleDashboardNow } from "@/data/sample/training";
 import { syncedEntries, syncedWeeks } from "@/data/sync/calendar";
 import { buildDashboard, latestActivity } from "@/data/sync/dashboard";
 import { syncView } from "@/data/sync";
@@ -45,23 +46,23 @@ export interface Scale {
 
 /** Widgets on the dashboard board, in board order. */
 export const WIDGETS = [
-  { key: "rings", name: "Readiness, sleep & load" },
-  { key: "today", name: "Today" },
-  { key: "latest", name: "Latest activity" },
-  { key: "fitness", name: "Fitness & freshness" },
-  { key: "load", name: "Training load" },
-  { key: "streak", name: "Streak" },
-  { key: "heat", name: "Training heat map" },
-  { key: "goal", name: "Weekly goal" },
-  { key: "volume", name: "Weekly volume" },
-  { key: "year", name: "Year to date" },
-  { key: "intensity", name: "Easy vs hard" },
-  { key: "sleep", name: "Sleep, two weeks" },
-  { key: "hrv", name: "HRV trend" },
-  { key: "mix", name: "Sport mix" },
-  { key: "thresholds", name: "Threshold & VO₂max" },
-  { key: "bests", name: "Personal bests" },
-  { key: "month", name: "This month" },
+  { key: "rings", name: msg("Readiness, sleep & load") },
+  { key: "today", name: msg("Today") },
+  { key: "latest", name: msg("Latest activity") },
+  { key: "fitness", name: msg("Fitness & freshness") },
+  { key: "load", name: msg("Training load") },
+  { key: "streak", name: msg("Streak") },
+  { key: "heat", name: msg("Training heat map") },
+  { key: "goal", name: msg("Weekly goal") },
+  { key: "volume", name: msg("Weekly volume") },
+  { key: "year", name: msg("Year to date") },
+  { key: "intensity", name: msg("Easy vs hard") },
+  { key: "sleep", name: msg("Sleep, two weeks") },
+  { key: "hrv", name: msg("HRV trend") },
+  { key: "mix", name: msg("Sport mix") },
+  { key: "thresholds", name: msg("Threshold & VO₂max") },
+  { key: "bests", name: msg("Personal bests") },
+  { key: "month", name: msg("This month") },
 ] as const;
 export type WidgetKey = (typeof WIDGETS)[number]["key"];
 
@@ -155,7 +156,7 @@ export function sliceSeries(series: FitnessSeries, weeks: number): FitnessSeries
  */
 export async function loadDashboard(): Promise<Loaded<Dashboard>> {
   const view = await syncView();
-  if (!view) return fromSample(sampleDashboard);
+  if (!view) return fromSample(sampleDashboardNow());
   const now = new Date();
   const activities = view.all("activity").map((i) => i.body);
   const latest = latestActivity(activities, now);
@@ -232,7 +233,7 @@ const HUB_SPORT: Record<HubSport, CalendarSport> = {
 export function hubDetail(totals: { seconds: number; meters: number; sets: number } | null): string {
   if (!totals) return "";
   // A gym workout's seconds are only its timed steps, so its sets say more.
-  if (totals.sets > 0) return `${totals.sets} sets`;
+  if (totals.sets > 0) return totals.sets === 1 ? t("1 set") : t("{n} sets", { n: totals.sets });
   const parts: string[] = [];
   if (totals.meters > 0) parts.push(km(totals.meters));
   if (totals.seconds > 0) parts.push(clock(totals.seconds));

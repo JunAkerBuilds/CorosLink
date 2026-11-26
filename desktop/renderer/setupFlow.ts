@@ -1,24 +1,33 @@
 // First-run setup's steps, kept in the address (/setup?step=…&from=…) so a reload (sample data turning on, a backup
 // restoring) lands back on the same step. Pure, so it can be tested without a window.
 
+import { msg, t } from "@/lib/i18n";
+import { COMPUTER, computerWord, thisComputer } from "./computer";
 export type Step = "source" | "phone" | "sports" | "coach" | "mac" | "done";
-/** Where the data comes from: the phone, the sample athlete, or a backup restored on the first step. */
-export type Source = "phone" | "look" | "backup";
+/** Where the data comes from: the phone, the COROS account (the watch stays on the COROS app), the sample athlete,
+ * or a backup restored on the first step. */
+export type Source = "phone" | "coros" | "look" | "backup";
 
 const STEPS: readonly Step[] = ["source", "phone", "sports", "coach", "mac", "done"];
-const SOURCES: readonly Source[] = ["phone", "look", "backup"];
+const SOURCES: readonly Source[] = ["phone", "coros", "look", "backup"];
+/** Sources with a Connect step: pairing the phone, or signing in to the COROS account. */
+const connects = (source: Source) => source === "phone" || source === "coros";
 
 export const SETUP_PATH = "/setup";
 
-/** The list down the side: five steps; the phone step is "Connect". */
+/** The list down the side: five steps; the phone step (or the COROS account's) is "Connect". Labels are English;
+ * `listLabel` gives them in the app's language. */
 export const LIST = [
-  { id: "source", label: "Your data" },
-  { id: "connect", label: "Connect" },
-  { id: "sports", label: "Your sports" },
-  { id: "coach", label: "Coach" },
-  { id: "mac", label: "This Mac" },
+  { id: "source", label: msg("Your data") },
+  { id: "connect", label: msg("Connect") },
+  { id: "sports", label: msg("Your sports") },
+  { id: "coach", label: msg("Coach") },
+  { id: "mac", label: `This ${COMPUTER}` },
 ] as const;
 export type ListId = (typeof LIST)[number]["id"];
+
+/** A step's label on screen. */
+export const listLabel = (item: (typeof LIST)[number]): string => (item.id === "mac" ? thisComputer() : t(item.label));
 
 export interface Place { step: Step; source: Source }
 
@@ -37,39 +46,45 @@ export function listIndex(step: Step): number {
 }
 
 export function nextStep(step: Step, source: Source): Step {
-  if (step === "source") return source === "phone" ? "phone" : "sports";
+  if (step === "source") return connects(source) ? "phone" : "sports";
   return STEPS[Math.min(STEPS.length - 1, STEPS.indexOf(step) + 1)];
 }
 
 export function backStep(step: Step, source: Source): Step {
-  if (step === "sports") return source === "phone" ? "phone" : "source";
+  if (step === "sports") return connects(source) ? "phone" : "source";
   return STEPS[Math.max(0, STEPS.indexOf(step) - 1)];
 }
 
-export interface Notes { phone: string | null; sports: number; coach: string | null }
+export interface Notes { phone: string | null; sports: number; coach: string | null; account?: string | null }
 
 /** The short note beside each step once it's done. */
 export function stepNote(id: ListId, source: Source, notes: Notes): string {
   switch (id) {
-    case "source": return source === "phone" ? "Your phone" : source === "look" ? "Sample data" : "A backup";
-    case "connect": return source === "look" ? "Skipped" : source === "backup" ? "Restored" : notes.phone ?? "Later";
-    case "sports": return notes.sports ? `${notes.sports} picked` : "None";
-    case "coach": return notes.coach ?? "Later";
+    case "source": return source === "phone" ? t("Your phone") : source === "coros" ? t("COROS account") : source === "look" ? t("Sample data") : t("A backup");
+    case "connect": return source === "look" ? t("Skipped") : source === "backup" ? t("Restored") : source === "coros" ? notes.account ?? t("Later") : notes.phone ?? t("Later");
+    case "sports": return notes.sports ? t("{n} picked", { n: notes.sports }) : t("None");
+    case "coach": return notes.coach ?? t("Later");
     case "mac": return "";
   }
 }
 
 /** Coach's pose and line for each step, as on the phone's setup. */
-export function coachSays(step: Step, { paired, hasData }: { paired: boolean; hasData: boolean }): { pose: string; line: string } {
+export function coachSays(step: Step, { paired, hasData, coros = false }: { paired: boolean; hasData: boolean; coros?: boolean }): { pose: string; line: string } {
   switch (step) {
-    case "source": return { pose: "ponder", line: "Where does your watch data live today? I'll bring it all here." };
-    case "phone": return paired
-      ? { pose: "cheer", line: "Got it! Your history is on its way. Keep going while it copies." }
-      : { pose: "listen", line: "Scan this with your phone and I'll copy everything over." };
-    case "sports": return { pose: "think", line: hasData ? "Here's what I found in your workouts. Anything to add?" : "Which sports do you do? I'll talk about those, not just running." };
-    case "coach": return { pose: "write", line: "I need a brain to think with. Pick the one you already pay for." };
-    case "mac": return { pose: "listen", line: "Last bit. How should I behave on this Mac?" };
-    case "done": return { pose: "cheer", line: "You're all set! Every workout you do helps me earn a new look." };
+    case "source": return { pose: "ponder", line: t("Where does your watch data live today? I'll bring it all here.") };
+    case "phone":
+      if (coros) {
+        return paired
+          ? { pose: "cheer", line: t("Connected! Your workouts, health and sleep are on their way. Keep going while they come.") }
+          : { pose: "listen", line: t("Keep your watch on the COROS app. Connect your COROS account and I'll read it from there.") };
+      }
+      return paired
+        ? { pose: "cheer", line: t("Got it! Your history is on its way. Keep going while it copies.") }
+        : { pose: "listen", line: t("Scan this with your phone and I'll copy everything over.") };
+    case "sports": return { pose: "think", line: hasData ? t("Here's what I found in your workouts. Anything to add?") : t("Which sports do you do? I'll talk about those, not just running.") };
+    case "coach": return { pose: "write", line: t("I need a brain to think with. Pick the one you already pay for.") };
+    case "mac": return { pose: "listen", line: t("Last bit. How should I behave on this {computer}?", { computer: computerWord() }) };
+    case "done": return { pose: "cheer", line: t("You're all set! Every workout you do helps me earn a new look.") };
   }
 }
 

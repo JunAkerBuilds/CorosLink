@@ -6,6 +6,7 @@
 // Rewritten from CorosLink's WatchfaceAddMenu.tsx (its Live data list) and WatchfaceEditor.tsx (addNativeData,
 // addChartPageFromAddMenu, addStatusIndicator, addDefaultBatteryIcon, restoreFirmwareLayer, addElement, chooseSprite,
 // addSeconds, addDatePart, addAnalogHands, addNegativeSign, chooseAnimationFrames and their removals), keeping their rules.
+import { msg, t } from "@/lib/i18n";
 import type {
   CorosWatchfaceAnimation, CorosWatchfaceArtwork, CorosWatchfaceBackgroundElement, CorosWatchfaceDesignSprite,
   CorosWatchfaceNativeDataStyle, CorosWatchfaceTemplateDetails,
@@ -88,7 +89,7 @@ const FIELD_ICON: Record<string, string> = {
   sleep_hrv_level: "heart", sedentary: "hand", sunriseset: "sun", chart_sun_angle: "sun",
 };
 const PAGE_ICON: Record<string, string> = { bars: "chart", sun: "sun", moon: "moon", "daily-a": "chart", "daily-b": "chart" };
-const PAGE_LABEL: Record<string, string> = { bars: "Barometer and tide", sun: "Sun", moon: "Moon", "daily-a": "Daily stats", "daily-b": "Daily activity" };
+const PAGE_LABEL: Record<string, string> = { bars: msg("Barometer and tide"), sun: msg("Sun"), moon: msg("Moon"), "daily-a": msg("Daily stats"), "daily-b": msg("Daily activity") };
 
 /** The firmware caveat a field carries, short for the tile and whole for its tooltip. */
 export function fieldCaveat(field: NativeDataDefinition): { tag?: string; hint?: string } {
@@ -118,8 +119,8 @@ const STATUS_ICON: Record<string, string> = { bluetooth: "bt", doNotDisturb: "mo
 /** The states' icons, in the order WATCHFACE_STATUS_GROUPS lists them: on, off, then airplane or sleep mode. */
 const STATUS_ICONS: Record<string, string[]> = { bluetooth: ["bt", "btOff", "plane"], doNotDisturb: ["moon", "moonOff", "bed"] };
 const STATUS_HINT: Record<string, string> = {
-  bluetooth: "On, off and airplane mode: one indicator, edited in its panel.",
-  doNotDisturb: "On, off and sleep mode: one indicator, edited in its panel.",
+  bluetooth: msg("On, off and airplane mode: one indicator, edited in its panel."),
+  doNotDisturb: msg("On, off and sleep mode: one indicator, edited in its panel."),
 };
 const statusLayerId = (key: string) => `configAsset:config:${key}`;
 const configKeyOf = (layer: EditorLayer) => layer.configAssetId?.startsWith("config:") ? layer.configAssetId.slice("config:".length) : undefined;
@@ -132,11 +133,11 @@ const METRIC_ICON: Record<string, string> = { heartRate: "heart", steps: "steps"
 
 /** What Add → Artwork offers. Baked into the face's picture: it doesn't change on the watch. */
 export const ARTWORK_ROWS = [
-  { kind: "image", label: "Image", icon: "image", words: "picture photo png jpeg jpg webp artwork sprite" },
-  { kind: "text", label: "Text", icon: "text", words: "label words type artwork" },
-  { kind: "rect", label: "Rectangle", icon: "rect", words: "shape box square artwork" },
-  { kind: "ellipse", label: "Ellipse", icon: "ellipse", words: "shape circle oval round artwork" },
-  { kind: "line", label: "Line", icon: "minus", words: "shape rule divider stroke artwork" },
+  { kind: "image", label: msg("Image"), icon: "image", words: "picture photo png jpeg jpg webp artwork sprite" },
+  { kind: "text", label: msg("Text"), icon: "text", words: "label words type artwork" },
+  { kind: "rect", label: msg("Rectangle"), icon: "rect", words: "shape box square artwork" },
+  { kind: "ellipse", label: msg("Ellipse"), icon: "ellipse", words: "shape circle oval round artwork" },
+  { kind: "line", label: msg("Line"), icon: "minus", words: "shape rule divider stroke artwork" },
 ] as const;
 export type ArtworkKind = (typeof ARTWORK_ROWS)[number]["kind"];
 
@@ -146,7 +147,7 @@ const HAND_ASSETS = new Set(HAND_KEYS.map((key) => `config:${key}`));
 export const HOUR_HAND_LAYER = "configAsset:config:time_hour_icon";
 export const NEGATIVE_SIGN_LAYER = "configAsset:config:negative_sign_icon";
 const DATE_ROWS: Record<WatchfaceDatePartId, { label: string; sample: string }> = {
-  weekday: { label: "Weekday", sample: "TUE" }, dateMonth: { label: "Month", sample: "11" }, dateDay: { label: "Day", sample: "23" },
+  weekday: { label: msg("Weekday"), sample: "TUE" }, dateMonth: { label: msg("Month"), sample: "11" }, dateDay: { label: msg("Day"), sample: "23" },
 };
 
 /** Whether Studio adds the seconds: on Current, on a template with none of its own. */
@@ -185,13 +186,13 @@ export function libraryItems(design: Design, ctx: LibraryContext): LibraryItem[]
 
   // Time and date parts Studio makes for a template without them. Hidden with the eye, they come back from here.
   if (seconds) {
-    items.push({ key: "time:seconds", label: "Seconds", group: "time", icon: "clock", sample: ":42", layerId: "seconds",
+    items.push({ key: "time:seconds", label: msg("Seconds"), group: "time", icon: "clock", sample: ":42", layerId: "seconds",
       added: !!design.addSeconds && design.layerVisibility?.seconds !== false,
-      hint: "Uses the minute digits: this template has no seconds of its own.", words: "seconds time clock" });
+      hint: t("Uses the minute digits: this template has no seconds of its own."), words: "seconds time clock" });
   }
-  items.push({ key: "time:analog", label: "Analog hands", group: "time", icon: "clock", layerId: HOUR_HAND_LAYER,
+  items.push({ key: "time:analog", label: msg("Analog hands"), group: "time", icon: "clock", layerId: HOUR_HAND_LAYER,
     added: present.some((l) => l.visible && (l.configAssetId === "config:time_hour_icon" || l.configAssetId === "config:time_minute_icon")),
-    hint: "Hour, minute and second hands and a centre cap. Always-on gets no second hand.", words: "analog analogue hands hour minute second cap time clock" });
+    hint: t("Hour, minute and second hands and a centre cap. Always-on gets no second hand."), words: "analog analogue hands hour minute second cap time clock" });
   for (const id of dateParts) {
     items.push({ key: `date:${id}`, label: DATE_ROWS[id].label, group: "time", icon: "cal", sample: DATE_ROWS[id].sample, layerId: id,
       added: design[ADDED_DATE_PART_FLAGS[id]] === true && design.layerVisibility?.[id] !== false, words: `${id} date calendar` });
@@ -224,7 +225,7 @@ export function libraryItems(design: Design, ctx: LibraryContext): LibraryItem[]
   const slot = ctx.layers.find((l) => l.kind === SLOT_LAYER);
   if (slot && (current || slot.present)) {
     items.push({ key: "slot", label: SLOT_LABEL, group: "activity", icon: "gauge", sample: "96", added: slot.present && slot.visible, layerId: slot.id,
-      bounds: slot.present && !slot.visible ? slot.bounds : null, hint: "One place whose data the wearer picks in the watch's face settings.",
+      bounds: slot.present && !slot.visible ? slot.bounds : null, hint: t("One place whose data the wearer picks in the watch's face settings."),
       words: "selectable metric slot complication control wearer picks chooses data chosen on watch" });
   }
 
@@ -235,7 +236,7 @@ export function libraryItems(design: Design, ctx: LibraryContext): LibraryItem[]
     const style = design.nativeData?.[field.id];
     const added = !!style?.enabled && (!pair || !!design.nativeData?.weather_temp_max?.enabled);
     items.push({
-      key: `native:${field.id}`, label: pair ? "Min / max temperature" : field.label, group: CATEGORY_GROUP[field.category],
+      key: `native:${field.id}`, label: pair ? msg("Min / max temperature") : field.label, group: CATEGORY_GROUP[field.category],
       icon: FIELD_ICON[field.id] ?? (field.category === "Training" ? "watch" : "gauge"),
       sample: pair ? "12/24°" : field.kind === "state" ? undefined : `${field.sample}${field.unit ?? ""}`,
       added, layerId: `native:${field.id}`, ...fieldCaveat(field),
@@ -251,7 +252,7 @@ export function libraryItems(design: Design, ctx: LibraryContext): LibraryItem[]
     items.push({
       key: `chart:${page}`, label: PAGE_LABEL[page], group: "charts", icon: PAGE_ICON[page], added: pages.has(page === "bars" ? "barometer" : page),
       layerId: "native:chart", tag: "Experimental",
-      hint: `${page === "bars" ? "Bars" : page === "sun" || page === "moon" ? "Line" : "No graph"} · ${sources.map(nativeChartReadoutLabel).join(", ")}${page === "bars" ? " · two pages, needs phone data" : ""}`,
+      hint: `${page === "bars" ? t("Bars") : page === "sun" || page === "moon" ? t("Line") : t("No graph")} · ${sources.map((x) => t(nativeChartReadoutLabel(x))).join(", ")}${page === "bars" ? ` · ${t("two pages, needs phone data")}` : ""}`,
       words: `chart page ${sources.join(" ")} ${sources.map(nativeChartReadoutLabel).join(" ")}`,
     });
   }
@@ -273,18 +274,18 @@ export function libraryItems(design: Design, ctx: LibraryContext): LibraryItem[]
   }
   // The minus the watch puts before negative and missing values, on a template without one.
   if (!present.some((l) => l.id === NEGATIVE_SIGN_LAYER)) {
-    items.push({ key: "sign", label: "Negative sign", group: "device", icon: "minus", added: false, layerId: NEGATIVE_SIGN_LAYER,
-      hint: "The minus the watch draws before negative and missing values.", words: "negative_sign_icon minus dash temperature" });
+    items.push({ key: "sign", label: msg("Negative sign"), group: "device", icon: "minus", added: false, layerId: NEGATIVE_SIGN_LAYER,
+      hint: t("The minus the watch draws before negative and missing values."), words: "negative_sign_icon minus dash temperature" });
   }
   // A face without an animation makes one from a folder of PNG frames. Always-on never animates.
   if (current && !design.animation?.frames.length) {
-    items.push({ key: "animation", label: "Animation", group: "device", icon: "spark", added: false, layerId: "animation",
-      hint: `A folder of PNG frames, up to ${MAX_ANIMATION_FRAMES}, all one size. Plays while the face is lit.`, words: "animation frames gif motion" });
+    items.push({ key: "animation", label: msg("Animation"), group: "device", icon: "spark", added: false, layerId: "animation",
+      hint: t("A folder of PNG frames, up to {max}, all one size. Plays while the face is lit.", { max: MAX_ANIMATION_FRAMES }), words: "animation frames gif motion" });
   }
   const battery = ctx.layers.find((l) => l.id === "batteryIcon");
   if (battery && !battery.present && !design.configAssetOverrides?.["config:battery_icon"]?.replacement &&
     !Object.keys(design.configAssetOverrides?.["config:battery_icon"]?.stateReplacements ?? {}).length) {
-    items.push({ key: "battery", label: "Battery icon", group: "device", icon: "battery", added: false, layerId: "batteryIcon", words: "battery_icon level charge" });
+    items.push({ key: "battery", label: msg("Battery icon"), group: "device", icon: "battery", added: false, layerId: "batteryIcon", words: "battery_icon level charge" });
   }
   return items;
 }
@@ -301,7 +302,7 @@ export function searchLibrary(items: LibraryItem[], query: string): LibraryItem[
   const q = query.trim().toLowerCase();
   if (!q) return items;
   const parts = q.split(/\s+/);
-  return items.filter((i) => { const text = `${i.label} ${i.group} ${i.words} ${i.tag ?? ""}`.toLowerCase(); return parts.every((p) => text.includes(p)); });
+  return items.filter((i) => { const text = `${i.label} ${t(i.label)} ${i.group} ${i.words} ${i.tag ?? ""}`.toLowerCase(); return parts.every((p) => text.includes(p)); });
 }
 
 // ───── Placing ─────
@@ -507,7 +508,7 @@ export const shapeLayerId = watchfaceBackgroundElementLayerId;
  * shrunk to fit when it is larger than the face, at `at` or the free spot nearest the middle.
  */
 export function newImage(design: Design, art: CorosWatchfaceArtwork, id: string, ctx: LibraryContext, at?: Point): CorosWatchfaceDesignSprite {
-  if ((design.designSprites ?? []).length >= MAX_DESIGN_SPRITES) throw new Error(`A face can hold up to ${MAX_DESIGN_SPRITES} imported images.`);
+  if ((design.designSprites ?? []).length >= MAX_DESIGN_SPRITES) throw new Error(t("A face can hold up to {max} imported images.", { max: MAX_DESIGN_SPRITES }));
   const width = watchfaceMasterPixelsFromDevice(art.width, ctx.face.width, ctx.watchWidth ?? ctx.face.width);
   const height = watchfaceMasterPixelsFromDevice(art.height, ctx.face.width, ctx.watchWidth ?? ctx.face.width);
   const sprite: CorosWatchfaceDesignSprite = {

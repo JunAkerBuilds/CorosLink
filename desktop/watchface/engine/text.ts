@@ -1,10 +1,11 @@
-// The engine's words. C-LINK is in English for now, so this only fills in {{placeholders}}; when the app gets
-// languages, this is the one place to hook them in.
+// The engine's words, in the app's language (src/lib/i18n): the English is the key, {{placeholders}} are filled here.
+import { locale, t as translate } from "@/lib/i18n";
+
 type Values = Record<string, string | number | null | undefined>;
 
 export function t(source: string, values?: Values): string {
-  return source.replace(/\{\{(\w+)\}\}/g, (placeholder, key: string) =>
+  return translate(source).replace(/\{\{(\w+)\}\}/g, (placeholder, key: string) =>
     values && Object.hasOwn(values, key) ? String(values[key] ?? "") : placeholder);
 }
 
-export const getLocale = (): string => "en-US";
+export const getLocale = (): string => locale("en-US");

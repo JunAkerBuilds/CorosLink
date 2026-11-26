@@ -3,6 +3,7 @@
 import type { LatLon, TrailRoute } from "../../../maps/types";
 import { meters } from "./geo";
 import { asProblem, RoutingProblem, Spacer, USER_AGENT, type Net } from "./net";
+import { t } from "@/lib/i18n";
 
 const ENDPOINT = "https://overpass-api.de/api/interpreter";
 /** Wider than this and Overpass is slow and the list unreadable: zoom in first. */
@@ -31,10 +32,10 @@ export class Overpass {
 
   async trails(box: Bbox, kinds: TrailKind[]): Promise<TrailRoute[]> {
     if (![box.south, box.west, box.north, box.east].every(Number.isFinite) || box.south >= box.north || box.west >= box.east) {
-      throw new RoutingProblem("Move the map to where you want to look for trails.", "bbox");
+      throw new RoutingProblem(t("Move the map to where you want to look for trails."), "bbox");
     }
     if (box.north - box.south > MAX_SPAN_DEG || box.east - box.west > MAX_SPAN_DEG) {
-      throw new RoutingProblem("Zoom in to see marked trails.", "zoom_in");
+      throw new RoutingProblem(t("Zoom in to see marked trails."), "zoom_in");
     }
     const routes = [...new Set((kinds.length ? kinds : (["hike", "cycle", "mtb"] as TrailKind[])).flatMap((k) => OSM_ROUTES[k]))];
     const f = (n: number) => n.toFixed(5);
@@ -51,14 +52,14 @@ export class Overpass {
 
   /** One route's line, its member ways joined end to end in order. */
   async relation(id: string): Promise<{ name: string; kind: TrailKind | null; points: LatLon[] }> {
-    if (!/^\d{1,12}$/.test(id)) throw new RoutingProblem("That trail wasn't found.", "not_found", 404);
+    if (!/^\d{1,12}$/.test(id)) throw new RoutingProblem(t("That trail wasn't found."), "not_found", 404);
     const [rel] = (await this.ask(`[out:json][timeout:25];relation(${id});out geom;`)).filter((e) => e.type === "relation");
-    if (!rel) throw new RoutingProblem("That trail wasn't found.", "not_found", 404);
+    if (!rel) throw new RoutingProblem(t("That trail wasn't found."), "not_found", 404);
     const ways = (rel.members ?? [])
       .filter((m) => m.type === "way" && m.geometry && m.geometry.length >= 2 && !SIDE_ROLES.has(m.role ?? ""))
       .map((m) => m.geometry!.map((g) => [g.lat, g.lon] as LatLon));
     const points = stitch(ways);
-    if (points.length < 2) throw new RoutingProblem("That trail has no line to follow.", "no_route", 422);
+    if (points.length < 2) throw new RoutingProblem(t("That trail has no line to follow."), "no_route", 422);
     return { name: rel.tags?.name || rel.tags?.ref || "Marked trail", kind: kindOf(rel.tags?.route), points };
   }
 
@@ -75,8 +76,8 @@ export class Overpass {
       } catch (e) {
         throw asProblem(e, "The trails service");
       }
-      if (res.status === 429 || res.status === 504) throw new RoutingProblem("The trails service is busy. Try again in a minute.", "busy", 503);
-      if (!res.ok) throw new RoutingProblem(`The trails service had a problem (${res.status}).`, "trails", 502);
+      if (res.status === 429 || res.status === 504) throw new RoutingProblem(t("The trails service is busy. Try again in a minute."), "busy", 503);
+      if (!res.ok) throw new RoutingProblem(t("The trails service had a problem ({status}).", { status: res.status }), "trails", 502);
       const body = (await res.json()) as { elements?: Element[] };
       return Array.isArray(body.elements) ? body.elements : [];
     });

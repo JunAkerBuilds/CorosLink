@@ -2,6 +2,7 @@ import type { EnergyBand, EnergyData, EnergyDay, EnergyEvent, EnergyPoint } from
 import { SAMPLE_TODAY } from "../core";
 import { dayKey } from "@/lib/format";
 import { addDays, clockOfDay, scatter } from "@/lib/health";
+import { msg } from "@/lib/i18n";
 
 const MONTH = 30;
 const BEDTIME = 22 * 60 + 45;
@@ -16,29 +17,29 @@ const today: EnergyDay = {
     [660, 67], [690, 66], [735, 62], [760, 61], [820, 66], [850, 64],
   ] as const).map(([minute, level]) => ({ minute, level })),
   bands: [
-    { kind: "sleep", from: 0, to: 414, label: "Sleep" },
+    { kind: "sleep", from: 0, to: 414, label: msg("Sleep") },
     { kind: "workout", from: 462, to: 500, label: "Morning tempo" },
-    { kind: "rest", from: 570, to: 660, label: "Rest" },
-    { kind: "stress", from: 690, to: 735, label: "Stress" },
-    { kind: "rest", from: 760, to: 820, label: "Rest" },
-    { kind: "sleep", from: BEDTIME, to: 1440, label: "Sleep" },
+    { kind: "rest", from: 570, to: 660, label: msg("Rest") },
+    { kind: "stress", from: 690, to: 735, label: msg("Stress") },
+    { kind: "rest", from: 760, to: 820, label: msg("Rest") },
+    { kind: "sleep", from: BEDTIME, to: 1440, label: msg("Sleep") },
   ],
   events: [
-    { kind: "sleep", name: "Sleep", detail: "22:58 – 06:54 · Score 84", delta: 52, when: "22:58 – 06:54" },
+    { kind: "sleep", name: msg("Sleep"), detail: "22:58 – 06:54 · Score 84", delta: 52, when: "22:58 – 06:54" },
     { kind: "workout", name: "Morning tempo", detail: "07:42 – 08:20 · 8.02 km", delta: -22 },
-    { kind: "rest", name: "Rest", detail: "09:30 – 11:00", delta: 11 },
-    { kind: "stress", name: "Stress", detail: "11:30 – 12:15", delta: -4 },
-    { kind: "rest", name: "Rest", detail: "12:40 – 13:40", delta: 5 },
-    { kind: "awake", name: "Awake", detail: "The rest of the day so far", delta: -7, when: "so far" },
+    { kind: "rest", name: msg("Rest"), detail: "09:30 – 11:00", delta: 11 },
+    { kind: "stress", name: msg("Stress"), detail: "11:30 – 12:15", delta: -4 },
+    { kind: "rest", name: msg("Rest"), detail: "12:40 – 13:40", delta: 5 },
+    { kind: "awake", name: msg("Awake"), detail: msg("The rest of the day so far"), delta: -7, when: msg("so far") },
   ],
   woke: { minute: 414, level: 81 },
   low: 56,
   high: 81,
   now: { minute: 850, level: 64 },
   bedtime: { minute: BEDTIME, level: 38 },
-  pace: { label: "Using slowly", direction: "down" },
-  note: "On this pace you reach bedtime at about 38. Enough left for an easy evening.",
-  headline: "Enough left for an easy evening.",
+  pace: { label: msg("Using slowly"), direction: "down" },
+  note: msg("On this pace you reach bedtime at about 38. Enough left for an easy evening."),
+  headline: msg("Enough left for an easy evening."),
   sleep: { minutes: 462, score: 84 },
 };
 
@@ -58,11 +59,11 @@ function pastDay(date: Date, seed: number, low: number, high: number, waking: nu
   const stressFrom = evening ? 660 : 900;
 
   const stretches: Stretch[] = [];
-  if (high > waking) stretches.push({ kind: "rest", name: "Rest", from: wake + 30, to: wake + 90, change: high - waking });
+  if (high > waking) stretches.push({ kind: "rest", name: msg("Rest"), from: wake + 30, to: wake + 90, change: high - waking });
   const workoutDrop = Math.round(span * (long ? 0.62 : 0.5));
   const stressDrop = Math.max(1, Math.round(span * 0.08));
   stretches.push({ kind: "workout", name: long ? "Long run" : evening ? "Evening run" : "Lunch run", from: workoutFrom, to: workoutFrom + workoutLength, change: -workoutDrop });
-  stretches.push({ kind: "stress", name: "Stress", from: stressFrom, to: stressFrom + 40, change: -stressDrop });
+  stretches.push({ kind: "stress", name: msg("Stress"), from: stressFrom, to: stressFrom + 40, change: -stressDrop });
   stretches.sort((a, b) => a.from - b.from);
 
   // Time awake between the stretches uses what is left of the day's fall, shared out by how long each gap is.
@@ -75,9 +76,9 @@ function pastDay(date: Date, seed: number, low: number, high: number, waking: nu
   const gapMinutes = gaps.reduce((sum, [a, b]) => sum + Math.max(0, b - Math.max(a, peakAt)), 0);
 
   const points: EnergyPoint[] = [{ minute: 0, level: startLevel }, { minute: wake, level: waking }];
-  const bands: EnergyBand[] = [{ kind: "sleep", from: 0, to: wake, label: "Sleep" }];
+  const bands: EnergyBand[] = [{ kind: "sleep", from: 0, to: wake, label: msg("Sleep") }];
   const events: EnergyEvent[] = [{
-    kind: "sleep", name: "Sleep", detail: `${clockOfDay(BEDTIME)} – ${clockOfDay(wake)}`, delta: waking - (startLevel - EVENING_CHARGE),
+    kind: "sleep", name: msg("Sleep"), detail: `${clockOfDay(BEDTIME)} – ${clockOfDay(wake)}`, delta: waking - (startLevel - EVENING_CHARGE),
   }];
   let exact = waking, awakeUsed = 0;
   const push = (minute: number) => {
@@ -100,9 +101,9 @@ function pastDay(date: Date, seed: number, low: number, high: number, waking: nu
     bands.push({ kind: s.kind, from: s.from, to: s.to, label: s.name });
     events.push({ kind: s.kind, name: s.name, detail: `${clockOfDay(s.from)} – ${clockOfDay(s.to)}`, delta });
   });
-  events.push({ kind: "awake", name: "Awake", detail: "The rest of the day", delta: -awakeUsed });
+  events.push({ kind: "awake", name: msg("Awake"), detail: msg("The rest of the day"), delta: -awakeUsed });
   points.push({ minute: 1440, level: low + EVENING_CHARGE });
-  bands.push({ kind: "sleep", from: BEDTIME, to: 1440, label: "Sleep" });
+  bands.push({ kind: "sleep", from: BEDTIME, to: 1440, label: msg("Sleep") });
 
   return { date: dayKey(date), points, bands, events, woke: { minute: wake, level: waking }, low, high };
 }

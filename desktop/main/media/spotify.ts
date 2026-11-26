@@ -13,6 +13,7 @@ import { searchFor, SourceProblem, type MusicSource, type Playlist, type Song, t
 import { readPlaylist, SpotifyInternalError } from "./spotifyInternal";
 import type { ServiceVault } from "./vault";
 import type { WebHost } from "./webHost";
+import { t } from "@/lib/i18n";
 
 const AUTHORIZE = "https://accounts.spotify.com/authorize";
 const TOKEN = "https://accounts.spotify.com/api/token";
@@ -24,12 +25,12 @@ interface Grant { key: "spotify" | "spotify.followed"; redirect: string; scopes:
 /** The person's own app. */
 const APP: Grant = {
   key: "spotify", redirect: "http://127.0.0.1:4567/callback", scopes: "playlist-read-private playlist-read-collaborative user-read-private",
-  title: "Sign in to Spotify", partition: "persist:clink-spotify",
+  title: t("Sign in to Spotify"), partition: "persist:clink-spotify",
 };
 /** Spotify's desktop client, for followed playlists. Its registered redirect is http://127.0.0.1:8898/login. */
 const FOLLOWED: Grant = {
   key: "spotify.followed", redirect: "http://127.0.0.1:8898/login", scopes: "playlist-read-private playlist-read-collaborative",
-  title: "Unlock followed Spotify playlists", partition: "persist:clink-spotify",
+  title: t("Unlock followed Spotify playlists"), partition: "persist:clink-spotify",
 };
 export const SPOTIFY_DESKTOP_CLIENT = "65b708073fc0480ea92a077233ca87bd";
 export const SPOTIFY_REDIRECT = APP.redirect;
@@ -81,8 +82,8 @@ export class Spotify implements MusicSource {
   /** Saves the Client ID (32 hex characters); a different one signs out. */
   async setClientId(value: string): Promise<SourceStatus> {
     const id = value.trim();
-    if (!/^[0-9a-f]{32}$/i.test(id)) throw new SourceProblem("A Spotify Client ID is 32 letters and numbers, from your app's page on developer.spotify.com.", "clientId");
-    if (id.toLowerCase() === SPOTIFY_DESKTOP_CLIENT) throw new SourceProblem("Use the Client ID of an app you made yourself.", "clientId");
+    if (!/^[0-9a-f]{32}$/i.test(id)) throw new SourceProblem(t("A Spotify Client ID is 32 letters and numbers, from your app's page on developer.spotify.com."), "clientId");
+    if (id.toLowerCase() === SPOTIFY_DESKTOP_CLIENT) throw new SourceProblem(t("Use the Client ID of an app you made yourself."), "clientId");
     if (id !== this.clientId()) await this.forget();
     this.vault.setSetting("spotify.clientId", id);
     return this.status();
@@ -91,19 +92,19 @@ export class Spotify implements MusicSource {
   /** A sign-in window for a grant; resolves with its tokens, or null when the window was closed. */
   private async authorize(grant: Grant): Promise<Tokens | null> {
     const clientId = this.grantClient(grant);
-    if (!clientId) throw new SourceProblem("Add your Spotify app's Client ID first.", "clientId");
+    if (!clientId) throw new SourceProblem(t("Add your Spotify app's Client ID first."), "clientId");
     const { url, verifier, state } = authorizeUrl(clientId, grant);
     const back = await this.web.signIn({ url, partition: grant.partition, title: grant.title, done: (u) => u.startsWith(grant.redirect) });
     if (!back) return null;
     const answer = new URL(back).searchParams;
-    if (answer.get("state") !== state) throw new SourceProblem("Spotify's answer didn't match. Try again.", "state");
+    if (answer.get("state") !== state) throw new SourceProblem(t("Spotify's answer didn't match. Try again."), "state");
     const code = answer.get("code");
     if (!code) {
-      throw new SourceProblem(answer.get("error") === "access_denied" ? "Spotify sign-in was cancelled."
-        : grant === APP ? "Spotify didn't sign you in. Check the Redirect URI in your app's settings." : "Spotify didn't unlock followed playlists.", "denied");
+      throw new SourceProblem(answer.get("error") === "access_denied" ? t("Spotify sign-in was cancelled.")
+        : grant === APP ? t("Spotify didn't sign you in. Check the Redirect URI in your app's settings.") : t("Spotify didn't unlock followed playlists."), "denied");
     }
-    const t = await this.token({ grant_type: "authorization_code", code, redirect_uri: grant.redirect, client_id: clientId, code_verifier: verifier });
-    return { access: t.access_token, refresh: t.refresh_token ?? "", expiresAt: Date.now() + (t.expires_in ?? 3600) * 1000 - 60_000 };
+    const tok = await this.token({ grant_type: "authorization_code", code, redirect_uri: grant.redirect, client_id: clientId, code_verifier: verifier });
+    return { access: tok.access_token, refresh: tok.refresh_token ?? "", expiresAt: Date.now() + (tok.expires_in ?? 3600) * 1000 - 60_000 };
   }
 
   async connect(): Promise<SourceStatus> {
@@ -117,7 +118,7 @@ export class Spotify implements MusicSource {
 
   /** Signs in as Spotify's desktop client, so playlists the person only follows can be read too. */
   async unlock(): Promise<SourceStatus> {
-    if (!(await this.status()).connected) throw new SourceProblem("Sign in to Spotify first.", "signedOut");
+    if (!(await this.status()).connected) throw new SourceProblem(t("Sign in to Spotify first."), "signedOut");
     const tokens = await this.authorize(FOLLOWED);
     if (tokens) await this.vault.setSecret(FOLLOWED.key, tokens);
     return this.status();
@@ -142,7 +143,7 @@ export class Spotify implements MusicSource {
   private async token(body: Record<string, string>) {
     const answer = await this.get(TOKEN, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(body).toString() });
     const json = (await answer.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string; expires_in?: number; error_description?: string };
-    if (!answer.ok || !json.access_token) throw new SourceProblem(`Spotify refused: ${json.error_description ?? answer.status}. Sign in again.`, "token");
+    if (!answer.ok || !json.access_token) throw new SourceProblem(t("Spotify refused: {reason}. Sign in again.", { reason: json.error_description ?? answer.status }), "token");
     return json as { access_token: string; refresh_token?: string; expires_in?: number };
   }
 
@@ -152,25 +153,25 @@ export class Spotify implements MusicSource {
     const clientId = this.grantClient(grant);
     if (!tokens || !clientId) throw new SourceProblem(grant === APP ? "Sign in to Spotify first." : "Unlock followed playlists first.", "signedOut");
     if (Date.now() < tokens.expiresAt) return tokens.access;
-    let t;
+    let tok;
     try {
-      t = await this.token({ grant_type: "refresh_token", refresh_token: tokens.refresh, client_id: clientId });
+      tok = await this.token({ grant_type: "refresh_token", refresh_token: tokens.refresh, client_id: clientId });
     } catch (error) {
-      if (grant === FOLLOWED) { await this.vault.setSecret(FOLLOWED.key, null); throw new SourceProblem("Spotify ended the unlock. Unlock followed playlists again.", "locked"); }
+      if (grant === FOLLOWED) { await this.vault.setSecret(FOLLOWED.key, null); throw new SourceProblem(t("Spotify ended the unlock. Unlock followed playlists again."), "locked"); }
       throw error;
     }
-    await this.vault.setSecret(grant.key, { ...tokens, access: t.access_token, refresh: t.refresh_token ?? tokens.refresh, expiresAt: Date.now() + (t.expires_in ?? 3600) * 1000 - 60_000 });
-    return t.access_token;
+    await this.vault.setSecret(grant.key, { ...tokens, access: tok.access_token, refresh: tok.refresh_token ?? tokens.refresh, expiresAt: Date.now() + (tok.expires_in ?? 3600) * 1000 - 60_000 });
+    return tok.access_token;
   }
 
   private async api<T>(pathOrUrl: string): Promise<T> {
     const url = pathOrUrl.startsWith("https://") ? pathOrUrl : `${API}${pathOrUrl}`;
-    if (!url.startsWith(`${API}/`)) throw new SourceProblem("Not a Spotify address.", "address");
+    if (!url.startsWith(`${API}/`)) throw new SourceProblem(t("Not a Spotify address."), "address");
     const answer = await this.get(url, { headers: { Authorization: `Bearer ${await this.access(APP)}` } });
-    if (answer.status === 401) { await this.forget(); throw new SourceProblem("Spotify signed you out. Sign in again.", "signedOut"); }
-    if (answer.status === 403 || answer.status === 404) throw new SourceProblem("Spotify only lets your app read playlists you made or collaborate on. Unlock followed playlists to read this one.", "forbidden");
-    if (answer.status === 429) throw new SourceProblem("Spotify asked to slow down. Try again in a minute.", "rate");
-    if (!answer.ok) throw new SourceProblem(`Spotify didn't answer (${answer.status}).`, "spotify");
+    if (answer.status === 401) { await this.forget(); throw new SourceProblem(t("Spotify signed you out. Sign in again."), "signedOut"); }
+    if (answer.status === 403 || answer.status === 404) throw new SourceProblem(t("Spotify only lets your app read playlists you made or collaborate on. Unlock followed playlists to read this one."), "forbidden");
+    if (answer.status === 429) throw new SourceProblem(t("Spotify asked to slow down. Try again in a minute."), "rate");
+    if (!answer.ok) throw new SourceProblem(t("Spotify didn't answer ({status}).", { status: answer.status }), "spotify");
     return (await answer.json()) as T;
   }
 
@@ -200,7 +201,7 @@ export class Spotify implements MusicSource {
   }
 
   async songs(playlistId: string): Promise<Song[]> {
-    if (!/^[A-Za-z0-9]{10,40}$/.test(playlistId)) throw new SourceProblem("Not a Spotify playlist.", "playlist");
+    if (!/^[A-Za-z0-9]{10,40}$/.test(playlistId)) throw new SourceProblem(t("Not a Spotify playlist."), "playlist");
     try {
       return await this.webApiSongs(playlistId);
     } catch (error) {
@@ -212,9 +213,9 @@ export class Spotify implements MusicSource {
       } catch (inner) {
         if (inner instanceof SpotifyInternalError && (inner.status === 401 || inner.status === 403)) {
           await this.vault.setSecret(FOLLOWED.key, null);
-          throw new SourceProblem("Spotify turned the unlock away. Unlock followed playlists again.", "locked");
+          throw new SourceProblem(t("Spotify turned the unlock away. Unlock followed playlists again."), "locked");
         }
-        if (inner instanceof SpotifyInternalError && inner.status === 429) throw new SourceProblem("Spotify asked to slow down. Try again in a minute.", "rate");
+        if (inner instanceof SpotifyInternalError && inner.status === 429) throw new SourceProblem(t("Spotify asked to slow down. Try again in a minute."), "rate");
         throw inner;
       }
     }

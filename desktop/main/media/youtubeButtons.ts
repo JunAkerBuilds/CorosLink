@@ -6,6 +6,8 @@
 /** The isolated world the buttons live in (any number not used by Electron itself). */
 export const BUTTON_WORLD = 7311;
 
+import { t } from "@/lib/i18n";
+
 const ID = /^[\w-]{11}$/;
 
 export const BUTTON_CSS = `
@@ -45,10 +47,10 @@ export function buttonsScript(tag: string): string {
     return ((t && (t.textContent || t.getAttribute("title"))) || a.getAttribute("title") || a.getAttribute("aria-label") || "").replace(/\\s+/g, " ").trim().slice(0, 200);
   };
   const ADS = "ytd-ad-slot-renderer, ytd-in-feed-ad-layout-renderer, ytd-promoted-video-renderer, ytd-display-ad-renderer";
-  const LABEL = { queued: "Queued", working: "Downloading…", done: "✓ In library", failed: "Didn't download" };
+  const LABEL = ${JSON.stringify({ queued: t("Queued"), working: t("Downloading…"), done: `✓ ${t("In library")}`, failed: t("Didn't download") })};
   const show = (b) => {
     const s = states.get(b.dataset.clinkId);
-    b.textContent = s ? (LABEL[s] || s) : "↓ Download MP3";
+    b.textContent = s ? (LABEL[s] || s) : ${JSON.stringify(`↓ ${t("Download MP3")}`)};
     if (s && LABEL[s]) b.dataset.state = s; else delete b.dataset.state;
   };
   const stop = (e) => { e.stopPropagation(); };

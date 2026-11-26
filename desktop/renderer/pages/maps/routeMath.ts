@@ -1,5 +1,6 @@
 // Route Studio's sums: joining drawn legs, the elevation profile, estimated time and the makeup line. Pure.
 import type { RouteGeometry, RouteMakeup, RouteSport, TrackPoint } from "../../../maps/types";
+import { msg, t, tx } from "@/lib/i18n";
 import { haversine } from "./sketchShapes";
 
 /** Legs end where the next starts: joined without repeating that point. */
@@ -93,14 +94,14 @@ export function shares(makeup: RouteMakeup | undefined) {
 export function terrain(makeup: RouteMakeup | undefined): string {
   const s = shares(makeup);
   if (!s) return "–";
-  if (s.paved >= 0.8) return "Paved";
-  if (s.unpaved >= 0.6) return "Trail";
-  return "Mixed";
+  if (s.paved >= 0.8) return t("Paved");
+  if (s.unpaved >= 0.6) return t("Trail");
+  return tx("surface", "Mixed");
 }
 
 export const WAY_LABEL: Record<RouteMakeup["ways"][number]["kind"], string> = {
-  path: "Path & trail", cycleway: "Cycleway", sidewalk: "Sidewalk", quiet: "Quiet street", busy: "Busy road", other: "Steps & other",
+  path: msg("Path & trail"), cycleway: msg("Cycleway"), sidewalk: msg("Sidewalk"), quiet: msg("Quiet street"), busy: msg("Busy road"), other: msg("Steps & other"),
 };
 export const SURFACE_LABEL: Record<RouteMakeup["surfaces"][number]["kind"], string> = {
-  paved: "Paved", gravel: "Gravel", dirt: "Dirt & grass", unknown: "Unknown",
+  paved: msg("Paved"), gravel: msg("Gravel"), dirt: msg("Dirt & grass"), unknown: msg("Unknown"),
 };

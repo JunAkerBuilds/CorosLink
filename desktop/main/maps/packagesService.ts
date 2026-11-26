@@ -12,6 +12,7 @@ import { download, DownloadProblem, prunePartials } from "./packages/download";
 import { assertNotOwnFolder, fingerprint, InstallProblem, mapFolderOf, onWatch, plan, unpack } from "./packages/install";
 import { isOfficialUrl, manifestUrl, MAP_VERSIONS, mapVersionOf, packagesOf, parseManifest, parsePackageId, regionName, type RawManifest } from "./packages/manifest";
 import { ZipProblem } from "./packages/zip";
+import { t } from "@/lib/i18n";
 
 /** The watch as a USB drive, as far as map packages care. */
 export interface PackagesWatch {
@@ -100,7 +101,7 @@ export class PackagesService {
       if (error instanceof InstallProblem || error instanceof DownloadProblem) return problem(error.message, error.code);
       if (error instanceof ZipProblem) return problem(error.message, "damaged");
       this.host.log?.(`Maps ${method} ${pathOnly} failed: ${String(error)}`);
-      return problem("That didn't work.", "internal", 500);
+      return problem(t("That didn't work."), "internal", 500);
     }
   }
 
@@ -125,7 +126,7 @@ export class PackagesService {
       this.host.log?.(`COROS map list v${version} failed: ${String(error)}`);
       const saved = await readFile(this.manifestFile(version), "utf8").then((t) => JSON.parse(t) as MapManifest, () => null);
       if (saved) return saved;
-      throw new DownloadProblem("COROS's map list couldn't be loaded. Check the connection and try again.", "manifest");
+      throw new DownloadProblem(t("COROS's map list couldn't be loaded. Check the connection and try again."), "manifest");
     }
   }
 
@@ -185,8 +186,8 @@ export class PackagesService {
     const existing = this.jobs.get(id);
     if (existing && (existing.state === "queued" || existing.state === "downloading")) return null;
     const hit = await this.lookup(id);
-    if (!hit) return problem("That map package isn't in COROS's list.", "notFound", 404);
-    if (!isOfficialUrl(hit.pkg.url)) return problem("Only COROS's own map downloads can be used.", "notOfficial");
+    if (!hit) return problem(t("That map package isn't in COROS's list."), "notFound", 404);
+    if (!isOfficialUrl(hit.pkg.url)) return problem(t("Only COROS's own map downloads can be used."), "notOfficial");
     const resumed = await this.cache.partialOf(id);
     this.jobs.set(id, { packageId: id, state: "queued", receivedBytes: resumed, totalBytes: hit.pkg.sizeBytes, pkg: hit.pkg, region: hit.region });
     this.pump();
@@ -219,7 +220,7 @@ export class PackagesService {
         } catch (error) {
           await rm(file, { force: true });
           throw error instanceof ZipProblem || error instanceof InstallProblem
-            ? new DownloadProblem("The download came out damaged. Try again.", "damaged") : error;
+            ? new DownloadProblem(t("The download came out damaged. Try again."), "damaged") : error;
         }
         const parsed = parsePackageId(job.packageId)!;
         await this.cache.put({
@@ -232,10 +233,10 @@ export class PackagesService {
         if (this.jobs.get(job.packageId) !== job) return;
         if (job.controller?.signal.aborted) {
           job.state = "cancelled";
-          job.message = "Download cancelled. It picks up where it left off next time.";
+          job.message = t("Download cancelled. It picks up where it left off next time.");
         } else {
           job.state = "failed";
-          job.message = error instanceof DownloadProblem ? error.message : "The download stopped. Try again.";
+          job.message = error instanceof DownloadProblem ? error.message : t("The download stopped. Try again.");
           this.host.log?.(`Map package ${job.packageId} failed: ${String(error)}`);
         }
       } finally {
@@ -251,13 +252,13 @@ export class PackagesService {
   private cancel(id: string): void {
     const job = this.jobs.get(id);
     if (!job) return;
-    if (job.state === "queued") { job.state = "cancelled"; job.message = "Download cancelled."; }
+    if (job.state === "queued") { job.state = "cancelled"; job.message = t("Download cancelled."); }
     else if (job.state === "downloading") job.controller?.abort();
     else this.jobs.delete(id);
   }
 
   private async remove(id: string): Promise<Response | null> {
-    if (this.installing?.ids.includes(id)) return problem("This map is going to the watch. Cancel that first.", "busy", 409);
+    if (this.installing?.ids.includes(id)) return problem(t("This map is going to the watch. Cancel that first."), "busy", 409);
     const job = this.jobs.get(id);
     if (job?.controller) { job.controller.abort(); await this.settled.get(id); }
     this.jobs.delete(id);
@@ -269,13 +270,13 @@ export class PackagesService {
   // ---- Install over USB ----
 
   private async startInstall(ids: string[]): Promise<Response | null> {
-    if (!ids.length) return problem("Pick at least one downloaded map.", "noIds");
-    if (this.installing) return problem("Maps are already going to the watch.", "busy", 409);
+    if (!ids.length) return problem(t("Pick at least one downloaded map."), "noIds");
+    if (this.installing) return problem(t("Maps are already going to the watch."), "busy", 409);
     const records = ids.map((id) => this.cache.get(id));
-    if (records.some((r) => !r)) return problem("That map isn't downloaded yet.", "notCached", 404);
+    if (records.some((r) => !r)) return problem(t("That map isn't downloaded yet."), "notCached", 404);
     const drive = this.host.drive();
     const watch = await drive.watch();
-    if (!watch) return problem("Plug in your watch first.", "noWatch", 409);
+    if (!watch) return problem(t("Plug in your watch first."), "noWatch", 409);
     const { folder } = mapFolderOf(watch.root, watch.model);
     assertNotOwnFolder(this.host.folder, folder);
     const zips = records.map((r) => ({
@@ -283,22 +284,22 @@ export class PackagesService {
       label: `${regionName(r!.region)} ${layerName(r!.layer)}`,
     }));
     for (const z of zips) assertNotOwnFolder(z.file, folder);
-    const label = zips.length === 1 ? zips[0].label : `${zips.length} map packages`;
+    const label = zips.length === 1 ? zips[0].label : t("{n} map packages", { n: zips.length });
 
     const controller = new AbortController();
     this.installing = { controller, ids };
-    this.install = { state: "copying", label, copiedBytes: 0, totalBytes: 0, files: 0, filesDone: 0, message: "Checking what the watch already has" };
+    this.install = { state: "copying", label, copiedBytes: 0, totalBytes: 0, files: 0, filesDone: 0, message: t("Checking what the watch already has") };
     let totals;
     try {
       totals = await plan(zips.map((z) => z.file), folder, controller.signal);
       const free = watch.freeBytes ?? freeSpace(watch.root);
       if (free !== undefined && totals.neededBytes > free) {
-        throw new InstallProblem(`The watch needs ${gb(totals.neededBytes)} free for these maps and has ${gb(free)}. Remove some maps or music first.`, "noSpace");
+        throw new InstallProblem(t("The watch needs {needed} free for these maps and has {free}. Remove some maps or music first.", { needed: gb(totals.neededBytes), free: gb(free) }), "noSpace");
       }
     } catch (error) {
       this.installing = null;
       this.install = error instanceof InstallProblem && error.code === "cancelled"
-        ? { ...this.install, state: "cancelled", message: "Transfer cancelled." } : undefined;
+        ? { ...this.install, state: "cancelled", message: t("Transfer cancelled.") } : undefined;
       if (error instanceof InstallProblem && error.code === "cancelled") return null;
       throw error;
     }
@@ -325,7 +326,7 @@ export class PackagesService {
         const cancelled = controller.signal.aborted;
         if (!cancelled) this.host.log?.(`Map install failed: ${String(error)}`);
         if (this.install) Object.assign(this.install, cancelled
-          ? { state: "cancelled", message: "Transfer cancelled." }
+          ? { state: "cancelled", message: t("Transfer cancelled.") }
           : { state: "failed", message: watchWriteMessage(error) });
       } finally {
         this.installing = null;

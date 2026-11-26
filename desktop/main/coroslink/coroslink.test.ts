@@ -69,6 +69,11 @@ describe("finding CorosLink", () => {
     mkdirSync(path.join(apps, "CorosLink.app", "Contents"), { recursive: true });
     writeFileSync(path.join(apps, "CorosLink.app", "Contents", "Info.plist"), "<plist><dict><key>CFBundleShortVersionString</key>\n<string>0.1.81</string></dict></plist>");
     expect(installedVersion([temp("none"), apps])).toBe("0.1.81");
+    // Windows: the NSIS install's own package.json (an unpacked resources\app stands in for app.asar here).
+    const programs = temp("programs");
+    mkdirSync(path.join(programs, "CorosLink", "resources", "app"), { recursive: true });
+    writeFileSync(path.join(programs, "CorosLink", "resources", "app", "package.json"), JSON.stringify({ name: "coroslink", version: "0.1.83" }));
+    expect(installedVersion([temp("none"), programs])).toBe("0.1.83");
     const appData = temp("appdata");
     makeCorosLinkFolder(path.join(appData, "CorosLink"));
     const elsewhere = makeCorosLinkFolder(path.join(temp("copy"), "x"));

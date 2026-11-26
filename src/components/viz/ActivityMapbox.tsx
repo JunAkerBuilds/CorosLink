@@ -6,6 +6,7 @@ import type { PlacedPoint } from "@/data/activities";
 import { kmMarkers, routeLngLatAt, routeLngLatSlice, type Span } from "@/lib/activities";
 import { baseAlpha, basemapConfig, isStandard, mapStyle, type RouteMapLight, type RouteMapType } from "@/lib/routeMap";
 import { useTheme } from "@/lib/theme";
+import { t } from "@/lib/i18n";
 
 type LineData = Parameters<mapboxgl.GeoJSONSource["setData"]>[0];
 const line = (coordinates: [number, number][]): LineData => ({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates } });
@@ -142,8 +143,8 @@ export default function ActivityMapbox({ accessToken, route, distanceM, at, span
     <>
       <div ref={box} className="act-map-gl" />
       <div className="ad-map-zoom">
-        <button type="button" aria-label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>+</button>
-        <button type="button" aria-label="Zoom out" onClick={() => mapRef.current?.zoomOut()}>−</button>
+        <button type="button" aria-label={t("Zoom in")} onClick={() => mapRef.current?.zoomIn()}>+</button>
+        <button type="button" aria-label={t("Zoom out")} onClick={() => mapRef.current?.zoomOut()}>−</button>
       </div>
     </>
   );

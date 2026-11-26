@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 import { indexAt } from "@/lib/chart";
 import { gapLinePath, present, trendScale } from "@/lib/health";
+import { t } from "@/lib/i18n";
 
 /** Horizontal padding of the card, so the pointer maps onto the plot and not the card edge. */
 const PAD = 18;
@@ -54,7 +55,7 @@ export function HealthTrendChart({ name, values, color, index, onIndex, valueTex
   return (
     <div
       className="card health-trend" role="slider" tabIndex={0}
-      aria-label={`${name}, ${fromLabel} to ${toLabel}`} aria-orientation="horizontal"
+      aria-label={t("{name}, {from} to {to}", { name, from: fromLabel, to: toLabel })} aria-orientation="horizontal"
       aria-valuemin={0} aria-valuemax={n - 1} aria-valuenow={index} aria-valuetext={`${pickedLabel}: ${valueText}`}
       onPointerMove={point} onPointerDown={point} onKeyDown={key}
     >

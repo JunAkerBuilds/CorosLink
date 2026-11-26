@@ -1,4 +1,6 @@
 // The Media page's calls to the main process (desktop/main/media/service.ts), at /api/desktop/media.
+import { msg, t } from "@/lib/i18n";
+
 export interface WatchTrack {
   path: string; name: string; bytes: number; order: number; capital?: true;
   title: string | null; artist: string | null; album: string | null; secs: number | null;
@@ -20,20 +22,20 @@ export class MediaProblem extends Error {
 
 /** The page's sections. */
 export const MEDIA_TABS = [
-  { id: "library", label: "Library", built: true },
+  { id: "library", label: msg("Library"), built: true },
   { id: "youtube", label: "YouTube", built: true },
   { id: "ytmusic", label: "YouTube Music", built: true },
   { id: "spotify", label: "Spotify", built: true },
   { id: "apple", label: "Apple Music", built: true },
-  { id: "podcasts", label: "Podcasts", built: true },
-  { id: "books", label: "Audiobooks", built: true },
+  { id: "podcasts", label: msg("Podcasts"), built: true },
+  { id: "books", label: msg("Audiobooks"), built: true },
 ] as const;
 
 const BASE = "/api/desktop/media";
 
 async function parse<T>(answer: Response): Promise<T> {
   const body = (await answer.json().catch(() => ({}))) as T & { error?: { code: string; message: string } };
-  if (!answer.ok || body.error) throw new MediaProblem(body.error?.message ?? "That didn't work.", body.error?.code ?? "problem");
+  if (!answer.ok || body.error) throw new MediaProblem(body.error?.message ?? t("That didn't work."), body.error?.code ?? "problem");
   return body;
 }
 
@@ -111,10 +113,10 @@ export interface YouTubeBrowser { url: string; title: string; canBack: boolean; 
 
 /** What the box was given, as an address YouTube can open: a link as it is, words as a YouTube search. */
 export function addressFor(text: string): string {
-  const t = text.trim();
-  if (/^https?:\/\//i.test(t)) return t;
-  if (/^(www\.|m\.)?(youtube\.com|youtu\.be)\//i.test(t)) return `https://${t}`;
-  return `https://www.youtube.com/results?search_query=${encodeURIComponent(t)}`;
+  const s = text.trim();
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^(www\.|m\.)?(youtube\.com|youtu\.be)\//i.test(s)) return `https://${s}`;
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(s)}`;
 }
 
 export const readYouTube = () => get<{ history: YouTubeHistory[]; browser: YouTubeBrowser | null }>("/youtube");

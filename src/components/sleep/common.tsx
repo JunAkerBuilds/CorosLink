@@ -4,12 +4,13 @@ import type { ReactNode } from "react";
 import { Button, OriginBadge } from "@/components/ui";
 import type { Origin } from "@/data/core";
 import type { SleepStage } from "@/data/health";
+import { msg, t } from "@/lib/i18n";
 import { hm, qualityHue, type TonightPlan } from "@/lib/sleep";
 
 export const STAGE_VAR: Record<SleepStage, string> = {
   deep: "var(--sl-deep)", light: "var(--sl-light)", rem: "var(--sl-rem)", awake: "var(--sl-awake)",
 };
-export const STAGE_LABEL: Record<SleepStage, string> = { deep: "Deep", light: "Light", rem: "REM", awake: "Awake" };
+export const STAGE_LABEL: Record<SleepStage, string> = { deep: msg("Deep"), light: msg("Light"), rem: "REM", awake: msg("Awake") };
 export const BAND_VAR = ["var(--sl-b0)", "var(--sl-b1)", "var(--sl-b2)", "var(--sl-b3)"] as const;
 
 /** Fill colour for a score: violet, gold or coral. */
@@ -21,10 +22,10 @@ export const scoreInk = (score: number) => `var(--h-${qualityHue(score)}-ink)`;
 
 export type RangeTab = "night" | "week" | "month" | "year";
 const TABS: { tab: RangeTab; label: string; href: string }[] = [
-  { tab: "night", label: "Day", href: "/health/sleep" },
-  { tab: "week", label: "Week", href: "/health/sleep/week" },
-  { tab: "month", label: "Month", href: "/health/sleep/month" },
-  { tab: "year", label: "Year", href: "/health/sleep/year" },
+  { tab: "night", label: msg("Day"), href: "/health/sleep" },
+  { tab: "week", label: msg("Week"), href: "/health/sleep/week" },
+  { tab: "month", label: msg("Month"), href: "/health/sleep/month" },
+  { tab: "year", label: msg("Year"), href: "/health/sleep/year" },
 ];
 
 function Chevron({ next }: { next?: boolean }) {
@@ -51,11 +52,11 @@ export function SleepHead({ tab, origin, title, back, forward, latest }: {
   return (
     <div className="page-head">
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px 14px" }}>
-        <div className="sl-crumb"><Link href="/health">Health</Link><span aria-hidden="true" className="muted">/</span><h1>Sleep</h1></div>
+        <div className="sl-crumb"><Link href="/health">{t("Health")}</Link><span aria-hidden="true" className="muted">/</span><h1>{t("Sleep")}</h1></div>
         <OriginBadge origin={origin} />
       </div>
-      <nav aria-label="Sleep range" className="seg">
-        {TABS.map((t) => <Link key={t.tab} href={t.href} aria-current={t.tab === tab ? "page" : undefined}>{t.label}</Link>)}
+      <nav aria-label={t("Sleep range")} className="seg">
+        {TABS.map((x) => <Link key={x.tab} href={x.href} aria-current={x.tab === tab ? "page" : undefined}>{t(x.label)}</Link>)}
       </nav>
       <div className="sl-step">
         <IconStep label={back.label} disabled={back.disabled} onClick={back.go} />
@@ -75,27 +76,27 @@ export function DeltaChip({ good, children }: { good: boolean | null; children: 
 export function SleepLoading({ label, state }: { label: string; state: { status: string; error?: Error } }) {
   return (
     <>
-      <div className="page-head"><div className="sl-crumb"><Link href="/health">Health</Link><span aria-hidden="true" className="muted">/</span><h1>Sleep</h1></div></div>
+      <div className="page-head"><div className="sl-crumb"><Link href="/health">{t("Health")}</Link><span aria-hidden="true" className="muted">/</span><h1>{t("Sleep")}</h1></div></div>
       {state.status === "error"
-        ? <div className="notice" role="alert">Sleep could not be loaded. {state.error?.message}</div>
-        : <div className="skeleton" aria-busy="true" aria-label={`Loading ${label}`} style={{ minHeight: 360 }} />}
+        ? <div className="notice" role="alert">{t("Sleep could not be loaded.")} {state.error?.message}</div>
+        : <div className="skeleton" aria-busy="true" aria-label={t("Loading {what}", { what: label })} style={{ minHeight: 360 }} />}
     </>
   );
 }
 
-export const PAGE_NOTE = "A night belongs to the day it ended. Scores, lengths and stages are COROS’s. Excellent, Good, Fair and Low are C-LINK’s words for scores of 85+, 70–84, 55–69 and below.";
+export const PAGE_NOTE = msg("A night belongs to the day it ended. Scores, lengths and stages are COROS’s. Excellent, Good, Fair and Low are C-LINK’s words for scores of 85+, 70–84, 55–69 and below.");
 
 /** Tomorrow's workout and the sleep-debt top-up, as the phone shows them under tonight's bedtime. */
 export function TonightChips({ plan }: { plan: TonightPlan }) {
   if (!plan.workout && !plan.catchUp) return null;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-      {plan.workout ? <span className="sl-chip sl-chip-flat">Tomorrow: {plan.workout}</span> : null}
-      {plan.catchUp > 0 ? <span className="sl-chip sl-chip-flat">+{hm(plan.catchUp)} for sleep debt</span> : null}
+      {plan.workout ? <span className="sl-chip sl-chip-flat">{t("Tomorrow: {workout}", { workout: plan.workout })}</span> : null}
+      {plan.catchUp > 0 ? <span className="sl-chip sl-chip-flat">{t("+{time} for sleep debt", { time: hm(plan.catchUp) })}</span> : null}
     </div>
   );
 }
 
 export const tonightSource = (plan: { fromSchedule: boolean }) =>
-  plan.fromSchedule ? "Wake time from your watch's sleep schedule; 15 minutes allowed to fall asleep."
-    : "Wake time from your usual mornings; 15 minutes allowed to fall asleep.";
+  plan.fromSchedule ? t("Wake time from your watch's sleep schedule; 15 minutes allowed to fall asleep.")
+    : t("Wake time from your usual mornings; 15 minutes allowed to fall asleep.");

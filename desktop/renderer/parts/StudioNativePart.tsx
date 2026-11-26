@@ -3,6 +3,7 @@
 // Reset this part. The edits are studioNativeParts.ts; NativeParts in StudioInspector lays these out per part.
 import { useState } from "react";
 import { Segmented, Select, Switch } from "@/components/ui";
+import { msg, t } from "@/lib/i18n";
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceResolutionDetails } from "../../watchface/types";
 import { nativeAssetText, nativeComponentFontSize, nativePart, nativeRoleDrawsText } from "../../watchface/engine/nativeDataParts";
 import { nativeOf, readArtwork, setNative } from "../studioEdits";
@@ -29,11 +30,11 @@ async function readPartPicture(file: File): Promise<string> {
   const fit = pictureFit(art.width, art.height);
   if (fit.width === art.width && fit.height === art.height) return art.dataUrl;
   const img = new Image();
-  await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(new Error(`Couldn't open ${file.name}.`)); img.src = art.dataUrl; });
+  await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(new Error(t("Couldn't open {name}.", { name: file.name }))); img.src = art.dataUrl; });
   const canvas = document.createElement("canvas");
   canvas.width = fit.width; canvas.height = fit.height;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Couldn't resize the picture.");
+  if (!ctx) throw new Error(t("Couldn't resize the picture."));
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(img, 0, 0, fit.width, fit.height);
   return canvas.toDataURL("image/png");
@@ -61,9 +62,9 @@ export interface NativePicturesProps {
 // What the picture grid sits on. The checkerboard is mid-grey, which hides grey sprites; black and white show them.
 type Backdrop = "checker" | "black" | "white";
 const BACKDROP: Record<Backdrop, { label: string; icon: "grid" | "moon" | "sun"; next: Backdrop }> = {
-  checker: { label: "checkerboard", icon: "grid", next: "black" },
-  black: { label: "black", icon: "moon", next: "white" },
-  white: { label: "white", icon: "sun", next: "checker" },
+  checker: { label: msg("checkerboard"), icon: "grid", next: "black" },
+  black: { label: msg("black"), icon: "moon", next: "white" },
+  white: { label: msg("white"), icon: "sun", next: "checker" },
 };
 
 export function NativePictures({ design, edit, layer, part, partName, role, indexes, urls, watch, fail, onImportFolder }: NativePicturesProps) {
@@ -92,15 +93,15 @@ export function NativePictures({ design, edit, layer, part, partName, role, inde
   return (
     <div className="st-wx-card" data-backdrop={backdrop === "checker" ? undefined : backdrop}>
       <div className="st-wx-head">
-        <b>Pictures</b>
-        <span className="st-wx-badge" data-custom={custom ? "" : undefined}>{custom ? (custom === indexes.length ? "Your PNGs" : `${custom} of ${indexes.length} yours`) : "Drawn"}</span>
+        <b>{t("Pictures")}</b>
+        <span className="st-wx-badge" data-custom={custom ? "" : undefined}>{custom ? (custom === indexes.length ? t("Your PNGs") : t("{custom} of {total} yours", { custom, total: indexes.length })) : t("Drawn")}</span>
         <span className="st-grow" />
-        <button type="button" className="st-icon-btn" aria-label={`Backdrop: ${BACKDROP[backdrop].label}`} title={`Backdrop: ${BACKDROP[backdrop].label}`}
+        <button type="button" className="st-icon-btn" aria-label={t("Backdrop: {name}", { name: t(BACKDROP[backdrop].label) })} title={t("Backdrop: {name}", { name: t(BACKDROP[backdrop].label) })}
           onClick={() => setBackdrop(BACKDROP[backdrop].next)}><Icon name={BACKDROP[backdrop].icon} size={15} /></button>
-        <button type="button" className="st-icon-btn" aria-label="Import numbered PNGs" title={`Import PNGs named ${pad(indexes[0]!)}${indexes.length > 1 ? `–${pad(indexes[indexes.length - 1]!)}` : ""}`} onClick={onImportFolder}><Icon name="folder" size={15} /></button>
-        {custom ? <button type="button" className="st-icon-btn" aria-label="Back to the drawn pictures" title="Back to the drawn pictures" onClick={restore}><Icon name="refresh" size={15} /></button> : null}
+        <button type="button" className="st-icon-btn" aria-label={t("Import numbered PNGs")} title={t("Import PNGs named {names}", { names: `${pad(indexes[0]!)}${indexes.length > 1 ? `–${pad(indexes[indexes.length - 1]!)}` : ""}` })} onClick={onImportFolder}><Icon name="folder" size={15} /></button>
+        {custom ? <button type="button" className="st-icon-btn" aria-label={t("Back to the drawn pictures")} title={t("Back to the drawn pictures")} onClick={restore}><Icon name="refresh" size={15} /></button> : null}
       </div>
-      <div className="st-wx-grid st-glyph-grid st-np-grid" role="listbox" aria-label={`${partName} pictures`}>
+      <div className="st-wx-grid st-glyph-grid st-np-grid" role="listbox" aria-label={t("{part} pictures", { part: partName })}>
         {indexes.map((i, k) => {
           const label = role === "digits" ? null : nativeAssetText(id, n, role, i);
           return (
@@ -112,13 +113,13 @@ export function NativePictures({ design, edit, layer, part, partName, role, inde
         })}
       </div>
       {text !== null && !image ? (
-        <PictureText key={`${key}:${index}`} label={indexes.length > 1 ? `Text ${pad(index)}` : "Text"} value={text}
+        <PictureText key={`${key}:${index}`} label={indexes.length > 1 ? t("Text {n}", { n: pad(index) }) : t("Text")} value={text}
           onCommit={(v) => patchNative(edit, layer, (s) => withPictureText(s, role, index, v))} />
       ) : null}
       <div className="st-np-actions">
-        <button type="button" className="chip st-chip-btn" aria-label={`Official ${partName.toLowerCase()}`} onClick={() => setOfficial(true)}><Icon name="spark" size={15} />Official</button>
-        <button type="button" className="chip st-chip-btn" onClick={choose}><Icon name="image" size={15} />{image ? "Replace image" : "Use an image"}</button>
-        {image ? <button type="button" className="chip st-chip-btn" onClick={() => patchNative(edit, layer, (s) => withoutPicture(s, role, index))}><Icon name="trash" size={15} />Remove image</button> : null}
+        <button type="button" className="chip st-chip-btn" aria-label={t("Official {part}", { part: partName.toLowerCase() })} onClick={() => setOfficial(true)}><Icon name="spark" size={15} />{t("Official")}</button>
+        <button type="button" className="chip st-chip-btn" onClick={choose}><Icon name="image" size={15} />{image ? t("Replace image") : t("Use an image")}</button>
+        {image ? <button type="button" className="chip st-chip-btn" onClick={() => patchNative(edit, layer, (s) => withoutPicture(s, role, index))}><Icon name="trash" size={15} />{t("Remove image")}</button> : null}
       </div>
       {official ? (
         <OfficialPicker watch={watch} request={nativeOfficialRequest(id, n, role, partName)} onClose={() => setOfficial(false)}
@@ -133,14 +134,14 @@ function PictureText({ label, value, onCommit }: { label: string; value: string;
   const commit = () => { if (text !== null && text !== value) onCommit(text); setText(null); };
   return (
     <label className="st-num st-text"><span>{label}</span>
-      <input type="text" maxLength={32} value={text ?? value} aria-label={`Picture ${label.toLowerCase()}`} onChange={(e) => setText(e.target.value)} onBlur={commit}
+      <input type="text" maxLength={32} value={text ?? value} aria-label={t("Picture {label}", { label: label.toLowerCase() })} onChange={(e) => setText(e.target.value)} onBlur={commit}
         onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
     </label>
   );
 }
 
 const WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900] as const;
-const ALIGNS = [{ value: "left", label: "Left" }, { value: "center", label: "Center" }, { value: "right", label: "Right" }] as const;
+const ALIGNS = [{ value: "left", label: msg("Left") }, { value: "center", label: msg("Center") }, { value: "right", label: msg("Right") }] as const;
 
 export interface NativePartLayoutProps {
   design: Design;
@@ -164,28 +165,28 @@ export function NativePartLayout({ design, edit, layer, part, partName, role, re
   const set = (patch: Parameters<typeof withPart>[2]) => patchNative(edit, layer, (s) => withPart(s, part, patch));
   return <>
     <div className="st-nums">
-      <NumberField label="Width" unit="px" value={Math.round(c.width)} min={4} max={800} onChange={(v) => set({ width: clampBox(v) })} />
-      <NumberField label="Height" unit="px" value={Math.round(c.height)} min={4} max={800} onChange={(v) => set({ height: clampBox(v) })} />
-      {role ? <NumberField label="Font size" unit="px" value={Math.round(nativeComponentFontSize(id, n, part))} min={1} max={800}
+      <NumberField label={t("Width")} unit="px" value={Math.round(c.width)} min={4} max={800} onChange={(v) => set({ width: clampBox(v) })} />
+      <NumberField label={t("Height")} unit="px" value={Math.round(c.height)} min={4} max={800} onChange={(v) => set({ height: clampBox(v) })} />
+      {role ? <NumberField label={t("Font size")} unit="px" value={Math.round(nativeComponentFontSize(id, n, part))} min={1} max={800}
         onChange={(v) => patchNative(edit, layer, (s) => withPartFontSize(id, s, part, v))} /> : null}
     </div>
-    <Segmented small label={`${partName} alignment`} value={c.align} onChange={(v) => set({ align: v })} options={ALIGNS} />
+    <Segmented small label={t("{part} alignment", { part: partName })} value={c.align} onChange={(v) => set({ align: v })} options={ALIGNS.map((a) => ({ ...a, label: t(a.label) }))} />
     {role && drawn ? <>
-      <div className="st-row"><span>Own font</span>
-        <Switch label={`${partName} own font`} checked={own}
+      <div className="st-row"><span>{t("Own font")}</span>
+        <Switch label={t("{part} own font", { part: partName })} checked={own}
           onChange={(v) => patchNative(edit, layer, (s) => (v ? withPart(s, part, { fontWeight: c.fontWeight }) : withoutPartFont(s, part)))} /></div>
       {own ? <>
-        <FontPicker label={`${partName} font`} family={n.parts?.[part]?.fontFamily ?? ""} weight={c.fontWeight} style={c.fontStyle} sample="Aa" template={false}
+        <FontPicker label={t("{part} font", { part: partName })} family={n.parts?.[part]?.fontFamily ?? ""} weight={c.fontWeight} style={c.fontStyle} sample="Aa" template={false}
           resolution={resolution} layerId={layer.id}
           onFamily={(f, weight) => patchNative(edit, layer, (s) => { const font = withPartFont(s, part, f); return weight ? { ...font, parts: { ...font.parts, [part]: { ...font.parts?.[part], fontWeight: weight } } } : font; })} />
         <div className="st-nums">
-          <label className="st-select"><Select aria-label={`${partName} weight`} value={c.fontWeight} onChange={(e) => set({ fontWeight: Number(e.target.value) })}>
+          <label className="st-select"><Select aria-label={t("{part} weight", { part: partName })} value={c.fontWeight} onChange={(e) => set({ fontWeight: Number(e.target.value) })}>
             {[...new Set([...WEIGHTS, c.fontWeight])].sort((a, b) => a - b).map((w) => <option key={w} value={w}>{w}</option>)}</Select><Icon name="chevD" size={14} /></label>
-          <Segmented small label={`${partName} style`} value={c.fontStyle} onChange={(v) => set({ fontStyle: v })} options={[{ value: "normal", label: "Normal" }, { value: "italic", label: "Italic" }]} />
+          <Segmented small label={t("{part} style", { part: partName })} value={c.fontStyle} onChange={(v) => set({ fontStyle: v })} options={[{ value: "normal", label: t("Normal") }, { value: "italic", label: t("Italic") }]} />
         </div>
       </> : null}
     </> : null}
     <button type="button" className="chip st-chip-btn st-np-reset" disabled={!partCustomized(n, part, role)}
-      onClick={() => patchNative(edit, layer, (s) => withoutPartChanges(s, part, role))}><Icon name="undo" size={15} />Reset this part</button>
+      onClick={() => patchNative(edit, layer, (s) => withoutPartChanges(s, part, role))}><Icon name="undo" size={15} />{t("Reset this part")}</button>
   </>;
 }

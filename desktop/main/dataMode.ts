@@ -1,6 +1,7 @@
 // Local-Only Mode: nothing is uploaded to COROS. The web code's server side (Training Hub, activity uploads) runs in
 // this process and calls the global fetch, so a guard around it stops every write to COROS's servers and its upload
 // bucket, while reads and signing in still work. Each stopped request is noted (method, host and path only).
+import { t } from "@/lib/i18n";
 
 export type DataMode = "connected" | "localOnly";
 export interface Blocked { at: number; method: string; target: string }
@@ -8,7 +9,8 @@ export interface Blocked { at: number; method: string; target: string }
 // Reads COROS takes as POSTs: Training Hub sign-in and queries; for Studio, the mobile app's sign-in and its
 // watch-face lists (corosAccount.ts). A face is only ever sent to COROS by a later phase, through a path not here.
 // Map areas' package check (mapstatic.coros.com) is a POST that only asks which map files cover some squares.
-const READ_PATH = /^\/account\/|\/query$|\/calculate$|^\/coros\/user\/login$|^\/coros\/watchface\/getWatchFaceThemeList$|^\/openapi\/tileMap\/getMapPackage$/;
+// An activity's file (/activity/detail/download) is a POST that only names where to fetch it (the account import).
+const READ_PATH = /^\/account\/|\/query$|\/calculate$|^\/activity\/detail\/download$|^\/coros\/user\/login$|^\/coros\/watchface\/getWatchFaceThemeList$|^\/openapi\/tileMap\/getMapPackage$/;
 
 /** Whether a request would upload to COROS: any write to its servers, the upload bucket, or the start of an upload. */
 export function uploadsToCoros(url: URL, method: string): boolean {
@@ -25,7 +27,7 @@ export function uploadsToCoros(url: URL, method: string): boolean {
 
 /** COROS's answer shape for a refusal, so the screens say why in their usual way. */
 const refusal = () => Response.json(
-  { result: "LOCAL", apiCode: "LOCAL", message: "Local-Only Mode is on: nothing is uploaded to COROS. Turn it off in Settings → Privacy & local data." },
+  { result: "LOCAL", apiCode: "LOCAL", message: t("Local-Only Mode is on: nothing is uploaded to COROS. Turn it off in Settings → Privacy & local data.") },
   { status: 200, headers: { "x-clink-blocked": "1" } },
 );
 

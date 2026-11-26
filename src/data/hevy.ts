@@ -16,6 +16,7 @@ import { createStore, useStore } from "@/data/local/store";
 import { syncView } from "@/data/sync";
 import { idbGet, idbSet } from "@/data/sync/idb";
 import type { NativeGymWorkout } from "@/data/sync/native";
+import { t } from "@/lib/i18n";
 import {
   fullHevySync, hevyExerciseNames, hevyGymWorkout, incrementalHevySync, isHevyStale, needsFullSync,
   type HevyCache, type HevyEventsPage, type HevyReader, type HevyTemplatesPage, type HevyWorkoutsPage,
@@ -96,7 +97,7 @@ async function writeCache(viewer: string, cache: HevyCache | null): Promise<void
 /** Every answer says whose workouts they are: a key changed in another tab mid-sync stops the sync. */
 function reader(userId: string): HevyReader {
   const check = <T extends { userId: string }>(answer: T): T => {
-    if (answer.userId !== userId) throw new HubError("invalid", "The Hevy connection changed while syncing. Sync again.");
+    if (answer.userId !== userId) throw new HubError("invalid", t("The Hevy connection changed while syncing. Sync again."));
     return answer;
   };
   return {

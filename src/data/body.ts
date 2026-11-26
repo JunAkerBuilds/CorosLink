@@ -4,6 +4,7 @@ import { BODY_SAMPLE } from "@/data/sample/body";
 import { newUuid, put, remove, syncView, type SyncView } from "@/data/sync";
 import { bodyFromItems, goalsWithWeight, measurementBody, measurementWrite, movedId, ownMeasurements as typedMeasurements, phoneWeight, profileWithEdit, profileWithWeight } from "@/data/sync/body";
 import { mergeMeasurements } from "@/lib/body";
+import { msg, t } from "@/lib/i18n";
 
 /** One weigh-in. Body fat is there when the scale gives it. */
 export interface Measurement {
@@ -20,7 +21,7 @@ export interface OwnMeasurement extends Measurement {
 
 /** "custom" is the phone app's own daily calorie number; it can't be chosen here, only kept. */
 export type GoalKind = "lose" | "maintain" | "gain" | "custom";
-export const GOAL_LABEL: Record<GoalKind, string> = { lose: "Lose slowly", maintain: "Maintain", gain: "Gain slowly", custom: "Own calorie target" };
+export const GOAL_LABEL: Record<GoalKind, string> = { lose: msg("Lose slowly"), maintain: msg("Maintain"), gain: msg("Gain slowly"), custom: msg("Own calorie target") };
 
 /** Each is null when signed in and the phone hasn't sent it. */
 export interface BodyProfile {
@@ -99,7 +100,15 @@ function moveBrowserMeasurements(view: SyncView): boolean {
 
 export async function loadBody(): Promise<Loaded<BodyData>> {
   let view = await syncView();
-  if (!view) return fromSample(BODY_SAMPLE);
+  if (!view) {
+    return fromSample({
+      ...BODY_SAMPLE,
+      headline: BODY_SAMPLE.headline && t(BODY_SAMPLE.headline),
+      advice: BODY_SAMPLE.advice && t(BODY_SAMPLE.advice),
+      signals: BODY_SAMPLE.signals.map((s) => ({ ...s, name: t(s.name), pill: t(s.pill) })),
+      stats: BODY_SAMPLE.stats.map((s) => ({ ...s, name: t(s.name), unit: t(s.unit), note: t(s.note) })),
+    });
+  }
   if (moveBrowserMeasurements(view)) view = (await syncView()) ?? view;
   return fromSynced(bodyFromItems({
     view: view.get("view.body", "me"),
@@ -115,7 +124,7 @@ export async function loadBody(): Promise<Loaded<BodyData>> {
 
 async function signedIn(): Promise<SyncView> {
   const view = await syncView();
-  if (!view) throw new Error("C-LINK is still starting. Try again in a moment.");
+  if (!view) throw new Error(t("C-LINK is still starting. Try again in a moment."));
   return view;
 }
 
@@ -148,7 +157,7 @@ export async function saveSyncedProfile(edit: ProfileEdit): Promise<void> {
   if (edit.goalWeightKg == null) return;
   const phone = phoneWeight(view.get("view.body", "me"));
   const current = mergeMeasurements(phone ? [phone] : [], typedMeasurements(view.all("body.measurement"))).at(-1)?.weightKg ?? profile?.weightKg;
-  if (current == null) throw new Error("Add a measurement first, so the goal has a weight to start from.");
+  if (current == null) throw new Error(t("Add a measurement first, so the goal has a weight to start from."));
   const goals = goalsWithWeight(view.get("body.goals", "me"), edit.goalWeightKg, current, new Date());
   if (goals) put("body.goals", "me", goals);
 }

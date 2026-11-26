@@ -8,6 +8,7 @@ import type { CoachModel, ModelMessage, ModelRequest, ModelTurn, ToolCall } from
 import { textFileBlock, type UserPart } from "@/lib/coach/files";
 import { CoachModelError } from "@/server/coach/anthropic";
 import type { AccountProvider, EffortLevels } from "./service";
+import { t } from "@/lib/i18n";
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";
@@ -42,7 +43,7 @@ function claims(idToken: unknown): Record<string, unknown> {
 
 /** The token as kept, from OpenAI's token answer. */
 export function tokenFrom(body: Record<string, unknown>, previous: ChatGPTToken | null, now = Date.now()): ChatGPTToken {
-  if (typeof body.access_token !== "string") throw new CoachModelError("bad_key", "ChatGPT didn't sign in. Try again.");
+  if (typeof body.access_token !== "string") throw new CoachModelError("bad_key", t("ChatGPT didn't sign in. Try again."));
   const c = claims(body.id_token);
   const auth = (c["https://api.openai.com/auth"] ?? {}) as { chatgpt_account_id?: unknown };
   return {
@@ -59,9 +60,9 @@ async function tokenRequest(form: Record<string, string>): Promise<Record<string
   try {
     response = await fetch(TOKEN_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(form), signal: AbortSignal.timeout(20_000) });
   } catch {
-    throw new CoachModelError("unreachable", "ChatGPT couldn't be reached.");
+    throw new CoachModelError("unreachable", t("ChatGPT couldn't be reached."));
   }
-  if (!response.ok) throw new CoachModelError("bad_key", "ChatGPT's sign-in ended. Sign in again.");
+  if (!response.ok) throw new CoachModelError("bad_key", t("ChatGPT's sign-in ended. Sign in again."));
   return (await response.json()) as Record<string, unknown>;
 }
 
@@ -100,11 +101,11 @@ export function toResponses(messages: readonly ModelMessage[]): Item[] {
 }
 
 function statusError(status: number, detail: string): CoachModelError {
-  if (status === 401 || status === 403) return new CoachModelError("bad_key", "ChatGPT's sign-in ended. Sign in again on the AI page.");
-  if (status === 429) return new CoachModelError("rate_limited", "This ChatGPT account has reached its usage limit for now.");
-  if (status === 400 && /not supported/i.test(detail)) return new CoachModelError("refused_request", "That model isn't on this ChatGPT plan. Pick another on the AI page.");
+  if (status === 401 || status === 403) return new CoachModelError("bad_key", t("ChatGPT's sign-in ended. Sign in again on the AI page."));
+  if (status === 429) return new CoachModelError("rate_limited", t("This ChatGPT account has reached its usage limit for now."));
+  if (status === 400 && /not supported/i.test(detail)) return new CoachModelError("refused_request", t("That model isn't on this ChatGPT plan. Pick another on the AI page."));
   if (status === 400) return new CoachModelError("refused_request", `ChatGPT refused the request${detail ? `: ${detail.slice(0, 160)}` : ""}.`);
-  return new CoachModelError("overloaded", "ChatGPT is having trouble right now. Try again shortly.");
+  return new CoachModelError("overloaded", t("ChatGPT is having trouble right now. Try again shortly."));
 }
 
 type Fetch = typeof fetch;
@@ -126,16 +127,16 @@ export function effortsOf(m: CatalogModel): EffortLevels {
 export function chatgptModel(token: () => Promise<ChatGPTToken>, model: () => Promise<string>, fetchImpl: Fetch = (...args) => fetch(...args), effort?: string): CoachModel {
   return {
     async turn(request: ModelRequest): Promise<ModelTurn> {
-      const t = await token();
+      const tok = await token();
       const tools = request.allowTools ? request.tools : [];
       let response: Response;
       try {
         response = await fetchImpl(RESPONSES_URL, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${t.access}`, "Content-Type": "application/json", Accept: "text/event-stream",
+            Authorization: `Bearer ${tok.access}`, "Content-Type": "application/json", Accept: "text/event-stream",
             "OpenAI-Beta": "responses=experimental", originator: ORIGINATOR, "User-Agent": ORIGINATOR, session_id: randomBytes(16).toString("hex"),
-            ...(t.accountId ? { "chatgpt-account-id": t.accountId } : {}),
+            ...(tok.accountId ? { "chatgpt-account-id": tok.accountId } : {}),
           },
           body: JSON.stringify({
             model: await model(), instructions: [request.rules, request.context].filter(Boolean).join("\n\n"), input: toResponses(request.messages), stream: true, store: false,
@@ -146,7 +147,7 @@ export function chatgptModel(token: () => Promise<ChatGPTToken>, model: () => Pr
         });
       } catch (error) {
         if (request.signal?.aborted) throw error;
-        throw new CoachModelError("unreachable", "ChatGPT couldn't be reached.");
+        throw new CoachModelError("unreachable", t("ChatGPT couldn't be reached."));
       }
       if (!response.ok || !response.body) throw statusError(response.status, await response.text().catch(() => ""));
 
@@ -170,8 +171,8 @@ export function chatgptModel(token: () => Promise<ChatGPTToken>, model: () => Pr
           status = event.response?.incomplete_details?.reason ?? event.response?.status ?? "";
           inputTokens = event.response?.usage?.input_tokens ?? 0;
           outputTokens = event.response?.usage?.output_tokens ?? 0;
-          if (event.type === "response.failed") failure = new CoachModelError("overloaded", event.response?.error?.message ? `ChatGPT: ${event.response.error.message.slice(0, 160)}` : "ChatGPT couldn't answer. Try again.");
-        } else if (event.type === "error") failure = new CoachModelError("overloaded", "ChatGPT couldn't answer. Try again.");
+          if (event.type === "response.failed") failure = new CoachModelError("overloaded", event.response?.error?.message ? `ChatGPT: ${event.response.error.message.slice(0, 160)}` : t("ChatGPT couldn't answer. Try again."));
+        } else if (event.type === "error") failure = new CoachModelError("overloaded", t("ChatGPT couldn't answer. Try again."));
       };
       const reader = response.body.getReader(), decoder = new TextDecoder();
       try {
@@ -186,7 +187,7 @@ export function chatgptModel(token: () => Promise<ChatGPTToken>, model: () => Pr
         take(buffer);
       } catch (error) {
         if (request.signal?.aborted) throw error;
-        throw new CoachModelError("unreachable", "ChatGPT's answer was cut off. Try again.");
+        throw new CoachModelError("unreachable", t("ChatGPT's answer was cut off. Try again."));
       }
       if (failure) throw failure;
       if (text) kept.unshift({ type: "message", role: "assistant", content: [{ type: "output_text", text }] });
@@ -206,17 +207,17 @@ function waitForCode(state: string, signal: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
     let server: Server | null = null;
     const done = (error: Error | null, code?: string) => { server?.close(); if (error) reject(error); else resolve(code!); };
-    signal.addEventListener("abort", () => done(new CoachModelError("unreachable", "Sign-in took too long or was closed.")), { once: true });
+    signal.addEventListener("abort", () => done(new CoachModelError("unreachable", t("Sign-in took too long or was closed."))), { once: true });
     server = createServer((req, res) => {
       const url = new URL(req.url ?? "/", REDIRECT_URI);
       if (url.pathname !== "/auth/callback") { res.writeHead(404).end(); return; }
       const ok = url.searchParams.get("state") === state && url.searchParams.get("code");
       res.writeHead(ok ? 200 : 400, { "Content-Type": "text/html; charset=utf-8" })
-        .end(`<!doctype html><meta charset="utf-8"><title>C-LINK</title><body style="font:16px system-ui;padding:40px">${ok ? "Signed in. You can close this window." : "That sign-in didn't match. Try again from C-LINK."}</body>`);
+        .end(`<!doctype html><meta charset="utf-8"><title>C-LINK</title><body style="font:16px system-ui;padding:40px">${ok ? t("Signed in. You can close this window.") : t("That sign-in didn't match. Try again from C-LINK.")}</body>`);
       if (ok) done(null, url.searchParams.get("code")!);
-      else done(new CoachModelError("bad_key", url.searchParams.get("error_description") ?? "ChatGPT didn't sign in."));
+      else done(new CoachModelError("bad_key", url.searchParams.get("error_description") ?? t("ChatGPT didn't sign in.")));
     });
-    server.on("error", () => done(new CoachModelError("unreachable", `Port ${PORT} is in use (is the Codex CLI signing in?). Close it and try again.`)));
+    server.on("error", () => done(new CoachModelError("unreachable", t("Port {port} is in use (is the Codex CLI signing in?). Close it and try again.", { port: PORT }))));
     server.listen(PORT, "127.0.0.1");
   });
 }
@@ -235,18 +236,18 @@ export class ChatGPTAccount implements AccountProvider {
 
   /** A token with at least a minute left, refreshed once however many ask at the same time. */
   async token(): Promise<ChatGPTToken> {
-    const t = await this.stored();
-    if (!t) throw new CoachModelError("bad_key", "Sign in to ChatGPT on the AI page.");
-    if (t.expiresAt - Date.now() > 60_000) return t;
-    this.refreshing ??= tokenRequest({ grant_type: "refresh_token", refresh_token: t.refresh, client_id: CLIENT_ID, scope: SCOPE })
-      .then(async (body) => { const next = tokenFrom(body, t); await this.host.save(JSON.stringify(next)); return next; })
+    const tok = await this.stored();
+    if (!tok) throw new CoachModelError("bad_key", t("Sign in to ChatGPT on the AI page."));
+    if (tok.expiresAt - Date.now() > 60_000) return tok;
+    this.refreshing ??= tokenRequest({ grant_type: "refresh_token", refresh_token: tok.refresh, client_id: CLIENT_ID, scope: SCOPE })
+      .then(async (body) => { const next = tokenFrom(body, tok); await this.host.save(JSON.stringify(next)); return next; })
       .finally(() => { this.refreshing = null; });
     return this.refreshing;
   }
 
   async status() {
-    const t = await this.stored();
-    return t ? { ready: true, ...(t.email ? { account: t.email } : {}) } : { ready: false };
+    const tok = await this.stored();
+    return tok ? { ready: true, ...(tok.email ? { account: tok.email } : {}) } : { ready: false };
   }
 
   async signIn(): Promise<void> {
@@ -279,8 +280,8 @@ export class ChatGPTAccount implements AccountProvider {
   async models(): Promise<string[]> {
     if (this.listed && Date.now() - this.listed.at < 10 * 60_000) return this.listed.models;
     try {
-      const t = await this.token();
-      const response = await fetch(MODELS_URL, { headers: { Authorization: `Bearer ${t.access}`, Accept: "application/json", originator: ORIGINATOR, "User-Agent": ORIGINATOR, ...(t.accountId ? { "chatgpt-account-id": t.accountId } : {}) }, signal: AbortSignal.timeout(10_000) });
+      const tok = await this.token();
+      const response = await fetch(MODELS_URL, { headers: { Authorization: `Bearer ${tok.access}`, Accept: "application/json", originator: ORIGINATOR, "User-Agent": ORIGINATOR, ...(tok.accountId ? { "chatgpt-account-id": tok.accountId } : {}) }, signal: AbortSignal.timeout(10_000) });
       if (!response.ok) throw new Error(String(response.status));
       const body = (await response.json()) as { models?: CatalogModel[] };
       const shown = (body.models ?? []).filter((m) => typeof m.slug === "string" && m.visibility !== "hide" && m.supported_in_api !== false)

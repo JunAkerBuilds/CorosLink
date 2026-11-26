@@ -1,5 +1,6 @@
 "use client";
 import { Button } from "@/components/ui";
+import { t } from "@/lib/i18n";
 
 /** Placeholder while a screen's data loads. */
 export function LoadingPage({ label }: { label: string }) {
@@ -17,7 +18,7 @@ export function LoadError({ error, onRetry, children }: { error: Error; onRetry?
       <div className="notice" role="alert">
         <span style={{ flex: "1 1 240px" }}>{error.message}</span>
         {children}
-        {onRetry ? <Button onClick={onRetry}>Try again</Button> : null}
+        {onRetry ? <Button onClick={onRetry}>{t("Try again")}</Button> : null}
       </div>
     </main>
   );

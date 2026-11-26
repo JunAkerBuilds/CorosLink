@@ -7,6 +7,7 @@
  * image it falls back to on/off. Studio lists each group as one component and
  * edits its states in the panel.
  */
+import { msg } from "@/lib/i18n";
 export interface WatchfaceStatusState {
   key: string;
   label: string;
@@ -22,19 +23,19 @@ export interface WatchfaceStatusGroup {
 
 export const WATCHFACE_STATUS_GROUPS: readonly WatchfaceStatusGroup[] = [
   {
-    id: "bluetooth", label: "Bluetooth", primary: "bluetooth_off_icon",
+    id: "bluetooth", label: msg("Bluetooth"), primary: "bluetooth_off_icon",
     states: [
-      { key: "bluetooth_on_icon", label: "On", hint: "Shows while Bluetooth is on." },
-      { key: "bluetooth_off_icon", label: "Off", hint: "Shows while Bluetooth is off." },
-      { key: "airplane_icon", label: "Airplane mode", hint: "Replaces the on and off icons while airplane mode is on." }
+      { key: "bluetooth_on_icon", label: msg("On"), hint: "Shows while Bluetooth is on." },
+      { key: "bluetooth_off_icon", label: msg("Off"), hint: "Shows while Bluetooth is off." },
+      { key: "airplane_icon", label: msg("Airplane mode"), hint: "Replaces the on and off icons while airplane mode is on." }
     ]
   },
   {
-    id: "doNotDisturb", label: "Do Not Disturb", primary: "no_disturb_on_icon",
+    id: "doNotDisturb", label: msg("Do Not Disturb"), primary: "no_disturb_on_icon",
     states: [
-      { key: "no_disturb_on_icon", label: "On", hint: "Shows while Do Not Disturb is on." },
-      { key: "no_disturb_off_icon", label: "Off", hint: "Shows while Do Not Disturb is off." },
-      { key: "sleep_mode_icon", label: "Sleep mode", hint: "Replaces the on and off icons while sleep mode is on." }
+      { key: "no_disturb_on_icon", label: msg("On"), hint: "Shows while Do Not Disturb is on." },
+      { key: "no_disturb_off_icon", label: msg("Off"), hint: "Shows while Do Not Disturb is off." },
+      { key: "sleep_mode_icon", label: msg("Sleep mode"), hint: "Replaces the on and off icons while sleep mode is on." }
     ]
   }
 ];

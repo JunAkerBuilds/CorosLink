@@ -11,6 +11,10 @@ export const platformSlots: {
   aiSettingsHref?: string;
   /** In Coach's message box: the host app's own AI, model and power level picker, in place of the read-only label. */
   coachAI?: ComponentType;
+  /** In Connections' COROS account card, above Training Hub: the host app's own way into the account (the desktop's import). */
+  corosAccount?: ComponentType;
+  /** A hook: whether that way in is connected, for the card's pill. */
+  useCorosAccountConnected?: () => boolean;
   /** The host app's Settings page, linked from the account menu. */
   settingsHref?: string;
   /** A row the host app adds to the account menu, after Settings (the desktop's Updates, with its flyout). */

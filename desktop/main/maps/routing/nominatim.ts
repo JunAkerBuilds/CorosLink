@@ -2,6 +2,7 @@
 // second, so every call waits its turn with 1.1 s between starts. Requests carry the typed text or the point only.
 import type { Place } from "../../../maps/types";
 import { asProblem, RoutingProblem, Spacer, USER_AGENT, type Net } from "./net";
+import { t } from "@/lib/i18n";
 
 const BASE = "https://nominatim.openstreetmap.org";
 export const NOMINATIM_GAP_MS = 1_100;
@@ -46,9 +47,9 @@ export class Nominatim {
       } catch (e) {
         throw asProblem(e, "Place search");
       }
-      if (res.status === 429) throw new RoutingProblem("Place search is busy. Try again in a minute.", "busy", 503);
-      if (res.status === 404) throw new RoutingProblem("Nothing found there.", "not_found", 404);
-      if (!res.ok) throw new RoutingProblem(`Place search had a problem (${res.status}). Try again.`, "search", 502);
+      if (res.status === 429) throw new RoutingProblem(t("Place search is busy. Try again in a minute."), "busy", 503);
+      if (res.status === 404) throw new RoutingProblem(t("Nothing found there."), "not_found", 404);
+      if (!res.ok) throw new RoutingProblem(t("Place search had a problem ({status}). Try again.", { status: res.status }), "search", 502);
       return (await res.json()) as T;
     });
   }

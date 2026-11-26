@@ -8,6 +8,7 @@ import type { CoachBlock } from "@/data/coach";
 import type { HubSport } from "@/data/hub";
 import { docFromHub, legacyDoc, sportLabel, SPORTS, type BuilderDoc } from "@/lib/builder";
 import { addDays, dayMonth, isDayKey, shortDay } from "@/lib/calendar";
+import { msg, t } from "@/lib/i18n";
 import {
   createTrainingPlan, DAY_NAMES, daysBetween, durationText, MAX_PLAN_WEEKS, PHASE_LABELS, planDate, planDay, planEntryFromWorkout, planEnv, trainingPlanEntryMetrics,
   type PhaseKind, type PlanDifficulty, type PlanEnv, type TrainingPlanDocument, type TrainingPlanEntry, type TrainingPlanPhase,
@@ -32,13 +33,13 @@ export const CONSTRAINTS_MAX = 600;
 export const MAX_GENERATED_WEEKS = 24;
 
 export const DIFFICULTY_OPTIONS: readonly { value: PlanDifficulty; label: string; hint: string }[] = [
-  { value: "beginner", label: "Beginner", hint: "New to structured training" },
-  { value: "intermediate", label: "Intermediate", hint: "Training consistently" },
-  { value: "advanced", label: "Advanced", hint: "Strong high-volume base" },
-  { value: "custom", label: "Custom", hint: "Coach judges from your data" },
+  { value: "beginner", label: msg("Beginner"), hint: msg("New to structured training") },
+  { value: "intermediate", label: msg("Intermediate"), hint: msg("Training consistently") },
+  { value: "advanced", label: msg("Advanced"), hint: msg("Strong high-volume base") },
+  { value: "custom", label: msg("Custom"), hint: msg("Coach judges from your data") },
 ];
 
-export const EXAMPLE_GOALS: readonly string[] = ["Finish my first trail 50K comfortably", "Build a consistent 5K run base", "Hybrid strength and engine for HYROX"];
+export const EXAMPLE_GOALS: readonly string[] = [msg("Finish my first trail 50K comfortably"), msg("Build a consistent 5K run base"), msg("Hybrid strength and engine for HYROX")];
 
 /** What the form opens with; a preset from "Build me a plan" fills goal, length and sessions. */
 export function newPlanRequest(today: string, preset?: { goal: string; weeks: number; sessionsPerWeek: number }): PlanGenerationRequest {
@@ -50,24 +51,24 @@ export const maxSessions = (request: Pick<PlanGenerationRequest, "availableDayIn
 
 /** The first thing that stops the request being sent, or null. */
 export function requestProblem(request: PlanGenerationRequest, today: string): string | null {
-  if (!request.goal.trim()) return "Describe your goal to continue.";
-  if (request.goal.trim().length > GOAL_MAX) return `Keep the goal to ${GOAL_MAX} characters.`;
-  if (!request.sports.length) return "Pick at least one sport.";
-  if (!request.availableDayIndexes.length) return "Pick at least one available day.";
-  if (request.availableDayIndexes.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) return "Available days must be Monday through Sunday.";
-  if (!(Number.isInteger(request.weeks) && request.weeks >= 1 && request.weeks <= MAX_GENERATED_WEEKS)) return "Generated plans must contain 1 to 24 weeks.";
-  if (!(Number.isInteger(request.sessionsPerWeek) && request.sessionsPerWeek >= 1 && request.sessionsPerWeek <= 7)) return "Sessions per week must be between 1 and 7.";
-  if (request.sessionsPerWeek > request.availableDayIndexes.length) return `Choose at least ${request.sessionsPerWeek} available days.`;
-  if (!isDayKey(request.startDate) || request.startDate < today) return "Choose today or a future start date.";
-  if (request.maxSessionMinutes !== undefined && !(request.maxSessionMinutes >= 10 && request.maxSessionMinutes <= 600)) return "A session limit goes from 10 to 600 minutes.";
+  if (!request.goal.trim()) return t("Describe your goal to continue.");
+  if (request.goal.trim().length > GOAL_MAX) return t("Keep the goal to {n} characters.", { n: GOAL_MAX });
+  if (!request.sports.length) return t("Pick at least one sport.");
+  if (!request.availableDayIndexes.length) return t("Pick at least one available day.");
+  if (request.availableDayIndexes.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) return t("Available days must be Monday through Sunday.");
+  if (!(Number.isInteger(request.weeks) && request.weeks >= 1 && request.weeks <= MAX_GENERATED_WEEKS)) return t("Generated plans must contain 1 to 24 weeks.");
+  if (!(Number.isInteger(request.sessionsPerWeek) && request.sessionsPerWeek >= 1 && request.sessionsPerWeek <= 7)) return t("Sessions per week must be between 1 and 7.");
+  if (request.sessionsPerWeek > request.availableDayIndexes.length) return t("Choose at least {n} available days.", { n: request.sessionsPerWeek });
+  if (!isDayKey(request.startDate) || request.startDate < today) return t("Choose today or a future start date.");
+  if (request.maxSessionMinutes !== undefined && !(request.maxSessionMinutes >= 10 && request.maxSessionMinutes <= 600)) return t("A session limit goes from 10 to 600 minutes.");
   return null;
 }
 
 /** The Session limit box: empty is no limit, anything else must be a whole number of minutes. */
 export function parseSessionLimit(text: string): number | undefined | null {
-  const t = text.trim();
-  if (!t) return undefined;
-  const n = Number(t);
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
   return Number.isInteger(n) ? n : null;
 }
 
@@ -79,10 +80,10 @@ export function planSnapshot(request: PlanGenerationRequest): PlanSnapshot {
   const end = isDayKey(request.startDate) ? addDays(request.startDate, Math.max(1, request.weeks) * 7 - 1) : null;
   return {
     sports: request.sports.length ? request.sports.map(sportLabel).join(", ") : "—",
-    structure: `${request.weeks} ${request.weeks === 1 ? "week" : "weeks"} · ${request.sessionsPerWeek} / week`,
+    structure: request.weeks === 1 ? t("1 week · {n} / week", { n: request.sessionsPerWeek }) : t("{weeks} weeks · {n} / week", { weeks: request.weeks, n: request.sessionsPerWeek }),
     total: request.weeks * request.sessionsPerWeek,
-    dates: end ? `${dayMonth(request.startDate)} to ${dayMonth(end)}` : "Pick a plan start date",
-    days: !days.length ? "—" : days.length === 7 ? "Every day" : days.map((day) => DAY_NAMES[day]).join(", "),
+    dates: end ? t("{from} to {to}", { from: dayMonth(request.startDate), to: dayMonth(end) }) : t("Pick a plan start date"),
+    days: !days.length ? "—" : days.length === 7 ? t("Every day") : days.map((day) => t(DAY_NAMES[day])).join(", "),
     cap: request.maxSessionMinutes ? `${request.maxSessionMinutes} min` : null,
   };
 }
@@ -222,7 +223,7 @@ export function inferPhases(plan: Pick<TrainingPlanDocument, "entries" | "weekCo
   kinds.forEach((kind, i) => {
     const last = phases[phases.length - 1];
     if (last && last.kind === kind) last.endWeek = i + 1;
-    else phases.push({ id: env.newId("phase"), name: PHASE_LABELS[kind], kind, startWeek: i + 1, endWeek: i + 1 });
+    else phases.push({ id: env.newId("phase"), name: t(PHASE_LABELS[kind]), kind, startWeek: i + 1, endWeek: i + 1 });
   });
   return phases;
 }
@@ -268,10 +269,10 @@ export function generatedPlanFromBlocks(blocks: readonly CoachBlock[], nextId: (
     for (const op of card.ops ?? []) {
       if (op.op === "add_workout") {
         const doc = op.hub ? docFromHub(op.hub, nextId, false) : op.workout ? op.workout.doc ?? legacyDoc(op.workout, [], nextId) : null;
-        if (!doc) { left.push(`Coach's “${op.name}” on ${shortDay(op.day)} came without steps, so it is not in this plan.`); continue; }
+        if (!doc) { left.push(t("Coach's “{name}” on {day} came without steps, so it is not in this plan.", { name: op.name, day: shortDay(op.day) })); continue; }
         workouts.push({ day: op.day, name: op.name, sport: doc.sport, doc: { ...doc, name: op.name }, ...(op.load ? { load: op.load } : {}) });
       } else if (op.op === "add_routine") {
-        left.push(`Coach put your saved gym routine “${op.name}” on ${shortDay(op.day)}. A plan holds workouts only, so it is not in this plan.`);
+        left.push(t("Coach put your saved gym routine “{name}” on {day}. A plan holds workouts only, so it is not in this plan.", { name: op.name, day: shortDay(op.day) }));
       }
     }
   }
@@ -293,13 +294,13 @@ const list = (numbers: number[]) => numbers.join(", ");
  * can fix it in the editor; it throws only when there is nothing to open.
  */
 export function trainingPlanFromGenerated(made: GeneratedPlan, request: PlanGenerationRequest, env: PlanEnv = planEnv): GeneratedDocument {
-  if (!made.workouts.length) throw new Error("Coach's plan held no workouts.");
-  if (!made.name.trim()) throw new Error("Coach returned a plan without a name.");
+  if (!made.workouts.length) throw new Error(t("Coach's plan held no workouts."));
+  if (!made.name.trim()) throw new Error(t("Coach returned a plan without a name."));
   const differences: string[] = [...made.left];
   const sorted = [...made.workouts].sort((a, b) => a.day.localeCompare(b.day));
   const first = sorted[0].day;
   const start = first < request.startDate ? first : request.startDate;
-  if (start !== request.startDate) differences.push(`Coach's first workout is on ${shortDay(first)}, before the start date you asked for, so the plan starts there.`);
+  if (start !== request.startDate) differences.push(t("Coach's first workout is on {day}, before the start date you asked for, so the plan starts there.", { day: shortDay(first) }));
 
   const plan = createTrainingPlan(cleanPlanName(made.name), "coach", env);
   plan.description = made.summary.trim();
@@ -314,7 +315,7 @@ export function trainingPlanFromGenerated(made: GeneratedPlan, request: PlanGene
     const entry = planEntryFromWorkout({ key: `coach-${index + 1}`, name: w.name, sport: w.sport, doc: w.doc }, Math.floor(offset / 7), offset % 7, undefined, env);
     entries.push({ ...entry, sortOrder: index, ...(w.load ? { plannedTrainingLoad: w.load } : {}) });
   });
-  if (dropped) differences.push(`${dropped} of Coach's workouts fall more than ${MAX_PLAN_WEEKS} weeks out and are not in this plan.`);
+  if (dropped) differences.push(t("{n} of Coach's workouts fall more than {weeks} weeks out and are not in this plan.", { n: dropped, weeks: MAX_PLAN_WEEKS }));
   plan.entries = entries;
   plan.weekCount = Math.min(MAX_PLAN_WEEKS, Math.max(request.weeks, ...entries.map((entry) => entry.weekIndex + 1)));
   plan.sportMix = [...new Set(entries.map((entry) => entry.workout!.sport))];
@@ -322,18 +323,25 @@ export function trainingPlanFromGenerated(made: GeneratedPlan, request: PlanGene
 
   // What the desktop app refuses a draft for is listed here instead.
   const asked = request.weeks * request.sessionsPerWeek;
-  if (entries.length !== asked) differences.push(`Coach laid out ${entries.length} of the ${asked} workouts you asked for.`);
-  if (plan.weekCount > request.weeks) differences.push(`Coach's plan runs ${plan.weekCount} weeks, not ${request.weeks}.`);
+  if (entries.length !== asked) differences.push(t("Coach laid out {n} of the {asked} workouts you asked for.", { n: entries.length, asked }));
+  if (plan.weekCount > request.weeks) differences.push(t("Coach's plan runs {weeks} weeks, not {asked}.", { weeks: plan.weekCount, asked: request.weeks }));
   const perWeek = Array.from({ length: request.weeks }, (_, week) => entries.filter((entry) => entry.weekIndex === week).length);
   const off = perWeek.map((n, week) => (n === request.sessionsPerWeek ? 0 : week + 1)).filter(Boolean);
-  if (off.length) differences.push(`${off.length === 1 ? "Week" : "Weeks"} ${list(off)} ${off.length === 1 ? "doesn't" : "don't"} have ${request.sessionsPerWeek} ${request.sessionsPerWeek === 1 ? "workout" : "workouts"}.`);
+  if (off.length) {
+    const vars = { weeks: list(off), n: request.sessionsPerWeek };
+    differences.push(off.length === 1
+      ? (request.sessionsPerWeek === 1 ? t("Week {weeks} doesn't have 1 workout.", vars) : t("Week {weeks} doesn't have {n} workouts.", vars))
+      : (request.sessionsPerWeek === 1 ? t("Weeks {weeks} don't have 1 workout.", vars) : t("Weeks {weeks} don't have {n} workouts.", vars)));
+  }
   const offDay = sorted.filter((w) => !request.availableDayIndexes.includes(weekdayIndex(w.day)));
-  if (offDay.length) differences.push(`${offDay.length === 1 ? `“${offDay[0].name}” is` : `${offDay.length} workouts are`} on a day you didn't make available.`);
+  if (offDay.length) differences.push(offDay.length === 1 ? t("“{name}” is on a day you didn't make available.", { name: offDay[0].name }) : t("{n} workouts are on a day you didn't make available.", { n: offDay.length }));
   const offSport = [...new Set(sorted.filter((w) => !request.sports.includes(w.sport)).map((w) => sportLabel(w.sport)))];
-  if (offSport.length) differences.push(`Coach used a sport you didn't ask for: ${offSport.join(", ")}.`);
+  if (offSport.length) differences.push(t("Coach used a sport you didn't ask for: {sports}.", { sports: offSport.join(", ") }));
   if (request.maxSessionMinutes) {
     const long = entries.filter((entry) => trainingPlanEntryMetrics(entry).durationSeconds > request.maxSessionMinutes! * 60);
-    if (long.length) differences.push(`${long.length === 1 ? `“${long[0].title}” (${durationText(trainingPlanEntryMetrics(long[0]).durationSeconds)}) is` : `${long.length} workouts are`} over your ${request.maxSessionMinutes} min session limit.`);
+    if (long.length) differences.push(long.length === 1
+      ? t("“{name}” ({time}) is over your {limit} min session limit.", { name: long[0].title ?? "", time: durationText(trainingPlanEntryMetrics(long[0]).durationSeconds), limit: request.maxSessionMinutes })
+      : t("{n} workouts are over your {limit} min session limit.", { n: long.length, limit: request.maxSessionMinutes }));
   }
   plan.notes = [request.constraints?.trim(), ...differences].filter(Boolean).join("\n");
   return { plan, differences };

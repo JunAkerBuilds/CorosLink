@@ -15,6 +15,7 @@ import {
 import { isDayKey, occurrences } from "@/lib/calendar";
 import { savedFromDoc } from "@/lib/savedWorkout";
 import { dayKey } from "@/lib/format";
+import { t } from "@/lib/i18n";
 import { parseCorosWorkoutId, type CorosLink } from "@/lib/hubWorkout";
 import { describe, totals, type Pacing, type Sport, type WorkoutItem } from "@/lib/workout";
 
@@ -57,8 +58,8 @@ export interface AthleteProfile {
 /** Stamps a workout with its totals, ready for the calendar store. */
 export function toSaved(workout: Workout, profile: AthleteProfile, now: Date = new Date()): SavedWorkout {
   const pacing = profile.pacing[workout.sport];
-  const t = totals(workout.items, pacing);
-  return { ...workout, summary: { detail: describe(workout.items, pacing), metres: Math.round(t.metres), load: t.load }, savedAt: now.toISOString() };
+  const tot = totals(workout.items, pacing);
+  return { ...workout, summary: { detail: describe(workout.items, pacing), metres: Math.round(tot.metres), load: tot.load }, savedAt: now.toISOString() };
 }
 
 export { savedFromDoc };
@@ -157,8 +158,8 @@ export async function loadWorkoutBuilder(query: BuilderQuery): Promise<Loaded<Bu
   if (query.id && coros) {
     const days = await hubCalendar(coros.day, coros.day);
     const planned = days.data.flatMap((d) => d.workouts).find((w) => w.idInPlan === coros.idInPlan);
-    if (!planned) throw new Error("This workout is not on your COROS calendar any more.");
-    if (!planned.workout) throw new Error("This workout has steps the builder can't edit yet. Change it in the COROS app.");
+    if (!planned) throw new Error(t("This workout is not on your COROS calendar any more."));
+    if (!planned.workout) throw new Error(t("This workout has steps the builder can't edit yet. Change it in the COROS app."));
     return fromCoros({
       ...base, doc: docFromHub(planned.workout, newStepId), date: planned.day, toCoros: true,
       coros: { day: planned.day, idInPlan: planned.idInPlan, name: planned.name },
@@ -169,19 +170,19 @@ export async function loadWorkoutBuilder(query: BuilderQuery): Promise<Loaded<Bu
     if (saved) return fromBrowser({ ...base, doc: docOfSaved(saved), date: saved.date, savedId: saved.id, repeatWeeks: saved.repeatWeeks, toCoros: false });
     const planned = at.sample ? sampleWorkouts.find((w) => w.id === query.id) : undefined;
     if (planned) return fromSample({ ...base, doc: docOfSaved(planned), date: planned.date, toCoros: false });
-    throw new Error("This workout is not saved on this computer any more.");
+    throw new Error(t("This workout is not saved on this computer any more."));
   }
   if (query.library) {
     if (at.toCoros) {
       const saved = (await hubWorkout(query.library)).data;
-      if (!saved.workout) throw new Error("This workout has steps the builder can't edit yet. Schedule it from the COROS app.");
+      if (!saved.workout) throw new Error(t("This workout has steps the builder can't edit yet. Schedule it from the COROS app."));
       return fromCoros({ ...base, doc: docFromHub(saved.workout, newStepId, false), date, toCoros: true, fromLibrary: true });
     }
     const kept = libraryWorkouts().find((w) => w.id === query.library);
     if (kept) return fromBrowser({ ...base, doc: docOfSaved(kept), date, toCoros: false, fromLibrary: true });
     const sample = at.sample ? sampleLibrary.find((w) => w.id === query.library) : undefined;
     if (sample) return fromSample({ ...base, doc: sample.doc, date, toCoros: false, fromLibrary: true });
-    throw new Error("This workout is not in your library any more.");
+    throw new Error(t("This workout is not in your library any more."));
   }
   const doc = newDoc(isSport(query.sport) ? query.sport : "run", [newStepId(), newStepId(), newStepId()]);
   return at.toCoros ? fromCoros({ ...base, doc, date, toCoros: true }) : fromBrowser({ ...base, doc, date, toCoros: false });
@@ -217,7 +218,7 @@ export interface ScheduleResult {
 function forCoros(doc: BuilderDoc): HubWorkout {
   const unwired = docUnwired(doc);
   if (unwired.length > 0) {
-    throw new NotWiredError("workout-coros-targets", `Not connected yet, so this can't go to COROS from here: ${unwired.join(", ")}.`);
+    throw new NotWiredError("workout-coros-targets", t("Not connected yet, so this can't go to COROS from here: {list}.", { list: unwired.join(", ") }));
   }
   const workout = docToHub(doc);
   const problem = hubWorkoutProblem(workout);
@@ -231,8 +232,8 @@ function forCoros(doc: BuilderDoc): HubWorkout {
  */
 export async function scheduleWorkout(request: ScheduleRequest): Promise<ScheduleResult> {
   const { doc, date } = request;
-  if (!isDayKey(date)) throw new Error("Pick a day.");
-  if (!docReady(doc, !request.toCoros)) throw new Error("Some steps still need a value.");
+  if (!isDayKey(date)) throw new Error(t("Pick a day."));
+  if (!docReady(doc, !request.toCoros)) throw new Error(t("Some steps still need a value."));
   if (!request.toCoros) {
     const id = request.savedId ?? newWorkoutId();
     saveWorkout(savedFromDoc(doc, date, id, request.pacing, request.savedId ? request.repeatWeeks ?? 1 : 1));
@@ -244,19 +245,19 @@ export async function scheduleWorkout(request: ScheduleRequest): Promise<Schedul
     await hubUpdateScheduled(request.coros, workout);
     return { where: "coros" };
   }
-  if (date < dayKey(new Date())) throw new Error("COROS takes planned workouts from today on.");
+  if (date < dayKey(new Date())) throw new Error(t("COROS takes planned workouts from today on."));
   const ref = (await hubScheduleWorkout(date, workout)).data;
   if (!request.saveToLibrary) return { where: "coros", ref };
   try {
     await hubSaveWorkout(workout);
     return { where: "coros", ref };
   } catch (e) {
-    return { where: "coros", ref, libraryProblem: e instanceof Error ? e.message : "COROS didn't save the library copy." };
+    return { where: "coros", ref, libraryProblem: e instanceof Error ? e.message : t("COROS didn't save the library copy.") };
   }
 }
 
 function keepInBrowserLibrary(doc: BuilderDoc, date: string): void {
-  const name = doc.name.trim() || DEFAULT_NAME;
+  const name = doc.name.trim() || t(DEFAULT_NAME);
   saveToLibrary({ id: `lib-${newWorkoutId()}`, name, sport: calendarSport(doc.sport), date, repeatWeeks: 1, items: docToLegacy(doc) ?? [], doc: { ...doc, name } });
 }
 
@@ -304,19 +305,19 @@ export async function loadAddToCalendar(): Promise<Loaded<AddData>> {
     try {
       saved = (await hubWorkouts()).data;
     } catch (error) {
-      return fromCoros({ ...base, library: [], libraryError: error instanceof Error ? error.message : "COROS's workout library couldn't be read." });
+      return fromCoros({ ...base, library: [], libraryError: error instanceof Error ? error.message : t("COROS's workout library couldn't be read.") });
     }
     const library = saved.map((w): LibraryRow => {
       const doc = w.workout ? docFromHub(w.workout, newStepId, false) : null;
       return {
-        id: w.id, name: w.name, sport: w.sport, sportName: w.sport ? sportLabel(w.sport) : "Other", doc,
+        id: w.id, name: w.name, sport: w.sport, sportName: w.sport ? sportLabel(w.sport) : t("Other"), doc,
         total: doc ? docSummary(doc, null) : hubDetail(w.totals), tags: [], load: null, used: null,
       };
     });
     return fromCoros({ ...base, library });
   }
   const row = (id: string, doc: BuilderDoc, extra: Partial<LibraryRow> = {}): LibraryRow => ({
-    id, name: doc.name || DEFAULT_NAME, sport: doc.sport, sportName: sportLabel(doc.sport), doc,
+    id, name: doc.name || t(DEFAULT_NAME), sport: doc.sport, sportName: sportLabel(doc.sport), doc,
     total: docSummary(doc, pacingFor(doc.sport, at.pacing)), tags: [], load: null, used: null, ...extra,
   });
   const kept = libraryWorkouts();
@@ -341,6 +342,6 @@ export async function scheduleLibraryWorkout(row: Pick<LibraryRow, "id" | "doc">
     const saved = (await hubWorkout(row.id)).data;
     doc = saved.workout ? docFromHub(saved.workout, newStepId, false) : null;
   }
-  if (!doc) throw new Error("This workout has steps this app can't write yet. Schedule it from the COROS app.");
+  if (!doc) throw new Error(t("This workout has steps this app can't write yet. Schedule it from the COROS app."));
   return scheduleWorkout({ doc, date, toCoros, saveToLibrary: false, pacing });
 }

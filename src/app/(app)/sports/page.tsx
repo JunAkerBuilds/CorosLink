@@ -6,6 +6,7 @@ import { HeroText, Icon, Ring, SPORT_HUE, SportHead, Spark, Stats, ToneChip } fr
 import { useLoaded, type Origin } from "@/data/core";
 import { loadSports, type HoursWeek, type Sports, type SportsHub } from "@/data/sports";
 import { FAMILY_NAME } from "@/data/sync/sports";
+import { locale, t } from "@/lib/i18n";
 import "./sports.css";
 
 export default function SportsPage() {
@@ -19,9 +20,9 @@ function HubScreen({ data, origin }: { data: Sports; origin: Origin }) {
   const hub = data.hub;
   return (
     <main className="page sp-page">
-      <SportHead title="Sports" crumb={hub.day} current={null} families={data.families} origin={origin} />
+      <SportHead title={t("Sports")} crumb={hub.day} current={null} families={data.families} origin={origin} />
 
-      <section aria-label="This week across your sports" className="sp-hero" data-hue="run">
+      <section aria-label={t("This week across your sports")} className="sp-hero" data-hue="run">
         <HeroText chip={hub.range} headline={hub.headline} text={hub.text} figures={hub.figures} mascot basis={400} />
         <div className="sp-rings">
           {hub.rings.map((r) => (
@@ -37,8 +38,8 @@ function HubScreen({ data, origin }: { data: Sports; origin: Origin }) {
       </section>
 
       <div className="sp-hub-grid">
-        <section aria-label="What stands out" className="sp-card" style={{ gap: 6, paddingBottom: 12 }}>
-          <div className="sp-card-head" style={{ marginBottom: 6 }}><h2>What stands out</h2></div>
+        <section aria-label={t("What stands out")} className="sp-card" style={{ gap: 6, paddingBottom: 12 }}>
+          <div className="sp-card-head" style={{ marginBottom: 6 }}><h2>{t("What stands out")}</h2></div>
           {hub.standouts.map((s) => (
             <Link key={s.family} href={s.href} className="sp-stand">
               <span aria-hidden="true" className="sp-icon lg sp-tint" data-hue={SPORT_HUE[s.family]}><Icon name={s.family} size={21} /></span>
@@ -48,12 +49,12 @@ function HubScreen({ data, origin }: { data: Sports; origin: Origin }) {
             </Link>
           ))}
         </section>
-        <section aria-label="Hours a week" className="sp-card" style={{ gap: 12 }}>
-          <div className="sp-card-head" style={{ flexWrap: "wrap", justifyContent: "space-between" }}><h2>Hours a week</h2><span className="sp-note">{hub.hours.total}</span></div>
+        <section aria-label={t("Hours a week")} className="sp-card" style={{ gap: 12 }}>
+          <div className="sp-card-head" style={{ flexWrap: "wrap", justifyContent: "space-between" }}><h2>{t("Hours a week")}</h2><span className="sp-note">{hub.hours.total}</span></div>
           <HoursChart hours={hub.hours} />
           <div className="sp-legend">
-            {hub.hours.families.map((f) => <span key={f} data-hue={SPORT_HUE[f]}><i aria-hidden="true" />{FAMILY_NAME[f]}</span>)}
-            {hub.hours.planned ? <span><i aria-hidden="true" className="sp-swatch-plan" style={{ background: "none" }} />Planned</span> : null}
+            {hub.hours.families.map((f) => <span key={f} data-hue={SPORT_HUE[f]}><i aria-hidden="true" />{t(FAMILY_NAME[f])}</span>)}
+            {hub.hours.planned ? <span><i aria-hidden="true" className="sp-swatch-plan" style={{ background: "none" }} />{t("Planned")}</span> : null}
           </div>
         </section>
       </div>
@@ -74,8 +75,8 @@ function HubScreen({ data, origin }: { data: Sports; origin: Origin }) {
 
       <div className="sp-hub-grid">
         {hub.also.length ? (
-          <section aria-label="Also in the last 90 days" className="sp-card">
-            <div className="sp-card-head"><h2>Also in the last 90 days</h2><Link href="/activities" className="sp-end">All activities</Link></div>
+          <section aria-label={t("Also in the last 90 days")} className="sp-card">
+            <div className="sp-card-head"><h2>{t("Also in the last 90 days")}</h2><Link href="/activities" className="sp-end">{t("All activities")}</Link></div>
             <div className="sp-list">
               {hub.also.map((a) => (
                 <Link key={a.name} href="/activities" className="row" style={{ gridTemplateColumns: "minmax(0, 1fr) 90px 110px 60px", color: "var(--fg)", textDecoration: "none", margin: "0 -10px", padding: "0 10px", borderRadius: 10 }}>
@@ -85,12 +86,12 @@ function HubScreen({ data, origin }: { data: Sports; origin: Origin }) {
             </div>
           </section>
         ) : null}
-        <section aria-label="Your sports" className="sp-card">
-          <div className="sp-card-head"><h2>Your sports</h2></div>
+        <section aria-label={t("Your sports")} className="sp-card">
+          <div className="sp-card-head"><h2>{t("Your sports")}</h2></div>
           <div className="sp-pills">
             {hub.rings.map((r) => <span key={r.family} data-hue={SPORT_HUE[r.family]}><Icon name={r.family} />{r.name}</span>)}
           </div>
-          <p className="sp-note">Worked out from your workouts of the last 90 days.</p>
+          <p className="sp-note">{t("Worked out from your workouts of the last 90 days.")}</p>
         </section>
       </div>
     </main>
@@ -106,7 +107,7 @@ function hoursText(h: number): string {
 /** "26 Oct – 1 Nov" for the week starting on that Monday. */
 function weekRange(monday: string): string {
   const d = new Date(`${monday}T12:00:00`), e = new Date(d); e.setDate(d.getDate() + 6);
-  const f = (x: Date) => x.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const f = (x: Date) => x.toLocaleDateString(locale("en-GB"), { day: "numeric", month: "short" });
   return `${f(d)} – ${f(e)}`;
 }
 
@@ -134,7 +135,7 @@ function HoursChart({ hours }: { hours: SportsHub["hours"] }) {
           const planH = w.planned * unit;
           return (
             <g key={k} className={hover === k ? "on" : undefined} role="link" tabIndex={0}
-              aria-label={`Week of ${weekRange(w.start)}: ${w.total > 0 ? hoursText(w.total) : "no training"}. Open in calendar`}
+              aria-label={t("Week of {week}: {time}. Open in calendar", { week: weekRange(w.start), time: w.total > 0 ? hoursText(w.total) : t("no training") })}
               onMouseEnter={() => setHover(k)} onFocus={() => setHover(k)} onBlur={() => setHover(null)}
               onClick={() => open(w)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(w); } }}>
               <rect className="hit" x={k * slot + 2} y={top - 22} width={slot - 4} height={H - top + 22} rx="10" />
@@ -150,13 +151,13 @@ function HoursChart({ hours }: { hours: SportsHub["hours"] }) {
       </svg>
       {tip && hover != null ? (
         <div className="sp-tip" aria-hidden="true" style={{ left: `${Math.min(84, Math.max(16, ((hover + 0.5) / hours.weeks.length) * 100))}%` }}>
-          <span className="sp-tip-head">{tip.now ? "This week" : weekRange(tip.start)}</span>
-          <b className="num">{tip.total > 0 ? hoursText(tip.total) : "No training"}</b>
+          <span className="sp-tip-head">{tip.now ? t("This week") : weekRange(tip.start)}</span>
+          <b className="num">{tip.total > 0 ? hoursText(tip.total) : t("No training")}</b>
           {tip.parts.filter((p) => p.hours > 0).map((p) => (
-            <span key={p.family} className="sp-tip-row" data-hue={SPORT_HUE[p.family]}><i />{FAMILY_NAME[p.family]}<em className="num">{hoursText(p.hours)}</em></span>
+            <span key={p.family} className="sp-tip-row" data-hue={SPORT_HUE[p.family]}><i />{t(FAMILY_NAME[p.family])}<em className="num">{hoursText(p.hours)}</em></span>
           ))}
-          {tip.planned > 0 ? <span className="sp-tip-row"><i className="sp-swatch-plan" />Planned<em className="num">{hoursText(tip.planned)}</em></span> : null}
-          <span className="sp-tip-foot">Click to open in Calendar</span>
+          {tip.planned > 0 ? <span className="sp-tip-row"><i className="sp-swatch-plan" />{t("Planned")}<em className="num">{hoursText(tip.planned)}</em></span> : null}
+          <span className="sp-tip-foot">{t("Click to open in Calendar")}</span>
         </div>
       ) : null}
     </div>

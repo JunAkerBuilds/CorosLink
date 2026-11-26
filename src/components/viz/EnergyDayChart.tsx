@@ -3,16 +3,17 @@ import { useMemo } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 import type { EnergyBandKind, EnergyDay } from "@/data/energy";
 import { bandAt, clockOfDay, energyAt } from "@/lib/health";
+import { msg, t } from "@/lib/i18n";
 
 const W = 980, H = 322, PLOT = 940, TOP = 10, BASE = 270;
 const X = (minute: number) => (minute / 1440) * PLOT;
 const Y = (level: number) => BASE - (level / 100) * (BASE - TOP);
 
 export const ENERGY_BAND: Record<EnergyBandKind, { name: string; color: string }> = {
-  sleep: { name: "Sleep", color: "var(--h-violet)" },
-  workout: { name: "Workout", color: "var(--h-mint)" },
-  rest: { name: "Rest", color: "var(--h-lime-deep)" },
-  stress: { name: "Stress", color: "var(--h-coral)" },
+  sleep: { name: msg("Sleep"), color: "var(--h-violet)" },
+  workout: { name: msg("Workout"), color: "var(--h-mint)" },
+  rest: { name: msg("Rest"), color: "var(--h-lime-deep)" },
+  stress: { name: msg("Stress"), color: "var(--h-coral)" },
 };
 const BAND_KINDS = Object.keys(ENERGY_BAND) as EnergyBandKind[];
 
@@ -26,9 +27,9 @@ export function energyReadingAt(day: EnergyDay, minute: number): EnergyReading {
   if (day.now && minute > day.now.minute) {
     const projected = day.bedtime ? energyAt([day.now, day.bedtime], Math.min(minute, day.bedtime.minute)) : null;
     const atBed = day.bedtime != null && minute >= day.bedtime.minute;
-    return { minute, level: projected, projected: true, what: atBed ? "Bedtime, projected" : "Projected" };
+    return { minute, level: projected, projected: true, what: atBed ? t("Bedtime, projected") : t("Projected") };
   }
-  return { minute, level: energyAt(day.points, minute), projected: false, what: band ? band.label : "Awake" };
+  return { minute, level: energyAt(day.points, minute), projected: false, what: band ? band.label : t("Awake") };
 }
 
 /** The minute a pointer or key lands on, kept inside the day (and before bedtime on the current day). */
@@ -58,10 +59,13 @@ export function EnergyDayChart({ day, minute, onMinute }: { day: EnergyDay; minu
   }, [day]);
 
   const label = useMemo(() => {
-    const parts = [`Energy through the day${day.woke ? `: woke at ${day.woke.level} at ${clockOfDay(day.woke.minute)}` : ""}`, `lowest ${day.low}`, `highest ${day.high}`];
-    if (day.now) parts.push(`${day.now.level} now`);
-    if (day.bedtime) parts.push(`with a dashed projection to ${day.bedtime.level} by bedtime`);
-    return `${parts.join(", ")}. Below it, a strip marks sleep, workouts, rest and stress.`;
+    const parts = [
+      day.woke ? t("Energy through the day: woke at {level} at {time}", { level: day.woke.level, time: clockOfDay(day.woke.minute) }) : t("Energy through the day"),
+      t("lowest {n}", { n: day.low }), t("highest {n}", { n: day.high }),
+    ];
+    if (day.now) parts.push(t("{n} now", { n: day.now.level }));
+    if (day.bedtime) parts.push(t("with a dashed projection to {n} by bedtime", { n: day.bedtime.level }));
+    return `${parts.join(", ")}. ${t("Below it, a strip marks sleep, workouts, rest and stress.")}`;
   }, [day]);
 
   const reading = energyReadingAt(day, minute);
@@ -87,7 +91,8 @@ export function EnergyDayChart({ day, minute, onMinute }: { day: EnergyDay; minu
   const nowX = now ? X(now.minute).toFixed(1) : null;
   const cx = X(reading.minute).toFixed(1);
   const cy = reading.level != null ? Y(reading.level).toFixed(1) : null;
-  const readout = `${clockOfDay(reading.minute)} · ${reading.level != null ? `${reading.projected ? "about " : ""}${Math.round(reading.level)}` : "no reading"} · ${reading.what}`;
+  const level = reading.level == null ? t("no reading") : reading.projected ? t("about {n}", { n: Math.round(reading.level) }) : String(Math.round(reading.level));
+  const readout = `${clockOfDay(reading.minute)} · ${level} · ${reading.what}`;
 
   return (
     <div style={{ position: "relative" }}>
@@ -108,7 +113,7 @@ export function EnergyDayChart({ day, minute, onMinute }: { day: EnergyDay; minu
         {nowX ? (
           <>
             <path d={`M${nowX} ${TOP}V${BASE}`} fill="none" style={{ stroke: "rgba(var(--fg-rgb), 0.22)", strokeDasharray: "2 4" }} />
-            <text x={nowX} y="6" style={{ ...axis, fontWeight: 600, textAnchor: "middle" }}>Now</text>
+            <text x={nowX} y="6" style={{ ...axis, fontWeight: 600, textAnchor: "middle" }}>{t("Now")}</text>
           </>
         ) : null}
         <path d={`M0 291H${PLOT}`} fill="none" style={{ stroke: "rgba(var(--fg-rgb), 0.1)", strokeWidth: 10, strokeLinecap: "round", opacity: 0.5 }} />
@@ -127,7 +132,7 @@ export function EnergyDayChart({ day, minute, onMinute }: { day: EnergyDay; minu
         <text x="940" y="318" style={{ ...axis, textAnchor: "end" }}>24:00</text>
       </svg>
       <div
-        className="chart-hit" role="slider" tabIndex={0} aria-label="Time of day" aria-orientation="horizontal"
+        className="chart-hit" role="slider" tabIndex={0} aria-label={t("Time of day")} aria-orientation="horizontal"
         aria-valuemin={0} aria-valuemax={1440} aria-valuenow={minute} aria-valuetext={readout}
         onPointerMove={point} onPointerDown={point} onPointerLeave={() => onMinute(null)} onBlur={() => onMinute(null)} onKeyDown={key}
       />

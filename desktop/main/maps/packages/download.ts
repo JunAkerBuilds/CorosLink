@@ -6,6 +6,7 @@ import { once } from "node:events";
 import { createWriteStream } from "node:fs";
 import { readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { t } from "@/lib/i18n";
 
 export const PARTIAL_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -81,11 +82,11 @@ export async function download(options: DownloadOptions): Promise<number> {
   }
   if (!response.ok || !response.body) {
     await response.body?.cancel().catch(() => undefined);
-    throw new DownloadProblem(`COROS's map server answered ${response.status}. Try again later.`, "server");
+    throw new DownloadProblem(t("COROS's map server answered {status}. Try again later.", { status: response.status }), "server");
   }
   if (response.status === 206 && from === 0) {
     await response.body.cancel().catch(() => undefined);
-    throw new DownloadProblem("COROS's map server sent part of the file only. Try again.", "server");
+    throw new DownloadProblem(t("COROS's map server sent part of the file only. Try again."), "server");
   }
 
   if (from === 0) {
@@ -118,12 +119,12 @@ export async function download(options: DownloadOptions): Promise<number> {
     await new Promise<void>((resolve) => { output.once("close", resolve); output.end(); });
     await reader.cancel().catch(() => undefined);
     // The partial stays for the next try.
-    if (signal?.aborted) throw new DownloadProblem("Download cancelled.", "cancelled");
-    throw new DownloadProblem("The download stopped. It will pick up where it left off.", "network");
+    if (signal?.aborted) throw new DownloadProblem(t("Download cancelled."), "cancelled");
+    throw new DownloadProblem(t("The download stopped. It will pick up where it left off."), "network");
   }
   const size = (await stat(partPath(target))).size;
   if (total !== undefined && size !== total) {
-    throw new DownloadProblem("The download ended early. It will pick up where it left off.", "network");
+    throw new DownloadProblem(t("The download ended early. It will pick up where it left off."), "network");
   }
   await rename(partPath(target), target);
   await rm(metaPath(target), { force: true });

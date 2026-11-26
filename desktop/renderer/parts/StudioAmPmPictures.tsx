@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import type { CorosWatchfaceArtwork, CorosWatchfaceRasterFont } from "../../watchface/types";
 import type { Design } from "../studioFace";
 import { readArtwork } from "../studioEdits";
+import { t } from "@/lib/i18n";
 import { Icon } from "./StudioIcon";
 
 type Edit = (fn: (d: Design) => Design) => void;
@@ -42,18 +43,18 @@ export function AmPmPictures({ design, edit, fail }: { design: Design; edit: Edi
   if (!design.ampmIndicator) return null;
   return (
     <div className="st-ampm">
-      <div className="st-ampm-row" role="group" aria-label="AM and PM pictures">
+      <div className="st-ampm-row" role="group" aria-label={t("AM and PM pictures")}>
         {(["AM", "PM"] as const).map((label) => (
-          <button key={label} type="button" className="st-ampm-pic" aria-label={`Replace the ${label} picture`} onClick={() => { setWhich(label); input.current?.click(); }}>
+          <button key={label} type="button" className="st-ampm-pic" aria-label={t("Replace the {label} picture", { label })} onClick={() => { setWhich(label); input.current?.click(); }}>
             <span className="st-ampm-prev" data-checker="">{pictures[label] ? <img src={pictures[label]} alt="" /> : <b>{label}</b>}</span>
-            <span className="st-ampm-copy"><b>{label}</b><small>{pictures[label] ? "Yours" : "Template"}</small></span>
+            <span className="st-ampm-copy"><b>{label}</b><small>{pictures[label] ? t("Yours") : t("Template")}</small></span>
             <Icon name="upload" size={15} />
           </button>
         ))}
       </div>
       {pictures.AM || pictures.PM ? (
-        <button type="button" className="chip st-chip-btn" onClick={() => edit(resetAmPmPictures)}><Icon name="refresh" size={15} />Use the template's</button>
-      ) : <span className="st-note">AM shows before noon and PM after, in 12-hour mode.</span>}
+        <button type="button" className="chip st-chip-btn" onClick={() => edit(resetAmPmPictures)}><Icon name="refresh" size={15} />{t("Use the template's")}</button>
+      ) : <span className="st-note">{t("AM shows before noon and PM after, in 12-hour mode.")}</span>}
       <input ref={input} type="file" hidden accept="image/png" onChange={(e) => {
         const f = e.target.files?.[0]; e.target.value = "";
         if (f) void readArtwork(f).then((art) => edit((x) => setAmPmPicture(x, which, art))).catch(fail);

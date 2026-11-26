@@ -3,6 +3,7 @@
 import type { BodyExtra, BodyLift, BodyNumber } from "@/data/coach";
 import type { HubWorkout, HubWorkoutStep } from "@/data/hub";
 import type { NativeGymWorkout } from "@/data/sync/native";
+import { t, tx } from "@/lib/i18n";
 import { formatClock } from "@/lib/workout";
 
 /** An exercise's best working set the last time it was logged: its heaviest weight, the most reps at it, the longest hold. */
@@ -41,12 +42,12 @@ const plus = (n: number) => `+${Number(n.toFixed(2))}`;
 const minutes = (seconds: number): BodyNumber => (seconds % 60 === 0 ? { value: String(seconds / 60), unit: "min" } : { value: formatClock(seconds), unit: "" });
 
 function each(s: HubWorkoutStep): BodyNumber {
-  if (s.target === "reps") return { value: String(s.count ?? 0), unit: s.count === 1 ? "rep" : "reps" };
+  if (s.target === "reps") return { value: String(s.count ?? 0), unit: s.count === 1 ? t("rep") : t("reps") };
   if (s.target === "time") {
     const sec = s.seconds ?? 0;
-    return sec < 60 ? { value: String(sec), unit: "s hold" } : { value: formatClock(sec), unit: "hold" };
+    return sec < 60 ? { value: String(sec), unit: t("s hold") } : { value: formatClock(sec), unit: t("hold") };
   }
-  return { value: "", unit: "to lap button" };
+  return { value: "", unit: t("to lap button") };
 }
 
 function load(s: HubWorkoutStep): BodyLift["load"] {
@@ -68,7 +69,7 @@ function upOn(s: HubWorkoutStep, name: string, history: LiftHistory | null): Bod
 }
 
 const extraName = (s: HubWorkoutStep, fallback: string) => s.exercise?.name ?? s.name ?? fallback;
-const extraAmount = (s: HubWorkoutStep): BodyNumber => (s.target === "time" ? minutes(s.seconds ?? 0) : { value: "", unit: "to lap button" });
+const extraAmount = (s: HubWorkoutStep): BodyNumber => (s.target === "time" ? minutes(s.seconds ?? 0) : { value: "", unit: t("to lap button") });
 
 /**
  * The strength workout as the card lists it. Warm-ups at the start and cool-downs at the end stand apart; every
@@ -79,11 +80,11 @@ export function strengthLines(w: HubWorkout, history: LiftHistory | null = null)
   let first = 0, last = steps.length;
   while (first < last && steps[first].s.kind === "warmup") first++;
   while (last > first && steps[last - 1].s.kind === "cooldown") last--;
-  const before = steps.slice(0, first).map(({ s }) => ({ name: extraName(s, "Warm-up"), amount: extraAmount(s) }));
-  const after = steps.slice(last).map(({ s }) => ({ name: extraName(s, "Cool-down"), amount: extraAmount(s) }));
+  const before = steps.slice(0, first).map(({ s }) => ({ name: extraName(s, t("Warm-up")), amount: extraAmount(s) }));
+  const after = steps.slice(last).map(({ s }) => ({ name: extraName(s, t("Cool-down")), amount: extraAmount(s) }));
   const lifts = steps.slice(first, last).map(({ s, times }): BodyLift => {
-    if (s.kind === "rest") return { kind: "rest", name: "Rest", sets: 0, each: { value: "", unit: "" }, load: null, rest: s.target === "time" ? formatClock(s.seconds ?? 0) : "" };
-    const name = s.exercise?.name ?? s.name ?? (s.kind === "warmup" ? "Warm-up" : s.kind === "cooldown" ? "Cool-down" : "Exercise");
+    if (s.kind === "rest") return { kind: "rest", name: t("Rest"), sets: 0, each: { value: "", unit: "" }, load: null, rest: s.target === "time" ? formatClock(s.seconds ?? 0) : "" };
+    const name = s.exercise?.name ?? s.name ?? (s.kind === "warmup" ? t("Warm-up") : s.kind === "cooldown" ? t("Cool-down") : tx("step", "Exercise"));
     const up = upOn(s, name, history);
     return { kind: "lift", name, sets: (s.sets ?? 1) * times, each: each(s), load: load(s), rest: s.restSeconds ? formatClock(s.restSeconds) : "", ...(up ? { up } : {}) };
   });

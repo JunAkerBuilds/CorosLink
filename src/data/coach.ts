@@ -8,6 +8,7 @@ import type { PlanOp, PlanTarget, PlanUndo } from "@/lib/coach/plan";
 import type { PlanDraft, PlanEditOp, PlanEditRow } from "@/lib/coach/plans";
 import type { CoachEvent } from "@/lib/coach/loop";
 import { plannedBody } from "@/lib/coach/plan";
+import { msg, t, tx } from "@/lib/i18n";
 import { fromSample, fromSynced, NotWiredError, type Loaded } from "./core";
 import { hubCalendar, hubDeleteWorkout, hubMoveScheduled, hubRemoveScheduled, hubSaveWorkout, hubScheduleWorkout, hubSession, hubUpdateScheduled, type HubCalendarDay, type HubSport, type HubWorkout } from "./hub";
 import { titleFrom } from "./local/coach";
@@ -74,7 +75,8 @@ export interface FuelCard extends CardBase {
   burnedKcal: number | null;
   macros: { name: string; hue: CoachHue; grams: number; leftGrams: number }[];
   /** A meal idea. With its numbers and day it can be logged; `logged` is set once the athlete did. */
-  meal?: { slot: string; name: string; detail: string; kcal?: number; proteinG?: number; carbsG?: number; fatG?: number; day?: string; logged?: { entryId: string; at: number } };
+  /** `slot` is the meal's name as shown; `slotId` the meal it is logged under (older cards have only an English `slot`). */
+  meal?: { slot: string; slotId?: "breakfast" | "lunch" | "dinner" | "snack"; name: string; detail: string; kcal?: number; proteinG?: number; carbsG?: number; fatG?: number; day?: string; logged?: { entryId: string; at: number } };
 }
 
 /** One metric over time, with the day Coach means marked. */
@@ -361,20 +363,23 @@ export interface CoachData {
 
 /* ───────────── Loading ───────────── */
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS = [msg("Jan"), msg("Feb"), msg("Mar"), msg("Apr"), msg("May"), msg("Jun"), msg("Jul"), msg("Aug"), msg("Sep"), msg("Oct"), msg("Nov"), msg("Dec")];
 const two = (n: number) => String(n).padStart(2, "0");
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
 /** 09:21 for today, else 19 Nov. */
 export function stampOf(ms: number, now: Date): string {
   const d = new Date(ms);
-  return startOfDay(d) === startOfDay(now) ? `${two(d.getHours())}:${two(d.getMinutes())}` : `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return startOfDay(d) === startOfDay(now) ? `${two(d.getHours())}:${two(d.getMinutes())}` : t("{day} {month}", { day: d.getDate(), month: tx("month", MONTHS[d.getMonth()]) });
 }
 
 export function groupOf(ms: number, now: Date): Conversation["group"] {
   const days = Math.round((startOfDay(now) - startOfDay(new Date(ms))) / 86_400_000);
-  return days <= 0 ? "Today" : days < 7 ? "This week" : "Earlier";
+  return days <= 0 ? msg("Today") : days < 7 ? msg("This week") : msg("Earlier");
 }
+
+/** A conversation group's name for the screen. The group itself stays English: it is compared. */
+export const groupName = (group: Conversation["group"]): string => t(group);
 
 /** The id of a message's item: its conversation and its place in it. */
 export const messageItemId = (conversationId: string, n: number): string => `${conversationId}.${String(n).padStart(4, "0")}`;
@@ -411,17 +416,17 @@ export function conversationsFrom(conversations: readonly Item<CoachConversation
 function lookingAt(view: SyncView): CoachData["looking"] {
   const out: CoachData["looking"] = [];
   const activities = view.all("activity").length, nights = view.all("health.night").length, gym = view.all("gym.workout").length, foods = view.all("fuel.entry").length;
-  if (activities) out.push({ label: "Activities", value: String(activities) });
+  if (activities) out.push({ label: t("Activities"), value: String(activities) });
   const f = view.get("view.training", "me")?.fitness;
   if (f?.fitness?.length && f.fatigue?.length === f.fitness.length) {
     const fit = f.fitness[f.fitness.length - 1], fat = f.fatigue[f.fatigue.length - 1], form = Math.round((fit - fat) * 10) / 10;
-    out.push({ label: "Fitness / fatigue / form", value: `${fit} / ${fat} / ${form < 0 ? `−${Math.abs(form)}` : `+${form}`}` });
+    out.push({ label: t("Fitness / fatigue / form"), value: `${fit} / ${fat} / ${form < 0 ? `−${Math.abs(form)}` : `+${form}`}` });
   }
-  if (nights) out.push({ label: "Nights of sleep", value: String(nights) });
-  if (gym) out.push({ label: "Gym workouts", value: String(gym) });
-  if (foods) out.push({ label: "Foods logged", value: String(foods) });
+  if (nights) out.push({ label: t("Nights of sleep"), value: String(nights) });
+  if (gym) out.push({ label: t("Gym workouts"), value: String(gym) });
+  if (foods) out.push({ label: t("Foods logged"), value: String(foods) });
   const memory = view.all("coach.memory").length;
-  if (memory) out.push({ label: "Remembered", value: String(memory) });
+  if (memory) out.push({ label: t("Remembered"), value: String(memory) });
   return out;
 }
 
@@ -452,11 +457,11 @@ async function api<T>(path: string): Promise<T> {
   try {
     response = await fetch(path, { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } });
   } catch {
-    throw new CoachError("unreachable", "C-LINK couldn't be reached. Try again.");
+    throw new CoachError("unreachable", t("C-LINK couldn't be reached. Try again."));
   }
   const payload = (await response.json().catch(() => null)) as (T & { error?: { code?: string; message?: string } }) | null;
   if (response.ok && payload) return payload;
-  throw new CoachError(payload?.error?.code ?? `http_${response.status}`, payload?.error?.message ?? "Coach couldn't do that.");
+  throw new CoachError(payload?.error?.code ?? `http_${response.status}`, payload?.error?.message ?? t("Coach couldn't do that."));
 }
 
 export const loadCoachAccess = (): Promise<CoachAccessInfo> => api<CoachAccessInfo>("/api/coach/key");
@@ -465,7 +470,7 @@ export const loadCoachAccess = (): Promise<CoachAccessInfo> => api<CoachAccessIn
 
 async function signedIn(): Promise<SyncView> {
   const view = await syncView();
-  if (!view) throw new NotWiredError("coach", "Coach reads your own data, which isn't open yet. Try again in a moment.");
+  if (!view) throw new NotWiredError("coach", t("Coach reads your own data, which isn't open yet. Try again in a moment."));
   return view;
 }
 
@@ -530,15 +535,15 @@ export async function sendToCoach(conversationId: string, text: string, options:
   let question = text.trim();
   if (options.retry) {
     const lastYou = thread.map((m) => m.message.from).lastIndexOf("you");
-    if (lastYou < 0) throw new CoachError("nothing_to_retry", "There is no question to ask again.");
+    if (lastYou < 0) throw new CoachError("nothing_to_retry", t("There is no question to ask again."));
     for (const m of thread.slice(lastYou + 1)) remove("coach.message", m.itemId);
     const asked = thread[lastYou].message;
     question = asked.from === "you" ? asked.text : "";
     thread = thread.slice(0, lastYou);
   }
   const files = options.retry ? [] : options.files ?? [];
-  if (!question && files.length) question = files.length === 1 ? "What do you make of this file?" : "What do you make of these files?";
-  if (!question) throw new CoachError("empty", "Type a question for Coach.");
+  if (!question && files.length) question = files.length === 1 ? t("What do you make of this file?") : t("What do you make of these files?");
+  if (!question) throw new CoachError("empty", t("Type a question for Coach."));
   const had = view.get("coach.conversation", conversationId), now = Date.now();
   const conversation: CoachConversationBody = { title: had?.title ?? titleFrom(question), startedAt: had?.startedAt ?? dateToRef(new Date(now)), updatedAt: dateToRef(new Date(now)), suggestions: [], sources: [] };
   let n = thread.length ? thread[thread.length - 1].n + 1 : 0;
@@ -554,7 +559,7 @@ export async function sendToCoach(conversationId: string, text: string, options:
     for (const b of blocks) if (b.kind === "note" && b.note === "remembered") put("coach.memory", b.id, { text: b.text, at });
     return reply;
   };
-  const failed = (message: string): CoachBlock => ({ kind: "failed", id: newUuid(), title: "Coach couldn't answer", text: message, tried: "" });
+  const failed = (message: string): CoachBlock => ({ kind: "failed", id: newUuid(), title: t("Coach couldn't answer"), text: message, tried: "" });
 
   let response: Response;
   try {
@@ -567,12 +572,12 @@ export async function sendToCoach(conversationId: string, text: string, options:
       }),
     });
   } catch {
-    if (options.signal?.aborted) return save([{ kind: "note", id: newUuid(), note: "read", text: "Stopped before Coach answered." }]);
-    return save([failed("Coach couldn't be reached. Check your connection and try again.")]);
+    if (options.signal?.aborted) return save([{ kind: "note", id: newUuid(), note: "read", text: t("Stopped before Coach answered.") }]);
+    return save([failed(t("Coach couldn't be reached. Check your connection and try again."))]);
   }
   if (!response.ok || !response.body) {
     const payload = (await response.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
-    const code = payload?.error?.code ?? `http_${response.status}`, message = payload?.error?.message ?? "Coach couldn't answer.";
+    const code = payload?.error?.code ?? `http_${response.status}`, message = payload?.error?.message ?? t("Coach couldn't answer.");
     if (code === "no_key" || code === "signed_out") throw new CoachError(code, message);
     return save([failed(message)]);
   }
@@ -605,7 +610,7 @@ export async function sendToCoach(conversationId: string, text: string, options:
     }
     take(buffer);
   } catch {
-    if (!options.signal?.aborted) problem ??= "The connection dropped before Coach finished.";
+    if (!options.signal?.aborted) problem ??= t("The connection dropped before Coach finished.");
   }
   const finished = done as Extract<CoachEvent, { t: "done" }> | null;
   if (finished) {
@@ -614,8 +619,8 @@ export async function sendToCoach(conversationId: string, text: string, options:
     return reply;
   }
   const partial = [...blocks, ...paragraphs(words)];
-  if (options.signal?.aborted) return save([...partial, { kind: "note", id: newUuid(), note: "read", text: "Stopped before Coach finished." }]);
-  return save([...partial, failed(problem ?? "Coach stopped before finishing.")]);
+  if (options.signal?.aborted) return save([...partial, { kind: "note", id: newUuid(), note: "read", text: t("Stopped before Coach finished.") }]);
+  return save([...partial, failed(problem ?? t("Coach stopped before finishing."))]);
 }
 
 /**
@@ -648,7 +653,7 @@ export async function deleteConversation(conversationId: string): Promise<void> 
 
 /* ───────────── Card actions: the only places Coach's suggestions are written ───────────── */
 
-const SAMPLE_CARD = "This is a sample card. Coach works on your own data.";
+const SAMPLE_CARD = msg("This is a sample card. Coach works on your own data.");
 
 /** Rewrites one block of a saved conversation (a card's state after its button was pressed). */
 /* A card's latest state, published the moment a button changes it, so every copy of the conversation on screen
@@ -676,12 +681,12 @@ async function updateBlock(conversationId: string, blockId: string, change: (blo
     if (next) publish(next);
     return;
   }
-  throw new Error("This card's conversation is not in your account any more.");
+  throw new Error(t("This card's conversation is not in your account any more."));
 }
 
 const hubConnected = async (): Promise<boolean> => (await hubSession().catch(() => null))?.state === "signedIn";
 
-const NEEDS_HUB = "This workout has steps only COROS can hold. Connect COROS Training Hub on the Connections page, then add it.";
+const NEEDS_HUB = msg("This workout has steps only COROS can hold. Connect COROS Training Hub on the Connections page, then add it.");
 
 /**
  * Puts a workout on a day: on the COROS calendar when Training Hub is connected and COROS can hold it, otherwise
@@ -692,7 +697,7 @@ async function placeWorkout(day: string, w: { workout: Workout | null | undefine
     const idInPlan = (await hubScheduleWorkout(day, w.hub)).data;
     return { where: "coros", ref: idInPlan, undo: { undo: "coros_remove", day, idInPlan, name: w.hub.name } };
   }
-  if (!w.workout) throw new Error(NEEDS_HUB);
+  if (!w.workout) throw new Error(t(NEEDS_HUB));
   const saved: SavedWorkout = { ...w.workout, date: day, summary: { detail: w.detail, metres: w.metres ?? 0, load: w.load ?? 0 }, savedAt: new Date().toISOString() };
   saveWorkout(saved);
   return { where: "browser", ref: saved.id, undo: { undo: "browser_delete", workoutId: saved.id } };
@@ -701,20 +706,20 @@ async function placeWorkout(day: string, w: { workout: Workout | null | undefine
 /** Replaces a planned workout's steps and name with the card's, where it already is. */
 async function changeWorkout(card: WorkoutCard, was: PlanTarget): Promise<{ where: "coros" | "browser"; ref: string; undo: PlanUndo }> {
   if (was.coros) {
-    if (!card.hub || !was.coros.workout) throw new Error(`“${was.name}” can't be rewritten on COROS from here.`);
-    if (!(await hubConnected())) throw new Error("Connect COROS Training Hub on the Connections page to change the COROS calendar.");
+    if (!card.hub || !was.coros.workout) throw new Error(t("“{name}” can't be rewritten on COROS from here.", { name: was.name }));
+    if (!(await hubConnected())) throw new Error(t("Connect COROS Training Hub on the Connections page to change the COROS calendar."));
     const where = { day: was.date, idInPlan: was.coros.idInPlan, name: was.coros.name };
     await hubUpdateScheduled(where, card.hub);
     return { where: "coros", ref: was.coros.idInPlan, undo: { undo: "coros_update", day: was.date, idInPlan: was.coros.idInPlan, name: card.hub.name, workout: was.coros.workout } };
   }
   if (was.browser) {
     const saved = savedWorkouts().find((w) => w.id === was.browser!.workoutId);
-    if (!saved) throw new Error(`“${was.name}” is not saved on this computer any more.`);
-    if (!card.workout) throw new Error(NEEDS_HUB);
+    if (!saved) throw new Error(t("“{name}” is not saved on this computer any more.", { name: was.name }));
+    if (!card.workout) throw new Error(t(NEEDS_HUB));
     saveWorkout({ ...card.workout, id: saved.id, date: saved.date, repeatWeeks: saved.repeatWeeks, summary: { detail: card.summary, metres: card.totals?.metres ?? 0, load: card.totals?.load ?? 0 }, savedAt: new Date().toISOString() });
     return { where: "browser", ref: saved.id, undo: { undo: "browser_restore", saved } };
   }
-  throw new Error(`“${was.name}” can't be changed from here.`);
+  throw new Error(t("“{name}” can't be changed from here.", { name: was.name }));
 }
 
 /**
@@ -722,7 +727,7 @@ async function changeWorkout(card: WorkoutCard, was: PlanTarget): Promise<{ wher
  * it names. What Undo needs is kept on the card.
  */
 export async function addCoachWorkout(conversationId: string, card: WorkoutCard): Promise<void> {
-  if (!card.workout && !card.hub) throw new NotWiredError("coach.workout", SAMPLE_CARD);
+  if (!card.workout && !card.hub) throw new NotWiredError("coach.workout", t(SAMPLE_CARD));
   if (card.added) return;
   const done = card.replaces ? await changeWorkout(card, card.replaces) : await placeWorkout(card.date, { workout: card.workout, hub: card.hub, detail: card.summary, metres: card.totals?.metres, load: card.totals?.load });
   const added: NonNullable<WorkoutCard["added"]> = { ...done, at: Date.now() };
@@ -731,7 +736,7 @@ export async function addCoachWorkout(conversationId: string, card: WorkoutCard)
 
 /** "Not now" on a workout card, and back. Nothing is saved anywhere but the card. */
 export async function declineCoachWorkout(conversationId: string, card: WorkoutCard, declined: boolean): Promise<void> {
-  if (!card.workout && !card.hub) throw new NotWiredError("coach.workout", SAMPLE_CARD);
+  if (!card.workout && !card.hub) throw new NotWiredError("coach.workout", t(SAMPLE_CARD));
   await updateBlock(conversationId, card.id, (b) => {
     if (b.kind !== "workout") return b;
     if (declined) return { ...b, declined: { at: Date.now() } };
@@ -750,9 +755,9 @@ export async function undoCoachWorkout(conversationId: string, card: WorkoutCard
 
 /** Saves the card's workout to the COROS workout library, without putting it on a day. */
 export async function saveCoachWorkoutToLibrary(conversationId: string, card: WorkoutCard): Promise<void> {
-  if (!card.hub) throw new Error("Only workouts COROS can hold go in the COROS workout library.");
+  if (!card.hub) throw new Error(t("Only workouts COROS can hold go in the COROS workout library."));
   if (card.inLibrary) return;
-  if (!(await hubConnected())) throw new Error("Connect COROS Training Hub on the Connections page to save to your COROS workout library.");
+  if (!(await hubConnected())) throw new Error(t("Connect COROS Training Hub on the Connections page to save to your COROS workout library."));
   const saved = (await hubSaveWorkout(card.hub)).data;
   await updateBlock(conversationId, card.id, (b) => (b.kind === "workout" ? { ...b, inLibrary: { id: saved.id, at: Date.now() } } : b));
 }
@@ -771,15 +776,15 @@ async function applyOp(op: PlanOp): Promise<PlanUndo> {
   if (op.op === "add_workout") return (await placeWorkout(op.day, { workout: op.workout, hub: op.hub, detail: op.detail, load: op.load })).undo;
   const e = op.entry;
   if (e.source === "coros" && e.coros) {
-    if (!(await hubConnected())) throw new Error("Connect COROS Training Hub on the Connections page to change the COROS calendar.");
+    if (!(await hubConnected())) throw new Error(t("Connect COROS Training Hub on the Connections page to change the COROS calendar."));
     const where = { day: e.date, idInPlan: e.coros.idInPlan, name: e.coros.name };
     if (op.op === "move") return { undo: "coros_move", name: e.coros.name, day: op.to, idInPlan: (await hubMoveScheduled(where, op.to)).data, to: e.date };
     await hubRemoveScheduled(where);
-    return e.coros.workout ? { undo: "coros_add", day: e.date, workout: e.coros.workout } : { undo: "none", why: `“${e.name}” has steps this app can't write, so it can't be put back from here.` };
+    return e.coros.workout ? { undo: "coros_add", day: e.date, workout: e.coros.workout } : { undo: "none", why: t("“{name}” has steps this app can't write, so it can't be put back from here.", { name: e.name }) };
   }
   if (e.source === "browser" && e.browser) {
     const saved = savedWorkouts().find((w) => w.id === e.browser!.workoutId);
-    if (!saved) throw new Error(`“${e.name}” is not saved on this computer any more.`);
+    if (!saved) throw new Error(t("“{name}” is not saved on this computer any more.", { name: e.name }));
     if (op.op === "move") { saveWorkout({ ...saved, date: op.to }); return { undo: "browser_put", workoutId: saved.id, date: e.date }; }
     deleteWorkout(saved.id);
     return { undo: "browser_restore", saved };
@@ -789,7 +794,7 @@ async function applyOp(op: PlanOp): Promise<PlanUndo> {
     else remove("gym.planned", e.planned.id);
     return { undo: "gym_put", planned: e.planned };
   }
-  throw new Error(`“${e.name}” can't be changed from here.`);
+  throw new Error(t("“{name}” can't be changed from here.", { name: e.name }));
 }
 
 async function undoOp(step: PlanUndo): Promise<void> {
@@ -812,7 +817,7 @@ async function undoOp(step: PlanUndo): Promise<void> {
  * through are kept on the card (so Undo takes them back) and the failure is thrown.
  */
 export async function applyPlanChange(conversationId: string, card: PlanCard): Promise<void> {
-  if (!card.ops) throw new NotWiredError("coach.apply", SAMPLE_CARD);
+  if (!card.ops) throw new NotWiredError("coach.apply", t(SAMPLE_CARD));
   if (card.applied) return;
   const undo: PlanUndo[] = [];
   let problem: Error | null = null;
@@ -820,7 +825,7 @@ export async function applyPlanChange(conversationId: string, card: PlanCard): P
     try { undo.push(await applyOp(op)); } catch (e) { problem = e instanceof Error ? e : new Error(String(e)); break; }
   }
   if (undo.length) await updateBlock(conversationId, card.id, (b) => (b.kind === "plan" ? { ...b, kept: false, applied: { at: Date.now(), undo, steps: undo.length } } : b));
-  if (problem) throw new Error(undo.length ? `${undo.length} of ${card.ops.length} changes were made, then: ${problem.message}` : problem.message);
+  if (problem) throw new Error(undo.length ? t("{done} of {all} changes were made, then: {problem}", { done: undo.length, all: card.ops.length, problem: problem.message }) : problem.message);
 }
 
 /** Takes an applied plan change back, last step first. */
@@ -851,12 +856,12 @@ export interface OpenPlanEditor { plan: TrainingPlanDocument; apply: (next: Trai
 export async function applyCoachPlanEdit(conversationId: string, card: PlanEditCard, editor: OpenPlanEditor | null): Promise<void> {
   if (card.applied) return;
   if (editor && editor.plan.id === card.planId) {
-    editor.apply(applyPlanEdit(editor.plan, card.ops, nextStep), `Coach: ${card.title}`);
+    editor.apply(applyPlanEdit(editor.plan, card.ops, nextStep), t("Coach: {title}", { title: card.title }));
     await updateBlock(conversationId, card.id, (b) => (b.kind === "planEdit" ? { ...b, kept: false, applied: { at: Date.now(), in: "editor" } } : b));
     return;
   }
   const plan = savedPlans().find((p) => p.id === card.planId);
-  if (!plan) throw new Error(`“${card.planName}” isn't saved in this app any more.`);
+  if (!plan) throw new Error(t("“{name}” isn't saved in this app any more.", { name: card.planName }));
   const next = applyPlanEdit(plan, card.ops, nextStep);
   const problem = validateTrainingPlan(next).find((i) => i.severity === "error");
   if (problem) throw new Error(problem.message);
@@ -869,11 +874,11 @@ export async function applyCoachPlanEdit(conversationId: string, card: PlanEditC
 export async function undoCoachPlanEdit(conversationId: string, card: PlanEditCard, editor: OpenPlanEditor | null): Promise<void> {
   if (!card.applied) return;
   if (card.applied.in === "editor") {
-    if (!editor || editor.plan.id !== card.planId) throw new Error(`Open “${card.planName}” in the plan editor to undo this there, or use its Undo button.`);
+    if (!editor || editor.plan.id !== card.planId) throw new Error(t("Open “{name}” in the plan editor to undo this there, or use its Undo button.", { name: card.planName }));
     editor.undo();
   } else {
     const was = planUndoStore.get()[card.id];
-    if (!was) throw new Error("This change was made on another device or too long ago to undo here.");
+    if (!was) throw new Error(t("This change was made on another device or too long ago to undo here."));
     putPlan(was);
     const { [card.id]: _gone, ...rest } = planUndoStore.get(); void _gone;
     planUndoStore.set(rest);
@@ -901,14 +906,14 @@ export async function replaceOpenPlanWithDraft(conversationId: string, card: Pla
   if (card.replaced || card.saved) return;
   const made = planFromDraft(card.draft, nextStep);
   const was = editor.plan;
-  editor.apply({ ...was, name: made.name, goal: made.goal || was.goal, description: made.description, startDate: made.startDate, weekCount: made.weekCount, entries: made.entries, phases: made.phases, sportMix: made.sportMix }, `Coach's plan: ${made.name}`);
+  editor.apply({ ...was, name: made.name, goal: made.goal || was.goal, description: made.description, startDate: made.startDate, weekCount: made.weekCount, entries: made.entries, phases: made.phases, sportMix: made.sportMix }, t("Coach's plan: {name}", { name: made.name }));
   await updateBlock(conversationId, card.id, (b) => (b.kind === "planDraft" ? { ...b, replaced: { planId: was.id, planName: was.name, at: Date.now() } } : b));
 }
 
 /** Takes a replace back through the editor's own undo. */
 export async function undoReplaceOpenPlan(conversationId: string, card: PlanDraftCard, editor: OpenPlanEditor | null): Promise<void> {
   if (!card.replaced) return;
-  if (!editor || editor.plan.id !== card.replaced.planId) throw new Error(`Open “${card.replaced.planName}” in the plan editor to undo this, or use its Undo button.`);
+  if (!editor || editor.plan.id !== card.replaced.planId) throw new Error(t("Open “{name}” in the plan editor to undo this, or use its Undo button.", { name: card.replaced.planName }));
   editor.undo();
   await updateBlock(conversationId, card.id, (b) => { if (b.kind !== "planDraft") return b; const { replaced: _r, ...rest } = b; void _r; return rest; });
 }
@@ -922,17 +927,17 @@ export function openCoachPlanDraft(card: PlanDraftCard): string {
 
 /** "Keep as is" and "Review again". */
 export async function keepPlan(conversationId: string, card: PlanCard, kept: boolean): Promise<void> {
-  if (!card.ops) throw new NotWiredError("coach.apply", SAMPLE_CARD);
+  if (!card.ops) throw new NotWiredError("coach.apply", t(SAMPLE_CARD));
   await updateBlock(conversationId, card.id, (b) => (b.kind === "plan" ? { ...b, kept } : b));
 }
 
 /** Logs the meal Coach suggested in Fuel, on the day and meal the card names. */
 export async function logCoachMeal(conversationId: string, card: FuelCard): Promise<void> {
   const m = card.meal;
-  if (!m || m.kcal == null || !m.day) throw new NotWiredError("coach.meal", SAMPLE_CARD);
+  if (!m || m.kcal == null || !m.day) throw new NotWiredError("coach.meal", t(SAMPLE_CARD));
   if (m.logged) return;
   await signedIn();
-  const meal = m.slot.toLowerCase() as "breakfast" | "lunch" | "dinner" | "snack";
+  const meal = m.slotId ?? (m.slot.toLowerCase() as "breakfast" | "lunch" | "dinner" | "snack");
   const per = { kcal: m.kcal, protein: m.proteinG ?? 0, carbs: m.carbsG ?? 0, fat: m.fatG ?? 0, fiber: 0, sugar: 0, satFat: 0, sodium: 0, cholesterol: 0 };
   const made = newEntry({ id: newUuid(), itemId: newUuid(), day: m.day, meal, food: { id: "", name: m.name, unit: "serving", amount: 1, per }, origin: { from: "own" }, now: new Date() });
   put("fuel.entry", made.entry.id, made.entry);
@@ -949,11 +954,11 @@ export async function undoCoachMeal(conversationId: string, card: FuelCard): Pro
 
 /** Saves a brief Coach wrote, or removes a saved one. */
 export async function saveCoachBrief(conversationId: string, card: BriefCard): Promise<void> {
-  if (!card.day) throw new NotWiredError("coach.brief", SAMPLE_CARD);
+  if (!card.day) throw new NotWiredError("coach.brief", t(SAMPLE_CARD));
   await signedIn();
   const at = new Date();
   put("coach.brief", card.id, { title: card.title, day: card.day, goal: card.goal, cues: card.cues, fuel: card.fuel, at: dateToRef(at) });
-  await updateBlock(conversationId, card.id, (b) => (b.kind === "brief" ? { ...b, briefId: card.id, saved: "Saved", savedNote: `On this computer · ${stampOf(at.getTime(), at)}` } : b));
+  await updateBlock(conversationId, card.id, (b) => (b.kind === "brief" ? { ...b, briefId: card.id, saved: t("Saved"), savedNote: t("On this computer · {time}", { time: stampOf(at.getTime(), at) }) } : b));
 }
 
 export async function removeCoachBrief(conversationId: string, card: BriefCard): Promise<void> {
@@ -966,7 +971,7 @@ export async function removeCoachBrief(conversationId: string, card: BriefCard):
 /** Has Coach forget something it was told to remember. */
 export async function forgetFact(conversationId: string, line: NoteLine): Promise<void> {
   const view = await signedIn();
-  if (!view.get("coach.memory", line.id) && !line.id.includes("-")) throw new NotWiredError("coach.forget", SAMPLE_CARD);
+  if (!view.get("coach.memory", line.id) && !line.id.includes("-")) throw new NotWiredError("coach.forget", t(SAMPLE_CARD));
   remove("coach.memory", line.id);
   await updateBlock(conversationId, line.id, (b) => (b.kind === "note" ? { ...b, forgotten: true } : b));
 }
@@ -1004,5 +1009,5 @@ export async function answerQuestion(conversationId: string, card: QuestionCard,
 
 /** Files can't be sent to Coach from the web yet. */
 export async function attachToCoach(): Promise<never> {
-  throw new NotWiredError("coach.attach", "Attaching files isn't connected on the web yet.");
+  throw new NotWiredError("coach.attach", t("Attaching files isn't connected on the web yet."));
 }

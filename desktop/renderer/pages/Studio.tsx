@@ -4,6 +4,7 @@
 // computer (desktop/main/watchface/studio.ts).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Select } from "@/components/ui";
+import { msg, t } from "@/lib/i18n";
 import { WATCHFACE_TARGETS, getWatchfaceTarget } from "../../watchface/watchfaceTargets";
 import type { CorosWatchfaceDesignState } from "../../watchface/types";
 import { FaceView } from "../parts/FaceView";
@@ -21,10 +22,10 @@ import "./studio.css";
 
 type Tab = "mine" | "templates" | "community";
 /** Community has its own search in its toolbar. */
-const SEARCH_HINT: Record<Exclude<Tab, "community">, string> = { mine: "Search your faces", templates: "Template name, ID or category" };
-const watchName = (firmwareType?: string) => getWatchfaceTarget(firmwareType)?.label ?? "Watch";
+const SEARCH_HINT: Record<Exclude<Tab, "community">, string> = { mine: msg("Search your faces"), templates: msg("Template name, ID or category") };
+const watchName = (firmwareType?: string) => getWatchfaceTarget(firmwareType)?.label ?? t("Watch");
 /** A blank face is built on the watch's first digital template, so adding the time brings back digits, not hands. */
-const blankBase = (templates: TemplateItem[]) => templates.find((t) => t.templateType === 1) ?? templates[0];
+const blankBase = (templates: TemplateItem[]) => templates.find((x) => x.templateType === 1) ?? templates[0];
 /** A new project's design until the editor sets it up from the template on first open (CorosLink's version 1). */
 const UNSET = { version: 1 } as unknown as CorosWatchfaceDesignState;
 
@@ -94,47 +95,47 @@ export default function Studio() {
   return (
     <main className="page st-home">
       <div className="st-title-row">
-        <h1>Studio</h1>
+        <h1>{t("Studio")}</h1>
         <span className="st-grow" />
         <AccountChip account={account} onOpen={() => { setDialog("account"); void readAccount(); }} />
-        <Button onClick={() => setDialog("import")}><Icon name="upload" size={16} />Import</Button>
-        <Button variant="primary" onClick={() => setTab("templates")}><Icon name="plus" size={16} width={2.2} />New face</Button>
+        <Button onClick={() => setDialog("import")}><Icon name="upload" size={16} />{t("Import")}</Button>
+        <Button variant="primary" onClick={() => setTab("templates")}><Icon name="plus" size={16} width={2.2} />{t("New face")}</Button>
       </div>
       {problem ? <div className="notice" role="alert">{problem}</div> : null}
 
-      <section className="st-watch card" aria-label="On your watch">
+      <section className="st-watch card" aria-label={t("On your watch")}>
         <div className="st-watch-who">
           <span className="st-watch-icon"><Icon name="watch" size={26} /></span>
           <span className="st-watch-text">
             <span className="st-watch-name">
-              <Select aria-label="Watch" value={target.model} onChange={(e) => pickWatch(e.target.value)} className="st-watch-select">
-                {WATCHFACE_TARGETS.map((t) => <option key={t.model} value={t.model}>{t.label}</option>)}
+              <Select aria-label={t("Watch")} value={target.model} onChange={(e) => pickWatch(e.target.value)} className="st-watch-select">
+                {WATCHFACE_TARGETS.map((w) => <option key={w.model} value={w.model}>{w.label}</option>)}
               </Select>
               <i aria-hidden="true" />
             </span>
-            <span className="st-watch-sub">Not connected over Bluetooth · {target.previewSize} × {target.previewSize} {target.display === "amoled" ? "AMOLED" : "MIP"}</span>
+            <span className="st-watch-sub">{t("Not connected over Bluetooth")} · {target.previewSize} × {target.previewSize} {target.display === "amoled" ? "AMOLED" : "MIP"}</span>
           </span>
         </div>
-        <p className="st-watch-later">Its face slots show here once C-LINK connects to your watch over Bluetooth.</p>
+        <p className="st-watch-later">{t("Its face slots show here once C-LINK connects to your watch over Bluetooth.")}</p>
       </section>
 
       <div className="st-tabs-row">
-        <div role="tablist" aria-label="Studio sections" className="seg st-tabbar">
-          {(["mine", "templates", "community"] as const).map((t) => (
-            <button key={t} type="button" role="tab" aria-selected={tab === t} aria-pressed={tab === t} onClick={() => setTab(t)}>
-              {t === "mine" ? <>My faces {projects ? <span className="st-count">{projects.length}</span> : null}</> : t === "templates" ? "Templates" : "Community"}
+        <div role="tablist" aria-label={t("Studio sections")} className="seg st-tabbar">
+          {(["mine", "templates", "community"] as const).map((id) => (
+            <button key={id} type="button" role="tab" aria-selected={tab === id} aria-pressed={tab === id} onClick={() => setTab(id)}>
+              {id === "mine" ? <>{t("My faces")} {projects ? <span className="st-count">{projects.length}</span> : null}</> : id === "templates" ? t("Templates") : t("Community")}
             </button>
           ))}
         </div>
         <span className="st-grow" />
         {tab === "mine" ? (
           <label className="st-search st-home-search"><Icon name="search" size={15} />
-            <input type="search" aria-label="Search" placeholder={SEARCH_HINT[tab]} value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input type="search" aria-label={t("Search")} placeholder={t(SEARCH_HINT[tab])} value={query} onChange={(e) => setQuery(e.target.value)} />
           </label>
         ) : null}
         {tab === "mine" ? (
-          <Select field aria-label="Sort" value={mineSort} onChange={(e) => setMineSort(e.target.value as "edited" | "name")} className="st-sort">
-            <option value="edited">Last edited</option><option value="name">Name</option>
+          <Select field aria-label={t("Sort")} value={mineSort} onChange={(e) => setMineSort(e.target.value as "edited" | "name")} className="st-sort">
+            <option value="edited">{t("Last edited")}</option><option value="name">{t("Name")}</option>
           </Select>
         ) : null}
       </div>
@@ -142,44 +143,44 @@ export default function Studio() {
       {tab === "mine" ? (
         <div className="st-tab">
           {latest && !query ? (
-            <section className="card st-continue" aria-label="Continue designing">
-              <button type="button" className="st-stage st-continue-face" onClick={() => opened(latest.projectId)} aria-label={`Open ${latest.name}`}>
+            <section className="card st-continue" aria-label={t("Continue designing")}>
+              <button type="button" className="st-stage st-continue-face" onClick={() => opened(latest.projectId)} aria-label={t("Open {name}", { name: latest.name })}>
                 <FaceView src={latest.previewUpdatedAt ? projectPicture(latest) : null} size={196} label={latest.name} />
               </button>
               <div className="st-continue-text">
-                <span className="st-kicker">Continue where you left off</span>
+                <span className="st-kicker">{t("Continue where you left off")}</span>
                 <h2>{latest.name}</h2>
-                <span className="muted">{watchName(latest.firmwareType)} · edited {edited(latest.updatedAt).toLowerCase()}</span>
+                <span className="muted">{watchName(latest.firmwareType)} · {t("edited {when}", { when: edited(latest.updatedAt).toLowerCase() })}</span>
                 <div className="actions">
-                  <Button variant="primary" onClick={() => opened(latest.projectId)}>Open editor</Button>
-                  <Button variant="plain" className="st-quiet" onClick={() => void act(() => duplicateProject(latest.projectId))}><Icon name="dup" size={16} />Duplicate</Button>
+                  <Button variant="primary" onClick={() => opened(latest.projectId)}>{t("Open editor")}</Button>
+                  <Button variant="plain" className="st-quiet" onClick={() => void act(() => duplicateProject(latest.projectId))}><Icon name="dup" size={16} />{t("Duplicate")}</Button>
                 </div>
               </div>
             </section>
           ) : null}
-          <section className="st-section" aria-label="All projects">
-            {projects?.length ? <h2 className="st-h2">All projects</h2> : null}
+          <section className="st-section" aria-label={t("All projects")}>
+            {projects?.length ? <h2 className="st-h2">{t("All projects")}</h2> : null}
             <div className="st-grid">
               {!query ? (
                 <button type="button" className="st-card st-new-tile" onClick={() => setTab("templates")}>
-                  <span className="st-new-icon"><Icon name="plus" size={22} width={2.2} /></span><b>New face</b><span>Start from a template</span>
+                  <span className="st-new-icon"><Icon name="plus" size={22} width={2.2} /></span><b>{t("New face")}</b><span>{t("Start from a template")}</span>
                 </button>
               ) : null}
               {mine.map((p) => (
                 <article key={p.projectId} className="st-card">
-                  <button type="button" className="st-stage" onClick={() => opened(p.projectId)} aria-label={`Open ${p.name}`}>
+                  <button type="button" className="st-stage" onClick={() => opened(p.projectId)} aria-label={t("Open {name}", { name: p.name })}>
                     <FaceView src={p.previewUpdatedAt ? projectPicture(p) : null} size={136} label={p.name} />
                   </button>
                   <div className="st-card-foot">
                     <div className="st-card-text"><h3>{p.name}</h3><span>{watchName(p.firmwareType)} · {edited(p.updatedAt)}</span></div>
                     <div className="st-menu-wrap">
-                      <button type="button" className="st-icon-btn" aria-label={`Project actions for ${p.name}`} aria-expanded={menu === p.projectId}
+                      <button type="button" className="st-icon-btn" aria-label={t("Project actions for {name}", { name: p.name })} aria-expanded={menu === p.projectId}
                         onClick={(e) => { e.stopPropagation(); setMenu(menu === p.projectId ? null : p.projectId); }}><Icon name="more" /></button>
                       {menu === p.projectId ? (
                         <div className="st-menu" role="menu">
-                          <button type="button" role="menuitem" onClick={() => void act(() => duplicateProject(p.projectId))}><Icon name="dup" size={16} />Duplicate</button>
+                          <button type="button" role="menuitem" onClick={() => void act(() => duplicateProject(p.projectId))}><Icon name="dup" size={16} />{t("Duplicate")}</button>
                           <button type="button" role="menuitem" className="st-danger"
-                            onClick={() => { if (confirm(`Delete “${p.name}”? It can't be brought back.`)) void act(() => deleteProject(p.projectId)); }}><Icon name="trash" size={16} />Delete project</button>
+                            onClick={() => { if (confirm(t("Delete “{name}”? It can't be brought back.", { name: p.name }))) void act(() => deleteProject(p.projectId)); }}><Icon name="trash" size={16} />{t("Delete project")}</button>
                         </div>
                       ) : null}
                     </div>
@@ -187,8 +188,8 @@ export default function Studio() {
                 </article>
               ))}
             </div>
-            {projects && query && !mine.length ? <p className="st-hint">Nothing matches.</p> : null}
-            {projects === null ? <p className="st-hint">Loading…</p> : null}
+            {projects && query && !mine.length ? <p className="st-hint">{t("Nothing matches.")}</p> : null}
+            {projects === null ? <p className="st-hint">{t("Loading…")}</p> : null}
           </section>
         </div>
       ) : tab === "templates" ? (
@@ -217,14 +218,14 @@ function ImportDialog({ onClose, onFile }: { onClose: () => void; onFile: (f: Fi
   }, [onClose]);
   return (
     <div className="st-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="st-dialog st-small-dialog pop" role="dialog" aria-modal="true" aria-label="Import watch face">
-        <div className="st-dialog-head"><h2>Import a watch face</h2><button type="button" className="st-icon-btn" aria-label="Close import dialog" onClick={onClose}><Icon name="close" /></button></div>
+      <div className="st-dialog st-small-dialog pop" role="dialog" aria-modal="true" aria-label={t("Import watch face")}>
+        <div className="st-dialog-head"><h2>{t("Import a watch face")}</h2><button type="button" className="st-icon-btn" aria-label={t("Close import dialog")} onClick={onClose}><Icon name="close" /></button></div>
         <div className="st-dialog-stack">
           <input ref={file} type="file" accept=".zip,.dat,.bin,application/zip" hidden onChange={(e) => onFile(e.target.files?.[0])} />
           <button type="button" className="st-drop" data-over={over ? "" : undefined} autoFocus onClick={() => file.current?.click()}
             onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); onFile(e.dataTransfer.files[0]); }}>
-            <Icon name="upload" size={26} /><b>Drop a ZIP, DAT or BIN file</b><span>or click to choose one</span>
+            <Icon name="upload" size={26} /><b>{t("Drop a ZIP, DAT or BIN file")}</b><span>{t("or click to choose one")}</span>
           </button>
         </div>
       </div>

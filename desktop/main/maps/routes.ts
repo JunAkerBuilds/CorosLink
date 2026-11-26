@@ -10,6 +10,7 @@ import type {
 import { climb, isLatLon, lengthOf, meters, trackPoint } from "./routing/geo";
 import { RoutingProblem } from "./routing/net";
 import { SPORTS } from "./routing/sports";
+import { locale, t } from "@/lib/i18n";
 
 export const MIN_ROUTE_POINTS = 2;
 export const MAX_ROUTE_POINTS = 40_000;
@@ -22,13 +23,13 @@ export const isRouteId = (id: string) => ID.test(id);
 
 /** The points as given (validated, not rounded), or the reason they can't be a route. Never drops or moves a point. */
 export function checkPoints(points: unknown): TrackPoint[] {
-  if (!Array.isArray(points)) throw new RoutingProblem("The route has no points.", "points");
-  if (points.length < MIN_ROUTE_POINTS) throw new RoutingProblem("A route needs at least two points.", "points");
+  if (!Array.isArray(points)) throw new RoutingProblem(t("The route has no points."), "points");
+  if (points.length < MIN_ROUTE_POINTS) throw new RoutingProblem(t("A route needs at least two points."), "points");
   if (points.length > MAX_ROUTE_POINTS) {
-    throw new RoutingProblem(`This route has ${points.length.toLocaleString("en")} points; the watch takes up to 40,000.`, "too_many_points");
+    throw new RoutingProblem(t("This route has {n} points; the watch takes up to 40,000.", { n: points.length.toLocaleString(locale("en")) }), "too_many_points");
   }
   return points.map((p: unknown) => {
-    if (!isLatLon(p)) throw new RoutingProblem("The route has a point that isn't on the map.", "points");
+    if (!isLatLon(p)) throw new RoutingProblem(t("The route has a point that isn't on the map."), "points");
     const ele = (p as number[])[2];
     return typeof ele === "number" && Number.isFinite(ele) ? [p[0], p[1], ele] : [p[0], p[1]];
   });
@@ -101,9 +102,9 @@ export class RouteStore {
   }
 
   async save(input: RouteSave): Promise<SavedRoute> {
-    if (!SPORTS.includes(input.sport)) throw new RoutingProblem("Pick a sport for the route.", "sport");
-    if (input.kind !== "loop" && input.kind !== "ab") throw new RoutingProblem("Say whether the route is a loop.", "kind");
-    if (!SOURCES.includes(input.source)) throw new RoutingProblem("Unknown route source.", "source");
+    if (!SPORTS.includes(input.sport)) throw new RoutingProblem(t("Pick a sport for the route."), "sport");
+    if (input.kind !== "loop" && input.kind !== "ab") throw new RoutingProblem(t("Say whether the route is a loop."), "kind");
+    if (!SOURCES.includes(input.source)) throw new RoutingProblem(t("Unknown route source."), "source");
     const points = checkPoints(input.route?.points);
     const waypoints = Array.isArray(input.waypoints) ? input.waypoints.filter(isLatLon).map((p): LatLon => [p[0], p[1]]) : undefined;
     const measured = Math.round(lengthOf(points));
@@ -138,7 +139,7 @@ export class RouteStore {
 
   async rename(id: string, name: unknown): Promise<SavedRoute | null> {
     const clean = cleanName(name);
-    if (!clean) throw new RoutingProblem("Give the route a name.", "name");
+    if (!clean) throw new RoutingProblem(t("Give the route a name."), "name");
     return this.serial(async () => {
       const route = await this.get(id);
       if (!route) return null;
@@ -237,7 +238,7 @@ function pointsIn(xml: string, pt: "trkpt" | "rtept"): TrackPoint[] {
 /** Tracks when there are any (recorded or planned lines), else routes. Each needs 2–40,000 points. */
 export function parseGpx(text: string): { fileName: string | null; lines: GpxLine[] } {
   const xml = text.replace(/<!--[\s\S]*?-->/g, "");
-  if (!/<gpx\b/i.test(xml)) throw new RoutingProblem("That isn't a GPX file.", "gpx");
+  if (!/<gpx\b/i.test(xml)) throw new RoutingProblem(t("That isn't a GPX file."), "gpx");
   const metadata = /<metadata\b[\s\S]*?<\/metadata>/.exec(xml)?.[0] ?? "";
   const blocks = (el: "trk" | "rte") => [...xml.matchAll(new RegExp(`<${el}\\b[^>]*>([\\s\\S]*?)</${el}>`, "g"))].map((m) => m[1]);
   const read = (el: "trk" | "rte") => blocks(el).map((body): GpxLine => {
@@ -246,7 +247,7 @@ export function parseGpx(text: string): { fileName: string | null; lines: GpxLin
   });
   let lines = read("trk").filter((l) => l.points.length >= MIN_ROUTE_POINTS);
   if (!lines.length) lines = read("rte").filter((l) => l.points.length >= MIN_ROUTE_POINTS);
-  if (!lines.length) throw new RoutingProblem("No track or route with at least two points is in this GPX file.", "gpx");
+  if (!lines.length) throw new RoutingProblem(t("No track or route with at least two points is in this GPX file."), "gpx");
   const big = lines.find((l) => l.points.length > MAX_ROUTE_POINTS);
   if (big) {
     throw new RoutingProblem(

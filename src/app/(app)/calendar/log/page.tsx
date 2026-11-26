@@ -11,10 +11,11 @@ import type { CalendarEntry } from "@/data/training";
 import { logActivityInput, logSport, visibleLogSports, type LogForm, type LogIcon } from "@/lib/activityLog";
 import { monthOf, shortDay } from "@/lib/calendar";
 import "../training.css";
+import { t } from "@/lib/i18n";
 
 export default function LogActivityPage() {
   return (
-    <Suspense fallback={<LoadingPage label="Log activity" />}>
+    <Suspense fallback={<LoadingPage label={t("Log activity")} />}>
       <LogScreen />
     </Suspense>
   );
@@ -23,9 +24,9 @@ export default function LogActivityPage() {
 function LogScreen() {
   const asked = useSearchParams().get("date");
   const state = useLoaded(() => loadActivityLog(asked), asked ?? "");
-  if (state.status === "loading") return <LoadingPage label="Log activity" />;
+  if (state.status === "loading") return <LoadingPage label={t("Log activity")} />;
   if (state.status === "error") {
-    return <LoadError error={state.error} onRetry={state.reload}><LinkButton href="/calendar">Back to the calendar</LinkButton></LoadError>;
+    return <LoadError error={state.error} onRetry={state.reload}><LinkButton href="/calendar">{t("Back to the calendar")}</LinkButton></LoadError>;
   }
   return <LogActivity key={state.data.date} day={state.data} origin={state.origin} />;
 }
@@ -78,7 +79,7 @@ function LogActivity({ day, origin }: { day: LogDay; origin: Origin }) {
       // Cleared so the same activity isn't sent twice by a second press.
       setForm((prev) => ({ ...prev, hours: "", minutes: "", distance: "", calories: "", avgHr: "" }));
     }, (e: unknown) => {
-      setProblem(e instanceof Error ? e.message : "C-LINK couldn't finish that. Try again.");
+      setProblem(e instanceof Error ? e.message : t("C-LINK couldn’t finish that. Try again."));
       setBusy(false);
     });
   };
@@ -86,18 +87,18 @@ function LogActivity({ day, origin }: { day: LogDay; origin: Origin }) {
   const head = (
     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: 16 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: "1 1 360px", minWidth: 0 }}>
-        <nav aria-label="Breadcrumb" className="muted" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 13 }}>
-          <Link href={backHref} style={{ textDecoration: "none", fontWeight: 600 }}>Calendar</Link>
+        <nav aria-label={t("Breadcrumb")} className="muted" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 13 }}>
+          <Link href={backHref} style={{ textDecoration: "none", fontWeight: 600 }}>{t("Calendar")}</Link>
           <span aria-hidden="true">/</span>
           <Link href={`/calendar/new?date=${date}`} style={{ textDecoration: "none", fontWeight: 600 }}>{shortDay(date)}</Link>
           <span aria-hidden="true">/</span>
-          <span aria-current="page">Log activity</span>
+          <span aria-current="page">{t("Log activity")}</span>
           <OriginBadge origin={origin} />
         </nav>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}>Log activity</h1>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("Log activity")}</h1>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-        <LinkButton href={backHref}>{logged ? "Back to the calendar" : "Cancel"}</LinkButton>
+        <LinkButton href={backHref}>{logged ? t("Back to the calendar") : t("Cancel")}</LinkButton>
       </div>
     </div>
   );
@@ -107,9 +108,9 @@ function LogActivity({ day, origin }: { day: LogDay; origin: Origin }) {
       <main className="page" style={{ gap: 20, paddingTop: 24 }}>
         {head}
         <div className="notice">
-          <span style={{ flex: "1 1 240px" }}>Logging is for today or an earlier day. {shortDay(date)} hasn&apos;t happened yet.</span>
-          <LinkButton href={`/calendar/new?date=${date}`}>Plan a workout instead</LinkButton>
-          <LinkButton href={`/calendar/log?date=${today}`}>Log for today</LinkButton>
+          <span style={{ flex: "1 1 240px" }}>{t("Logging is for today or an earlier day. {day} hasn’t happened yet.", { day: shortDay(date) })}</span>
+          <LinkButton href={`/calendar/new?date=${date}`}>{t("Plan a workout instead")}</LinkButton>
+          <LinkButton href={`/calendar/log?date=${today}`}>{t("Log for today")}</LinkButton>
         </div>
       </main>
     );
@@ -120,51 +121,51 @@ function LogActivity({ day, origin }: { day: LogDay; origin: Origin }) {
       {head}
       {hub && !signedIn ? (
         <div className="notice">
-          <span style={{ flex: "1 1 240px" }}>{hub.state === "ended" ? "COROS signed you out. Sign in again to log an activity." : "A logged activity goes to your COROS account. Sign in to COROS first."}</span>
-          <LinkButton variant="primary" href="/connect">Sign in to COROS</LinkButton>
+          <span style={{ flex: "1 1 240px" }}>{hub.state === "ended" ? t("COROS signed you out. Sign in again to log an activity.") : t("A logged activity goes to your COROS account. Sign in to COROS first.")}</span>
+          <LinkButton variant="primary" href="/connect">{t("Sign in to COROS")}</LinkButton>
         </div>
       ) : null}
       {problem ? <p role="alert" style={{ margin: 0, fontWeight: 600, color: "var(--h-rose-ink)" }}>{problem}</p> : null}
-      {logged ? <p role="status" style={{ margin: 0, fontWeight: 600, color: "var(--h-mint-ink)" }}>Activity logged on {shortDay(date)}. COROS may take a moment to show it.</p> : null}
+      {logged ? <p role="status" style={{ margin: 0, fontWeight: 600, color: "var(--h-mint-ink)" }}>{t("Activity logged on {day}. COROS may take a moment to show it.", { day: shortDay(date) })}</p> : null}
 
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: 24 }}>
         <div style={{ flex: "2 1 620px", minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-          <Card aria-label="Activity" style={{ boxSizing: "border-box", padding: 18, display: "flex", flexDirection: "column", gap: 22 }}>
-            <div role="group" aria-label="Activity type" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <span style={HEAD}>Activity type</span>
+          <Card aria-label={t("Activity")} style={{ boxSizing: "border-box", padding: 18, display: "flex", flexDirection: "column", gap: 22 }}>
+            <div role="group" aria-label={t("Activity type")} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <span style={HEAD}>{t("Activity type")}</span>
               {searching ? (
-                <input type="search" className="field log-field" aria-label="Search activity types" placeholder="Rowing, pilates, indoor bike…" autoFocus value={search}
+                <input type="search" className="field log-field" aria-label={t("Search activity types")} placeholder={t("Rowing, pilates, indoor bike…")} autoFocus value={search}
                   onChange={(e) => setSearch(e.target.value)} disabled={busy} style={{ maxWidth: 320 }} />
               ) : null}
-              {sports.length === 0 ? <span className="muted" style={{ fontSize: 13 }}>No activity types match that search.</span> : (
+              {sports.length === 0 ? <span className="muted" style={{ fontSize: 13 }}>{t("No activity types match that search.")}</span> : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
                   {sports.map((option) => (
                     <button key={option.id} type="button" className="log-sport" aria-pressed={option.id === sport.id} disabled={busy} onClick={() => set({ sportId: option.id })}>
                       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ flex: "none", strokeWidth: 1.9, strokeLinecap: "round", strokeLinejoin: "round" }}>
                         <path d={ICONS[option.icon]} />
                       </svg>
-                      {option.label}
+                      {t(option.label)}
                     </button>
                   ))}
                 </div>
               )}
               <button type="button" aria-expanded={searching} disabled={busy} onClick={() => { setSearching((open) => !open); setSearch(""); }}
                 style={{ alignSelf: "flex-start", height: 32, padding: 0, border: 0, background: "transparent", color: "var(--h-mint-ink)", fontSize: 13, fontWeight: 600 }}>
-                {searching ? "Hide search" : "Search all types"}
+                {searching ? t("Hide search") : t("Search all types")}
               </button>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <span style={HEAD}>When and how long</span>
+              <span style={HEAD}>{t("When and how long")}</span>
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 20 }}>
-                <label className="add-label">Started at
+                <label className="add-label">{t("Started at")}
                   <input type="time" className="field log-field" value={form.time} onChange={(e) => set({ time: e.target.value })} disabled={busy} />
                 </label>
-                <div className="add-label" role="group" aria-label="Duration">Duration
+                <div className="add-label" role="group" aria-label={t("Duration")}>{t("Duration")}
                   <span style={UNIT}>
-                    <input type="text" inputMode="numeric" className="field log-field" aria-label="Duration hours" placeholder="0" maxLength={2} value={form.hours}
+                    <input type="text" inputMode="numeric" className="field log-field" aria-label={t("Duration hours")} placeholder="0" maxLength={2} value={form.hours}
                       onChange={(e) => set({ hours: e.target.value.replace(/\D/g, "") })} disabled={busy} style={{ width: 64, textAlign: "right" }} />h
-                    <input type="text" inputMode="numeric" className="field log-field" aria-label="Duration minutes" placeholder="0" maxLength={3} value={form.minutes}
+                    <input type="text" inputMode="numeric" className="field log-field" aria-label={t("Duration minutes")} placeholder="0" maxLength={3} value={form.minutes}
                       onChange={(e) => set({ minutes: e.target.value.replace(/\D/g, "") })} disabled={busy} style={{ width: 64, textAlign: "right" }} />m
                   </span>
                 </div>
@@ -172,23 +173,23 @@ function LogActivity({ day, origin }: { day: LogDay; origin: Origin }) {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <span style={HEAD}>If you know them</span>
+              <span style={HEAD}>{t("If you know them")}</span>
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 20 }}>
                 {sport.distanceUnit !== "none" ? (
-                  <label className="add-label">Distance
+                  <label className="add-label">{t("Distance")}
                     <span style={UNIT}>
                       <input type="text" inputMode="decimal" className="field log-field" placeholder="—" maxLength={8} value={form.distance} onChange={(e) => set({ distance: e.target.value })}
                         disabled={busy} style={{ width: 96, textAlign: "right" }} />{sport.distanceUnit}
                     </span>
                   </label>
                 ) : null}
-                <label className="add-label">Calories
+                <label className="add-label">{t("Calories")}
                   <span style={UNIT}>
                     <input type="text" inputMode="numeric" className="field log-field" placeholder="—" maxLength={6} value={form.calories} onChange={(e) => set({ calories: e.target.value })}
                       disabled={busy} style={{ width: 96, textAlign: "right" }} />kcal
                   </span>
                 </label>
-                <label className="add-label">Average heart rate
+                <label className="add-label">{t("Average heart rate")}
                   <span style={UNIT}>
                     <input type="text" inputMode="numeric" className="field log-field" placeholder="—" maxLength={3} value={form.avgHr} onChange={(e) => set({ avgHr: e.target.value })}
                       disabled={busy} style={{ width: 96, textAlign: "right" }} />bpm
@@ -198,8 +199,8 @@ function LogActivity({ day, origin }: { day: LogDay; origin: Origin }) {
             </div>
 
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
-              <span className="muted" style={{ fontSize: 13 }}>{activity || logged ? "Goes straight to your COROS account." : "Add a duration to log this activity."}</span>
-              <Button variant="primary" style={{ fontSize: 14, fontWeight: 700 }} disabled={!activity || busy || !signedIn} onClick={save}>{busy ? "Adding…" : "Add to COROS"}</Button>
+              <span className="muted" style={{ fontSize: 13 }}>{activity || logged ? t("Goes straight to your COROS account.") : t("Add a duration to log this activity.")}</span>
+              <Button variant="primary" style={{ fontSize: 14, fontWeight: 700 }} disabled={!activity || busy || !signedIn} onClick={save}>{busy ? t("Adding…") : t("Add to COROS")}</Button>
             </div>
           </Card>
         </div>
@@ -207,8 +208,8 @@ function LogActivity({ day, origin }: { day: LogDay; origin: Origin }) {
         <div style={{ flex: "1 1 320px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
           <Card aria-label={shortDay(date)} style={{ boxSizing: "border-box", padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
             <h2 className="h2">{shortDay(date)}</h2>
-            <DayEntries label="Planned" entries={day.planned} empty="Nothing planned" color="var(--h-blue)" />
-            <DayEntries label="Recorded" entries={day.recorded} empty="Nothing yet" color="var(--h-mint)" />
+            <DayEntries label={t("Planned")} entries={day.planned} empty={t("Nothing planned")} color="var(--h-blue)" />
+            <DayEntries label={t("Recorded")} entries={day.recorded} empty={t("Nothing yet")} color="var(--h-mint)" />
           </Card>
         </div>
       </div>

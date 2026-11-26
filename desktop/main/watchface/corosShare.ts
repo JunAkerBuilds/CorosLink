@@ -17,6 +17,7 @@ import { createStoreZip } from "../../watchface/zipStore";
 import { AccountProblem, type CorosAccount } from "./corosAccount";
 import { extractDecimalProperty } from "./corosMobile";
 import { qrCodeDataUrl } from "./phoneSend";
+import { msg, t } from "@/lib/i18n";
 
 export { buildCreateLinkBody } from "./corosAccount";
 
@@ -27,8 +28,8 @@ const MAX_INFO_BYTES = 1024 * 1024;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
-export const LOCAL_TEMPLATE_PUBLISH_ERROR =
-  "This face was converted without a COROS account, so it has no COROS template to publish. Install it over Bluetooth, or sign in to COROS and convert it again to publish it.";
+export const LOCAL_TEMPLATE_PUBLISH_ERROR = msg(
+  "This face was converted without a COROS account, so it has no COROS template to publish. Install it over Bluetooth, or sign in to COROS and convert it again to publish it.");
 
 /** True for the template ID of a face converted on a local carrier: all zeros. */
 export const isLocalTemplateId = (templateId: string) => /^0+$/.test(templateId);
@@ -45,18 +46,18 @@ export function archiveTemplate(archive: Buffer): { sourceTemplateId: string; wa
   let raw: string;
   try {
     const info = readZip(archive).find((entry) => !entry.directory && entry.path.replace(/^\.\//, "") === "info.json");
-    if (!info) throw new AccountProblem("The archive must contain an info.json template manifest.", "badInput");
-    if (info.size > MAX_INFO_BYTES) throw new AccountProblem("The template manifest is unexpectedly large.", "badInput");
+    if (!info) throw new AccountProblem(t("The archive must contain an info.json template manifest."), "badInput");
+    if (info.size > MAX_INFO_BYTES) throw new AccountProblem(t("The template manifest is unexpectedly large."), "badInput");
     raw = info.read().toString("utf8");
   } catch (error) {
-    throw error instanceof AccountProblem ? error : new AccountProblem("That file isn't a readable watch face archive.", "badInput");
+    throw error instanceof AccountProblem ? error : new AccountProblem(t("That file isn't a readable watch face archive."), "badInput");
   }
   let manifest: { o_template_id?: unknown; o_wf_ver?: unknown };
-  try { manifest = JSON.parse(raw) as typeof manifest; } catch { throw new AccountProblem("info.json is not valid UTF-8 JSON.", "badInput"); }
+  try { manifest = JSON.parse(raw) as typeof manifest; } catch { throw new AccountProblem(t("info.json is not valid UTF-8 JSON."), "badInput"); }
   const sourceTemplateId = extractDecimalProperty(raw, "o_template_id") ?? (typeof manifest.o_template_id === "string" ? manifest.o_template_id.trim() : undefined);
-  if (!sourceTemplateId || !/^\d{1,20}$/.test(sourceTemplateId)) throw new AccountProblem("info.json must include a valid o_template_id.", "badInput");
+  if (!sourceTemplateId || !/^\d{1,20}$/.test(sourceTemplateId)) throw new AccountProblem(t("info.json must include a valid o_template_id."), "badInput");
   const watchFaceVersion = Number(manifest.o_wf_ver ?? 0);
-  if (!Number.isSafeInteger(watchFaceVersion) || watchFaceVersion < 0 || watchFaceVersion > 999) throw new AccountProblem("info.json must include a valid o_wf_ver when present.", "badInput");
+  if (!Number.isSafeInteger(watchFaceVersion) || watchFaceVersion < 0 || watchFaceVersion > 999) throw new AccountProblem(t("info.json must include a valid o_wf_ver when present."), "badInput");
   return { sourceTemplateId, watchFaceVersion };
 }
 
@@ -75,13 +76,13 @@ function fitInWorker(entries: FitWorkerRequest["entries"], targetBytes: number, 
       settled = true; clearTimeout(timer); action();
       void worker.terminate();
     };
-    const timer = setTimeout(() => finish(() => reject(new Error("Compressing the watch face took too long."))), 180_000);
+    const timer = setTimeout(() => finish(() => reject(new Error(t("Compressing the watch face took too long.")))), 180_000);
     worker.once("message", (response: FitWorkerResponse) => finish(() => ("error" in response ? reject(new Error(response.error)) : resolve(response))));
     worker.once("error", (error: NodeJS.ErrnoException) => finish(() => {
-      if (error.code === "ERR_WORKER_OUT_OF_MEMORY") reject(new Error("The watch face is too large to compress."));
+      if (error.code === "ERR_WORKER_OUT_OF_MEMORY") reject(new Error(t("The watch face is too large to compress.")));
       else fitArchiveEntries(entries, targetBytes).then(resolve, reject);
     }));
-    worker.once("exit", () => finish(() => reject(new Error("Compressing the watch face stopped unexpectedly."))));
+    worker.once("exit", () => finish(() => reject(new Error(t("Compressing the watch face stopped unexpectedly.")))));
     worker.postMessage({ entries, targetBytes } satisfies FitWorkerRequest);
   });
 }
@@ -109,7 +110,7 @@ const megabytes = (size: number) => (size / (1024 * 1024)).toFixed(1);
 export async function fitCorosUploadLimit(archive: Buffer, options: { worker?: string } = {}): Promise<Buffer> {
   const { bytes } = await fitWatchfaceArchiveSize(archive, options);
   if (bytes.length > MAX_COROS_UPLOAD_BYTES) {
-    throw new AccountProblem(`This face is ${megabytes(bytes.length)} MB even after compression, and COROS accepts custom faces up to ${megabytes(MAX_COROS_UPLOAD_BYTES)} MB. Remove some images or use smaller ones, then publish again.`, "tooLarge", 413);
+    throw new AccountProblem(t("This face is {mb} MB even after compression, and COROS accepts custom faces up to {max} MB. Remove some images or use smaller ones, then publish again.", { mb: megabytes(bytes.length), max: megabytes(MAX_COROS_UPLOAD_BYTES) }), "tooLarge", 413);
   }
   return bytes;
 }
@@ -138,22 +139,22 @@ export interface CorosShareLink {
 /** Saves the face to the signed-in COROS account and makes its share link and QR code. */
 export async function publishToCoros(account: CorosAccount, input: CorosPublishInput, options: { worker?: string; now?: () => number } = {}): Promise<CorosShareLink> {
   const name = input.name.replace(new RegExp(CONTROL.source, "g"), "").trim();
-  if (!name) throw new AccountProblem("Enter a name for the custom watch face.", "badInput");
-  if (name.length > 64) throw new AccountProblem("Watch face names must be 64 characters or fewer.", "badInput");
+  if (!name) throw new AccountProblem(t("Enter a name for the custom watch face."), "badInput");
+  if (name.length > 64) throw new AccountProblem(t("Watch face names must be 64 characters or fewer."), "badInput");
   const firmwareType = input.firmwareType.trim();
-  if (!firmwareType || firmwareType.length > 120 || CONTROL.test(firmwareType)) throw new AccountProblem("Enter the COROS firmware type for this face.", "badInput");
-  if (!Number.isSafeInteger(input.backgroundImageId) || input.backgroundImageId < 0) throw new AccountProblem("Background image ID must be a non-negative integer.", "badInput");
+  if (!firmwareType || firmwareType.length > 120 || CONTROL.test(firmwareType)) throw new AccountProblem(t("Enter the COROS firmware type for this face."), "badInput");
+  if (!Number.isSafeInteger(input.backgroundImageId) || input.backgroundImageId < 0) throw new AccountProblem(t("Background image ID must be a non-negative integer."), "badInput");
   const language = (input.language || "en-US").trim();
-  if (!/^[a-z]{2,3}-[A-Z]{2}$/.test(language)) throw new AccountProblem("Language must be a locale such as en-US.", "badInput");
+  if (!/^[a-z]{2,3}-[A-Z]{2}$/.test(language)) throw new AccountProblem(t("Language must be a locale such as en-US."), "badInput");
   const sourceTemplateId = input.sourceTemplateId.trim();
-  if (!/^\d{1,20}$/.test(sourceTemplateId)) throw new AccountProblem("Invalid COROS source template ID.", "badInput");
-  if (isLocalTemplateId(sourceTemplateId)) throw new AccountProblem(LOCAL_TEMPLATE_PUBLISH_ERROR, "localTemplate");
-  if (!Number.isSafeInteger(input.watchFaceVersion) || input.watchFaceVersion < 0 || input.watchFaceVersion > 999) throw new AccountProblem("Invalid watch face version.", "badInput");
-  if (!(await account.signedIn())) throw new AccountProblem("Sign in to your COROS account first.", "signedOut", 401);
+  if (!/^\d{1,20}$/.test(sourceTemplateId)) throw new AccountProblem(t("Invalid COROS source template ID."), "badInput");
+  if (isLocalTemplateId(sourceTemplateId)) throw new AccountProblem(t(LOCAL_TEMPLATE_PUBLISH_ERROR), "localTemplate");
+  if (!Number.isSafeInteger(input.watchFaceVersion) || input.watchFaceVersion < 0 || input.watchFaceVersion > 999) throw new AccountProblem(t("Invalid watch face version."), "badInput");
+  if (!(await account.signedIn())) throw new AccountProblem(t("Sign in to your COROS account first."), "signedOut", 401);
 
   const archive = await fitCorosUploadLimit(input.archive, options);
   const answer = await account.publishFace({ archive, name, firmwareType, language, sourceTemplateId, watchFaceVersion: input.watchFaceVersion, backgroundImageId: input.backgroundImageId });
-  if (!answer.url || !isOfficialShareUrl(answer.url)) throw new AccountProblem("COROS didn't return an official share link.", "coros", 502);
+  if (!answer.url || !isOfficialShareUrl(answer.url)) throw new AccountProblem(t("COROS didn't return an official share link."), "coros", 502);
   const expiresAt = new Date(answer.expireTimestamp ?? (options.now ?? Date.now)() + SHARE_LINK_LIFETIME_MS).toISOString();
   const preview = answer.previewImageUrl && /^https:\/\//i.test(answer.previewImageUrl) ? answer.previewImageUrl : undefined;
   return { url: answer.url, qrDataUrl: await qrCodeDataUrl(answer.url), expiresAt, ...(preview ? { previewImageUrl: preview } : {}) };

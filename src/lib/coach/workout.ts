@@ -6,9 +6,10 @@ import type { HubExercise, HubIntensity, HubSport, HubStepKind, HubWorkout, HubW
 import type { Workout } from "@/data/workouts";
 import { intensityLabel } from "@/lib/hubWorkout";
 import { clock as clockText } from "@/lib/format";
+import { msg, t, tx } from "@/lib/i18n";
 import { expand, formatClock, stepIntensity, stepSeconds, totals, type Pacing, type Sport, type StepKind, type StepTarget, type WorkoutItem, type WorkoutStep } from "@/lib/workout";
 import { hubWorkoutProblem } from "@/server/hub/rules";
-import { dayLabel, dayOfRef, familyOf, finite, isDay, quoted, today, type AthleteItems, type Clock } from "./items";
+import { dayOfRef, familyOf, finite, isDay, quoted, shownDay, today, type AthleteItems, type Clock } from "./items";
 import { paceOf } from "./read";
 import { SPORT_HUE, sportStats, workoutBody } from "./sportCard";
 import type { LiftHistory } from "./strengthCard";
@@ -90,7 +91,7 @@ function stepOf(raw: unknown, sport: HubSport, catalog: readonly HubExercise[] |
   const intensity = intensityOf(raw.intensity);
   if (typeof intensity === "string") return intensity;
   const seconds = num(raw.seconds), meters = num(raw.meters), count = num(raw.count), sets = num(raw.sets), rest = num(raw.restSeconds), load = num(raw.load), bpm = num(raw.bpm);
-  const target = TARGETS.find((t) => t === raw.target) ?? (meters !== undefined ? "distance" : seconds !== undefined ? "time" : count !== undefined ? "reps" : null);
+  const target = TARGETS.find((x) => x === raw.target) ?? (meters !== undefined ? "distance" : seconds !== undefined ? "time" : count !== undefined ? "reps" : null);
   if (!target) return "each step needs a target: time (seconds), distance (meters), reps (count), open, load, hrRecovery (bpm), elevationGain (meters) or routes (count).";
   const exercise = quoted(typeof raw.exercise === "string" ? raw.exercise : isBag(raw.exercise) ? raw.exercise.name : "", 80);
   const step: HubWorkoutStep = { kind, target, intensity };
@@ -218,8 +219,8 @@ const median = (v: number[]) => { const s = [...v].sort((a, b) => a - b); return
  */
 export function pacingFor(items: AthleteItems, clock: Clock, sport: Sport): Pacing | null {
   if (sport === "strength") return { zonePace: [600, 600, 600, 600, 600], easyPace: 600, still: true };
-  const t = items.training?.thresholdPaceSecPerKm;
-  if (sport === "run" && finite(t) && t > 120 && t < 900) return { zonePace: [t * 1.38, t * 1.25, t * 1.12, t, t * 0.92], easyPace: t * 1.45 };
+  const th = items.training?.thresholdPaceSecPerKm;
+  if (sport === "run" && finite(th) && th > 120 && th < 900) return { zonePace: [th * 1.38, th * 1.25, th * 1.12, th, th * 0.92], easyPace: th * 1.45 };
   const from = today(clock);
   const paces = items.activities.filter((a) => familyOf(a.sport) === sport && dayOfRef(a.start ?? 0, clock) <= from).slice(0, 12).map(paceOf).filter((p): p is number => p !== null);
   if (paces.length < 3) return null;
@@ -229,43 +230,53 @@ export function pacingFor(items: AthleteItems, clock: Clock, sport: Sport): Paci
 
 /* ───────────── The card ───────────── */
 
-const KIND_WORDS: Record<StepKind, string> = { warmup: "Warm up", work: "Work", recovery: "Recovery", rest: "Rest", cooldown: "Cool down" };
+const KIND_WORDS: Record<StepKind, string> = { warmup: msg("Warm up"), work: msg("Work"), recovery: msg("Recovery"), rest: msg("Rest"), cooldown: msg("Cool down") };
 const KIND_HUE: Record<StepKind, CoachHue> = { warmup: "cyan", work: "mint", recovery: "blue", rest: "violet", cooldown: "cyan" };
 const KIND_HEIGHT: Record<StepKind, number> = { warmup: 0.42, cooldown: 0.42, work: 0.78, recovery: 0.3, rest: 0.16 };
-const SPORT_TITLE: Record<Sport, string> = { run: "Run", ride: "Ride", swim: "Swim", strength: "Strength" };
+const SPORT_TITLE: Record<Sport, string> = { run: msg("Run"), ride: msg("Ride"), swim: msg("Swim"), strength: msg("Strength") };
 
 function lengthText(step: WorkoutStep): string {
   if (step.length.type === "time") return formatClock(step.length.seconds);
   return step.length.unit === "km" ? `${(step.length.metres / 1000).toFixed(2)} km` : `${Math.round(step.length.metres)} m`;
 }
 
-function targetText(t: StepTarget): string {
-  if (t.type === "pace") return t.fast === t.slow ? `${paceText(t.fast)} /km` : `${paceText(t.fast)} to ${paceText(t.slow)} /km`;
-  if (t.type === "hr") return `Zone ${t.zone}`;
-  if (t.type === "kept") return t.label;
+/** A step's target in words: English for the model, or in the app's language when `shown`. */
+function targetText(target: StepTarget, shown = false): string {
+  if (target.type === "pace") {
+    if (target.fast === target.slow) return `${paceText(target.fast)} /km`;
+    return shown ? t("{fast} to {slow} /km", { fast: paceText(target.fast), slow: paceText(target.slow) }) : `${paceText(target.fast)} to ${paceText(target.slow)} /km`;
+  }
+  if (target.type === "hr") return shown ? t("Zone {zone}", { zone: target.zone }) : `Zone ${target.zone}`;
+  if (target.type === "kept") return target.label;
   return "";
 }
 
-const HUB_SPORT_TITLE: Record<HubSport, string> = { run: "Run", trailRun: "Trail run", bike: "Ride", swim: "Swim", strength: "Strength", hyrox: "HYROX", xcSki: "Ski", indoorClimb: "Climb", bouldering: "Bouldering" };
+const HUB_SPORT_TITLE: Record<HubSport, string> = {
+  run: msg("Run"), trailRun: msg("Trail run"), bike: msg("Ride"), swim: msg("Swim"), strength: msg("Strength"), hyrox: "HYROX", xcSki: msg("Ski"), indoorClimb: msg("Climb"), bouldering: msg("Bouldering"),
+};
 const HUB_KIND: Record<HubStepKind, StepKind> = { warmup: "warmup", training: "work", rest: "rest", cooldown: "cooldown" };
 
-/** How long a COROS step is, in words. */
-export function hubLength(s: HubWorkoutStep): string {
+/** How long a COROS step is, in words: English for the model, or in the app's language when `shown`. */
+export function hubLength(s: HubWorkoutStep, shown = false): string {
   const sets = s.sets && s.sets > 1 ? `${s.sets} × ` : "";
   switch (s.target) {
     case "time": return `${sets}${formatClock(s.seconds ?? 0)}`;
     case "distance": return (s.meters ?? 0) >= 1000 ? `${((s.meters ?? 0) / 1000).toFixed(2)} km` : `${Math.round(s.meters ?? 0)} m`;
     case "reps": return `${s.sets ?? 1} × ${s.count ?? 0}`;
-    case "routes": return `${s.count ?? 0} routes`;
-    case "load": return `load ${s.load ?? 0}`;
-    case "hrRecovery": return `until ${s.bpm ?? 0} bpm`;
+    case "routes": return shown ? (s.count === 1 ? tx("climbing", "1 route") : tx("climbing", "{n} routes", { n: s.count ?? 0 })) : `${s.count ?? 0} routes`;
+    case "load": return shown ? t("load {n}", { n: s.load ?? 0 }) : `load ${s.load ?? 0}`;
+    case "hrRecovery": return shown ? t("until {n} bpm", { n: s.bpm ?? 0 }) : `until ${s.bpm ?? 0} bpm`;
     case "elevationGain": return `+${Math.round(s.meters ?? 0)} m`;
-    case "open": return `${sets}open`;
+    case "open": return `${sets}${shown ? t("open") : "open"}`;
   }
 }
 
-const hubTarget = (i: HubIntensity): string =>
-  i.kind === "none" || i.kind === "kept" ? "" : i.kind === "pace" && finite(i.low) ? targetText(targetOf(i)) : i.kind === "bodyweight" ? "bodyweight" : i.kind === "weight" ? `${i.low ?? 0} kg` : intensityLabel(i);
+const hubTarget = (i: HubIntensity, shown = false): string =>
+  i.kind === "none" || i.kind === "kept" ? "" : i.kind === "pace" && finite(i.low) ? targetText(targetOf(i), shown) : i.kind === "bodyweight" ? (shown ? t("bodyweight") : "bodyweight") : i.kind === "weight" ? `${i.low ?? 0} kg` : intensityLabel(i);
+
+/** "Run · suggested", "Run · change": the workout card's eyebrow. */
+const eyebrowOf = (sport: string, change: boolean) => (change ? t("{sport} · change", { sport: t(sport) }) : t("{sport} · suggested", { sport: t(sport) }));
+const stepsWord = (n: number) => (n === 1 ? t("1 step") : t("{n} steps", { n }));
 
 /** A COROS workout step by step, for the model to read before it changes one. */
 export function describeHubWorkout(w: HubWorkout): string {
@@ -296,7 +307,7 @@ function hubCard(hub: HubWorkout, drawn: HubWorkout, input: CardInput, zones: At
   const steps: WorkoutCard["steps"] = [];
   const seen = new Map<string, number>();
   const unique = (name: string) => { const k = (seen.get(name) ?? 0) + 1; seen.set(name, k); return k === 1 ? name : `${name} (${k})`; };
-  let seconds = 0, metres = 0, sets = 0;
+  let seconds = 0, metres = 0, sets = 0, open = false;
   for (const b of hub.blocks) {
     const times = b.repeats ?? 1;
     for (const s of b.steps) {
@@ -305,20 +316,21 @@ function hubCard(hub: HubWorkout, drawn: HubWorkout, input: CardInput, zones: At
       if (s.target === "time") seconds += (s.seconds ?? 0) * (s.sets ?? 1) * times;
       if (s.target === "distance") metres += (s.meters ?? 0) * times;
       if (s.exercise || s.sets) sets += (s.sets ?? 1) * times;
+      if (s.target === "open") open = true;
       steps.push({
-        name: unique(`${times > 1 ? `${times} × ` : ""}${s.exercise?.name ?? s.name ?? KIND_WORDS[kind]}`), length: hubLength(s), target: hubTarget(s.intensity), note: "",
+        name: unique(`${times > 1 ? `${times} × ` : ""}${s.exercise?.name ?? s.name ?? t(KIND_WORDS[kind])}`), length: hubLength(s, true), target: hubTarget(s.intensity, true), note: "",
         hue: KIND_HUE[kind], weight: Math.max(1, Math.round(own * times)), height: KIND_HEIGHT[kind], soft: kind !== "work" || undefined,
       });
     }
   }
   const stats: CardStat[] = [];
-  if (metres > 0) stats.push({ label: "Distance", value: (metres / 1000).toFixed(2), unit: "km" });
-  if (seconds > 0) stats.push({ label: metres > 0 || steps.some((s) => s.length.includes("open")) ? "Timed steps" : "Time", value: formatClock(seconds) });
-  if (sets > 0) stats.push({ label: "Sets", value: String(sets) });
+  if (metres > 0) stats.push({ label: t("Distance"), value: (metres / 1000).toFixed(2), unit: "km" });
+  if (seconds > 0) stats.push({ label: metres > 0 || open ? t("Timed steps") : t("Time"), value: formatClock(seconds) });
+  if (sets > 0) stats.push({ label: t("Sets"), value: String(sets) });
   const body = workoutBody(drawn, { zones, lifts });
   return {
-    kind: "workout", id: input.id, eyebrow: `${HUB_SPORT_TITLE[hub.sport]} · ${input.replaces ? "change" : "suggested"}`, title: hub.name, date: input.date, dayLabel: isDay(input.date) ? dayLabel(input.date) : input.date,
-    stats: sportStats(drawn, body, { zones, lifts }) ?? stats, steps, shapeLabel: `The workout's shape: ${steps.map((s) => s.name).join(", ")}`, summary: `${steps.length} ${steps.length === 1 ? "step" : "steps"}`, note: quoted(input.note, 240),
+    kind: "workout", id: input.id, eyebrow: eyebrowOf(HUB_SPORT_TITLE[hub.sport], !!input.replaces), title: hub.name, date: input.date, dayLabel: isDay(input.date) ? shownDay(input.date) : input.date,
+    stats: sportStats(drawn, body, { zones, lifts }) ?? stats, steps, shapeLabel: t("The workout's shape: {steps}", { steps: steps.map((s) => s.name).join(", ") }), summary: stepsWord(steps.length), note: quoted(input.note, 240),
     hue: SPORT_HUE[hub.sport], sport: hub.sport, body,
     hub, ...(input.replaces ? { replaces: input.replaces } : {}),
   };
@@ -334,8 +346,8 @@ export function workoutCard(made: CoachWorkout, pacing: Pacing | null, input: Ca
     const seconds = pacing ? stepSeconds(s, pacing) : s.length.type === "time" ? s.length.seconds : (s.length.metres / 1000) * 330;
     const gym = strength && s.label?.includes(" · ") ? s.label.split(" · ") : null;
     steps.push({
-      name: unique(`${times > 1 ? `${times} × ` : ""}${gym ? gym[0] : s.label || KIND_WORDS[s.kind]}`),
-      length: gym ? gym[1] ?? "" : lengthText(s), target: gym ? gym[2] ?? "" : targetText(s.target), note: gym || !s.label ? "" : KIND_WORDS[s.kind],
+      name: unique(`${times > 1 ? `${times} × ` : ""}${gym ? gym[0] : s.label || t(KIND_WORDS[s.kind])}`),
+      length: gym ? gym[1] ?? "" : lengthText(s), target: gym ? gym[2] ?? "" : targetText(s.target, true), note: gym || !s.label ? "" : t(KIND_WORDS[s.kind]),
       hue: KIND_HUE[s.kind], weight: Math.max(1, Math.round(seconds * times)), height: pacing && !strength ? stepIntensity(s, pacing) : KIND_HEIGHT[s.kind],
       soft: s.kind !== "work" || undefined,
     });
@@ -347,28 +359,28 @@ export function workoutCard(made: CoachWorkout, pacing: Pacing | null, input: Ca
   const all = expand(w.items);
   const timed = all.every((s) => s.length.type === "time"), measured = all.every((s) => s.length.type === "distance");
   const stats: CardStat[] = [];
-  let summary = `${steps.length} ${steps.length === 1 ? "step" : "steps"}`;
+  let summary = stepsWord(steps.length);
   if (pacing) {
-    const t = totals(w.items, pacing);
-    stats.push({ label: timed ? "Time" : "Time, about", value: formatClock(t.seconds) });
-    if (t.metres >= 1) stats.push({ label: measured ? "Distance" : "Distance, about", value: (t.metres / 1000).toFixed(2), unit: "km" });
-    if (!strength) stats.push({ label: "Load, about", value: String(t.load), hue: "pink" });
-    summary = t.metres >= 1 ? `${(t.metres / 1000).toFixed(2)} km · ${formatClock(t.seconds)}` : formatClock(t.seconds);
+    const sum = totals(w.items, pacing);
+    stats.push({ label: timed ? t("Time") : t("Time, about"), value: formatClock(sum.seconds) });
+    if (sum.metres >= 1) stats.push({ label: measured ? t("Distance") : t("Distance, about"), value: (sum.metres / 1000).toFixed(2), unit: "km" });
+    if (!strength) stats.push({ label: t("Load, about"), value: String(sum.load), hue: "pink" });
+    summary = sum.metres >= 1 ? `${(sum.metres / 1000).toFixed(2)} km · ${formatClock(sum.seconds)}` : formatClock(sum.seconds);
   } else if (timed) {
     const seconds = all.reduce((sum, s) => sum + (s.length.type === "time" ? s.length.seconds : 0), 0);
-    stats.push({ label: "Time", value: formatClock(seconds) });
+    stats.push({ label: t("Time"), value: formatClock(seconds) });
     summary = formatClock(seconds);
   } else if (measured) {
     const metres = all.reduce((sum, s) => sum + (s.length.type === "distance" ? s.length.metres : 0), 0);
-    stats.push({ label: "Distance", value: (metres / 1000).toFixed(2), unit: "km" });
+    stats.push({ label: t("Distance"), value: (metres / 1000).toFixed(2), unit: "km" });
     summary = `${(metres / 1000).toFixed(2)} km`;
   }
-  if (strength) stats.push({ label: "Exercises", value: String(all.filter((s) => s.kind === "work").length) });
+  if (strength) stats.push({ label: t("Exercises"), value: String(all.filter((s) => s.kind === "work").length) });
   const draft = made.draft ?? made.hub, athlete = { pacing: strength ? null : pacing, zones, lifts };
   const body = draft ? workoutBody(draft, athlete) : undefined;
   return {
-    kind: "workout", id: input.id, eyebrow: `${made.sport === "trailRun" ? "Trail run" : SPORT_TITLE[w.sport]} · ${input.replaces ? "change" : "suggested"}`, title: w.name, date: input.date, dayLabel: isDay(input.date) ? dayLabel(input.date) : input.date,
-    stats: (draft && body ? sportStats(draft, body, athlete) : null) ?? stats, steps, shapeLabel: `The workout's shape: ${steps.map((s) => s.name).join(", ")}`, summary, note: quoted(input.note, 240),
+    kind: "workout", id: input.id, eyebrow: eyebrowOf(made.sport === "trailRun" ? HUB_SPORT_TITLE.trailRun : SPORT_TITLE[w.sport], !!input.replaces), title: w.name, date: input.date, dayLabel: isDay(input.date) ? shownDay(input.date) : input.date,
+    stats: (draft && body ? sportStats(draft, body, athlete) : null) ?? stats, steps, shapeLabel: t("The workout's shape: {steps}", { steps: steps.map((s) => s.name).join(", ") }), summary, note: quoted(input.note, 240),
     hue: SPORT_HUE[made.sport], sport: made.sport, ...(body ? { body } : {}),
     workout: w, hub: made.hub ?? undefined, ...(input.replaces ? { replaces: input.replaces } : {}), ...(pacing ? { totals: { metres: Math.round(totals(w.items, pacing).metres), load: totals(w.items, pacing).load } } : {}),
   };

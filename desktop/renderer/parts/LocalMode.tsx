@@ -11,10 +11,11 @@ import {
   useMinute, useWatchLink, watchSignIn, whenSynced, type Region, type WatchStatus,
 } from "../watchLink";
 import { LocalWatchSettings, WatchFacesCard, WeatherRow } from "./LocalWatchSettings";
+import { locale, msg, t, tx } from "@/lib/i18n";
 import "../pages/settings.css";
 import "./localMode.css";
 
-const said = (e: unknown) => (e instanceof Error ? e.message : "That didn't work.");
+const said = (e: unknown) => (e instanceof Error ? e.message : t("That didn't work."));
 
 function useMode() {
   const mode = useSyncExternalStore(dataMode.subscribe, dataMode.get);
@@ -58,12 +59,12 @@ export function LocalModePanel() {
         <div className="lm-toggle">
           <span className="lm-toggle-icon"><Icon d={I.laptop} size={20} /></span>
           <span className="lm-toggle-text">
-            <strong>Local mode</strong>
-            <span>{local ? "On. Pair your watch to sync it with this computer." : "Pair the watch to this computer instead of your phone"}</span>
+            <strong>{t("Local mode")}</strong>
+            <span>{local ? t("On. Pair your watch to sync it with this computer.") : t("Pair the watch to this computer instead of your phone")}</span>
           </span>
           {local
-            ? <Button variant="primary" onClick={() => setPairing(true)}>Pair watch</Button>
-            : <Switch label="Local mode" checked={asking} onChange={(on) => setAsking(on)} />}
+            ? <Button variant="primary" onClick={() => setPairing(true)}>{t("Pair watch")}</Button>
+            : <Switch label={t("Local mode")} checked={asking} onChange={(on) => setAsking(on)} />}
         </div>
         {asking ? <TurnOnDialog onCancel={() => setAsking(false)} onDone={() => { setAsking(false); setPairing(true); }} /> : null}
         {pairing ? <PairDialog onClose={() => setPairing(false)} /> : null}
@@ -80,26 +81,26 @@ function LinkedPanel({ status }: { status: WatchStatus }) {
   const percent = status.step?.percent;
   const run = (work: () => Promise<unknown>) => { setProblem(null); work().catch((e: unknown) => setProblem(said(e))); };
   const busy = !!status.busy;
-  const synced = status.lastSync ? `Synced ${whenSynced(status.lastSync.at, now)}` : "Not synced yet";
+  const synced = status.lastSync ? t("Synced {when}", { when: whenSynced(status.lastSync.at, now) }) : t("Not synced yet");
   return (
     <div className="lm-linked">
       <div className="lm-status" role="status">
         <Bars on={status.connected ? 3 : 0} />
-        <b>{status.connected ? "Connected" : "Not connected"}</b>
+        <b>{status.connected ? t("Connected") : t("Not connected")}</b>
         <span className="lm-dot" aria-hidden="true">·</span>
         <span>{synced}</span>
-        <span className="lm-mode" title="Paired to this computer. Changes go to the watch as you make them."><Icon d={I.laptop} size={13} />Local mode</span>
+        <span className="lm-mode" title={t("Paired to this computer. Changes go to the watch as you make them.")}><Icon d={I.laptop} size={13} />{t("Local mode")}</span>
       </div>
       <div className="lm-actions">
         <Button variant="primary" className="lm-sync" disabled={busy} onClick={() => run(syncWatch)}>
-          {syncing ? `${stepLabel(status.step)}…${percent != null ? ` ${percent}%` : ""}` : status.connected ? "Sync now" : "Connect and sync"}
+          {syncing ? `${stepLabel(status.step)}…${percent != null ? ` ${percent}%` : ""}` : status.connected ? t("Sync now") : t("Connect and sync")}
           {syncing && percent != null ? <span className="lm-sync-meter" style={{ width: `${percent}%` }} /> : null}
         </Button>
         {syncing
-          ? <Button onClick={() => run(cancelWatch)}>Cancel</Button>
-          : status.connected ? <Button disabled={busy} onClick={() => run(disconnectWatch)}>Disconnect</Button> : null}
-        <span className="lm-auto">Auto-sync
-          <Dropdown small label="Auto-sync" value={status.autoSyncMinutes} options={AUTO_SYNC.map((m) => ({ value: m as number, label: autoSyncLabel(m) }))}
+          ? <Button onClick={() => run(cancelWatch)}>{t("Cancel")}</Button>
+          : status.connected ? <Button disabled={busy} onClick={() => run(disconnectWatch)}>{t("Disconnect")}</Button> : null}
+        <span className="lm-auto">{t("Auto-sync")}
+          <Dropdown small label={t("Auto-sync")} value={status.autoSyncMinutes} options={AUTO_SYNC.map((m) => ({ value: m as number, label: autoSyncLabel(m) }))}
             onChange={(m) => run(() => setAutoSync(m))} />
         </span>
       </div>
@@ -145,39 +146,39 @@ export function TurnOnDialog({ onCancel, onDone }: { onCancel: () => void; onDon
     } catch (e) { setProblem(said(e)); setBusy(false); }
   };
   return (
-    <Dialog label="Turn on Local mode?">
+    <Dialog label={t("Turn on Local mode?")}>
       <div className="lm-pair-art" aria-hidden="true"><span className="lm-mini-watch" /><span className="lm-dots"><i /><i /><i /></span><span className="lm-mini-mac" /></div>
-      <h2>Turn on Local mode?</h2>
-      <p>This pairs your watch to this computer. Choose it only if you&apos;ll use C-LINK Desktop on its own, without the COROS app or C-LINK on your phone.</p>
+      <h2>{t("Turn on Local mode?")}</h2>
+      <p>{t("This pairs your watch to this computer. Choose it only if you'll use C-LINK Desktop on its own, without the COROS app or C-LINK on your phone.")}</p>
       <ul className="lm-list">
-        <li><span className="lm-ico" data-hue="mint"><Icon d={I.bluetooth} size={16} /></span><span>The watch syncs activities, sleep and health with this computer over Bluetooth.</span></li>
-        <li><span className="lm-ico" data-hue="mint"><Icon d={I.shield} size={16} /></span><span>Nothing is uploaded to COROS, except watch faces you send.</span></li>
-        <li><span className="lm-ico" data-hue="gold"><Icon d={I.phoneOff} size={16} /></span><span>The COROS app and C-LINK on your phone stop syncing with this watch. Turn off the watch&apos;s Wi-Fi too.</span></li>
-        <li><span className="lm-ico" data-hue="gold"><Icon d={I.alert} size={16} /></span><span>Strava and TrainingPeaks stop getting activities through COROS, and firmware updates stop.</span></li>
+        <li><span className="lm-ico" data-hue="mint"><Icon d={I.bluetooth} size={16} /></span><span>{t("The watch syncs activities, sleep and health with this computer over Bluetooth.")}</span></li>
+        <li><span className="lm-ico" data-hue="mint"><Icon d={I.shield} size={16} /></span><span>{t("Nothing is uploaded to COROS, except watch faces you send.")}</span></li>
+        <li><span className="lm-ico" data-hue="gold"><Icon d={I.phoneOff} size={16} /></span><span>{t("The COROS app and C-LINK on your phone stop syncing with this watch. Turn off the watch's Wi-Fi too.")}</span></li>
+        <li><span className="lm-ico" data-hue="gold"><Icon d={I.alert} size={16} /></span><span>{t("Strava and TrainingPeaks stop getting activities through COROS, and firmware updates stop.")}</span></li>
       </ul>
       {hub?.state === "signedIn" ? (
         <div className="lm-option">
-          <span className="lm-row-text"><strong>Sign out of COROS on this computer</strong><span>The watch key stays, so the watch still connects.</span></span>
-          <Switch label="Sign out of COROS on this computer" checked={signOut} onChange={setSignOut} />
+          <span className="lm-row-text"><strong>{t("Sign out of COROS on this computer")}</strong><span>{t("The watch key stays, so the watch still connects.")}</span></span>
+          <Switch label={t("Sign out of COROS on this computer")} checked={signOut} onChange={setSignOut} />
         </div>
       ) : null}
       <span className="lm-key">
         {status?.keySaved
-          ? <><span className="lm-done"><Icon d={I.check} size={14} />Watch key saved</span>{status.account ? `from ${status.account}` : null}</>
-          : "Next, you sign in to COROS once to get your watch key."}
+          ? <><span className="lm-done"><Icon d={I.check} size={14} />{t("Watch key saved")}</span>{status.account ? t("from {account}", { account: status.account }) : null}</>
+          : t("Next, you sign in to COROS once to get your watch key.")}
       </span>
-      {status && !status.available ? <p className="lm-problem" role="alert">Pairing a watch needs C-LINK's Bluetooth helper, which this copy doesn't have.</p> : null}
+      {status && !status.available ? <p className="lm-problem" role="alert">{t("Pairing a watch needs C-LINK's Bluetooth helper, which this copy doesn't have.")}</p> : null}
       {problem ? <p className="lm-problem" role="alert">{problem}</p> : null}
       <div className="lm-dialog-actions">
-        <Button onClick={onCancel} disabled={busy}>Cancel</Button>
-        <Button variant="primary" onClick={() => void turnOn()} disabled={busy}>Turn on and pair</Button>
+        <Button onClick={onCancel} disabled={busy}>{t("Cancel")}</Button>
+        <Button variant="primary" onClick={() => void turnOn()} disabled={busy}>{t("Turn on and pair")}</Button>
       </div>
     </Dialog>
   );
 }
 
 const REGIONS: { value: Region; label: string }[] = [
-  { value: "us", label: "Global" }, { value: "eu", label: "Europe" }, { value: "sg", label: "Singapore" }, { value: "cn", label: "China" },
+  { value: "us", label: msg("Global") }, { value: "eu", label: msg("Europe") }, { value: "sg", label: msg("Singapore") }, { value: "cn", label: msg("China") },
 ];
 const guessRegion = (): Region => {
   const country = (navigator.language.split("-")[1] ?? "").toUpperCase();
@@ -210,52 +211,52 @@ export function PairDialog({ onClose }: { onClose: () => void }) {
   const yours = status?.found.find((f) => f.name === status.paired?.name);
 
   return (
-    <Dialog label="Pair your watch">
-      <div className="lm-steps" aria-label="Steps">
-        <span data-on="">Watch key</span><span data-on={step !== "key" ? "" : undefined}>Find the watch</span><span data-on={step === "connect" || step === "done" ? "" : undefined}>Connect</span>
+    <Dialog label={t("Pair your watch")}>
+      <div className="lm-steps" aria-label={tx("process", "Steps")}>
+        <span data-on="">{t("Watch key")}</span><span data-on={step !== "key" ? "" : undefined}>{t("Find the watch")}</span><span data-on={step === "connect" || step === "done" ? "" : undefined}>{t("Connect")}</span>
       </div>
       {step === "key" ? (<>
-        <h2>Get your watch key</h2>
-        <p>The watch only answers to your COROS account&apos;s key. Sign in to COROS once and C-LINK keeps just the key, sealed on this computer.</p>
+        <h2>{t("Get your watch key")}</h2>
+        <p>{t("The watch only answers to your COROS account's key. Sign in to COROS once and C-LINK keeps just the key, sealed on this computer.")}</p>
         <form className="lm-form" onSubmit={(e) => { e.preventDefault(); signIn(); }}>
-          <label className="set-label">COROS email<Field type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-          <label className="set-label">Password<Field type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
-          <label className="set-label">Region<Select field value={region} onChange={(e) => setRegion(e.target.value as Region)}>{REGIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</Select></label>
-          {conflict ? <p className="lm-ask-note">Your COROS account is signed in somewhere else, maybe the COROS app. Continuing may sign it out there.</p> : null}
+          <label className="set-label">{t("COROS email")}<Field type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          <label className="set-label">{t("Password")}<Field type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+          <label className="set-label">{t("Region")}<Select field value={region} onChange={(e) => setRegion(e.target.value as Region)}>{REGIONS.map((r) => <option key={r.value} value={r.value}>{t(r.label)}</option>)}</Select></label>
+          {conflict ? <p className="lm-ask-note">{t("Your COROS account is signed in somewhere else, maybe the COROS app. Continuing may sign it out there.")}</p> : null}
           <div className="lm-dialog-actions">
-            <Button onClick={onClose}>Later</Button>
-            <Button variant="primary" type="submit" disabled={busy === "signingIn" || !email || !password}>{busy === "signingIn" ? "Signing in…" : conflict ? "Continue anyway" : "Sign in"}</Button>
+            <Button onClick={onClose}>{t("Later")}</Button>
+            <Button variant="primary" type="submit" disabled={busy === "signingIn" || !email || !password}>{busy === "signingIn" ? t("Signing in…") : conflict ? t("Continue anyway") : t("Sign in")}</Button>
           </div>
         </form>
       </>) : null}
       {step === "find" ? (<>
-        <h2>Pair your watch</h2>
-        <p>Keep the watch next to this computer and close the COROS app on your phone.</p>
+        <h2>{t("Pair your watch")}</h2>
+        <p>{t("Keep the watch next to this computer and close the COROS app on your phone.")}</p>
         <div className="lm-near">
           {(status?.found ?? []).map((w) => (
             <div key={w.name} className="lm-near-row" data-best={w === (yours ?? status?.found[0]) ? "" : undefined}>
               <span className="lm-near-face" aria-hidden="true" />
-              <span className="lm-row-text"><strong>{w.display}</strong><span>{w.connected ? "Connected to this computer" : signal(w.rssi)}</span></span>
+              <span className="lm-row-text"><strong>{w.display}</strong><span>{w.connected ? t("Connected to this computer") : signal(w.rssi)}</span></span>
               <Bars on={bars(w.rssi)} />
-              <Button variant={w === (yours ?? status?.found[0]) ? "primary" : "glass"} disabled={!!busy} onClick={() => pair(w.name)}>Pair</Button>
+              <Button variant={w === (yours ?? status?.found[0]) ? "primary" : "glass"} disabled={!!busy} onClick={() => pair(w.name)}>{t("Pair")}</Button>
             </div>
           ))}
-          {!busy && status && !status.found.length ? <p className="lm-quiet">No watch found. Wake the watch, keep it close, and search again.</p> : null}
+          {!busy && status && !status.found.length ? <p className="lm-quiet">{t("No watch found. Wake the watch, keep it close, and search again.")}</p> : null}
         </div>
         <div className="lm-search">
-          <span className="lm-quiet">{busy === "scanning" ? <><span className="lm-dots" aria-hidden="true"><i /><i /><i /></span> Looking for watches nearby</> : null}</span>
-          <span className="lm-actions"><button type="button" className="set-link" disabled={!!busy} onClick={() => void run(scanWatches).catch(() => undefined)}>Search again</button><Button onClick={onClose}>Later</Button></span>
+          <span className="lm-quiet">{busy === "scanning" ? <><span className="lm-dots" aria-hidden="true"><i /><i /><i /></span> {t("Looking for watches nearby")}</> : null}</span>
+          <span className="lm-actions"><button type="button" className="set-link" disabled={!!busy} onClick={() => void run(scanWatches).catch(() => undefined)}>{t("Search again")}</button><Button onClick={onClose}>{t("Later")}</Button></span>
         </div>
       </>) : null}
       {step === "connect" ? (<>
-        <h2>Connecting to your watch</h2>
-        <p>Signing in to the watch with your watch key. Keep it close.</p>
+        <h2>{t("Connecting to your watch")}</h2>
+        <p>{t("Signing in to the watch with your watch key. Keep it close.")}</p>
         <div className="lm-progress" role="status"><div className="lm-progress-head"><span>{stepLabel(status?.step ?? null)}</span></div><span className="lm-step-bar" aria-hidden="true"><i className="lm-indeterminate" /></span></div>
       </>) : null}
       {step === "done" ? (<>
-        <h2>Paired</h2>
-        <p>The watch is paired to this computer. The first sync is under way: activities, sleep and health come in as it reads them.</p>
-        <div className="lm-dialog-actions"><Button variant="primary" onClick={onClose}>Done</Button></div>
+        <h2>{t("Paired")}</h2>
+        <p>{t("The watch is paired to this computer. The first sync is under way: activities, sleep and health come in as it reads them.")}</p>
+        <div className="lm-dialog-actions"><Button variant="primary" onClick={onClose}>{t("Done")}</Button></div>
       </>) : null}
       {problem ? <p className="lm-problem" role="alert">{problem}</p> : null}
     </Dialog>
@@ -263,7 +264,8 @@ export function PairDialog({ onClose }: { onClose: () => void }) {
 }
 
 const bars = (rssi?: number) => (rssi == null ? 2 : rssi > -60 ? 4 : rssi > -72 ? 3 : rssi > -84 ? 2 : 1);
-const signal = (rssi?: number) => ["", "Weak signal", "Fair signal", "Good signal", "Strong signal"][bars(rssi)];
+const SIGNAL = ["", msg("Weak signal"), msg("Fair signal"), msg("Good signal"), msg("Strong signal")];
+const signal = (rssi?: number) => t(SIGNAL[bars(rssi)]);
 
 /* ───────────── Cards ───────────── */
 
@@ -278,15 +280,15 @@ export function LocalModeCards() {
   const rows = syncing
     ? [{ icon: I.act, hue: "mint", name: stepLabel(status.step), detail: status.step?.percent != null ? `${status.step.percent}%` : "", value: "" }]
     : last ? [
-      { icon: I.act, hue: "mint", name: "Activities", detail: `${last.workouts} on the watch`, value: last.newActivities ? `${last.newActivities} new` : "None new" },
-      { icon: I.moon, hue: "violet", name: "Sleep", detail: "From the watch's daily history", value: `${last.nights} ${last.nights === 1 ? "night" : "nights"}` },
-      { icon: I.heart, hue: "blue", name: "Health", detail: "Steps, resting HR, HRV, stress", value: `${last.healthDays} ${last.healthDays === 1 ? "day" : "days"}` },
-      ...(last.applied || last.refused ? [{ icon: I.send, hue: "gold", name: "To the watch", detail: last.refused ? `${last.refused} the watch didn't take` : "Goals, alarms and satellite systems", value: `${last.applied} sent` }] : []),
+      { icon: I.act, hue: "mint", name: t("Activities"), detail: t("{n} on the watch", { n: last.workouts }), value: last.newActivities ? t("{n} new", { n: last.newActivities }) : t("None new") },
+      { icon: I.moon, hue: "violet", name: t("Sleep"), detail: t("From the watch's daily history"), value: last.nights === 1 ? t("1 night") : t("{n} nights", { n: last.nights }) },
+      { icon: I.heart, hue: "blue", name: t("Health"), detail: t("Steps, resting HR, HRV, stress"), value: last.healthDays === 1 ? t("1 day") : t("{n} days", { n: last.healthDays }) },
+      ...(last.applied || last.refused ? [{ icon: I.send, hue: "gold", name: t("To the watch"), detail: last.refused ? t("{n} the watch didn't take", { n: last.refused }) : t("Goals, alarms and satellite systems"), value: t("{n} sent", { n: last.applied }) }] : []),
     ] : [];
   return (
     <>
-      <Card className="wa-card wa-w7" aria-label="Last sync">
-        <div className="wa-alarms-head"><h2>{syncing ? "Syncing" : "Last sync"}</h2>{last && !syncing ? <span className="lm-quiet">{whenSynced(last.at, now)}</span> : null}</div>
+      <Card className="wa-card wa-w7" aria-label={t("Last sync")}>
+        <div className="wa-alarms-head"><h2>{syncing ? t("Syncing") : t("Last sync")}</h2>{last && !syncing ? <span className="lm-quiet">{whenSynced(last.at, now)}</span> : null}</div>
         {rows.length ? (
           <div className="lm-rows">
             {rows.map((r) => (
@@ -297,17 +299,17 @@ export function LocalModeCards() {
               </div>
             ))}
           </div>
-        ) : <p className="lm-quiet">Not synced yet.</p>}
-        {last?.problems.length && !syncing ? <p className="lm-quiet">Not read this time: {last.problems.map((p) => p.split(":")[0]).join(", ")}. The next sync tries again.</p> : null}
+        ) : <p className="lm-quiet">{t("Not synced yet.")}</p>}
+        {last?.problems.length && !syncing ? <p className="lm-quiet">{t("Not read this time: {parts}. The next sync tries again.", { parts: last.problems.map((p) => p.split(":")[0]).join(", ") })}</p> : null}
       </Card>
-      <Card className="wa-card wa-w5" aria-label="On this computer">
-        <h2>On this computer</h2>
+      <Card className="wa-card wa-w5" aria-label={t("On this computer")}>
+        <h2>{t("On this computer")}</h2>
         <div className="set-figures">
-          <div className="set-figure"><span>Activities</span><strong className="num">{status.onComputer?.activities.toLocaleString() ?? "—"}</strong></div>
-          <div className="set-figure"><span>Days of health</span><strong className="num">{status.onComputer?.healthDays.toLocaleString() ?? "—"}</strong></div>
-          <div className="set-figure"><span>Nights of sleep</span><strong className="num">{status.onComputer?.nights.toLocaleString() ?? "—"}</strong></div>
+          <div className="set-figure"><span>{t("Activities")}</span><strong className="num">{status.onComputer?.activities.toLocaleString(locale("en-GB")) ?? "—"}</strong></div>
+          <div className="set-figure"><span>{t("Days of health")}</span><strong className="num">{status.onComputer?.healthDays.toLocaleString(locale("en-GB")) ?? "—"}</strong></div>
+          <div className="set-figure"><span>{t("Nights of sleep")}</span><strong className="num">{status.onComputer?.nights.toLocaleString(locale("en-GB")) ?? "—"}</strong></div>
         </div>
-        <p className="lm-quiet">Each workout&apos;s FIT file is kept as the watch recorded it.</p>
+        <p className="lm-quiet">{t("Each workout's FIT file is kept as the watch recorded it.")}</p>
       </Card>
     </>
   );
@@ -332,35 +334,35 @@ export function LocalModeTools() {
     <>
     <LocalWatchSettings />
     <WatchFacesCard />
-    <Card className="wa-card lm-w12" aria-label="Watch tools">
-      <h2>Watch tools</h2>
+    <Card className="wa-card lm-w12" aria-label={t("Watch tools")}>
+      <h2>{t("Watch tools")}</h2>
       <div className="lm-rows">
         <WeatherRow status={status} />
         <div className="lm-row">
           <span className="lm-ico" data-hue="gold"><Icon d={I.bell} /></span>
-          <span className="lm-row-text"><strong>Find my watch</strong><span>{ringing === "sent" ? "Ringing. Press Back on the watch to stop it." : "Rings until you press Back on the watch"}</span></span>
-          <span className="lm-row-end"><Button disabled={ringing === "sending"} onClick={ring}>{ringing === "sending" ? "Reaching the watch…" : ringing === "sent" ? "Ring again" : "Play sound"}</Button></span>
+          <span className="lm-row-text"><strong>{t("Find my watch")}</strong><span>{ringing === "sent" ? t("Ringing. Press Back on the watch to stop it.") : t("Rings until you press Back on the watch")}</span></span>
+          <span className="lm-row-end"><Button disabled={ringing === "sending"} onClick={ring}>{ringing === "sending" ? t("Reaching the watch…") : ringing === "sent" ? t("Ring again") : t("Play sound")}</Button></span>
         </div>
         <div className="lm-row">
           <span className="lm-ico"><Icon d={I.clock} /></span>
-          <span className="lm-row-text"><strong>Time and time zone</strong><span>Set from this computer each time the watch connects</span></span>
+          <span className="lm-row-text"><strong>{t("Time and time zone")}</strong><span>{t("Set from this computer each time the watch connects")}</span></span>
           <span className="lm-row-end"><span className="lm-done"><Icon d={I.check} size={14} />{zone}</span></span>
         </div>
         <div className="lm-row">
           <span className="lm-ico" data-hue="violet"><Icon d={I.key} /></span>
-          <span className="lm-row-text"><strong>Watch key</strong><span>{status.account ? `From ${status.account}. ` : ""}Sealed on this computer; the watch only answers to it.</span></span>
+          <span className="lm-row-text"><strong>{t("Watch key")}</strong><span>{status.account ? t("From {account}. Sealed on this computer; the watch only answers to it.", { account: status.account }) : t("Sealed on this computer; the watch only answers to it.")}</span></span>
           <span className="lm-row-end">
             {forgetting
-              ? <><Button onClick={() => setForgetting(false)}>Keep it</Button><Button className="lm-danger" onClick={() => run(forgetWatchKey)}>Forget key and unpair</Button></>
-              : <Button onClick={() => setForgetting(true)}>Forget</Button>}
+              ? <><Button onClick={() => setForgetting(false)}>{tx("key", "Keep it")}</Button><Button className="lm-danger" onClick={() => run(forgetWatchKey)}>{t("Forget key and unpair")}</Button></>
+              : <Button onClick={() => setForgetting(true)}>{t("Forget")}</Button>}
           </span>
         </div>
         <div className="lm-row">
           <span className="lm-ico" data-hue="rose"><Icon d={I.laptop} /></span>
-          <span className="lm-row-text"><strong>Local mode</strong><span>Leave to pair the watch with your phone again</span></span>
+          <span className="lm-row-text"><strong>{t("Local mode")}</strong><span>{t("Leave to pair the watch with your phone again")}</span></span>
           <span className="lm-row-end">
-            <Button onClick={() => run(unpairWatch)}>Unpair</Button>
-            <Button className="lm-danger" onClick={() => run(() => setDataMode("connected"))}>Leave Local mode</Button>
+            <Button onClick={() => run(unpairWatch)}>{t("Unpair")}</Button>
+            <Button className="lm-danger" onClick={() => run(() => setDataMode("connected"))}>{t("Leave Local mode")}</Button>
           </span>
         </div>
       </div>

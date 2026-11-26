@@ -4,6 +4,7 @@
 import type {
   HubClimbSystem, HubIntensityKind, HubSport, HubStepKind, HubStepTarget, HubTotals, HubWorkout, HubWorkoutStep,
 } from "@/data/hub";
+import { t } from "@/lib/i18n";
 
 export const HUB_SPORTS: readonly HubSport[] = ["run", "trailRun", "bike", "swim", "strength", "hyrox", "xcSki", "indoorClimb", "bouldering"];
 
@@ -97,13 +98,13 @@ const within = (value: number | undefined, low: number, high: number, fallback: 
  * `hasSource(step)` says a step was read from COROS (a strength step read from COROS may lack a catalog exercise).
  */
 export function hubWorkoutProblem(workout: HubWorkout, hasSource: (step: HubWorkoutStep) => boolean = (step) => step.id !== undefined): string | null {
-  if (workout.name.trim() === "") return "Give the workout a name.";
-  if (workout.blocks.length === 0) return "Add at least one step.";
+  if (workout.name.trim() === "") return t("Give the workout a name.");
+  if (workout.blocks.length === 0) return t("Add at least one step.");
   for (const block of workout.blocks) {
     const isRepeat = block.repeats !== null && block.repeats !== undefined;
-    if (isRepeat && !(Number.isInteger(block.repeats) && block.repeats! >= 1 && block.repeats! <= 99)) return "Repeats go from 1 to 99.";
-    if (block.steps.length === 0) return "A repeat needs at least one step.";
-    if (!isRepeat && block.steps.length !== 1) return "A step on its own holds one step.";
+    if (isRepeat && !(Number.isInteger(block.repeats) && block.repeats! >= 1 && block.repeats! <= 99)) return t("Repeats go from 1 to 99.");
+    if (block.steps.length === 0) return t("A repeat needs at least one step.");
+    if (!isRepeat && block.steps.length !== 1) return t("A step on its own holds one step.");
     for (const step of block.steps) {
       const problem = stepProblem(workout, step, hasSource(step));
       if (problem) return problem;
@@ -114,40 +115,40 @@ export function hubWorkoutProblem(workout: HubWorkout, hasSource: (step: HubWork
 
 function stepProblem(workout: HubWorkout, step: HubWorkoutStep, hasSource: boolean): string | null {
   const sport = workout.sport;
-  if (sport === "strength" && step.kind === "training" && !step.exercise && !hasSource) return "Pick an exercise for each strength step.";
-  if (!hubTargetsFor(sport, step.kind, step.exercise?.kind).includes(step.target)) return "A step ends on something this sport doesn't support.";
+  if (sport === "strength" && step.kind === "training" && !step.exercise && !hasSource) return t("Pick an exercise for each strength step.");
+  if (!hubTargetsFor(sport, step.kind, step.exercise?.kind).includes(step.target)) return t("A step ends on something this sport doesn't support.");
   switch (step.target) {
-    case "time": if (!within(step.seconds, 1, 86_399, 0)) return "Each time step needs a duration."; break;
-    case "distance": if (!((step.meters ?? 0) > 0)) return "Each distance step needs a distance."; break;
+    case "time": if (!within(step.seconds, 1, 86_399, 0)) return t("Each time step needs a duration."); break;
+    case "distance": if (!((step.meters ?? 0) > 0)) return t("Each distance step needs a distance."); break;
     case "open": break;
-    case "reps": if (!within(step.count, 1, 500, 0)) return "Reps go from 1 to 500."; break;
-    case "routes": if (!within(step.count, 1, 20, 0)) return "Routes go from 1 to 20."; break;
-    case "load": if (!within(step.load, 0, 999, -1)) return "Training load goes from 0 to 999."; break;
-    case "hrRecovery": if (!within(step.bpm, 30, 180, 0)) return "HR recovery goes from 30 to 180 bpm."; break;
-    case "elevationGain": if (!within(step.meters, 20, 10_000, 0)) return "Elevation gain goes from 20 to 10,000 m."; break;
+    case "reps": if (!within(step.count, 1, 500, 0)) return t("Reps go from 1 to 500."); break;
+    case "routes": if (!within(step.count, 1, 20, 0)) return t("Routes go from 1 to 20."); break;
+    case "load": if (!within(step.load, 0, 999, -1)) return t("Training load goes from 0 to 999."); break;
+    case "hrRecovery": if (!within(step.bpm, 30, 180, 0)) return t("HR recovery goes from 30 to 180 bpm."); break;
+    case "elevationGain": if (!within(step.meters, 20, 10_000, 0)) return t("Elevation gain goes from 20 to 10,000 m."); break;
   }
-  if (step.sets !== undefined && !within(step.sets, 1, 99, 0)) return "Sets go from 1 to 99.";
+  if (step.sets !== undefined && !within(step.sets, 1, 99, 0)) return t("Sets go from 1 to 99.");
   const intensity = step.intensity;
   if (intensity.kind !== "kept" && !hubIntensitiesFor(sport, step.kind, step.exercise?.kind).includes(intensity.kind)) {
-    return "That target isn't available for this step.";
+    return t("That target isn't available for this step.");
   }
   switch (intensity.kind) {
     case "none": case "kept": case "bodyweight": break;
-    case "stroke": if (!intensity.stroke) return "Pick a stroke."; break;
-    case "weight": if (!within(intensity.low, 0, 2000, -1)) return "Weight goes from 0 to 2000 kg."; break;
-    case "rpe": if (!within(intensity.low, 1, 10, 0)) return "RPE goes from 1 to 10."; break;
+    case "stroke": if (!intensity.stroke) return t("Pick a stroke."); break;
+    case "weight": if (!within(intensity.low, 0, 2000, -1)) return t("Weight goes from 0 to 2000 kg."); break;
+    case "rpe": if (!within(intensity.low, 1, 10, 0)) return t("RPE goes from 1 to 10."); break;
     case "grade":
       if (intensity.gradeOffset !== undefined) {
-        if (!within(intensity.gradeOffset, -8, 4, 0)) return "Relative grades go from −8 to +4.";
+        if (!within(intensity.gradeOffset, -8, 4, 0)) return t("Relative grades go from −8 to +4.");
       } else if (!HUB_CLIMB_GRADES[workout.gradeSystem ?? defaultGradeSystem(sport)].includes(intensity.grade ?? "")) {
-        return "Pick a grade.";
+        return t("Pick a grade.");
       }
       break;
     case "heartRate": case "pace": case "power": case "speed": case "cadence": {
       const { low, high } = intensity;
-      if (low === undefined || high === undefined || !(low > 0) || !(high > 0)) return "Each target needs both ends of its range.";
-      if (intensity.kind === "heartRate" && (low < 30 || low > 250 || high < 30 || high > 250)) return "Heart rate targets go from 30 to 250 bpm.";
-      if (intensity.kind === "pace" && (low < 60 || low > 3600 || high < 60 || high > 3600)) return "Paces go from 1:00 to 60:00 per km.";
+      if (low === undefined || high === undefined || !(low > 0) || !(high > 0)) return t("Each target needs both ends of its range.");
+      if (intensity.kind === "heartRate" && (low < 30 || low > 250 || high < 30 || high > 250)) return t("Heart rate targets go from 30 to 250 bpm.");
+      if (intensity.kind === "pace" && (low < 60 || low > 3600 || high < 60 || high > 3600)) return t("Paces go from 1:00 to 60:00 per km.");
     }
   }
   return null;

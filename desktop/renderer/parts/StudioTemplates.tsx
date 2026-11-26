@@ -3,6 +3,7 @@
 // opens as a new project.
 import { useEffect, useMemo, useState } from "react";
 import { Button, Field, Segmented, Select } from "@/components/ui";
+import { msg, t, tx } from "@/lib/i18n";
 import { WATCHFACE_TARGETS, type WatchfaceTarget } from "../../watchface/watchfaceTargets";
 import { FaceView } from "./FaceView";
 import { Icon } from "./StudioIcon";
@@ -17,7 +18,7 @@ export type TemplateSort = "coros" | "name";
 export function titleCase(name: string): string {
   return /[a-z]/.test(name) ? name : name.charAt(0) + name.slice(1).toLowerCase();
 }
-const kind = (t: TemplateItem) => (t.templateType === 2 ? "Analog" : t.templateType === 1 ? "Digital" : t.category);
+const kind = (tp: TemplateItem) => (tp.templateType === 2 ? msg("Analog") : tp.templateType === 1 ? msg("Digital") : tp.category);
 
 const LANGUAGES = [["en-US", "English"], ["zh-CN", "简体中文"], ["de-DE", "Deutsch"], ["fr-FR", "Français"], ["es-ES", "Español"], ["it-IT", "Italiano"], ["ja-JP", "日本語"], ["ko-KR", "한국어"]] as const;
 /** Special-edition watches with their own exclusive faces; COROS unlocks them by the watch's serial (CorosLink's presets). */
@@ -56,7 +57,7 @@ export function TemplatesTab({ watch, target, query, onQuery, sort, onSort, acco
   useEffect(() => {
     let current = true;
     let note: string | null = null;
-    const bundled = () => listTemplates(watch).then((t) => t.templates.map((x): TemplateItem => ({ ...x, picture: templatePicture(watch, x.id) })));
+    const bundled = () => listTemplates(watch).then((tp) => tp.templates.map((x): TemplateItem => ({ ...x, picture: templatePicture(watch, x.id) })));
     const load = async (): Promise<TemplateItem[]> => {
       if (source !== "editable") {
         if (!signedIn) return [];
@@ -69,7 +70,7 @@ export function TemplatesTab({ watch, target, query, onQuery, sort, onSort, acco
         return faces.map((f) => ({ ...f, picture: f.picture ? templatePicture(watch, f.id) : null }));
       } catch (e) {
         if (e instanceof StudioProblem && e.code === "signedOut") onSignedOut();
-        note = `${said(e)} Showing the templates that come with C-LINK.`;
+        note = `${said(e)} ${t("Showing the templates that come with C-LINK.")}`;
         return bundled();
       }
     };
@@ -84,14 +85,14 @@ export function TemplatesTab({ watch, target, query, onQuery, sort, onSort, acco
 
   const categories = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const t of items ?? []) { const k = kind(t); if (k) counts.set(k, (counts.get(k) ?? 0) + 1); }
+    for (const tp of items ?? []) { const k = kind(tp); if (k) counts.set(k, (counts.get(k) ?? 0) + 1); }
     return [...counts].sort((a, b) => b[1] - a[1]);
   }, [items]);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = (items ?? []).filter((t) => (category === "all" || kind(t) === category) &&
-      (!q || t.name.toLowerCase().includes(q) || t.id.includes(q) || (kind(t) ?? "").toLowerCase().includes(q)));
+    const list = (items ?? []).filter((tp) => (category === "all" || kind(tp) === category) &&
+      (!q || tp.name.toLowerCase().includes(q) || tp.id.includes(q) || (kind(tp) ?? "").toLowerCase().includes(q)));
     return sort === "name" ? [...list].sort((a, b) => a.name.localeCompare(b.name)) : list;
   }, [items, category, query, sort]);
 
@@ -110,7 +111,7 @@ export function TemplatesTab({ watch, target, query, onQuery, sort, onSort, acco
   const sn = usesSerial ? filters.sn ?? "" : "";
   const edition = EXCLUSIVES.find((x) => x.sn === sn && x.firmwareType === firmware);
   const watchPick = sn ? (edition ? `ex:${edition.sn}` : "custom")
-    : WATCHFACE_TARGETS.some((t) => t.firmwareType === firmware) ? `fw:${firmware}` : "custom";
+    : WATCHFACE_TARGETS.some((tp) => tp.firmwareType === firmware) ? `fw:${firmware}` : "custom";
   const pickWatch = (value: string) => {
     if (value === "custom") { setAdvanced(true); return; }
     const ex = EXCLUSIVES.find((x) => `ex:${x.sn}` === value);
@@ -122,66 +123,66 @@ export function TemplatesTab({ watch, target, query, onQuery, sort, onSort, acco
   return (
     <div className="st-tab">
       <div className="st-filter-row">
-        <Segmented small label="Faces from" value={source} onChange={setSource}
-          options={[{ value: "editable", label: "Templates" }, { value: "official", label: "Official" }, { value: "custom", label: "Your COROS faces" }]} />
+        <Segmented small label={t("Faces from")} value={source} onChange={setSource}
+          options={[{ value: "editable", label: t("Templates") }, { value: "official", label: t("Official") }, { value: "custom", label: t("Your COROS faces") }]} />
         {source === "editable" && categories.length > 1 ? (
-          <div role="group" aria-label="Template categories" className="st-chips">
-            <button type="button" className="chip" aria-pressed={category === "all"} onClick={() => setCategory("all")}>All<span className="st-count">{items?.length ?? 0}</span></button>
+          <div role="group" aria-label={t("Template categories")} className="st-chips">
+            <button type="button" className="chip" aria-pressed={category === "all"} onClick={() => setCategory("all")}>{t("All")}<span className="st-count">{items?.length ?? 0}</span></button>
             {categories.map(([name, n]) => (
-              <button key={name} type="button" className="chip" aria-pressed={category === name} onClick={() => setCategory(name)}>{name}<span className="st-count">{n}</span></button>
+              <button key={name} type="button" className="chip" aria-pressed={category === name} onClick={() => setCategory(name)}>{t(name)}<span className="st-count">{n}</span></button>
             ))}
           </div>
         ) : null}
         <label className="st-search st-tpl-search"><Icon name="search" size={15} />
-          <input type="search" aria-label="Search templates" placeholder="Template name, ID or category" value={query} onChange={(e) => onQuery(e.target.value)} />
+          <input type="search" aria-label={t("Search templates")} placeholder={t("Template name, ID or category")} value={query} onChange={(e) => onQuery(e.target.value)} />
         </label>
         {signedIn ? (
           <label className="st-watch-pick"><Icon name="watch" size={16} />
-            <Select field aria-label="Watch" value={watchPick} onChange={(e) => pickWatch(e.target.value)}>
-              <optgroup label="Watches">
-                {WATCHFACE_TARGETS.map((t) => <option key={t.firmwareType} value={`fw:${t.firmwareType}`}>{t.label}</option>)}
+            <Select field aria-label={t("Watch")} value={watchPick} onChange={(e) => pickWatch(e.target.value)}>
+              <optgroup label={t("Watches")}>
+                {WATCHFACE_TARGETS.map((tp) => <option key={tp.firmwareType} value={`fw:${tp.firmwareType}`}>{tp.label}</option>)}
               </optgroup>
               {usesSerial ? (
-                <optgroup label="Exclusive editions">
+                <optgroup label={t("Exclusive editions")}>
                   {EXCLUSIVES.map((x) => <option key={x.sn} value={`ex:${x.sn}`}>{x.label}</option>)}
                 </optgroup>
               ) : null}
-              <option value="custom">{watchPick === "custom" ? `Custom · ${firmware.replace(/^COROS /, "")}${sn ? ` · ${sn}` : ""}` : "Custom…"}</option>
+              <option value="custom">{watchPick === "custom" ? `${t("Custom")} · ${firmware.replace(/^COROS /, "")}${sn ? ` · ${sn}` : ""}` : t("Custom…")}</option>
             </Select>
           </label>
         ) : null}
-        <Select field aria-label="Sort" value={sort} onChange={(e) => onSort(e.target.value as TemplateSort)} className="st-sort">
-          <option value="coros">COROS order</option><option value="name">Name</option>
+        <Select field aria-label={t("Sort")} value={sort} onChange={(e) => onSort(e.target.value as TemplateSort)} className="st-sort">
+          <option value="coros">{t("COROS order")}</option><option value="name">{t("Name")}</option>
         </Select>
         {signedIn ? (
-          <button type="button" className="chip" aria-pressed={advanced} onClick={() => setAdvanced(!advanced)}><Icon name="sliders" size={15} />Advanced filters</button>
+          <button type="button" className="chip" aria-pressed={advanced} onClick={() => setAdvanced(!advanced)}><Icon name="sliders" size={15} />{t("Advanced filters")}</button>
         ) : null}
       </div>
 
       {advanced && signedIn ? (
         <div className="st-advanced pop">
-          <label className="st-form-row"><span>Firmware type</span>
+          <label className="st-form-row"><span>{t("Firmware type")}</span>
             <Field list="st-fw-list" spellCheck={false} autoComplete="off" placeholder={target.firmwareType} value={firmwareDraft ?? firmware}
               onChange={(e) => setFirmwareDraft(e.target.value)} onBlur={commitFirmware}
               onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setFirmwareDraft(null); e.currentTarget.blur(); } }} />
             <datalist id="st-fw-list">
-              {WATCHFACE_TARGETS.map((t) => <option key={t.firmwareType} value={t.firmwareType}>{t.label}</option>)}
+              {WATCHFACE_TARGETS.map((tp) => <option key={tp.firmwareType} value={tp.firmwareType}>{tp.label}</option>)}
             </datalist></label>
-          <label className="st-form-row"><span>Language</span>
+          <label className="st-form-row"><span>{t("Language")}</span>
             <Select field value={filters.language ?? "en-US"} onChange={(e) => set({ language: e.target.value === "en-US" ? undefined : e.target.value })}>
               {LANGUAGES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </Select></label>
-          <label className="st-form-row"><span>Maximum version</span>
+          <label className="st-form-row"><span>{t("Maximum version")}</span>
             <Select field value={filters.maxVersion ?? "5"} onChange={(e) => set({ maxVersion: e.target.value === "5" ? undefined : e.target.value })}>
-              {["5", "4", "3", "2", "1", "0"].map((v) => <option key={v} value={v}>{v === "5" ? "Latest" : `Version ${v}`}</option>)}
+              {["5", "4", "3", "2", "1", "0"].map((v) => <option key={v} value={v}>{v === "5" ? tx("version", "Latest") : t("Version {n}", { n: v })}</option>)}
             </Select></label>
           {source !== "editable" ? (
             <>
-              <label className="st-form-row"><span>Watch serial</span><Field key={sn} defaultValue={sn} autoComplete="off" spellCheck={false} placeholder="For an exclusive edition" onBlur={(e) => set({ sn: e.target.value.trim() || undefined })} /></label>
-              <label className="st-form-row"><span>Model version</span><Field defaultValue={filters.modelVersion ?? ""} placeholder="W332-3.1708.0" onBlur={(e) => set({ modelVersion: e.target.value.trim() || undefined })} /></label>
+              <label className="st-form-row"><span>{t("Watch serial")}</span><Field key={sn} defaultValue={sn} autoComplete="off" spellCheck={false} placeholder={t("For an exclusive edition")} onBlur={(e) => set({ sn: e.target.value.trim() || undefined })} /></label>
+              <label className="st-form-row"><span>{t("Model version")}</span><Field defaultValue={filters.modelVersion ?? ""} placeholder="W332-3.1708.0" onBlur={(e) => set({ modelVersion: e.target.value.trim() || undefined })} /></label>
             </>
           ) : null}
-          {filterKey !== "{}" ? <button type="button" className="st-link" onClick={() => { setFilters({}); setFirmwareDraft(null); }}>Reset</button> : null}
+          {filterKey !== "{}" ? <button type="button" className="st-link" onClick={() => { setFilters({}); setFirmwareDraft(null); }}>{t("Reset")}</button> : null}
         </div>
       ) : null}
 
@@ -190,35 +191,35 @@ export function TemplatesTab({ watch, target, query, onQuery, sort, onSort, acco
       {needsSignIn ? (
         <div className="st-empty">
           <Icon name="user" size={26} />
-          <b>{source === "official" ? "COROS's official faces" : "Faces saved to your COROS account"}</b>
-          <span>Sign in to COROS to open them in Studio.</span>
-          <Button variant="primary" onClick={onSignIn}>Sign in</Button>
+          <b>{source === "official" ? t("COROS's official faces") : t("Faces saved to your COROS account")}</b>
+          <span>{t("Sign in to COROS to open them in Studio.")}</span>
+          <Button variant="primary" onClick={onSignIn}>{t("Sign in")}</Button>
         </div>
       ) : (
         <>
-          <span className="st-hint">{source === "editable" ? `COROS templates for ${target.label}.` : source === "official" ? `COROS's own faces for ${target.label}. They open as an editable copy.` : "Faces you saved to COROS."}</span>
+          <span className="st-hint">{source === "editable" ? t("COROS templates for {watch}.", { watch: target.label }) : source === "official" ? t("COROS's own faces for {watch}. They open as an editable copy.", { watch: target.label }) : t("Faces you saved to COROS.")}</span>
           <div className="st-grid">
             {source === "editable" ? (
               <button type="button" className="st-card st-new-tile" disabled={!!starting || !items?.length} onClick={() => items?.length && onStart(items[0], true, items)}>
                 <span className="st-new-icon"><Icon name="plus" size={22} width={2.2} /></span>
-                <b>Start blank</b>
-                <span>{starting === "blank" ? "Getting the template…" : "An empty face"}</span>
+                <b>{t("Start blank")}</b>
+                <span>{starting === "blank" ? t("Getting the template…") : t("An empty face")}</span>
               </button>
             ) : null}
-            {shown.map((t) => (
-              <article key={t.id} className="st-card">
-                <button type="button" className="st-stage" disabled={!!starting} onClick={() => (source === "editable" ? onStart(t, false, items ?? []) : onOpen(source, t))} aria-label={`Open ${t.name}`}>
-                  <FaceView src={t.picture} size={136} label={t.name} />
+            {shown.map((tp) => (
+              <article key={tp.id} className="st-card">
+                <button type="button" className="st-stage" disabled={!!starting} onClick={() => (source === "editable" ? onStart(tp, false, items ?? []) : onOpen(source, tp))} aria-label={t("Open {name}", { name: tp.name })}>
+                  <FaceView src={tp.picture} size={136} label={tp.name} />
                 </button>
                 <div className="st-card-foot">
-                  <div className="st-card-text"><h3>{titleCase(t.name)}</h3><span>{starting === t.id ? "Getting it from COROS…" : [`ID ${t.id}`, kind(t)].filter(Boolean).join(" · ")}</span></div>
-                  <button type="button" className="st-pill" disabled={!!starting} onClick={() => (source === "editable" ? onStart(t, false, items ?? []) : onOpen(source, t))}>{source === "editable" ? "Use" : "Open"}</button>
+                  <div className="st-card-text"><h3>{titleCase(tp.name)}</h3><span>{starting === tp.id ? t("Getting it from COROS…") : [`ID ${tp.id}`, kind(tp) && t(kind(tp)!)].filter(Boolean).join(" · ")}</span></div>
+                  <button type="button" className="st-pill" disabled={!!starting} onClick={() => (source === "editable" ? onStart(tp, false, items ?? []) : onOpen(source, tp))}>{source === "editable" ? t("Use") : t("Open")}</button>
                 </div>
               </article>
             ))}
           </div>
-          {items === null ? <p className="st-hint">Loading…</p> : null}
-          {items && !shown.length ? <p className="st-hint">{items.length ? "Nothing matches." : source === "editable" ? `No editable templates for ${target.label} yet.` : `Nothing here for ${target.label}.`}</p> : null}
+          {items === null ? <p className="st-hint">{t("Loading…")}</p> : null}
+          {items && !shown.length ? <p className="st-hint">{items.length ? t("Nothing matches.") : source === "editable" ? t("No editable templates for {watch} yet.", { watch: target.label }) : t("Nothing here for {watch}.", { watch: target.label })}</p> : null}
         </>
       )}
     </div>

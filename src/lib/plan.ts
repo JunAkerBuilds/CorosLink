@@ -8,8 +8,9 @@
  */
 import type { HubSport } from "@/data/hub";
 import { docReady, docToLegacy, docTotals, docUnwired, pacingFor, sportLabel, type BuilderDoc } from "@/lib/builder";
-import { addDays, isDayKey, shortDay } from "@/lib/calendar";
+import { addDays, isDayKey, shortDay, shortWeekday } from "@/lib/calendar";
 import { thousands } from "@/lib/format";
+import { msg, t } from "@/lib/i18n";
 import { totals, type Pacing, type Sport } from "@/lib/workout";
 
 /* ───────────── The document ───────────── */
@@ -162,7 +163,7 @@ export const planEnv: PlanEnv = {
 export type PlanPacing = Record<Sport, Pacing> | null;
 
 export const MAX_PLAN_WEEKS = 52;
-export const DAY_NAMES: readonly string[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+export const DAY_NAMES: readonly string[] = [msg("Mon"), msg("Tue"), msg("Wed"), msg("Thu"), msg("Fri"), msg("Sat"), msg("Sun")];
 
 /* ───────────── Dates ───────────── */
 
@@ -197,7 +198,7 @@ export function entryDay(plan: Pick<TrainingPlanDocument, "startDate">, entry: P
 /** The seven column names: the weekdays from the start date on, Monday to Sunday without one. */
 export function planDayNames(plan: Pick<TrainingPlanDocument, "startDate">): string[] {
   const start = planDate(plan.startDate);
-  return DAY_NAMES.map((name, i) => (start ? shortDay(addDays(start, i)).slice(0, 3) : name));
+  return DAY_NAMES.map((name, i) => (start ? shortWeekday(addDays(start, i)) : t(name)));
 }
 
 /** Week and day of `today` inside the plan, or -1 when today is before it or it has no start date. */
@@ -211,7 +212,7 @@ export function planToday(plan: Pick<TrainingPlanDocument, "startDate">, today: 
 
 /* ───────────── Making and changing a plan ───────────── */
 
-export function createTrainingPlan(name = "Untitled plan", source: PlanSource = "local", env: PlanEnv = planEnv): TrainingPlanDocument {
+export function createTrainingPlan(name = t("Untitled plan"), source: PlanSource = "local", env: PlanEnv = planEnv): TrainingPlanDocument {
   const now = env.now();
   return {
     id: env.newId(source === "template" ? "template" : "plan"),
@@ -227,7 +228,7 @@ const touched = (plan: TrainingPlanDocument, env: PlanEnv): Pick<TrainingPlanDoc
 /** Moves the plan to a new start date. Every entry keeps its week and its day within the week. */
 export function shiftTrainingPlan(plan: TrainingPlanDocument, nextStartDate: string, env: PlanEnv = planEnv): TrainingPlanDocument {
   const next = planDate(nextStartDate);
-  if (!next) throw new Error("Plan start date must be YYYY-MM-DD or YYYYMMDD.");
+  if (!next) throw new Error(t("Plan start date must be YYYY-MM-DD or YYYYMMDD."));
   return { ...plan, startDate: next, ...touched(plan, env) };
 }
 
@@ -241,7 +242,7 @@ function expandPhasesAfterWeek(phases: readonly TrainingPlanPhase[], weekIndex: 
 }
 
 const inPlan = (plan: TrainingPlanDocument, weekIndex: number) => {
-  if (!Number.isInteger(weekIndex) || weekIndex < 0 || weekIndex >= plan.weekCount) throw new Error("Week index is outside the plan.");
+  if (!Number.isInteger(weekIndex) || weekIndex < 0 || weekIndex >= plan.weekCount) throw new Error(t("Week index is outside the plan."));
 };
 
 export function duplicateTrainingPlanWeek(plan: TrainingPlanDocument, weekIndex: number, env: PlanEnv = planEnv): TrainingPlanDocument {
@@ -263,7 +264,7 @@ export function insertRecoveryWeek(plan: TrainingPlanDocument, afterWeekIndex: n
     entries: plan.entries.map((entry) => (entry.weekIndex > afterWeekIndex ? { ...entry, weekIndex: entry.weekIndex + 1 } : entry)),
     phases: [
       ...expandPhasesAfterWeek(plan.phases, afterWeekIndex),
-      { id: env.newId("phase"), name: "Recovery", kind: "recovery", startWeek: afterWeekIndex + 2, endWeek: afterWeekIndex + 2 },
+      { id: env.newId("phase"), name: t("Recovery"), kind: "recovery", startWeek: afterWeekIndex + 2, endWeek: afterWeekIndex + 2 },
     ],
     ...touched(plan, env),
   };
@@ -275,7 +276,7 @@ export function insertRecoveryWeek(plan: TrainingPlanDocument, afterWeekIndex: n
  */
 export function removeTrainingPlanWeek(plan: TrainingPlanDocument, weekIndex: number, env: PlanEnv = planEnv): TrainingPlanDocument {
   inPlan(plan, weekIndex);
-  if (plan.weekCount <= 1) throw new Error("A plan needs at least one week.");
+  if (plan.weekCount <= 1) throw new Error(t("A plan needs at least one week."));
   const humanWeek = weekIndex + 1;
   return {
     ...plan,
@@ -319,7 +320,7 @@ export function reorderTrainingPlanWeek(plan: TrainingPlanDocument, fromWeekInde
 
 /** Adds an empty week at the end. */
 export function addTrainingPlanWeek(plan: TrainingPlanDocument, env: PlanEnv = planEnv): TrainingPlanDocument {
-  if (plan.weekCount >= MAX_PLAN_WEEKS) throw new Error("Plans must contain 1 to 52 weeks.");
+  if (plan.weekCount >= MAX_PLAN_WEEKS) throw new Error(t("Plans must contain 1 to 52 weeks."));
   return { ...plan, weekCount: plan.weekCount + 1, ...touched(plan, env) };
 }
 
@@ -334,8 +335,8 @@ export function calendarBlockedEntries(plan: TrainingPlanDocument, toCoros: bool
     const doc = entry.workout?.doc;
     if (entry.kind !== "workout" || entry.dayIndex === undefined || !doc) continue;
     const unwired = toCoros ? docUnwired(doc) : [];
-    if (unwired.length) out.push({ entry, why: `not connected yet for COROS: ${unwired.join(", ")}` });
-    else if (!docReady(doc, !toCoros)) out.push({ entry, why: toCoros && doc.sport === "strength" ? "its exercises must come from COROS’s list" : "some steps still need a value" });
+    if (unwired.length) out.push({ entry, why: t("not connected yet for COROS: {list}", { list: unwired.join(", ") }) });
+    else if (!docReady(doc, !toCoros)) out.push({ entry, why: toCoros && doc.sport === "strength" ? t("its exercises must come from COROS’s list") : t("some steps still need a value") });
   }
   return out;
 }
@@ -350,7 +351,7 @@ export function withDerivedSportMix(plan: TrainingPlanDocument, env: PlanEnv = p
 export function moveTrainingPlanEntry(plan: TrainingPlanDocument, entryId: string, weekIndex: number, dayIndex?: number): TrainingPlanDocument {
   if (dayIndex !== undefined) {
     inPlan(plan, weekIndex);
-    if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6) throw new Error("Plan day must be between Day 1 and Day 7.");
+    if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6) throw new Error(t("Plan day must be between Day 1 and Day 7."));
   }
   return { ...plan, entries: plan.entries.map((entry) => (entry.id === entryId ? { ...entry, weekIndex: dayIndex === undefined ? 0 : weekIndex, dayIndex } : entry)) };
 }
@@ -363,16 +364,16 @@ export function removeTrainingPlanEntry(plan: TrainingPlanDocument, entryId: str
 export function addRestDay(plan: TrainingPlanDocument, weekIndex: number, dayIndex: number, env: PlanEnv = planEnv): TrainingPlanDocument {
   inPlan(plan, weekIndex);
   if (plan.entries.some((e) => e.kind === "rest" && e.weekIndex === weekIndex && e.dayIndex === dayIndex)) return plan;
-  const rest: TrainingPlanEntry = { id: env.newId("rest"), kind: "rest", weekIndex, dayIndex, sortOrder: 0, title: "Rest day" };
+  const rest: TrainingPlanEntry = { id: env.newId("rest"), kind: "rest", weekIndex, dayIndex, sortOrder: 0, title: t("Rest day") };
   return { ...plan, entries: [...plan.entries, rest] };
 }
 
 /* ───────────── Phases ───────────── */
 
 export const PHASE_KINDS: readonly PhaseKind[] = ["base", "build", "peak", "taper", "recovery", "custom"];
-export const PHASE_LABELS: Record<PhaseKind, string> = { base: "Base", build: "Build", peak: "Peak", taper: "Taper", recovery: "Recovery", custom: "Custom" };
+export const PHASE_LABELS: Record<PhaseKind, string> = { base: msg("Base"), build: msg("Build"), peak: msg("Peak"), taper: msg("Taper"), recovery: msg("Recovery"), custom: msg("Custom") };
 
-export const phaseLabel = (phase: TrainingPlanPhase): string => phase.name.trim() || PHASE_LABELS[phase.kind ?? "custom"];
+export const phaseLabel = (phase: TrainingPlanPhase): string => phase.name.trim() || t(PHASE_LABELS[phase.kind ?? "custom"]);
 
 /** A phase after a change, held inside the plan: it starts in the plan and ends on or after its start. */
 export function clampPhase(phase: TrainingPlanPhase, weekCount: number): TrainingPlanPhase {
@@ -420,10 +421,10 @@ function workoutMetrics(workout: PlanWorkout | undefined, pacing: PlanPacing): E
   const doc = workout?.doc;
   if (!doc) return { durationSeconds: 0, distanceMeters: 0, trainingLoad: 0, strengthSets: 0 };
   const own = pacingFor(doc.sport, pacing);
-  const t = docTotals(doc, own);
+  const tot = docTotals(doc, own);
   const items = own ? docToLegacy(doc) : null;
   return {
-    durationSeconds: t.seconds ?? 0, distanceMeters: t.meters, strengthSets: t.sets,
+    durationSeconds: tot.seconds ?? 0, distanceMeters: tot.meters, strengthSets: tot.sets,
     // The load estimate needs the athlete's own paces; without them it is whatever the plan recorded.
     trainingLoad: own && items && items.length > 0 ? totals(items, own).load : 0,
   };
@@ -442,18 +443,18 @@ export function trainingPlanEntryMetrics(entry: TrainingPlanEntry, pacing: PlanP
 
 export function validateTrainingPlan(plan: TrainingPlanDocument): TrainingPlanValidationIssue[] {
   const issues: TrainingPlanValidationIssue[] = [];
-  if (!plan.name.trim()) issues.push({ path: "name", message: "Add a plan name.", severity: "error" });
-  if (plan.weekCount < 1 || plan.weekCount > MAX_PLAN_WEEKS) issues.push({ path: "weekCount", message: "Plans must contain 1 to 52 weeks.", severity: "error" });
+  if (!plan.name.trim()) issues.push({ path: "name", message: t("Add a plan name."), severity: "error" });
+  if (plan.weekCount < 1 || plan.weekCount > MAX_PLAN_WEEKS) issues.push({ path: "weekCount", message: t("Plans must contain 1 to 52 weeks."), severity: "error" });
   const occupied = new Map<string, number>();
   for (const entry of plan.entries) {
     if (entry.weekIndex < 0 || entry.weekIndex >= plan.weekCount) {
-      issues.push({ path: `entries.${entry.id}`, message: "A workout is outside the plan range.", severity: "error" });
+      issues.push({ path: `entries.${entry.id}`, message: t("A workout is outside the plan range."), severity: "error" });
     }
     if (entry.dayIndex !== undefined && (entry.dayIndex < 0 || entry.dayIndex > 6)) {
-      issues.push({ path: `entries.${entry.id}.dayIndex`, message: "Plan day must be between Day 1 and Day 7.", severity: "error" });
+      issues.push({ path: `entries.${entry.id}.dayIndex`, message: t("Plan day must be between Day 1 and Day 7."), severity: "error" });
     }
     if (entry.kind === "workout" && !entry.workout && !entry.programId) {
-      issues.push({ path: `entries.${entry.id}`, message: "Workout entry has no reusable workout definition.", severity: "error" });
+      issues.push({ path: `entries.${entry.id}`, message: t("Workout entry has no reusable workout definition."), severity: "error" });
     }
     if (entry.dayIndex !== undefined) {
       const key = `${entry.weekIndex}:${entry.dayIndex}`;
@@ -461,11 +462,11 @@ export function validateTrainingPlan(plan: TrainingPlanDocument): TrainingPlanVa
     }
   }
   for (const [key, count] of occupied) {
-    if (count > 2) issues.push({ path: key, message: `${count} items share one day. Review recovery and scheduling conflicts.`, severity: "warning" });
+    if (count > 2) issues.push({ path: key, message: t("{count} items share one day. Review recovery and scheduling conflicts.", { count }), severity: "warning" });
   }
   for (const phase of plan.phases) {
     if (phase.startWeek < 1 || phase.endWeek > plan.weekCount || phase.startWeek > phase.endWeek) {
-      issues.push({ path: `phases.${phase.id}`, message: `Phase "${phase.name}" is outside the plan range.`, severity: "error" });
+      issues.push({ path: `phases.${phase.id}`, message: t("Phase \"{name}\" is outside the plan range.", { name: phase.name }), severity: "error" });
     }
   }
   return issues;
@@ -496,7 +497,7 @@ export function summarizeTrainingPlan(plan: TrainingPlanDocument, pacing: PlanPa
     const sport = entry.workout?.sport;
     if (sport) sportDistribution[sport] = (sportDistribution[sport] ?? 0) + 1;
     if (!longestWorkout || metrics.durationSeconds > longestWorkout.durationSeconds) {
-      longestWorkout = { name: entry.workout?.name ?? entry.title ?? "Workout", durationSeconds: metrics.durationSeconds, distanceMeters: metrics.distanceMeters };
+      longestWorkout = { name: entry.workout?.name ?? entry.title ?? t("Workout"), durationSeconds: metrics.durationSeconds, distanceMeters: metrics.distanceMeters };
     }
     if (entry.dayIndex !== undefined) {
       const key = `${entry.weekIndex}:${entry.dayIndex}`;
@@ -547,14 +548,14 @@ export function planSuggestions(plan: TrainingPlanDocument, pacing: PlanPacing =
   weekly.forEach((week, index) => {
     const prior = weekly[index - 1]?.trainingLoad ?? 0;
     if (index > 0 && prior > 0 && week.trainingLoad > prior * 1.25) {
-      suggestions.push(`Week ${index + 1} load jumps ${Math.round((week.trainingLoad / prior - 1) * 100)}%`);
+      suggestions.push(t("Week {week} load jumps {percent}%", { week: index + 1, percent: Math.round((week.trainingLoad / prior - 1) * 100) }));
     }
   });
   const uncovered = weekly.map((_week, index) => index).filter((index) => !phaseForWeek(plan, index));
-  if (uncovered.length && plan.phases.length) suggestions.push(`Week ${uncovered.map((index) => index + 1).join(", ")} has no phase`);
+  if (uncovered.length && plan.phases.length) suggestions.push(t("Week {weeks} has no phase", { weeks: uncovered.map((index) => index + 1).join(", ") }));
   const held = holdingEntries(plan);
-  if (held.length === 1) suggestions.push(`${held[0].title ?? "1 workout"} in the holding area won’t go on the calendar`);
-  else if (held.length > 1) suggestions.push(`${held.length} in the holding area won’t go on the calendar`);
+  if (held.length === 1) suggestions.push(held[0].title ? t("{name} in the holding area won’t go on the calendar", { name: held[0].title }) : t("1 workout in the holding area won’t go on the calendar"));
+  else if (held.length > 1) suggestions.push(t("{n} in the holding area won’t go on the calendar", { n: held.length }));
   return suggestions;
 }
 
@@ -562,12 +563,12 @@ export interface SaveStatus { tone: "ok" | "warning" | "error"; text: string }
 
 /** The line beside "Plan checks". Warnings are what validation warns about plus the advice below it. */
 export function saveStatus(issues: readonly TrainingPlanValidationIssue[], suggestions: readonly string[], dirty: boolean, saving = false): SaveStatus {
-  if (saving) return { tone: "ok", text: "Saving…" };
+  if (saving) return { tone: "ok", text: t("Saving…") };
   const errors = issues.filter((issue) => issue.severity === "error").length;
   const warnings = issues.length - errors + suggestions.length;
-  if (errors) return { tone: "error", text: errors === 1 ? "Fix 1 issue before saving" : `Fix ${errors} issues before saving` };
-  if (warnings) return { tone: "warning", text: warnings === 1 ? "Ready to save · 1 warning" : `Ready to save · ${warnings} warnings` };
-  return { tone: "ok", text: dirty ? "Ready to save." : "Saved · everything is up to date" };
+  if (errors) return { tone: "error", text: errors === 1 ? t("Fix 1 issue before saving") : t("Fix {n} issues before saving", { n: errors }) };
+  if (warnings) return { tone: "warning", text: warnings === 1 ? t("Ready to save · 1 warning") : t("Ready to save · {n} warnings", { n: warnings }) };
+  return { tone: "ok", text: dirty ? t("Ready to save.") : t("Saved · everything is up to date") };
 }
 
 /* ───────────── Words ───────────── */
@@ -579,7 +580,6 @@ export function durationText(seconds: number): string {
   return h > 0 ? `${h} h ${m} min` : `${m} min`;
 }
 
-const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** A workout's line on its card: "45 min · 63" (time, else distance, else sets; then its load). */
 export function entryMeta(entry: TrainingPlanEntry, pacing: PlanPacing = null): string {
@@ -587,7 +587,7 @@ export function entryMeta(entry: TrainingPlanEntry, pacing: PlanPacing = null): 
   const parts: string[] = [];
   if (m.durationSeconds) parts.push(durationText(m.durationSeconds));
   else if (m.distanceMeters) parts.push(`${(m.distanceMeters / 1000).toFixed(2)} km`);
-  else if (m.strengthSets) parts.push(count(m.strengthSets, "set", "sets"));
+  else if (m.strengthSets) parts.push(m.strengthSets === 1 ? t("1 set") : t("{n} sets", { n: m.strengthSets }));
   if (m.trainingLoad) parts.push(thousands(m.trainingLoad));
   return parts.join(" · ") || (entry.workout ? sportLabel(entry.workout.sport) : "");
 }
@@ -596,18 +596,18 @@ export function entryMeta(entry: TrainingPlanEntry, pacing: PlanPacing = null): 
 
 /** Goals on the "Build me a plan" tile, each a starting point for the generator. */
 export const PLAN_GOAL_PRESETS = [
-  { id: "5k", label: "5K", goal: "Run a faster 5K", weeks: 8, sessionsPerWeek: 4 },
-  { id: "10k", label: "10K", goal: "Run a faster 10K", weeks: 10, sessionsPerWeek: 4 },
-  { id: "half", label: "Half", goal: "Race a half marathon", weeks: 12, sessionsPerWeek: 5 },
-  { id: "marathon", label: "Marathon", goal: "Race a marathon", weeks: 16, sessionsPerWeek: 5 },
-  { id: "trail", label: "Trail ultra", goal: "Finish a trail ultra strong", weeks: 16, sessionsPerWeek: 5 },
+  { id: "5k", label: "5K", goal: msg("Run a faster 5K"), weeks: 8, sessionsPerWeek: 4 },
+  { id: "10k", label: "10K", goal: msg("Run a faster 10K"), weeks: 10, sessionsPerWeek: 4 },
+  { id: "half", label: msg("Half"), goal: msg("Race a half marathon"), weeks: 12, sessionsPerWeek: 5 },
+  { id: "marathon", label: msg("Marathon"), goal: msg("Race a marathon"), weeks: 16, sessionsPerWeek: 5 },
+  { id: "trail", label: msg("Trail ultra"), goal: msg("Finish a trail ultra strong"), weeks: 16, sessionsPerWeek: 5 },
 ] as const;
 
 export type PlanGoalPreset = (typeof PLAN_GOAL_PRESETS)[number];
 export const planGoalPreset = (id: string | null | undefined): PlanGoalPreset | undefined => PLAN_GOAL_PRESETS.find((preset) => preset.id === id);
 
-export const PLAN_SOURCE_LABELS: Record<PlanSource, string> = { coros: "COROS", local: "Local", template: "Template", coach: "Coach" };
-const DIFFICULTY_LABELS: Record<PlanDifficulty, string> = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced", custom: "" };
+export const PLAN_SOURCE_LABELS: Record<PlanSource, string> = { coros: "COROS", local: msg("Local"), template: msg("Template"), coach: msg("Coach") };
+const DIFFICULTY_LABELS: Record<PlanDifficulty, string> = { beginner: msg("Beginner"), intermediate: msg("Intermediate"), advanced: msg("Advanced"), custom: "" };
 
 export interface PlanView {
   /** What the plan is for, in the author's words. */
@@ -629,13 +629,13 @@ export function planView(plan: TrainingPlanDocument, summary: TrainingPlanSummar
   const hasLoad = summary.weekly.some((week) => week.trainingLoad > 0);
   const values = summary.weekly.map((week) => (hasLoad ? week.trainingLoad : week.workouts));
   const top = Math.max(0, ...values);
-  const difficulty = DIFFICULTY_LABELS[plan.difficulty];
+  const difficulty = DIFFICULTY_LABELS[plan.difficulty] && t(DIFFICULTY_LABELS[plan.difficulty]);
   return {
     note: plan.goal || plan.description,
     facts: [plan.sportMix.map(sportLabel).join(", "), difficulty].filter(Boolean).join(" · "),
     sessions: summary.workouts,
     peakLoad: hasLoad ? Math.round(top) : 0,
-    chart: hasLoad ? "Weekly load" : "Sessions per week",
+    chart: hasLoad ? msg("Weekly load") : msg("Sessions per week"),
     bars: values.map((value, index) => ({ value, share: top > 0 ? value / top : 0, phase: phaseForWeek(plan, index)?.kind ?? (phaseForWeek(plan, index) ? "custom" : undefined) })),
     ribbon: plan.phases.map((phase) => ({ id: phase.id, label: phaseLabel(phase), weeks: Math.max(1, phase.endWeek - phase.startWeek + 1), kind: phase.kind ?? "custom" })),
   };
@@ -700,15 +700,15 @@ export function installStanding(plan: TrainingPlanDocument, today: string): Inst
 export function planStatus(plan: TrainingPlanDocument, today: string): { text: string; live: boolean } {
   const install = activeTrainingPlanCalendarInstall(plan, today);
   const start = planDate(install?.startDate ?? plan.startDate);
-  if (!install) return { text: start ? `Starts ${shortDay(start)}` : "Unscheduled", live: false };
+  if (!install) return { text: start ? t("Starts {day}", { day: shortDay(start) }) : t("Unscheduled"), live: false };
   if (install.state === "partial" && install.lastOperation === "install") {
     const s = installStanding(plan, today);
-    return { text: `Calendar install incomplete · ${s.added} of ${s.total} workouts added`, live: false };
+    return { text: t("Calendar install incomplete · {added} of {total} workouts added", { added: s.added, total: s.total }), live: false };
   }
-  if (!start) return { text: "On calendar", live: true };
+  if (!start) return { text: t("On calendar"), live: true };
   const days = daysBetween(start, today), week = Math.floor(days / 7) + 1;
-  if (days < 0) return { text: `Starts ${shortDay(start)}`, live: true };
-  return { text: week <= plan.weekCount ? `Week ${week} of ${plan.weekCount}` : "On calendar", live: true };
+  if (days < 0) return { text: t("Starts {day}", { day: shortDay(start) }), live: true };
+  return { text: week <= plan.weekCount ? t("Week {week} of {weeks}", { week, weeks: plan.weekCount }) : t("On calendar"), live: true };
 }
 
 /** A plan with a warning to settle: sync trouble, a calendar install that stopped part-way, or one that no longer matches the plan. */
@@ -721,14 +721,14 @@ export type PlanScope = "all" | "calendar" | "favorite" | "coros" | "local" | "c
 
 /** The filter chips, each only while a plan would show under it. */
 export function planScopes(plans: readonly TrainingPlanDocument[], today: string): { id: PlanScope; label: string }[] {
-  const options: { id: PlanScope; label: string }[] = [{ id: "all", label: "All" }];
-  if (plans.some((plan) => activeTrainingPlanCalendarInstall(plan, today))) options.push({ id: "calendar", label: "On calendar" });
-  if (plans.some((plan) => plan.favorite)) options.push({ id: "favorite", label: "Favorites" });
+  const options: { id: PlanScope; label: string }[] = [{ id: "all", label: t("All") }];
+  if (plans.some((plan) => activeTrainingPlanCalendarInstall(plan, today))) options.push({ id: "calendar", label: t("On calendar") });
+  if (plans.some((plan) => plan.favorite)) options.push({ id: "favorite", label: t("Favorites") });
   for (const source of ["coros", "local", "coach"] as const) {
-    if (plans.some((plan) => plan.source === source)) options.push({ id: source, label: PLAN_SOURCE_LABELS[source] });
+    if (plans.some((plan) => plan.source === source)) options.push({ id: source, label: t(PLAN_SOURCE_LABELS[source]) });
   }
-  if (plans.some((plan) => planNeedsAttention(plan, today))) options.push({ id: "unsettled", label: "Needs attention" });
-  if (plans.some((plan) => plan.archived)) options.push({ id: "archived", label: "Archived" });
+  if (plans.some((plan) => planNeedsAttention(plan, today))) options.push({ id: "unsettled", label: t("Needs attention") });
+  if (plans.some((plan) => plan.archived)) options.push({ id: "archived", label: t("Archived") });
   return options;
 }
 
@@ -755,7 +755,7 @@ export function duplicateTrainingPlan(plan: TrainingPlanDocument, env: PlanEnv =
   const copy = structuredClone(plan);
   delete copy.calendarInstalls;
   return {
-    ...copy, id: env.newId("plan"), name: `${plan.name} copy`, source: plan.source === "coach" ? "coach" : "local", favorite: false, archived: false, syncState: "local",
+    ...copy, id: env.newId("plan"), name: t("{name} copy", { name: plan.name }), source: plan.source === "coach" ? "coach" : "local", favorite: false, archived: false, syncState: "local",
     entries: copy.entries.map((entry) => ({ ...entry, id: env.newId("entry") })), phases: copy.phases.map((phase) => ({ ...phase, id: env.newId("phase") })),
     createdAt: now, updatedAt: now,
   };
@@ -776,13 +776,13 @@ export interface CalendarPreview {
 
 /** What "Add to calendar" would write for a plan, from `today` on. Rest days, notes and the holding area are left out. */
 export function planCalendarPreview(plan: TrainingPlanDocument, today: string): CalendarPreview {
-  if (!planDate(plan.startDate)) return { targets: [], skipped: [], blocker: "Set a plan start date first." };
+  if (!planDate(plan.startDate)) return { targets: [], skipped: [], blocker: t("Set a plan start date first.") };
   const all: CalendarTarget[] = plan.entries
     .filter((entry) => entry.kind === "workout" && entry.dayIndex !== undefined && entry.weekIndex >= 0 && entry.weekIndex < plan.weekCount)
-    .map((entry) => ({ entry, day: entryDay(plan, entry)!, name: entry.title ?? entry.workout?.name ?? "Workout" }))
+    .map((entry) => ({ entry, day: entryDay(plan, entry)!, name: entry.title ?? entry.workout?.name ?? t("Workout") }))
     .sort((a, b) => a.day.localeCompare(b.day) || a.entry.sortOrder - b.entry.sortOrder);
-  const targets = all.filter((t) => t.day >= today), skipped = all.filter((t) => t.day < today);
-  const blocker = all.length === 0 ? "Put a workout on a day first." : targets.length === 0 ? "Every workout in this plan is on a day that has passed." : null;
+  const targets = all.filter((x) => x.day >= today), skipped = all.filter((x) => x.day < today);
+  const blocker = all.length === 0 ? t("Put a workout on a day first.") : targets.length === 0 ? t("Every workout in this plan is on a day that has passed.") : null;
   return { targets, skipped, blocker };
 }
 
@@ -810,13 +810,13 @@ export async function installTrainingPlan(plan: TrainingPlanDocument, today: str
   const preview = planCalendarPreview(plan, today);
   if (preview.blocker) throw new Error(preview.blocker);
   const standing = installStanding(plan, today);
-  if (standing.install && !standing.retrying) throw new Error("This plan is on your calendar already.");
+  if (standing.install && !standing.retrying) throw new Error(t("This plan is on your calendar already."));
   const now = env.now();
   let install: PlanCalendarInstall = standing.install
     ? { ...standing.install, failures: [], lastOperation: "install", updatedAt: now }
     : { id: env.newId("install"), startDate: planDate(plan.startDate)!, fromDate: today, planRevision: trainingPlanCalendarRevision(plan), state: "partial", lastOperation: "install", total: preview.targets.length, occurrences: [], failures: [], createdAt: now, updatedAt: now };
   const have = new Set(install.occurrences.filter((o) => !o.removedAt).map((o) => o.planEntryId));
-  const todo = preview.targets.filter((t) => !have.has(t.entry.id));
+  const todo = preview.targets.filter((x) => !have.has(x.entry.id));
   install = { ...install, total: have.size + todo.length, state: "partial" };
   let current = plan;
   for (const target of todo) {

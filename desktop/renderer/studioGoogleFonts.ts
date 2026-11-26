@@ -3,6 +3,7 @@
 // FontFace API from the app's own origin, so the canvas draws and rasterizes a chosen family like an installed font.
 // On export it becomes PNG digits like any font, and the face's saved snapshot keeps it drawable offline. Rewritten
 // from CorosLink's src/watchfaces/watchfaceGoogleFonts.ts.
+import { t } from "@/lib/i18n";
 import { collectWatchfaceFontUses, forgetWatchfaceFontAvailability, hasWatchfaceFontSnapshot, isWatchfaceFontInstalled, normalizeWatchfaceFontFamily } from "../watchface/engine/watchfaceFontSnapshots";
 import { googleFamily, googleFontFile, googleFontList, resolveGoogleFonts, said, type GoogleFamily, type GoogleFamilyFaces, type GoogleFontList } from "./studio";
 import type { Design } from "./studioFace";
@@ -61,9 +62,10 @@ export function googleFamiliesToLoad(design: Design, installed: (family: string)
 
 /** What to say when Google fonts a face names couldn't be loaded; `snapshot` says whether the face carries the glyphs. */
 export function missingGoogleFontsMessage(families: readonly string[], snapshot: (family: string) => boolean = hasWatchfaceFontSnapshot): string {
-  const names = families.length > 2 ? `${families.slice(0, 2).join(", ")} and ${families.length - 2} more` : families.join(" and ");
+  const names = families.length > 2 ? t("{names} and {n} more", { names: families.slice(0, 2).join(", "), n: families.length - 2 })
+    : families.length === 2 ? t("{a} and {b}", { a: families[0]!, b: families[1]! }) : families.join("");
   const kept = families.every(snapshot);
-  return `${names} couldn't be loaded from Google Fonts. ${kept ? "The face draws from its saved snapshot." : "Another font stands in until it can be."}`;
+  return `${t("{names} couldn't be loaded from Google Fonts.", { names })} ${kept ? t("The face draws from its saved snapshot.") : t("Another font stands in until it can be.")}`;
 }
 
 // ───── Loading into the page ─────
@@ -167,7 +169,7 @@ export async function openGoogleFonts(design: Design, late: (message?: string) =
       }));
     } catch (e) {
       // The app itself couldn't be asked; nothing is known about which were Google's.
-      return `Fonts couldn't be loaded: ${said(e)}`;
+      return t("Fonts couldn't be loaded: {reason}", { reason: said(e) });
     }
     return failed.length ? missingGoogleFontsMessage(failed) : undefined;
   })();

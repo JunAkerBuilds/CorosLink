@@ -1,3 +1,4 @@
+import { t } from "./text";
 import type {
   CorosWatchfaceRasterFont,
   CorosWatchfaceRasterFontFolder,
@@ -91,7 +92,7 @@ function addUniqueSprite(
   const existing = target.get(key);
   if (existing) {
     throw new Error(
-      `Duplicate PNG sprite “${displayKey}” was found in “${normalizedRelativePath(existing)}” and “${normalizedRelativePath(sprite)}”. Choose a folder with only one file for each sprite.`
+      t("Duplicate PNG sprite “{{key}}” was found in “{{first}}” and “{{second}}”. Choose a folder with only one file for each sprite.", { key: displayKey, first: normalizedRelativePath(existing), second: normalizedRelativePath(sprite) })
     );
   }
   target.set(key, sprite);
@@ -188,7 +189,7 @@ export async function createRasterFontFolderReplacement(
   );
   if (digitSprites.size === 0 && labelSprites.size === 0) {
     throw new Error(
-      "Choose a digits folder, a weekdays folder, or a parent folder containing PNG sprites."
+      t("Choose a digits folder, a weekdays folder, or a parent folder containing PNG sprites.")
     );
   }
   const atlas = digitSprites.size > 0

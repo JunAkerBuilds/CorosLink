@@ -4,6 +4,7 @@
 // dragging, the base stands in for the face and the sprite follows the pointer; after the drop both stay until the
 // face composed at the new place is ready, then it replaces them in one paint. So there's never a frame with the
 // artwork in two places, or in none.
+import { t } from "@/lib/i18n";
 import { chartDragSplit } from "../watchface/engine/chartReadouts";
 import { makeWatchfaceDragForegroundDesign } from "../watchface/engine/watchfaceDragIsolation";
 import type { WatchfacePreviewScenario } from "../watchface/engine/watchfaceSimulation";
@@ -192,6 +193,6 @@ const canvas = (w: number, h = w): HTMLCanvasElement => Object.assign(document.c
 const decode = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
   const img = new Image();
   img.onload = () => resolve(img);
-  img.onerror = () => reject(new Error("Couldn't read a drag frame."));
+  img.onerror = () => reject(new Error(t("Couldn't read a drag frame.")));
   img.src = src;
 });

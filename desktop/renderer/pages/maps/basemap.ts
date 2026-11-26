@@ -2,16 +2,22 @@
 // with no account or token. One map per screen. Also the OpenStreetMap trail overlays (Waymarked Trails).
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type * as maplibregl from "maplibre-gl";
+import { t, tx } from "@/lib/i18n";
 
 export type BaseMap = "street" | "outdoors" | "topo" | "satellite" | "light" | "dark";
-export const BASE_MAPS: { value: BaseMap; label: string; swatch: string }[] = [
-  { value: "street", label: "Street", swatch: "#e9e3d6" },
-  { value: "outdoors", label: "Outdoors", swatch: "#b9d3a5" },
-  { value: "topo", label: "Topo", swatch: "#e5dcbf" },
-  { value: "satellite", label: "Satellite", swatch: "#3d4a33" },
-  { value: "light", label: "Light", swatch: "#eceeee" },
-  { value: "dark", label: "Dark", swatch: "#262a2b" },
+export const BASE_MAPS: { value: BaseMap; swatch: string }[] = [
+  { value: "street", swatch: "#e9e3d6" },
+  { value: "outdoors", swatch: "#b9d3a5" },
+  { value: "topo", swatch: "#e5dcbf" },
+  { value: "satellite", swatch: "#3d4a33" },
+  { value: "light", swatch: "#eceeee" },
+  { value: "dark", swatch: "#262a2b" },
 ];
+/** A base map's name, in the app's language (read when shown). */
+export const baseMapName = (b: BaseMap) => ({
+  street: tx("base map", "Street"), outdoors: tx("base map", "Outdoors"), topo: tx("base map", "Topo"),
+  satellite: tx("base map", "Satellite"), light: tx("base map", "Light"), dark: tx("base map", "Dark"),
+})[b];
 
 type Style = NonNullable<maplibregl.MapOptions["style"]>;
 const GLYPHS = "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf";
@@ -77,7 +83,7 @@ export function useMap(box: RefObject<HTMLDivElement | null>, options: { style: 
           dragRotate: false, pitchWithRotate: false, attributionControl: { compact: true },
         });
       } catch {
-        setState((s) => ({ ...s, problem: "This computer can't draw the map (WebGL is off)." }));
+        setState((s) => ({ ...s, problem: t("This computer can't draw the map (WebGL is off).") }));
         return;
       }
       const made = map, el = box.current;

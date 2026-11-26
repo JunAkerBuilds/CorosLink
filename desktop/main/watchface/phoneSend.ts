@@ -13,6 +13,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import http from "node:http";
 import os from "node:os";
+import { t } from "@/lib/i18n";
 
 export const PHONE_FACE_LINK_PREFIX = "coroslink://face/1";
 /** How long a code stays live: long enough to find the phone, short enough not to leave a port open. */
@@ -110,10 +111,10 @@ export class PhoneSend {
   /** Serves `data` until it expires or `stop()`; a new send replaces the last. */
   async start(input: { data: Buffer; name: string; model?: string }): Promise<PhoneFaceSendInfo> {
     const { data } = input;
-    if (!data.length) throw new Error("Build the watch face before sending it to your iPhone.");
-    if (data.length > PHONE_FACE_MAX_BYTES) throw new Error("This watch face is larger than 64 MB, which C-LINK on iPhone can't receive.");
+    if (!data.length) throw new Error(t("Build the watch face before sending it to your iPhone."));
+    if (data.length > PHONE_FACE_MAX_BYTES) throw new Error(t("This watch face is larger than 64 MB, which C-LINK on iPhone can't receive."));
     const hosts = (this.options.hosts ?? phoneSendAddresses)();
-    if (!hosts.length) throw new Error("This computer isn't on a local network. Join the same Wi-Fi as your iPhone, or your iPhone's Personal Hotspot, and try again.");
+    if (!hosts.length) throw new Error(t("This computer isn't on a local network. Join the same Wi-Fi as your iPhone, or your iPhone's Personal Hotspot, and try again."));
     this.stop();
 
     const token = randomBytes(16).toString("base64url");
@@ -163,7 +164,7 @@ export class PhoneSend {
     timer.unref();
     this.active = { server, timer, status };
 
-    const name = cleanName(input.name) || "Custom watch face";
+    const name = cleanName(input.name) || t("Custom watch face");
     const link = encodePhoneFaceLink({ hosts, port, token, sha256, size: data.length, name, model: input.model });
     return { link, qrDataUrl: await qrCodeDataUrl(link), name, size: data.length, hosts, expiresAt };
   }

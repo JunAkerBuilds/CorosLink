@@ -10,6 +10,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { t } from "@/lib/i18n";
 
 export const CATALOG_ORIGIN = "https://watchfaces.coroslink.com";
 const MAX_CATALOG_BYTES = 2 * 1024 * 1024;
@@ -63,7 +64,7 @@ export interface CommunityProgress { slug: string; stage: "downloading" | "verif
 // ───── Checking what the catalog sends ─────
 
 type Check<T> = (value: unknown, at: string) => T;
-const fail = (at: string): never => { throw new CommunityProblem(`The community catalog sent something unexpected (${at}).`, "catalog"); };
+const fail = (at: string): never => { throw new CommunityProblem(t("The community catalog sent something unexpected ({at}).", { at }), "catalog"); };
 const obj = (value: unknown, at: string): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : fail(at);
 const text = (min: number, max: number, pattern?: RegExp): Check<string> => (value, at) =>
@@ -144,7 +145,7 @@ function modelQueryOk(u: URL): boolean {
 function onCatalog(value: string, origin: string, pathname: RegExp, allowModel = false): URL {
   const u = new URL(value);
   if (u.origin !== origin || !pathname.test(u.pathname) || (allowModel ? !modelQueryOk(u) : Boolean(u.search)) || u.hash) {
-    throw new CommunityProblem("The community catalog returned an untrusted URL.", "catalog");
+    throw new CommunityProblem(t("The community catalog returned an untrusted URL."), "catalog");
   }
   return u;
 }
@@ -191,13 +192,13 @@ export function catalogQuery(input: CommunityQuery = {}): URLSearchParams {
 
 export function cleanSlug(slug: unknown): string {
   const s = String(slug ?? "").trim().toLowerCase();
-  if (!SLUG.test(s) || s.length > 100) throw new CommunityProblem("Choose a valid community watch face.", "badFace", 400);
+  if (!SLUG.test(s) || s.length > 100) throw new CommunityProblem(t("Choose a valid community watch face."), "badFace", 400);
   return s;
 }
 
 export function cleanModel(model: unknown): string | undefined {
   if (model === undefined || model === null || model === "") return undefined;
-  if (!(COMMUNITY_MODELS as readonly string[]).includes(String(model))) throw new CommunityProblem("Choose a watch the community catalog knows.", "badModel", 400);
+  if (!(COMMUNITY_MODELS as readonly string[]).includes(String(model))) throw new CommunityProblem(t("Choose a watch the community catalog knows."), "badModel", 400);
   return String(model);
 }
 
@@ -232,12 +233,12 @@ export class CommunityCatalog {
       answer = await this.fetch(new URL(pathname, this.origin), {
         headers: { accept: "application/json", "user-agent": this.userAgent }, redirect: "error", signal: AbortSignal.timeout(15_000),
       });
-    } catch { throw new CommunityProblem("The community catalog couldn't be reached. Check the connection and try again.", "offline"); }
-    if (Number(answer.headers.get("content-length") ?? 0) > MAX_CATALOG_BYTES) throw new CommunityProblem("The community catalog answer is unexpectedly large.");
+    } catch { throw new CommunityProblem(t("The community catalog couldn't be reached. Check the connection and try again."), "offline"); }
+    if (Number(answer.headers.get("content-length") ?? 0) > MAX_CATALOG_BYTES) throw new CommunityProblem(t("The community catalog answer is unexpectedly large."));
     const bytes = Buffer.from(await answer.arrayBuffer());
-    if (!bytes.length || bytes.length > MAX_CATALOG_BYTES) throw new CommunityProblem("The community catalog returned an invalid answer.");
+    if (!bytes.length || bytes.length > MAX_CATALOG_BYTES) throw new CommunityProblem(t("The community catalog returned an invalid answer."));
     let value: unknown;
-    try { value = JSON.parse(bytes.toString("utf8")); } catch { throw new CommunityProblem("The community catalog returned invalid JSON."); }
+    try { value = JSON.parse(bytes.toString("utf8")); } catch { throw new CommunityProblem(t("The community catalog returned invalid JSON.")); }
     if (!answer.ok) {
       const message = value && typeof value === "object" && typeof (value as { message?: unknown }).message === "string" ? (value as { message: string }).message : "";
       throw new CommunityProblem(message || `The community catalog answered ${answer.status}.`, answer.status === 404 ? "missing" : "community", answer.status === 404 ? 404 : 502);
@@ -254,26 +255,26 @@ export class CommunityCatalog {
     const s = cleanSlug(slug), m = cleanModel(model);
     const item = checkFaceUrls(parseCommunityItem(await this.getJson(`/api/v1/watch-faces/${encodeURIComponent(s)}${m ? `?${new URLSearchParams({ model: m })}` : ""}`)), this.origin);
     if (m && new URL(item.downloadUrl).searchParams.get("model") !== m) {
-      throw new CommunityProblem("The community catalog didn't return that watch's version of this face.", "badModel");
+      throw new CommunityProblem(t("The community catalog didn't return that watch's version of this face."), "badModel");
     }
     return item;
   }
 
   /** A face's picture, by its id: always the catalog's own preview route. */
   async preview(id: string): Promise<{ bytes: Buffer; type: string }> {
-    if (!UUID.test(id)) throw new CommunityProblem("No such face.", "missing", 404);
+    if (!UUID.test(id)) throw new CommunityProblem(t("No such face."), "missing", 404);
     let answer: Response;
     try {
       answer = await this.fetch(new URL(`/api/watch-faces/${id.toLowerCase()}/preview`, this.origin), {
         headers: { accept: "image/png,image/webp,image/jpeg", "user-agent": this.userAgent }, redirect: "follow", signal: AbortSignal.timeout(15_000),
       });
-    } catch { throw new CommunityProblem("The community catalog couldn't be reached.", "offline"); }
-    if (!answer.ok) throw new CommunityProblem(`The community catalog answered ${answer.status}.`, "missing", answer.status === 404 ? 404 : 502);
+    } catch { throw new CommunityProblem(t("The community catalog couldn't be reached."), "offline"); }
+    if (!answer.ok) throw new CommunityProblem(t("The community catalog answered {status}.", { status: answer.status }), "missing", answer.status === 404 ? 404 : 502);
     const bytes = Buffer.from(await answer.arrayBuffer());
     const type = bytes.length >= 4 && bytes.readUInt32BE(0) === 0x89504e47 ? "image/png"
       : bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg"
         : bytes.toString("latin1", 0, 4) === "RIFF" && bytes.toString("latin1", 8, 12) === "WEBP" ? "image/webp" : "";
-    if (!type || bytes.length > MAX_PREVIEW_BYTES) throw new CommunityProblem("That preview isn't a picture.");
+    if (!type || bytes.length > MAX_PREVIEW_BYTES) throw new CommunityProblem(t("That preview isn't a picture."));
     return { bytes, type };
   }
 
@@ -282,7 +283,7 @@ export class CommunityCatalog {
    * the preview. `null` when the face has none (the catalog answers `null` or an older format).
    */
   async animation(id: string): Promise<{ bytes: Buffer; type: string } | null> {
-    if (!UUID.test(id)) throw new CommunityProblem("No such face.", "missing", 404);
+    if (!UUID.test(id)) throw new CommunityProblem(t("No such face."), "missing", 404);
     const meta = await this.getJson(`/api/watch-faces/${id.toLowerCase()}/animation`);
     const image = meta && typeof meta === "object" ? (meta as { version?: unknown; image?: unknown }) : null;
     if (!image || image.version !== 2 || image.image !== `/api/watch-faces/${id.toLowerCase()}/animation/image`) return null;
@@ -291,7 +292,7 @@ export class CommunityCatalog {
       answer = await this.fetch(new URL(image.image, this.origin), {
         headers: { accept: "image/webp", "user-agent": this.userAgent }, redirect: "follow", signal: AbortSignal.timeout(20_000),
       });
-    } catch { throw new CommunityProblem("The community catalog couldn't be reached.", "offline"); }
+    } catch { throw new CommunityProblem(t("The community catalog couldn't be reached."), "offline"); }
     if (!answer.ok) return null;
     const bytes = Buffer.from(await answer.arrayBuffer());
     const webp = bytes.length >= 12 && bytes.toString("latin1", 0, 4) === "RIFF" && bytes.toString("latin1", 8, 12) === "WEBP";
@@ -306,14 +307,14 @@ export class CommunityCatalog {
       answer = await this.fetch(new URL(item.downloadUrl), {
         headers: { accept: "application/zip,application/octet-stream", "user-agent": this.userAgent }, redirect: "manual", signal: AbortSignal.timeout(15_000),
       });
-    } catch { throw new CommunityProblem("The community catalog couldn't be reached.", "offline"); }
+    } catch { throw new CommunityProblem(t("The community catalog couldn't be reached."), "offline"); }
     if (![302, 303, 307, 308].includes(answer.status)) {
-      if (answer.status === 404) throw new CommunityProblem("This watch face is no longer available.", "missing", 404);
-      throw new CommunityProblem(`The download couldn't be prepared (${answer.status}).`);
+      if (answer.status === 404) throw new CommunityProblem(t("This watch face is no longer available."), "missing", 404);
+      throw new CommunityProblem(t("The download couldn't be prepared ({status}).", { status: answer.status }));
     }
     const location = answer.headers.get("location");
     const trusted = location ? trustedDownloadLocation(location, this.origin) : null;
-    if (!trusted) throw new CommunityProblem("The community download pointed somewhere untrusted.", "untrusted");
+    if (!trusted) throw new CommunityProblem(t("The community download pointed somewhere untrusted."), "untrusted");
     return trusted;
   }
 
@@ -324,17 +325,17 @@ export class CommunityCatalog {
       answer = await this.fetch(from, {
         headers: { accept: "application/zip,application/octet-stream", "user-agent": this.userAgent }, redirect: "error", signal: AbortSignal.timeout(120_000),
       });
-    } catch { throw new CommunityProblem("The watch face couldn't be downloaded. Check the connection and try again.", "offline"); }
-    if (!answer.ok || !answer.body) throw new CommunityProblem(`The watch face download failed (${answer.status}).`);
+    } catch { throw new CommunityProblem(t("The watch face couldn't be downloaded. Check the connection and try again."), "offline"); }
+    if (!answer.ok || !answer.body) throw new CommunityProblem(t("The watch face download failed ({status}).", { status: answer.status }));
     const total = Number(answer.headers.get("content-length") ?? 0) || undefined;
-    if (total && total > MAX_COMMUNITY_PACKAGE) throw new CommunityProblem("The community watch face is larger than 100 MB.", "tooBig");
+    if (total && total > MAX_COMMUNITY_PACKAGE) throw new CommunityProblem(t("The community watch face is larger than 100 MB."), "tooBig");
     const hash = createHash("sha256");
     const out = await fs.promises.open(to, "wx");
     let received = 0;
     try {
       for await (const chunk of answer.body as unknown as AsyncIterable<Uint8Array>) {
         received += chunk.length;
-        if (received > MAX_COMMUNITY_PACKAGE) throw new CommunityProblem("The community watch face is larger than 100 MB.", "tooBig");
+        if (received > MAX_COMMUNITY_PACKAGE) throw new CommunityProblem(t("The community watch face is larger than 100 MB."), "tooBig");
         hash.update(chunk);
         await out.write(chunk);
         this.progress = { slug: item.slug, stage: "downloading", receivedBytes: received, ...(total ? { totalBytes: total } : {}) };
@@ -342,7 +343,7 @@ export class CommunityCatalog {
     } finally {
       await out.close();
     }
-    if (!received) throw new CommunityProblem("The community watch face was empty.");
+    if (!received) throw new CommunityProblem(t("The community watch face was empty."));
     this.progress = { slug: item.slug, stage: "verifying", receivedBytes: received, ...(total ? { totalBytes: total } : {}) };
     return hash.digest("hex");
   }
@@ -353,7 +354,7 @@ export class CommunityCatalog {
    */
   async download<T>(slug: unknown, model: unknown, open: (bytes: Buffer, item: CommunityFace) => Promise<T>): Promise<{ item: CommunityFace; opened: T }> {
     const s = cleanSlug(slug);
-    if (this.active) throw new CommunityProblem(this.active === s ? "This watch face is already downloading." : "Wait for the current download to finish.", "busy", 409);
+    if (this.active) throw new CommunityProblem(this.active === s ? t("This watch face is already downloading.") : t("Wait for the current download to finish."), "busy", 409);
     this.active = s;
     await fs.promises.mkdir(this.folder, { recursive: true });
     const id = randomUUID();
@@ -361,7 +362,7 @@ export class CommunityCatalog {
     try {
       const item = await this.face(s, model);
       const digest = await this.stream(await this.signedLocation(item), partial, item);
-      if (digest !== item.packageSha256) throw new CommunityProblem("The downloaded watch face didn't match its reviewed package.", "mismatch");
+      if (digest !== item.packageSha256) throw new CommunityProblem(t("The downloaded watch face didn't match its reviewed package."), "mismatch");
       await fs.promises.rename(partial, whole);
       this.progress = { slug: item.slug, stage: "opening", receivedBytes: item.packageBytes, totalBytes: item.packageBytes };
       return { item, opened: await open(await fs.promises.readFile(whole), item) };

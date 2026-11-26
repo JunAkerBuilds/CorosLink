@@ -8,6 +8,7 @@ import path from "node:path";
 import { refToDate, type RefDate } from "@/data/sync/native";
 import { packBackup } from "./backup";
 import type { LocalStore } from "./localStore";
+import { t } from "@/lib/i18n";
 
 /** The sport tiles setup offers, in the order it shows them. */
 export const SPORTS = ["run", "trail", "ride", "swim", "lift", "hike", "tri", "ski", "row", "climb", "yoga", "hybrid"] as const;
@@ -142,7 +143,7 @@ export class FirstRun {
     if (request.method === "POST") {
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
       this.change(body);
-    } else if (request.method !== "GET") return json({ error: { code: "method", message: "Not here." } }, 405);
+    } else if (request.method !== "GET") return json({ error: { code: "method", message: t("Not here.") } }, 405);
     return json(this.state());
   }
 

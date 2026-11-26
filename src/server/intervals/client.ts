@@ -2,6 +2,7 @@
 // Ported from the desktop app (CorosLink electron/intervalsService.ts). Requests go only to intervals.icu over
 // https. The API key travels in the Authorization header and nowhere else: never in a URL, a log or an answer.
 import { HubInvalid, HubProblem } from "@/server/hub/errors";
+import { t } from "@/lib/i18n";
 
 const ORIGIN = "https://intervals.icu";
 const BASE = ORIGIN + "/api/v1";
@@ -17,20 +18,20 @@ type Fetch = typeof fetch;
 /** An API key as typed: printable, no spaces. */
 export function intervalsKey(value: unknown): string {
   const found = typeof value === "string" ? value.trim() : "";
-  if (!/^[\x21-\x7e]{4,200}$/.test(found)) throw new HubInvalid("Enter your intervals.icu API key.");
+  if (!/^[\x21-\x7e]{4,200}$/.test(found)) throw new HubInvalid(t("Enter your intervals.icu API key."));
   return found;
 }
 
 /** An athlete ID such as i204817: it becomes part of a path, so letters and digits only. */
 export function intervalsAthlete(value: unknown): string {
   const found = typeof value === "string" ? value.trim() : "";
-  if (!/^[A-Za-z0-9]{1,32}$/.test(found)) throw new HubInvalid("Enter your intervals.icu athlete ID, like i123456.");
+  if (!/^[A-Za-z0-9]{1,32}$/.test(found)) throw new HubInvalid(t("Enter your intervals.icu athlete ID, like i123456."));
   return found;
 }
 
 /** An activity ID such as i55512345. */
 export function intervalsActivityId(value: unknown): string {
-  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(value)) throw new HubInvalid("That activity isn't valid.");
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(value)) throw new HubInvalid(t("That activity isn't valid."));
   return value;
 }
 
@@ -53,7 +54,7 @@ export class Intervals {
 
   private async get(path: string, login: IntervalsLogin, accept: string): Promise<Response> {
     const url = new URL(BASE + path);
-    if (url.origin !== ORIGIN) throw new HubProblem("C-LINK only talks to intervals.icu for this.", "blocked");
+    if (url.origin !== ORIGIN) throw new HubProblem(t("C-LINK only talks to intervals.icu for this."), "blocked");
     const response = await this.send(url, { Authorization: authHeader(login.apiKey), Accept: accept });
     if (response.status === 401 || response.status === 403) throw new HubInvalid("intervals.icu didn't accept that API key.");
     return response;
@@ -93,10 +94,10 @@ export class Intervals {
     }
     if (response.status === 404) throw new HubProblem("intervals.icu has no original file for this activity.");
     if (!response.ok) throw new HubProblem(`intervals.icu couldn't send that file (HTTP ${response.status}).`);
-    if (Number(response.headers.get("content-length") ?? 0) > MAX_FILE_BYTES) throw new HubProblem("That file is too large to send to COROS.");
+    if (Number(response.headers.get("content-length") ?? 0) > MAX_FILE_BYTES) throw new HubProblem(t("That file is too large to send to COROS."));
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length === 0) throw new HubProblem("intervals.icu has no original file for this activity.");
-    if (bytes.length > MAX_FILE_BYTES) throw new HubProblem("That file is too large to send to COROS.");
+    if (bytes.length > MAX_FILE_BYTES) throw new HubProblem(t("That file is too large to send to COROS."));
     return bytes;
   }
 }

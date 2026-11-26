@@ -2,21 +2,22 @@
 // the plan editor. Read from the name first (Coach and people name sessions the way they mean them), then from the
 // steps (repeats are intervals, a long single effort is a long run) and the sport. Pure.
 import type { BuilderDoc } from "@/lib/builder";
+import { msg } from "@/lib/i18n";
 
 export type WorkoutType = "easy" | "long" | "tempo" | "intervals" | "speed" | "hills" | "recovery" | "race" | "strength" | "cross" | "other";
 
 export const WORKOUT_TYPES: Record<WorkoutType, { label: string; hue: string }> = {
-  easy: { label: "Easy", hue: "mint" },
-  long: { label: "Long", hue: "blue" },
-  tempo: { label: "Tempo", hue: "gold" },
-  intervals: { label: "Intervals", hue: "coral" },
-  speed: { label: "Speed", hue: "pink" },
-  hills: { label: "Hills", hue: "violet" },
-  recovery: { label: "Recovery", hue: "cyan" },
-  race: { label: "Race", hue: "rose" },
-  strength: { label: "Strength", hue: "orange" },
-  cross: { label: "Cross", hue: "lime" },
-  other: { label: "Workout", hue: "honey" },
+  easy: { label: msg("Easy"), hue: "mint" },
+  long: { label: msg("Long"), hue: "blue" },
+  tempo: { label: msg("Tempo"), hue: "gold" },
+  intervals: { label: msg("Intervals"), hue: "coral" },
+  speed: { label: msg("Speed"), hue: "pink" },
+  hills: { label: msg("Hills"), hue: "violet" },
+  recovery: { label: msg("Recovery"), hue: "cyan" },
+  race: { label: msg("Race"), hue: "rose" },
+  strength: { label: msg("Strength"), hue: "orange" },
+  cross: { label: msg("Cross"), hue: "lime" },
+  other: { label: msg("Workout"), hue: "honey" },
 };
 
 /** The order the legend lists them in: from easiest to hardest, then the rest. */

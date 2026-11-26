@@ -1,10 +1,11 @@
 // Shared by the screens that draw a route or name a sport from synced activities.
 import type { NativeSport } from "./native";
+import { msg } from "@/lib/i18n";
 
 /** The phone's own English name for each sport family (TrainingInsights.Sport.title). */
 export const SPORT_TITLE: Record<NativeSport, string> = {
-  run: "Run", indoorRun: "Indoor run", trailRun: "Trail run", track: "Track run", walk: "Walk", hike: "Hike", bike: "Ride", indoorBike: "Indoor ride",
-  poolSwim: "Pool swim", openWater: "Open water", strength: "Strength", cardio: "Cardio", ski: "Ski", row: "Row", multisport: "Multisport", other: "Workout",
+  run: msg("Run"), indoorRun: msg("Indoor run"), trailRun: msg("Trail run"), track: msg("Track run"), walk: msg("Walk"), hike: msg("Hike"), bike: msg("Ride"), indoorBike: msg("Indoor ride"),
+  poolSwim: msg("Pool swim"), openWater: msg("Open water"), strength: msg("Strength"), cardio: msg("Cardio"), ski: msg("Ski"), row: msg("Row"), multisport: msg("Multisport"), other: msg("Workout"),
 };
 
 export interface ProjectedPoint { x: number; y: number; /** Metres covered on reaching the point. */ d: number; /** Where the point is on Earth, for the real map. */ lat: number; lon: number }

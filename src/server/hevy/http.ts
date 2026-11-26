@@ -10,6 +10,7 @@ import { open, seal } from "@/server/hub/seal";
 import { shareConnection } from "@/server/connections";
 import { Hevy, hevyKey, type HevyIdentity } from "./client";
 import { mockHevyFetch } from "./mock";
+import { t } from "@/lib/i18n";
 
 const LOGIN_COOKIE = "clink_hevy";
 const LOGIN_SECONDS = 180 * 24 * 3600;
@@ -62,7 +63,7 @@ export async function readLogin(): Promise<HevyLogin | null> {
 
 export async function writeLogin(login: HevyLogin): Promise<void> {
   const owner = (await readAccount())?.viewer.id;
-  if (!owner) throw new HubInvalid("C-LINK is still starting. Try again in a moment.");
+  if (!owner) throw new HubInvalid(t("C-LINK is still starting. Try again in a moment."));
   const sealed: SealedLogin = { ...login, owner };
   (await cookies()).set(LOGIN_COOKIE, seal(LOGIN_COOKIE, sealed, LOGIN_SECONDS), cookieOptions(LOGIN_SECONDS));
 }
@@ -90,7 +91,7 @@ export const shareLogin = (login: HevyLogin | null): Promise<void> => shareConne
 /** Runs `work` with the saved connection; a plain "connect first" without one. */
 export async function withLogin<T>(work: (login: HevyLogin) => Promise<T>): Promise<T> {
   const login = await readLogin();
-  if (!login) throw new HubInvalid("Connect Hevy first.");
+  if (!login) throw new HubInvalid(t("Connect Hevy first."));
   return work(login);
 }
 

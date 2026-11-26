@@ -64,6 +64,8 @@
 .cn-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; }
 .cn-card-actions .btn { height: 32px; }
 .cn-note { margin: 0; font-size: 13px; color: var(--muted); }
+/* A part of a card that has more than one way in (COROS account: the host app's own, then Training Hub). */
+.cn-part { margin: 4px 0 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; font-weight: 700; }
 .cn-problem { margin: 0; font-size: 13px; font-weight: 600; color: var(--h-rose-ink); }
 
 /* Sign-in forms inside the Training Hub card */

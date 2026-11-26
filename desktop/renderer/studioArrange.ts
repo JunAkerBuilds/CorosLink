@@ -1,6 +1,7 @@
 // Arranging the face's own artwork (imported images, text and shapes): its paint order and duplicates. CorosLink's
 // Move backward / forward (Alt+↑ / Alt+↓, with Shift to the back or front) and ⌘D. Template parts have a fixed order
 // on the watch, so only artwork moves.
+import { t } from "@/lib/i18n";
 import {
   moveWatchfaceArtworkLayer, resolveWatchfaceArtworkLayerOrder, watchfaceBackgroundElementLayerId, watchfaceSpriteLayerId,
 } from "../watchface/engine/watchfaceArtworkLayers";
@@ -46,7 +47,7 @@ export function duplicate(design: Design, layerId: string): { design: Design; la
     const sprites = design.designSprites ?? [];
     const source = sprites.find((s) => watchfaceSpriteLayerId(s.id) === layerId);
     if (!source) return null;
-    if (sprites.length >= MAX_DESIGN_SPRITES) throw new Error(`A face can hold up to ${MAX_DESIGN_SPRITES} imported images.`);
+    if (sprites.length >= MAX_DESIGN_SPRITES) throw new Error(t("A face can hold up to {max} imported images.", { max: MAX_DESIGN_SPRITES }));
     const id = freshId(new Set(sprites.map((s) => s.id)), source.id.replace(/-\d+$/, ""));
     const copy = { ...source, id, x: source.x + OFFSET, y: source.y + OFFSET, ...(source.name ? { name: `${source.name} copy` } : {}) };
     const at = sprites.indexOf(source);

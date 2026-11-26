@@ -6,6 +6,7 @@ import type { CoachModel, ModelMessage, ModelRequest, ModelTurn, ToolCall } from
 import { contentText, type CoachFile, type UserPart } from "@/lib/coach/files";
 import { CoachModelError } from "@/server/coach/anthropic";
 import { openBridge, type ToolBridge } from "./bridge";
+import { t } from "@/lib/i18n";
 
 /** One question for an agent: its instructions, the conversation as words, and the newest question's files. */
 export interface AgentAsk {
@@ -92,7 +93,7 @@ export function agentModel(driver: AgentDriver): CoachModel {
             current.text = "";
             return { content: { agent: round.map((h) => h.call.id) }, text: said.trim(), calls: round.map((h) => h.call), stop: "tools", inputTokens: 0, outputTokens: 0 };
           }
-          if (current.failed) { run = null; throw current.failed instanceof CoachModelError || request.signal?.aborted ? current.failed : new CoachModelError("unreachable", "The AI stopped before it answered."); }
+          if (current.failed) { run = null; throw current.failed instanceof CoachModelError || request.signal?.aborted ? current.failed : new CoachModelError("unreachable", t("The AI stopped before it answered.")); }
           if (current.done) {
             run = null;
             const text = (current.text || current.done.text).trim();

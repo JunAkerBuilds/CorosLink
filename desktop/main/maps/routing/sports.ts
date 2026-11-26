@@ -7,6 +7,7 @@
 // change the costs. BRouter can't reward climbing (negative costs break its search), so "hilly" is left to scoring.
 import type { Elevation, RouteSport, Surface } from "../../../maps/types";
 import { RoutingProblem } from "./net";
+import { t } from "@/lib/i18n";
 
 export type Router = "foot" | "road" | "mtb";
 
@@ -21,9 +22,9 @@ export const maxKmFor = (sport: RouteSport) => (isCycling(sport) ? MAX_CYCLING_K
 /** Refuses distances the router can't plan for this sport. */
 export function checkDistance(sport: RouteSport, km: number): void {
   const max = maxKmFor(sport);
-  if (!Number.isFinite(km) || km <= 0) throw new RoutingProblem("Pick a distance above zero.", "distance");
+  if (!Number.isFinite(km) || km <= 0) throw new RoutingProblem(t("Pick a distance above zero."), "distance");
   if (km > max) {
-    throw new RoutingProblem(`${isCycling(sport) ? "Rides" : "Runs, walks and hikes"} can be planned up to ${max} km.`, "distance");
+    throw new RoutingProblem(isCycling(sport) ? t("Rides can be planned up to {max} km.", { max }) : t("Runs, walks and hikes can be planned up to {max} km.", { max }), "distance");
   }
 }
 

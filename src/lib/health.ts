@@ -1,6 +1,7 @@
 /** Pure maths for the Health and Energy screens: dial geometry, sleep stage sums, energy sums, labels. */
 import type { SleepNight, SleepSegment, SleepStage } from "@/data/health";
 import type { EnergyBand, EnergyEvent, EnergyEventKind, EnergyPoint } from "@/data/energy";
+import { language, locale, msg, t } from "@/lib/i18n";
 
 /** Repeatable scatter between -0.5 and 0.5, the same one the design canvas uses for its sample lines and stars. */
 export function scatter(i: number, k: number): number {
@@ -41,10 +42,10 @@ export interface StageTotals {
 }
 
 export function stageTotals(segments: readonly SleepSegment[]): StageTotals {
-  const t: Record<SleepStage, number> = { awake: 0, rem: 0, light: 0, deep: 0 };
-  for (const s of segments) t[s.stage] += s.minutes;
-  const inBed = t.awake + t.rem + t.light + t.deep;
-  return { ...t, asleep: inBed - t.awake, inBed };
+  const tot: Record<SleepStage, number> = { awake: 0, rem: 0, light: 0, deep: 0 };
+  for (const s of segments) tot[s.stage] += s.minutes;
+  const inBed = tot.awake + tot.rem + tot.light + tot.deep;
+  return { ...tot, asleep: inBed - tot.awake, inBed };
 }
 
 /** A night's minutes per stage, asleep and in bed; null where nothing gives the number. */
@@ -57,8 +58,8 @@ export type NightTotals = Record<keyof StageTotals, number | null>;
 export function nightTotals(night: SleepNight): NightTotals {
   const given = night.totals ?? {};
   if (night.segments.length > 0) {
-    const t = stageTotals(night.segments);
-    return { ...t, asleep: given.asleep ?? t.asleep };
+    const tot = stageTotals(night.segments);
+    return { ...tot, asleep: given.asleep ?? tot.asleep };
   }
   const { awake = null, rem = null, light = null, deep = null } = given;
   const asleep = given.asleep ?? (rem != null && light != null && deep != null ? rem + light + deep : null);
@@ -119,11 +120,13 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function weekdayShort(d: Date): string {
+  if (language() !== "en") return d.toLocaleDateString(locale(), { weekday: "short" });
   return WEEKDAYS[d.getDay()];
 }
 
 /** "19 Nov", with the year added when asked. */
 export function dayMonth(d: Date, withYear = false): string {
+  if (language() !== "en") return d.toLocaleDateString(locale(), { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
   return `${d.getDate()} ${MONTHS[d.getMonth()]}${withYear ? ` ${d.getFullYear()}` : ""}`;
 }
 
@@ -269,7 +272,7 @@ export function energySteps(events: readonly EnergyEvent[], endLevel: number, en
   const startLevel = endLevel - total;
   const first = events[0];
   const firstWhen = first ? (first.when ?? first.detail.split(" · ")[0]) : "";
-  const steps: EnergyStep[] = [{ kind: "end", name: "Bedtime", when: firstWhen.split(" – ")[0], from: startLevel, to: startLevel }];
+  const steps: EnergyStep[] = [{ kind: "end", name: t("Bedtime"), when: firstWhen.split(" – ")[0], from: startLevel, to: startLevel }];
   let level = startLevel;
   for (const e of events) {
     steps.push({ kind: e.kind, name: e.name, when: e.when ?? e.detail.split(" · ")[0], from: level, to: level + e.delta });
@@ -282,9 +285,9 @@ export function energySteps(events: readonly EnergyEvent[], endLevel: number, en
 /** A share of a whole in plain words: "three quarters", "two thirds", "half"… */
 export function shareWords(fraction: number): string {
   const f = Math.max(0, Math.min(1, fraction));
-  if (f >= 0.92) return "nearly all";
-  const named: [number, string][] = [[0.8, "most"], [0.75, "three quarters"], [0.667, "two thirds"], [0.5, "half"], [0.333, "a third"], [0.25, "a quarter"]];
+  if (f >= 0.92) return msg("nearly all");
+  const named: [number, string][] = [[0.8, msg("most")], [0.75, msg("three quarters")], [0.667, msg("two thirds")], [0.5, msg("half")], [0.333, msg("a third")], [0.25, msg("a quarter")]];
   let best = named[0];
   for (const n of named) if (Math.abs(n[0] - f) < Math.abs(best[0] - f)) best = n;
-  return Math.abs(best[0] - f) <= 0.06 ? best[1] : f > 0.5 ? "most" : "some";
+  return Math.abs(best[0] - f) <= 0.06 ? best[1] : f > 0.5 ? msg("most") : msg("some");
 }

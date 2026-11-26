@@ -17,10 +17,12 @@ import {
   summarizeTrainingPlan, trainingPlanEntryMetrics, updateTrainingPlanPhase, validateTrainingPlan, withDerivedSportMix, withPhaseKind,
   type PhaseKind, type PlanCalendarInstall, type PlanDifficulty, type TrainingPlanDocument, type TrainingPlanEntry, type TrainingPlanPhase,
 } from "@/lib/plan";
+import { msg, t } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/react";
 
 const DIFFICULTIES: readonly { value: PlanDifficulty; label: string; full: string }[] = [
-  { value: "beginner", label: "Beginner", full: "Beginner" }, { value: "intermediate", label: "Interm.", full: "Intermediate" },
-  { value: "advanced", label: "Advanced", full: "Advanced" }, { value: "custom", label: "Custom", full: "Custom" },
+  { value: "beginner", label: msg("Beginner"), full: msg("Beginner") }, { value: "intermediate", label: msg("Interm."), full: msg("Intermediate") },
+  { value: "advanced", label: msg("Advanced"), full: msg("Advanced") }, { value: "custom", label: msg("Custom"), full: msg("Custom") },
 ];
 
 /** What makes a plan "changed": its content, not when it was touched or where it sits on the calendar. */
@@ -75,7 +77,10 @@ export function PlanEditor({ initial, origin, draft }: { initial: PlanEditorData
   const view = useMemo(() => planView(plan, { ...summary, weekly: summary.weekly.map((w, i) => ({ ...w, workouts: weekly[i]?.workouts ?? 0, trainingLoad: weekly[i]?.trainingLoad ?? 0 })) }), [plan, summary, weekly]);
   const suggestions = useMemo(() => [
     ...planSuggestions(plan, pacing),
-    ...calendarBlockedEntries(plan, toCoros).map((b) => `${b.entry.title ?? "A workout"} can’t go on the ${toCoros ? "COROS calendar" : "calendar"}: ${b.why}`),
+    ...calendarBlockedEntries(plan, toCoros).map((b) => {
+      const vars = { name: b.entry.title ?? t("A workout"), why: b.why };
+      return toCoros ? t("{name} can’t go on the COROS calendar: {why}", vars) : t("{name} can’t go on the calendar: {why}", vars);
+    }),
   ], [plan, pacing, toCoros]);
   const hasError = validation.some((issue) => issue.severity === "error");
   const status = saveStatus(validation, suggestions, dirty, saving);
@@ -109,7 +114,7 @@ export function PlanEditor({ initial, origin, draft }: { initial: PlanEditorData
     setSaid(message);
   };
   const attempt = (work: () => TrainingPlanDocument, message = "") => {
-    try { commit(work(), message); } catch (e) { setProblem(e instanceof Error ? e.message : "That didn't work."); }
+    try { commit(work(), message); } catch (e) { setProblem(e instanceof Error ? e.message : t("That didn’t work.")); }
   };
   const patch = (change: Partial<TrainingPlanDocument>, message?: string) => commit({ ...edited, ...change }, message);
   const step = (by: number, message: string) => { setAt((i) => Math.max(0, Math.min(history.length - 1, i + by))); setConfirmWeek(null); setPicked(null); setSaid(message); };
@@ -118,21 +123,22 @@ export function PlanEditor({ initial, origin, draft }: { initial: PlanEditorData
   const latest = useRef({ edited, commit, step });
   useEffect(() => { latest.current = { edited, commit, step }; });
   const coach = useMemo<PageCoach>(() => ({
-    title: "Plan editor",
-    looking: `Looking at “${plan.name || "Untitled plan"}” · ${plan.weekCount} ${plan.weekCount === 1 ? "week" : "weeks"} · ${summary.workouts} workouts${peak.index >= 0 ? ` · peak week ${peak.index + 1}` : ""}`,
+    title: t("Plan editor"),
+    looking: [`“${plan.name || t("Untitled plan")}”`, plan.weekCount === 1 ? t("1 week") : t("{n} weeks", { n: plan.weekCount }),
+      summary.workouts === 1 ? t("1 workout") : t("{n} workouts", { n: summary.workouts }), peak.index >= 0 ? t("peak week {n}", { n: peak.index + 1 }) : ""].filter(Boolean).join(" · "),
     about: planOutline(plan),
     findings: checks.map((c) => ({ ...c, fix: `Fix this in the plan: ${c.text}` })),
-    asks: ["Long runs on Sunday", "Add a recovery week", "Is this plan right for my goal?", "Make it a bit easier", "What should I watch out for?"],
+    asks: [t("Long runs on Sunday"), t("Add a recovery week"), t("Is this plan right for my goal?"), t("Make it a bit easier"), t("What should I watch out for?")],
     plan: {
       plan,
       apply: (next, message) => latest.current.commit(next, message),
-      undo: () => latest.current.step(-1, "Undone"),
+      undo: () => latest.current.step(-1, t("Undone")),
     },
   }), [plan, summary.workouts, peak.index, checks]);
   usePageCoach(coach);
 
   const move = (entryId: string, weekIndex: number, dayIndex?: number) => {
-    attempt(() => moveTrainingPlanEntry(edited, entryId, weekIndex, dayIndex), dayIndex === undefined ? "Moved to the holding area" : `Moved to week ${weekIndex + 1}`);
+    attempt(() => moveTrainingPlanEntry(edited, entryId, weekIndex, dayIndex), dayIndex === undefined ? t("Moved to the holding area") : t("Moved to week {n}", { n: weekIndex + 1 }));
     setPicked(null);
   };
   const pick = (entryId: string) => {
@@ -149,9 +155,9 @@ export function PlanEditor({ initial, origin, draft }: { initial: PlanEditorData
       setSaving(false);
       setSavedContent(contentOf(edited));
       setNeverSaved(false);
-      setSaid(`Saved “${saved.name}”`);
+      setSaid(t("Saved “{name}”", { name: saved.name }));
       if (saved.id !== plan.id || neverSaved) router.replace(`/calendar/plans/edit?id=${encodeURIComponent(saved.id)}`, { scroll: false });
-    }, (e: unknown) => { setSaving(false); setProblem(e instanceof Error ? e.message : "The plan couldn't be saved."); });
+    }, (e: unknown) => { setSaving(false); setProblem(e instanceof Error ? e.message : t("The plan couldn’t be saved.")); });
   };
   const leave = (href: string) => { if (dirty) setLeaving(href); else router.push(href); };
 
@@ -171,62 +177,62 @@ export function PlanEditor({ initial, origin, draft }: { initial: PlanEditorData
   });
 
   const entryCard = (entry: TrainingPlanEntry) => {
-    const type = entryType(entry), { label, hue } = WORKOUT_TYPES[type];
+    const type = entryType(entry), { hue } = WORKOUT_TYPES[type], label = t(WORKOUT_TYPES[type].label);
     return (
       <button key={entry.id} type="button" className="pe-entry" draggable aria-pressed={picked === entry.id} data-dragging={dragging === entry.id ? "true" : undefined}
         data-wtype={type} style={{ "--wt": `var(--h-${hue})`, "--wt-ink": `var(--h-${hue}-ink)` } as React.CSSProperties}
-        aria-label={`${label}: ${entry.title ?? "Workout"}, ${entryMeta(entry, pacing)}. Choose to move or remove`}
+        aria-label={t("{type}: {name}, {meta}. Choose to move or remove", { type: label, name: entry.title ?? t("Workout"), meta: entryMeta(entry, pacing) })}
         onClick={() => pick(entry.id)}
         onDragStart={(event) => { event.dataTransfer.setData("text/plan-entry", entry.id); event.dataTransfer.effectAllowed = "move"; setDragging(entry.id); }}
         onDragEnd={() => { setDragging(null); setOver(null); }}>
         <span className="pe-type">{label}</span>
-        <span>{entry.title ?? "Workout"}</span>
+        <span>{entry.title ?? t("Workout")}</span>
         <span>{entryMeta(entry, pacing)}</span>
       </button>
     );
   };
   /** How many of each kind the plan holds, for the legend over the weeks. */
-  const typeCounts = TYPE_ORDER.map((t) => ({ type: t, n: plan.entries.filter((e) => e.kind === "workout" && e.dayIndex !== undefined && entryType(e) === t).length })).filter((x) => x.n);
+  const typeCounts = TYPE_ORDER.map((kind) => ({ type: kind, n: plan.entries.filter((e) => e.kind === "workout" && e.dayIndex !== undefined && entryType(e) === kind).length })).filter((x) => x.n);
 
-  const calendarTitle = dirty || neverSaved ? "Save the plan before changing its calendar installation" : undefined;
+  const calendarTitle = dirty || neverSaved ? t("Save the plan before changing its calendar installation") : undefined;
   const start = planDate(plan.startDate);
 
   return (
     <main className="page" style={{ gap: 20, paddingTop: 40 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <nav aria-label="Breadcrumb" className="pl-crumb" style={{ marginBottom: 2 }}>
-          <button type="button" onClick={() => leave("/calendar/plans")}>Workout Library</button><span aria-hidden="true">/</span>
-          <button type="button" onClick={() => leave("/calendar/plans")}>Plans</button><span aria-hidden="true">/</span>
-          <span aria-current="page">Plan editor</span>
+        <nav aria-label={t("Breadcrumb")} className="pl-crumb" style={{ marginBottom: 2 }}>
+          <button type="button" onClick={() => leave("/calendar/plans")}>{t("Workout Library")}</button><span aria-hidden="true">/</span>
+          <button type="button" onClick={() => leave("/calendar/plans")}>{t("Plans")}</button><span aria-hidden="true">/</span>
+          <span aria-current="page">{t("Plan editor")}</span>
           <OriginBadge origin={origin} />
         </nav>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 4 }}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, flex: "1 1 360px", minWidth: 0 }}>
-            <input type="text" className="field pe-name" aria-label="Plan name" value={plan.name} maxLength={80} aria-invalid={plan.name.trim() ? undefined : true} onChange={(e) => patch({ name: e.target.value })} />
-            {dirty ? <span className="pe-pill" data-tone="dirty">Unsaved changes</span> : null}
-            {standing.retrying ? <span className="pe-pill" data-tone="bad">Calendar install incomplete · {standing.added} of {standing.total} workouts added</span> : null}
-            {standing.removing ? <span className="pe-pill" data-tone="bad">Removal incomplete · {standing.added} still on the calendar</span> : null}
-            {standing.differs && !standing.retrying ? <span className="pe-pill" data-tone="dirty">Calendar differs · Remove and add again to apply edits</span> : null}
+            <input type="text" className="field pe-name" aria-label={t("Plan name")} value={plan.name} maxLength={80} aria-invalid={plan.name.trim() ? undefined : true} onChange={(e) => patch({ name: e.target.value })} />
+            {dirty ? <span className="pe-pill" data-tone="dirty">{t("Unsaved changes")}</span> : null}
+            {standing.retrying ? <span className="pe-pill" data-tone="bad">{t("Calendar install incomplete · {added} of {total} workouts added", { added: standing.added, total: standing.total })}</span> : null}
+            {standing.removing ? <span className="pe-pill" data-tone="bad">{t("Removal incomplete · {n} still on the calendar", { n: standing.added })}</span> : null}
+            {standing.differs && !standing.retrying ? <span className="pe-pill" data-tone="dirty">{t("Calendar differs · Remove and add again to apply edits")}</span> : null}
           </div>
           <div className="actions">
-            <Button disabled={at === 0} onClick={() => step(-1, "Undone")}>Undo</Button>
-            <Button disabled={at === history.length - 1} onClick={() => step(1, "Redone")}>Redo</Button>
+            <Button disabled={at === 0} onClick={() => step(-1, t("Undone"))}>{t("Undo")}</Button>
+            <Button disabled={at === history.length - 1} onClick={() => step(1, t("Redone"))}>{t("Redo")}</Button>
             {standing.retrying ? (
               <>
-                <Button disabled={dirty || saving} title={calendarTitle} onClick={() => setCalendar("install")}>Retry calendar install</Button>
-                <Button disabled={dirty || saving} title={calendarTitle} onClick={() => setCalendar("remove")}>Remove partial install</Button>
+                <Button disabled={dirty || saving} title={calendarTitle} onClick={() => setCalendar("install")}>{t("Retry calendar install")}</Button>
+                <Button disabled={dirty || saving} title={calendarTitle} onClick={() => setCalendar("remove")}>{t("Remove partial install")}</Button>
               </>
             ) : (
-              <Button disabled={dirty || neverSaved || saving} title={calendarTitle} onClick={() => setCalendar(onCalendar ? "remove" : "install")}>{onCalendar ? "Remove from calendar" : "Add to calendar"}</Button>
+              <Button disabled={dirty || neverSaved || saving} title={calendarTitle} onClick={() => setCalendar(onCalendar ? "remove" : "install")}>{onCalendar ? t("Remove from calendar") : t("Add to calendar")}</Button>
             )}
-            <Button variant="primary" disabled={!canSave} aria-busy={saving} onClick={save}>{saving ? "Saving…" : dirty || neverSaved ? "Save plan" : "Saved"}</Button>
+            <Button variant="primary" disabled={!canSave} aria-busy={saving} onClick={save}>{saving ? t("Saving…") : dirty || neverSaved ? t("Save plan") : t("Saved")}</Button>
           </div>
         </div>
       </div>
       {problem ? <p role="alert" className="pl-bad" style={{ margin: 0, fontWeight: 600 }}>{problem}</p> : null}
       {differences.length ? (
         <div className="notice" role="status" style={{ alignItems: "flex-start" }}>
-          <span style={{ fontWeight: 700 }}>Coach’s plan differs from what you asked</span>
+          <span style={{ fontWeight: 700 }}>{t("Coach’s plan differs from what you asked")}</span>
           <ul style={{ flex: "1 1 100%", margin: 0, paddingLeft: 18 }}>{differences.map((d) => <li key={d}>{d}</li>)}</ul>
         </div>
       ) : null}
@@ -234,127 +240,127 @@ export function PlanEditor({ initial, origin, draft }: { initial: PlanEditorData
 
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: 24 }}>
         <div className="pe-rail" style={{ flex: "1 1 290px", maxWidth: 340, minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
-          <Card aria-label="Details" className="pl-card" style={{ gap: 12 }}>
-            <h2 className="h2">Details</h2>
-            <label className="pl-label"><span>Goal</span>
-              <input type="text" className="field" value={plan.goal} maxLength={180} placeholder="e.g. Run 10K under 50:00" onChange={(e) => patch({ goal: e.target.value })} style={{ height: 40, padding: "0 12px" }} />
+          <Card aria-label={t("Details")} className="pl-card" style={{ gap: 12 }}>
+            <h2 className="h2">{t("Details")}</h2>
+            <label className="pl-label"><span>{t("Goal")}</span>
+              <input type="text" className="field" value={plan.goal} maxLength={180} placeholder={t("e.g. Run 10K under 50:00")} onChange={(e) => patch({ goal: e.target.value })} style={{ height: 40, padding: "0 12px" }} />
             </label>
-            <div className="pl-label">Difficulty
-              <div role="group" aria-label="Difficulty" className="pe-seg">
-                {DIFFICULTIES.map((d) => <button key={d.value} type="button" aria-pressed={plan.difficulty === d.value} aria-label={d.full} onClick={() => patch({ difficulty: d.value })}>{d.label}</button>)}
+            <div className="pl-label">{t("Difficulty")}
+              <div role="group" aria-label={t("Difficulty")} className="pe-seg">
+                {DIFFICULTIES.map((d) => <button key={d.value} type="button" aria-pressed={plan.difficulty === d.value} aria-label={t(d.full)} onClick={() => patch({ difficulty: d.value })}>{t(d.label)}</button>)}
               </div>
             </div>
-            <label className="pl-label"><span>Plan start date</span>
+            <label className="pl-label"><span>{t("Plan start date")}</span>
               <input type="date" className="field" value={start ?? ""} style={{ height: 40, padding: "0 12px" }}
-                onChange={(e) => { const value = e.target.value; if (value) attempt(() => shiftTrainingPlan(edited, value), `Plan moved to start ${dayMonth(value)}`); }} />
+                onChange={(e) => { const value = e.target.value; if (value) attempt(() => shiftTrainingPlan(edited, value), t("Plan moved to start {day}", { day: dayMonth(value) })); }} />
             </label>
-            <p className="pl-help">Changing it moves every week; workouts keep their weekday.</p>
-            <label className="pl-label"><span>Description</span>
-              <textarea className="field pe-text" rows={6} value={plan.description} maxLength={600} placeholder="What this block is for and how it builds" onChange={(e) => patch({ description: e.target.value })} />
+            <p className="pl-help">{t("Changing it moves every week; workouts keep their weekday.")}</p>
+            <label className="pl-label"><span>{t("Description")}</span>
+              <textarea className="field pe-text" rows={6} value={plan.description} maxLength={600} placeholder={t("What this block is for and how it builds")} onChange={(e) => patch({ description: e.target.value })} />
             </label>
-            <label className="pl-label"><span>Notes</span>
-              <textarea className="field pe-text" rows={2} value={plan.notes} maxLength={4000} placeholder="Private notes for this block" onChange={(e) => patch({ notes: e.target.value })} />
+            <label className="pl-label"><span>{t("Notes")}</span>
+              <textarea className="field pe-text" rows={2} value={plan.notes} maxLength={4000} placeholder={t("Private notes for this block")} onChange={(e) => patch({ notes: e.target.value })} />
             </label>
           </Card>
 
-          <Card aria-label="Phases" className="pl-card" style={{ gap: 12 }}>
-            <h2 className="h2">Phases</h2>
+          <Card aria-label={t("Phases")} className="pl-card" style={{ gap: 12 }}>
+            <h2 className="h2">{t("Phases")}</h2>
             {plan.phases.length ? (
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {plan.phases.map((phase) => <PhaseRow key={`${phase.id}:${phase.startWeek}:${phase.endWeek}`} phase={phase}
                   onChange={(change, message) => commit(updateTrainingPlanPhase(edited, phase.id, change), message)}
-                  onRemove={() => commit(removeTrainingPlanPhase(edited, phase.id), "Phase removed")} />)}
+                  onRemove={() => commit(removeTrainingPlanPhase(edited, phase.id), t("Phase removed"))} />)}
               </div>
             ) : null}
-            {!plan.phases.length ? <p className="pl-help">Phases colour the weeks: Base, Build, Recovery, Peak and Taper. Auto phases reads them off the weekly load.</p> : null}
+            {!plan.phases.length ? <p className="pl-help">{t("Phases colour the weeks: Base, Build, Recovery, Peak and Taper. Auto phases reads them off the weekly load.")}</p> : null}
             <div className="actions" style={{ justifyContent: "flex-start" }}>
-              <Button style={{ height: 32 }} onClick={() => commit(addTrainingPlanPhase(edited), "Phase added")}>+ Add phase</Button>
-              <Button style={{ height: 32 }} disabled={plan.weekCount < 3 || !summary.workouts} title={plan.weekCount < 3 ? "A plan needs 3 weeks or more for phases" : undefined}
-                onClick={() => { const phases = inferPhases(edited); commit({ ...edited, phases }, phases.length ? `${phases.length} phases set from the weekly load` : "No phases fit this plan"); }}>{plan.phases.length ? "Redo phases" : "Auto phases"}</Button>
+              <Button style={{ height: 32 }} onClick={() => commit(addTrainingPlanPhase(edited), t("Phase added"))}>+ {t("Add phase")}</Button>
+              <Button style={{ height: 32 }} disabled={plan.weekCount < 3 || !summary.workouts} title={plan.weekCount < 3 ? t("A plan needs 3 weeks or more for phases") : undefined}
+                onClick={() => { const phases = inferPhases(edited); commit({ ...edited, phases }, phases.length === 1 ? t("1 phase set from the weekly load") : phases.length ? t("{n} phases set from the weekly load", { n: phases.length }) : t("No phases fit this plan")); }}>{plan.phases.length ? t("Redo phases") : t("Auto phases")}</Button>
             </div>
           </Card>
         </div>
 
         <div style={{ flex: "3.4 1 640px", minWidth: 0, display: "flex", flexDirection: "column", gap: 14 }}>
-          <Card aria-label="Plan overview" className="pl-card">
+          <Card aria-label={t("Plan overview")} className="pl-card">
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-              <h2 className="h2">Plan overview</h2>
-              {peak.index >= 0 ? <span className="muted" style={{ fontSize: 13 }}>Peak week {peak.index + 1} · {thousands(peak.load)} load</span> : null}
+              <h2 className="h2">{t("Plan overview")}</h2>
+              {peak.index >= 0 ? <span className="muted" style={{ fontSize: 13 }}>{t("Peak week {n} · {load} load", { n: peak.index + 1, load: thousands(peak.load) })}</span> : null}
             </div>
-            <PlanOverviewChart bars={view.bars} label={`${view.chart}, week 1 to week ${plan.weekCount}`} peak={peak.index}
+            <PlanOverviewChart bars={view.bars} label={t("{chart}, week 1 to week {n}", { chart: view.chart, n: plan.weekCount })} peak={peak.index}
               onWeek={(i) => document.getElementById(`pe-week-${i}`)?.scrollIntoView({ behavior: "smooth", block: "center" })} />
             <PhaseRibbon ribbon={view.ribbon} />
             <div className="pe-facts">
-              <div className="pl-fig"><span>Workouts</span><span>{thousands(summary.workouts)}</span></div>
-              <div className="pl-fig"><span>Duration</span><span>{summary.durationSeconds ? durationText(summary.durationSeconds) : "—"}</span></div>
-              <div className="pl-fig"><span>Distance</span><span>{summary.distanceMeters ? `${(summary.distanceMeters / 1000).toFixed(2)} km` : "—"}</span></div>
-              <div className="pl-fig"><span>Training load</span><span className={summary.trainingLoad ? "pl-load" : undefined}>{summary.trainingLoad ? thousands(summary.trainingLoad) : "—"}</span></div>
-              <div className="pl-fig"><span>Rest days</span><span>{summary.restDays}</span></div>
-              <div className="pl-fig"><span>Peak week</span><span>{peak.index >= 0 ? `Week ${peak.index + 1}` : "—"}</span></div>
+              <div className="pl-fig"><span>{t("Workouts")}</span><span>{thousands(summary.workouts)}</span></div>
+              <div className="pl-fig"><span>{t("Duration")}</span><span>{summary.durationSeconds ? durationText(summary.durationSeconds) : "—"}</span></div>
+              <div className="pl-fig"><span>{t("Distance")}</span><span>{summary.distanceMeters ? `${(summary.distanceMeters / 1000).toFixed(2)} km` : "—"}</span></div>
+              <div className="pl-fig"><span>{t("Training load")}</span><span className={summary.trainingLoad ? "pl-load" : undefined}>{summary.trainingLoad ? thousands(summary.trainingLoad) : "—"}</span></div>
+              <div className="pl-fig"><span>{t("Rest days")}</span><span>{summary.restDays}</span></div>
+              <div className="pl-fig"><span>{t("Peak week")}</span><span>{peak.index >= 0 ? t("Week {n}", { n: peak.index + 1 }) : "—"}</span></div>
             </div>
           </Card>
 
-          <section aria-label="Holding area" className="pe-hold" {...dropZone("holding", 0, undefined)}>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>Holding area</span>
+          <section aria-label={t("Holding area")} className="pe-hold" {...dropZone("holding", 0, undefined)}>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>{t("Holding area")}</span>
             {held.map((entry) => <div key={entry.id} style={{ width: 170, maxWidth: "100%" }}>{entryCard(entry)}</div>)}
-            <span className="muted" style={{ fontSize: 13 }}>{held.length ? "Drag these onto a day to schedule them" : "Drag a workout here to take it off its day"}</span>
+            <span className="muted" style={{ fontSize: 13 }}>{held.length ? t("Drag these onto a day to schedule them") : t("Drag a workout here to take it off its day")}</span>
           </section>
 
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 6 }}>
-            <h2 className="h2">Weeks</h2>
+            <h2 className="h2">{t("Weeks")}</h2>
             {typeCounts.length ? (
-              <div className="pe-legend" aria-label="Workout types in this plan">
-                {typeCounts.map(({ type, n }) => <span key={type} style={{ "--wt": `var(--h-${WORKOUT_TYPES[type].hue})` } as React.CSSProperties}><i aria-hidden="true" />{WORKOUT_TYPES[type].label} {n}</span>)}
+              <div className="pe-legend" aria-label={t("Workout types in this plan")}>
+                {typeCounts.map(({ type, n }) => <span key={type} style={{ "--wt": `var(--h-${WORKOUT_TYPES[type].hue})` } as React.CSSProperties}><i aria-hidden="true" />{t(WORKOUT_TYPES[type].label)} {n}</span>)}
               </div>
             ) : null}
-            <Button aria-pressed={compact} style={{ height: 32 }} onClick={() => setCompact((v) => !v)}>{compact ? "Roomy weeks" : "Compact weeks"}</Button>
+            <Button aria-pressed={compact} style={{ height: 32 }} onClick={() => setCompact((v) => !v)}>{compact ? t("Roomy weeks") : t("Compact weeks")}</Button>
           </div>
 
           {pickedEntry ? (
-            <div className="pe-bar" role="group" aria-label={`Move ${pickedEntry.title ?? "workout"}`}>
-              <span style={{ fontWeight: 700 }}>{pickedEntry.title ?? "Workout"}</span>
-              <Select ref={moveBox} aria-label={`Move ${pickedEntry.title ?? "workout"} to`} value="" style={{ height: 32 }}
+            <div className="pe-bar" role="group" aria-label={pickedEntry.title ? t("Move {name}", { name: pickedEntry.title }) : t("Move workout")}>
+              <span style={{ fontWeight: 700 }}>{pickedEntry.title ?? t("Workout")}</span>
+              <Select ref={moveBox} aria-label={pickedEntry.title ? t("Move {name} to", { name: pickedEntry.title }) : t("Move workout to")} value="" style={{ height: 32 }}
                 onChange={(e) => {
                   const value = e.target.value;
                   if (value === "hold") move(pickedEntry.id, 0, undefined);
                   else if (value) { const [w, d] = value.split(":").map(Number); move(pickedEntry.id, w, d); }
                 }}>
-                <option value="">Move to…</option>
-                {pickedEntry.dayIndex !== undefined ? <option value="hold">Holding area</option> : null}
+                <option value="">{t("Move to…")}</option>
+                {pickedEntry.dayIndex !== undefined ? <option value="hold">{t("Holding area")}</option> : null}
                 {weekly.map((_w, weekIndex) => (
-                  <optgroup key={weekIndex} label={`Week ${weekIndex + 1}`}>
+                  <optgroup key={weekIndex} label={t("Week {n}", { n: weekIndex + 1 })}>
                     {dayNames.map((day, dayIndex) => {
                       const date = planDay(plan, weekIndex * 7 + dayIndex);
-                      return <option key={dayIndex} value={`${weekIndex}:${dayIndex}`} disabled={pickedEntry.weekIndex === weekIndex && pickedEntry.dayIndex === dayIndex}>Week {weekIndex + 1} · {day}{date ? ` ${dayMonth(date)}` : ""}</option>;
+                      return <option key={dayIndex} value={`${weekIndex}:${dayIndex}`} disabled={pickedEntry.weekIndex === weekIndex && pickedEntry.dayIndex === dayIndex}>{t("Week {n} · {day}", { n: weekIndex + 1, day: t(day) })}{date ? ` ${dayMonth(date)}` : ""}</option>;
                     })}
                   </optgroup>
                 ))}
               </Select>
-              <Button onClick={() => { commit(removeTrainingPlanEntry(edited, pickedEntry.id), `${pickedEntry.title ?? "Workout"} removed`); setPicked(null); }}>Remove from plan</Button>
-              <Button onClick={() => setPicked(null)}>Done</Button>
+              <Button onClick={() => { commit(removeTrainingPlanEntry(edited, pickedEntry.id), t("{name} removed", { name: pickedEntry.title ?? t("Workout") })); setPicked(null); }}>{t("Remove from plan")}</Button>
+              <Button onClick={() => setPicked(null)}>{t("Done")}</Button>
             </div>
           ) : null}
 
           <div className="scroll-x">
             <div className={`${compact ? "pe-compact " : ""}${pickedEntry ? "pe-place" : ""}`} style={{ minWidth: 860, display: "flex", flexDirection: "column", gap: 8, padding: 3 }}>
-              <div className="pe-week7 pe-days" aria-hidden="true">{dayNames.map((day, i) => <span key={i}>{day}</span>)}</div>
+              <div className="pe-week7 pe-days" aria-hidden="true">{dayNames.map((day, i) => <span key={i}>{t(day)}</span>)}</div>
               {weekly.map((week, weekIndex) => {
                 const phase = phaseForWeek(plan, weekIndex);
                 const scheduled = plan.entries.filter((entry) => entry.weekIndex === weekIndex && entry.dayIndex !== undefined);
                 const label = String(weekIndex + 1);
                 const first = planDay(plan, weekIndex * 7), last = planDay(plan, weekIndex * 7 + 6);
                 return (
-                  <section key={weekIndex} id={`pe-week-${weekIndex}`} className="pe-row" aria-label={`Week ${label}`} data-now={weekIndex === now.week ? "true" : undefined}>
+                  <section key={weekIndex} id={`pe-week-${weekIndex}`} className="pe-row" aria-label={t("Week {n}", { n: label })} data-now={weekIndex === now.week ? "true" : undefined}>
                     {/* The week's facts sit on one line over its seven days, so the days get the whole width. */}
                     <header className="pe-weekhead">
-                      <strong>Week {label}</strong>
-                      <span className="pe-phase-tag" data-phase={phase ? phase.kind ?? "custom" : ""}><span aria-hidden="true" className="pl-dot" data-phase={phase ? phase.kind ?? "custom" : ""} />{phase ? phaseLabel(phase) : "No phase"}</span>
-                      {first && last ? <span className="muted">{dayMonth(first)} – {dayMonth(last)}{weekIndex === now.week ? " · This week" : ""}</span> : null}
+                      <strong>{t("Week {n}", { n: label })}</strong>
+                      <span className="pe-phase-tag" data-phase={phase ? phase.kind ?? "custom" : ""}><span aria-hidden="true" className="pl-dot" data-phase={phase ? phase.kind ?? "custom" : ""} />{phase ? t(phaseLabel(phase)) : t("No phase")}</span>
+                      {first && last ? <span className="muted">{dayMonth(first)} – {dayMonth(last)}{weekIndex === now.week ? ` · ${t("This week")}` : ""}</span> : null}
                       <span className="pe-weekfacts">
-                        <span>{week.workouts} {week.workouts === 1 ? "workout" : "workouts"}{week.trainingLoad ? <> · <strong className="pl-load">{thousands(week.trainingLoad)}</strong> load</> : null}</span>
+                        <span>{week.workouts === 1 ? t("1 workout") : t("{n} workouts", { n: week.workouts })}{week.trainingLoad ? <> · {tr("{load} load", { load: <strong className="pl-load">{thousands(week.trainingLoad)}</strong> })}</> : null}</span>
                         {week.trainingLoad ? <span aria-hidden="true" className="pe-weekbar"><i style={{ width: `${Math.round((week.trainingLoad / Math.max(1, peak.load)) * 100)}%` }} data-phase={phase ? phase.kind ?? "custom" : "none"} /></span> : null}
                       </span>
-                      <button type="button" className="pe-dots" aria-label={`Week ${label} actions`} aria-expanded={openWeek === weekIndex} onClick={() => { setOpenWeek(openWeek === weekIndex ? null : weekIndex); setConfirmWeek(null); }}>
+                      <button type="button" className="pe-dots" aria-label={t("Week {n} actions", { n: label })} aria-expanded={openWeek === weekIndex} onClick={() => { setOpenWeek(openWeek === weekIndex ? null : weekIndex); setConfirmWeek(null); }}>
                         <Icon d={ICONS.dots} width={2.6} />
                       </button>
                     </header>
@@ -368,35 +374,35 @@ export function PlanEditor({ initial, origin, draft }: { initial: PlanEditorData
                           <div key={key} className="pe-day" {...dropZone(key, weekIndex, dayIndex)}>
                             {entries.filter((entry) => entry.kind === "workout").map(entryCard)}
                             {rest ? (
-                              <span className="pe-rest">Rest day
-                                <button type="button" className="pe-mini" aria-label={`Remove rest day, ${day} of week ${label}`} onClick={() => commit(removeTrainingPlanEntry(edited, rest.id), "Rest day removed")}><Icon d={ICONS.close} size={12} width={2.2} /></button>
+                              <span className="pe-rest">{t("Rest day")}
+                                <button type="button" className="pe-mini" aria-label={t("Remove rest day, {day} of week {n}", { day: t(day), n: label })} onClick={() => commit(removeTrainingPlanEntry(edited, rest.id), t("Rest day removed"))}><Icon d={ICONS.close} size={12} width={2.2} /></button>
                               </span>
                             ) : null}
                             {here ? (
-                              <button type="button" className="pe-here" aria-label={`Move ${pickedEntry.title ?? "workout"} to ${day} of week ${label}`} onClick={() => move(pickedEntry.id, weekIndex, dayIndex)}>Move here</button>
+                              <button type="button" className="pe-here" aria-label={t("Move {name} to {day} of week {n}", { name: pickedEntry.title ?? t("workout"), day: t(day), n: label })} onClick={() => move(pickedEntry.id, weekIndex, dayIndex)}>{t("Move here")}</button>
                             ) : !rest && !pickedEntry ? (
-                              <button type="button" className="pe-mini" title="Mark as rest day" aria-label={`Mark ${day} of week ${label} as a rest day`} onClick={() => attempt(() => addRestDay(edited, weekIndex, dayIndex), "Rest day added")}><Icon d={ICONS.moon} size={12} width={2.2} /></button>
+                              <button type="button" className="pe-mini" title={t("Mark as rest day")} aria-label={t("Mark {day} of week {n} as a rest day", { day: t(day), n: label })} onClick={() => attempt(() => addRestDay(edited, weekIndex, dayIndex), t("Rest day added"))}><Icon d={ICONS.moon} size={12} width={2.2} /></button>
                             ) : null}
                           </div>
                         );
                       })}
                     </div>
                     {openWeek === weekIndex ? (
-                      <div className="pe-tools" role="toolbar" aria-label={`Week ${label} actions`}>
-                        <Button disabled={weekIndex === 0} onClick={() => { attempt(() => reorderTrainingPlanWeek(edited, weekIndex, weekIndex - 1), `Week ${label} moved up`); setOpenWeek(weekIndex - 1); }}>Move up</Button>
-                        <Button disabled={weekIndex === plan.weekCount - 1} onClick={() => { attempt(() => reorderTrainingPlanWeek(edited, weekIndex, weekIndex + 1), `Week ${label} moved down`); setOpenWeek(weekIndex + 1); }}>Move down</Button>
-                        <Button disabled={plan.weekCount >= MAX_PLAN_WEEKS} onClick={() => attempt(() => duplicateTrainingPlanWeek(edited, weekIndex), `Week ${label} duplicated`)}>Duplicate week</Button>
-                        <Button disabled={plan.weekCount >= MAX_PLAN_WEEKS} onClick={() => attempt(() => insertRecoveryWeek(edited, weekIndex), `Recovery week inserted after week ${label}`)}>Insert recovery week after</Button>
+                      <div className="pe-tools" role="toolbar" aria-label={t("Week {n} actions", { n: label })}>
+                        <Button disabled={weekIndex === 0} onClick={() => { attempt(() => reorderTrainingPlanWeek(edited, weekIndex, weekIndex - 1), t("Week {n} moved up", { n: label })); setOpenWeek(weekIndex - 1); }}>{t("Move up")}</Button>
+                        <Button disabled={weekIndex === plan.weekCount - 1} onClick={() => { attempt(() => reorderTrainingPlanWeek(edited, weekIndex, weekIndex + 1), t("Week {n} moved down", { n: label })); setOpenWeek(weekIndex + 1); }}>{t("Move down")}</Button>
+                        <Button disabled={plan.weekCount >= MAX_PLAN_WEEKS} onClick={() => attempt(() => duplicateTrainingPlanWeek(edited, weekIndex), t("Week {n} duplicated", { n: label }))}>{t("Duplicate week")}</Button>
+                        <Button disabled={plan.weekCount >= MAX_PLAN_WEEKS} onClick={() => attempt(() => insertRecoveryWeek(edited, weekIndex), t("Recovery week inserted after week {n}", { n: label }))}>{t("Insert recovery week after")}</Button>
                         {confirmWeek === weekIndex ? (
                           <>
-                            <Button variant="ink" onClick={() => { attempt(() => removeTrainingPlanWeek(edited, weekIndex), `Week ${label} deleted`); setOpenWeek(null); }}>{scheduled.length === 1 ? "Delete 1 item?" : `Delete ${scheduled.length} items?`}</Button>
-                            <Button onClick={() => setConfirmWeek(null)}>Keep</Button>
+                            <Button variant="ink" onClick={() => { attempt(() => removeTrainingPlanWeek(edited, weekIndex), t("Week {n} deleted", { n: label })); setOpenWeek(null); }}>{scheduled.length === 1 ? t("Delete 1 item?") : t("Delete {n} items?", { n: scheduled.length })}</Button>
+                            <Button onClick={() => setConfirmWeek(null)}>{t("Keep")}</Button>
                           </>
                         ) : (
                           <Button disabled={plan.weekCount <= 1} onClick={() => {
                             if (scheduled.length) setConfirmWeek(weekIndex);
-                            else { attempt(() => removeTrainingPlanWeek(edited, weekIndex), `Week ${label} deleted`); setOpenWeek(null); }
-                          }}>Delete week</Button>
+                            else { attempt(() => removeTrainingPlanWeek(edited, weekIndex), t("Week {n} deleted", { n: label })); setOpenWeek(null); }
+                          }}>{t("Delete week")}</Button>
                         )}
                       </div>
                     ) : null}
@@ -405,11 +411,11 @@ export function PlanEditor({ initial, origin, draft }: { initial: PlanEditorData
               })}
             </div>
           </div>
-          <div><Button style={{ height: 34 }} disabled={plan.weekCount >= MAX_PLAN_WEEKS} onClick={() => attempt(() => addTrainingPlanWeek(edited), `Week ${plan.weekCount + 1} added`)}>+ Add week {plan.weekCount + 1}</Button></div>
+          <div><Button style={{ height: 34 }} disabled={plan.weekCount >= MAX_PLAN_WEEKS} onClick={() => attempt(() => addTrainingPlanWeek(edited), t("Week {n} added", { n: plan.weekCount + 1 }))}>+ {t("Add week {n}", { n: plan.weekCount + 1 })}</Button></div>
 
-          <Card aria-label="Plan checks" className="pl-card" style={{ gap: 10 }}>
+          <Card aria-label={t("Plan checks")} className="pl-card" style={{ gap: 10 }}>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <h2 className="h2">Plan checks</h2>
+              <h2 className="h2">{t("Plan checks")}</h2>
               <span role="status" className={status.tone === "error" ? "pl-bad" : status.tone === "warning" ? "pl-warn" : "pl-good"} style={{ fontSize: 13, fontWeight: 600 }}>{status.text}</span>
             </div>
             {[...validation].sort((a, b) => Number(b.severity === "error") - Number(a.severity === "error")).map((issue, i) => (
@@ -423,12 +429,12 @@ export function PlanEditor({ initial, origin, draft }: { initial: PlanEditorData
       </div>
 
       {leaving ? (
-        <PlanDialog title="Discard unsaved plan changes?" onClose={() => setLeaving(null)}
+        <PlanDialog title={t("Discard unsaved plan changes?")} onClose={() => setLeaving(null)}
           actions={<>
-            <Button data-first onClick={() => setLeaving(null)}>Keep editing</Button>
-            <Button variant="ink" onClick={() => router.push(leaving)}>Discard and leave</Button>
+            <Button data-first onClick={() => setLeaving(null)}>{t("Keep editing")}</Button>
+            <Button variant="ink" onClick={() => router.push(leaving)}>{t("Discard and leave")}</Button>
           </>}>
-          <p>{at <= 1 ? "You have 1 unsaved change to this plan. Leaving now throws it away." : `You have ${at} unsaved changes to this plan. Leaving now throws them away.`}</p>
+          <p>{at <= 1 ? t("You have 1 unsaved change to this plan. Leaving now throws it away.") : t("You have {n} unsaved changes to this plan. Leaving now throws them away.", { n: at })}</p>
         </PlanDialog>
       ) : null}
       {calendar ? (
@@ -440,18 +446,18 @@ export function PlanEditor({ initial, origin, draft }: { initial: PlanEditorData
 
 function PhaseRow({ phase, onChange, onRemove }: { phase: TrainingPlanPhase; onChange: (change: (phase: TrainingPlanPhase) => TrainingPlanPhase, message?: string) => void; onRemove: () => void }) {
   const kind: PhaseKind = phase.kind ?? "custom";
-  const label = phaseLabel(phase);
+  const label = t(phaseLabel(phase));
   return (
     <div className="pe-phase">
       <span aria-hidden="true" className="pl-dot" data-phase={kind} />
-      <Select field aria-label={`${label} phase type`} value={kind} onChange={(e) => onChange((p) => withPhaseKind(p, e.target.value as PhaseKind))}>
-        {PHASE_KINDS.map((option) => <option key={option} value={option}>{PHASE_LABELS[option]}</option>)}
+      <Select field aria-label={t("{phase} phase type", { phase: label })} value={kind} onChange={(e) => onChange((p) => withPhaseKind(p, e.target.value as PhaseKind))}>
+        {PHASE_KINDS.map((option) => <option key={option} value={option}>{t(PHASE_LABELS[option])}</option>)}
       </Select>
-      <span className="sr-only">Weeks</span>
-      <WeekBox label={`${label} first week`} value={phase.startWeek} onCommit={(startWeek) => onChange((p) => ({ ...p, startWeek, endWeek: Math.max(startWeek, p.endWeek) }))} />
-      <span aria-label="to">–</span>
-      <WeekBox label={`${label} last week`} value={phase.endWeek} onCommit={(endWeek) => onChange((p) => ({ ...p, endWeek, startWeek: Math.min(p.startWeek, Math.max(1, endWeek)) }))} />
-      <button type="button" className="pl-icon" aria-label={`Remove ${label} phase`} onClick={onRemove}><Icon d={ICONS.close} size={16} width={2} /></button>
+      <span className="sr-only">{t("Weeks")}</span>
+      <WeekBox label={t("{phase} first week", { phase: label })} value={phase.startWeek} onCommit={(startWeek) => onChange((p) => ({ ...p, startWeek, endWeek: Math.max(startWeek, p.endWeek) }))} />
+      <span aria-label={t("to")}>–</span>
+      <WeekBox label={t("{phase} last week", { phase: label })} value={phase.endWeek} onCommit={(endWeek) => onChange((p) => ({ ...p, endWeek, startWeek: Math.min(p.startWeek, Math.max(1, endWeek)) }))} />
+      <button type="button" className="pl-icon" aria-label={t("Remove {phase} phase", { phase: label })} onClick={onRemove}><Icon d={ICONS.close} size={16} width={2} /></button>
     </div>
   );
 }

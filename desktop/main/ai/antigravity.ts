@@ -14,6 +14,7 @@ import { AcpAgent, acpAnswer, acpFailure, allowCoachTools, sessionModels } from 
 import { agentModel, type AgentAsk } from "./agent";
 import { BRIDGE_NAME } from "./bridge";
 import type { AccountProvider } from "./service";
+import { t } from "@/lib/i18n";
 
 const VERSION = "1.4.3";
 const BASE = "https://dl.google.com/agy-extensions/releases";
@@ -74,22 +75,22 @@ export class AntigravityAccount implements AccountProvider {
 
   async status() {
     if (this.note) return { ready: false, problem: this.note };
-    if (!RELEASES[`${process.platform}-${process.arch}`]) return { ready: false, problem: "Antigravity isn't made for this computer." };
-    if (!this.installed()) return { ready: false, problem: `Signing in downloads Antigravity from Google (${Math.round(RELEASES[`${process.platform}-${process.arch}`].bytes / 1e6)} MB).` };
-    return this.signedIn() ? { ready: true, account: "Google account" } : { ready: false, problem: "Not signed in." };
+    if (!RELEASES[`${process.platform}-${process.arch}`]) return { ready: false, problem: t("Antigravity isn't made for this computer.") };
+    if (!this.installed()) return { ready: false, problem: t("Signing in downloads Antigravity from Google ({mb} MB).", { mb: Math.round(RELEASES[`${process.platform}-${process.arch}`].bytes / 1e6) }) };
+    return this.signedIn() ? { ready: true, account: t("Google account") } : { ready: false, problem: t("Not signed in.") };
   }
 
   /** Downloads and unpacks the pinned runtime, once. */
   private install(): Promise<void> {
     this.installing ??= (async () => {
       const release = RELEASES[`${process.platform}-${process.arch}`];
-      if (!release) throw new CoachModelError("unreachable", "Antigravity isn't made for this computer.");
+      if (!release) throw new CoachModelError("unreachable", t("Antigravity isn't made for this computer."));
       const { runtime, root } = this.dirs;
       const zip = path.join(root, `download-${randomUUID()}.zip`), unpacked = `${runtime}.${randomUUID()}`;
       await mkdir(root, { recursive: true, mode: 0o700 });
       try {
         const response = await fetch(release.url, { signal: AbortSignal.timeout(30 * 60_000) });
-        if (!response.ok || !response.body) throw new CoachModelError("unreachable", "Antigravity couldn't be downloaded.");
+        if (!response.ok || !response.body) throw new CoachModelError("unreachable", t("Antigravity couldn't be downloaded."));
         const hash = createHash("sha256");
         let got = 0, shown = 0;
         const body = Readable.fromWeb(response.body as import("node:stream/web").ReadableStream);
@@ -97,14 +98,14 @@ export class AntigravityAccount implements AccountProvider {
           hash.update(chunk);
           got += chunk.length;
           const pct = Math.floor((got / release.bytes) * 100);
-          if (pct >= shown + 5) { shown = pct; this.note = `Downloading Antigravity… ${pct}%`; this.host.progress?.(this.note); }
+          if (pct >= shown + 5) { shown = pct; this.note = t("Downloading Antigravity… {pct}%", { pct }); this.host.progress?.(this.note); }
         });
         await pipeline(body, createWriteStream(zip, { mode: 0o600 }));
-        if (got !== release.bytes || hash.digest("hex") !== release.sha256) throw new CoachModelError("unreachable", "The Antigravity download didn't match Google's release. Nothing was installed.");
-        this.note = "Unpacking Antigravity…";
+        if (got !== release.bytes || hash.digest("hex") !== release.sha256) throw new CoachModelError("unreachable", t("The Antigravity download didn't match Google's release. Nothing was installed."));
+        this.note = t("Unpacking Antigravity…");
         await mkdir(unpacked, { recursive: true, mode: 0o700 });
         await unzip(zip, unpacked);
-        if (!existsSync(path.join(unpacked, FILES.server))) throw new CoachModelError("unreachable", "The Antigravity download is missing its program.");
+        if (!existsSync(path.join(unpacked, FILES.server))) throw new CoachModelError("unreachable", t("The Antigravity download is missing its program."));
         await rm(runtime, { recursive: true, force: true });
         await rename(unpacked, runtime);
       } finally {
@@ -202,7 +203,7 @@ export class AntigravityAccount implements AccountProvider {
   }
 
   private async answer(model: string, ask: AgentAsk) {
-    if (!this.installed()) throw new CoachModelError("bad_key", "Sign in to Antigravity on the AI page.");
+    if (!this.installed()) throw new CoachModelError("bad_key", t("Sign in to Antigravity on the AI page."));
     const log: string[] = [];
     const { agent, stop } = await this.start(null, log);
     let sessionId: unknown = null;
@@ -230,7 +231,7 @@ async function unzip(zip: string, into: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(file, args as string[], { stdio: "ignore" });
     child.on("error", reject);
-    child.on("close", (code) => (code === 0 ? resolve() : reject(new CoachModelError("unreachable", "Antigravity couldn't be unpacked."))));
+    child.on("close", (code) => (code === 0 ? resolve() : reject(new CoachModelError("unreachable", t("Antigravity couldn't be unpacked.")))));
   });
   // Some archives keep the program one folder down.
   const inner = await readdir(into);

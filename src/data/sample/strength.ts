@@ -1,4 +1,6 @@
+import { t } from "@/lib/i18n";
 import type { Muscle, MuscleState, Strength } from "../strength";
+import { dateText } from "../sync/strength";
 
 const m = (name: string, note: string, fatigue: number, state: MuscleState): Muscle => ({ name, note, fatigue, state });
 
@@ -43,3 +45,32 @@ export const SAMPLE_STRENGTH: Strength = {
     { date: "Sat 31 Oct", name: "Lower body", top: "Squat 100 kg × 4 · Leg press 180 kg × 10", sets: 20, liftedKg: 8730, seconds: 2740 },
   ],
 };
+
+/** The sample in the app's language: its notes, ranges and suggestion translated now (exercise and muscle names stay). */
+export function sampleStrength(): Strength {
+  const s = SAMPLE_STRENGTH;
+  const note = (text: string): string => {
+    const days = /^Not trained in (\d+) days$/.exec(text), held = /^Holding for (\d+) weeks$/.exec(text), gain = /^([+−]\S+) kg in (\d+) weeks$/.exec(text), best = /^New best, \+(\S+) kg$/.exec(text);
+    if (days) return t("Not trained in {n} days", { n: days[1] });
+    if (held) return t("Holding for {n} weeks", { n: held[1] });
+    if (gain) return t("{change} kg in {n} weeks", { change: gain[1], n: gain[2] });
+    if (best) return t("New best, +{kg} kg", { kg: best[1] });
+    return t(text);
+  };
+  return {
+    ...s,
+    suggestion: {
+      title: t("Push day"),
+      text: t("Chest, shoulders and triceps are ready. Six exercises, about 50 minutes, built from what you lifted in the last six months. Plan it here and log it in the app at the gym."),
+      figureAlt: t("The muscle figure's torso, close up, with chest, shoulders and triceps lit in ember"),
+    },
+    muscles: s.muscles.map((x) => ({ ...x, note: note(x.note) })),
+    ranges: s.ranges.map((r) => ({ ...r, label: t(r.label) })),
+    lifts: s.lifts.map((l) => ({ ...l, note: note(l.note) })),
+    workouts: s.workouts.map((w) => {
+      const [, day, month] = /^\S+ (\d+) (\S+)$/.exec(w.date) ?? [];
+      const at = new Date(2026, ["Oct", "Nov"].indexOf(month) + 9, Number(day));
+      return day ? { ...w, date: dateText(at) } : w;
+    }),
+  };
+}

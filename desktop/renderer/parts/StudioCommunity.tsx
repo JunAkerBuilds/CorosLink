@@ -5,6 +5,7 @@
 // a project (desktop/main/watchface/community.ts).
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui";
+import { language, locale, msg, t } from "@/lib/i18n";
 import type { WatchfaceTarget } from "../../watchface/watchfaceTargets";
 import { FaceView } from "./FaceView";
 import { Icon } from "./StudioIcon";
@@ -13,23 +14,23 @@ import { downloads, modelFor, useCommunityList } from "../studioCommunity";
 
 type Sort = "newest" | "trending" | "downloads";
 const SORTS: { value: Sort; label: string; icon: string }[] = [
-  { value: "newest", label: "New", icon: "clock" }, { value: "trending", label: "Popular", icon: "spark" }, { value: "downloads", label: "Most downloaded", icon: "download" },
+  { value: "newest", label: msg("New"), icon: "clock" }, { value: "trending", label: msg("Popular"), icon: "spark" }, { value: "downloads", label: msg("Most downloaded"), icon: "download" },
 ];
-const ORDER_LINE: Record<Sort, string> = { newest: "newest first", trending: "most popular", downloads: "most downloaded" };
+const ORDER_LINE: Record<Sort, string> = { newest: msg("newest first"), trending: msg("most popular"), downloads: msg("most downloaded") };
 
 /** The catalog's watch names are the app's labels (PACE Pro, APEX 4…); a watch it doesn't know has no filter. */
 const COMMUNITY_WATCHES = ["PACE 3", "PACE 4", "PACE 4 Pro", "PACE Pro", "APEX 2", "APEX 2 Pro", "APEX 4", "NOMAD", "VERTIX 2", "VERTIX 2S", "VERTIX 4"];
 const DAY = 24 * 60 * 60 * 1000;
 const isNew = (face: CommunityFace) => !!face.publishedAt && Date.now() - Date.parse(face.publishedAt) < 3 * DAY;
-const isAnimated = (face: CommunityFace) => face.tags.some((t) => /anim/i.test(t));
+const isAnimated = (face: CommunityFace) => face.tags.some((tag) => /anim/i.test(tag));
 const ago = (iso: string | null) => {
   if (!iso) return null;
   const days = (Date.now() - Date.parse(iso)) / DAY;
-  if (days < 1) return "today";
-  if (days < 2) return "yesterday";
-  if (days < 14) return `${Math.floor(days)} days ago`;
-  if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  if (days < 1) return t("today");
+  if (days < 2) return t("yesterday");
+  if (days < 14) return t("{n} days ago", { n: Math.floor(days) });
+  if (days < 60) return t("{n} weeks ago", { n: Math.floor(days / 7) });
+  return new Date(iso).toLocaleDateString(language() === "en" ? undefined : locale(), { month: "short", year: "numeric" });
 };
 
 export function CommunityTab({ target, opening, onOpen }: {
@@ -53,11 +54,11 @@ export function CommunityTab({ target, opening, onOpen }: {
   const known = COMMUNITY_WATCHES.includes(target.label);
   const mine = (w: string) => w.toUpperCase() === target.label.toUpperCase();
 
-  useEffect(() => { const t = setTimeout(() => setSearch(typed.trim()), 300); return () => clearTimeout(t); }, [typed]);
+  useEffect(() => { const timer = setTimeout(() => setSearch(typed.trim()), 300); return () => clearTimeout(timer); }, [typed]);
   useEffect(() => {
     if (!opening) return;
-    const t = setInterval(() => { communityProgress().then(setProgress, () => {}); }, 250);
-    return () => clearInterval(t);
+    const timer = setInterval(() => { communityProgress().then(setProgress, () => {}); }, 250);
+    return () => clearInterval(timer);
   }, [opening]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -99,7 +100,7 @@ export function CommunityTab({ target, opening, onOpen }: {
   }, []);
   const toTop = () => top.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
-  const watchLabel = (w: string) => (!w ? "Every watch" : mine(w) ? `Fits my ${target.label}` : w);
+  const watchLabel = (w: string) => (!w ? t("Every watch") : mine(w) ? t("Fits my {watch}", { watch: target.label }) : w);
   const watchOptions = ["", ...(known ? [target.label] : []), ...COMMUNITY_WATCHES.filter((w) => !mine(w))];
   const styleLabel = styles.find((s) => s.value === style)?.label ?? style;
   const pills = [
@@ -111,10 +112,10 @@ export function CommunityTab({ target, opening, onOpen }: {
 
   const status = (face: CommunityFace) => {
     if (opening !== face.slug) return null;
-    if (!progress || progress.slug !== face.slug || progress.receivedBytes === undefined) return "Getting it…";
-    if (progress.stage === "verifying") return "Checking…";
-    if (progress.stage === "opening") return "Opening…";
-    return progress.totalBytes ? `Downloading ${Math.round((progress.receivedBytes / progress.totalBytes) * 100)}%` : "Downloading…";
+    if (!progress || progress.slug !== face.slug || progress.receivedBytes === undefined) return t("Getting it…");
+    if (progress.stage === "verifying") return t("Checking…");
+    if (progress.stage === "opening") return t("Opening…");
+    return progress.totalBytes ? t("Downloading {percent}%", { percent: Math.round((progress.receivedBytes / progress.totalBytes) * 100) }) : t("Downloading…");
   };
   const open = (face: CommunityFace) => {
     if (!group && (face.group?.variantCount ?? 0) > 1) { setGroup(face.group!); toTop(); return; }
@@ -122,8 +123,8 @@ export function CommunityTab({ target, opening, onOpen }: {
     onOpen(face, version, fits);
   };
   const meta = (face: CommunityFace) => [
-    `by ${face.creatorHandle || face.creatorName}`,
-    sort === "newest" ? ago(face.publishedAt) : face.downloadCount !== undefined ? `${downloads(face.downloadCount)} downloads` : null,
+    t("by {creator}", { creator: face.creatorHandle || face.creatorName }),
+    sort === "newest" ? ago(face.publishedAt) : face.downloadCount !== undefined ? t("{n} downloads", { n: downloads(face.downloadCount) }) : null,
   ].filter(Boolean).join(" · ");
 
   return (
@@ -131,21 +132,21 @@ export function CommunityTab({ target, opening, onOpen }: {
       <div ref={top} className="stc-top" aria-hidden="true" />
       {group ? (
         <div className="st-filter-row">
-          <button type="button" className="st-back" onClick={() => setGroup(null)}><Icon name="chevL" size={16} />Community</button>
-          <b className="st-group-name">{group.name}</b><span className="st-hint">{group.variantCount} variants</span>
+          <button type="button" className="st-back" onClick={() => setGroup(null)}><Icon name="chevL" size={16} />{t("Community")}</button>
+          <b className="st-group-name">{group.name}</b><span className="st-hint">{t("{n} variants", { n: group.variantCount })}</span>
         </div>
       ) : null}
 
-      <section className="stc-tools" aria-label="Find community faces">
+      <section className="stc-tools" aria-label={t("Find community faces")}>
         <div className="stc-row">
           <label className="st-search stc-search"><Icon name="search" size={17} />
-            <input ref={searchBox} type="search" aria-label="Search community faces" placeholder="Search faces, creators or watches"
+            <input ref={searchBox} type="search" aria-label={t("Search community faces")} placeholder={t("Search faces, creators or watches")}
               value={typed} onChange={(e) => setTyped(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape" && typed) { e.stopPropagation(); setTyped(""); } }} />
-            {typed ? <button type="button" className="stc-clear" aria-label="Clear search" onClick={() => { setTyped(""); searchBox.current?.focus(); }}><Icon name="close" size={15} /></button>
+            {typed ? <button type="button" className="stc-clear" aria-label={t("Clear search")} onClick={() => { setTyped(""); searchBox.current?.focus(); }}><Icon name="close" size={15} /></button>
               : <kbd className="stc-kbd">⌘F</kbd>}
           </label>
-          <div role="group" aria-label="Order" className="seg stc-sort">
-            {SORTS.map((s) => <button key={s.value} type="button" aria-pressed={sort === s.value} onClick={() => setSort(s.value)}><Icon name={s.icon} size={15} />{s.label}</button>)}
+          <div role="group" aria-label={t("Order")} className="seg stc-sort">
+            {SORTS.map((s) => <button key={s.value} type="button" aria-pressed={sort === s.value} onClick={() => setSort(s.value)}><Icon name={s.icon} size={15} />{t(s.label)}</button>)}
           </div>
           <div className="stc-menu-wrap">
             <button type="button" className="chip stc-watch" aria-haspopup="listbox" aria-expanded={menu} aria-pressed={!!watch}
@@ -153,7 +154,7 @@ export function CommunityTab({ target, opening, onOpen }: {
               <Icon name="watch" size={16} />{watchLabel(watch)}<Icon name="chevD" size={15} />
             </button>
             {menu ? (
-              <div className="st-menu st-menu-down stc-menu pop" role="listbox" aria-label="Watch">
+              <div className="st-menu st-menu-down stc-menu pop" role="listbox" aria-label={t("Watch")}>
                 {watchOptions.map((w) => (
                   <button key={w || "all"} type="button" role="option" aria-selected={watch === w} onClick={() => setWatch(w)}>
                     <span>{watchLabel(w)}</span>{watch === w ? <Icon name="check" size={15} width={2.4} /> : null}
@@ -164,22 +165,22 @@ export function CommunityTab({ target, opening, onOpen }: {
           </div>
         </div>
         {styles.length ? (
-          <div role="group" aria-label="Style" className="stc-chips">
-            <button type="button" className="chip" aria-pressed={!style} onClick={() => setStyle("")}>All</button>
+          <div role="group" aria-label={t("Style")} className="stc-chips">
+            <button type="button" className="chip" aria-pressed={!style} onClick={() => setStyle("")}>{t("All")}</button>
             {styles.map((s) => <button key={s.value} type="button" className="chip" aria-pressed={style === s.value} onClick={() => setStyle(style === s.value ? "" : s.value)}>{s.label}</button>)}
           </div>
         ) : null}
         <div className="stc-line">
-          {list.page ? <b aria-live="polite">{total.toLocaleString()} {total === 1 ? "face" : "faces"}</b> : null}
-          {list.page ? <span>· {ORDER_LINE[list.sort as Sort] ?? ORDER_LINE.newest}</span> : null}
-          {pills.map((p) => <button key={p.label} type="button" className="stc-pill" aria-label={`Remove filter ${p.label}`} onClick={p.off}>{p.label}<Icon name="close" size={13} width={2.2} /></button>)}
-          {pills.length ? <button type="button" className="stc-clear-all" onClick={clearAll}>Clear all</button> : null}
+          {list.page ? <b aria-live="polite">{total === 1 ? t("1 face") : t("{n} faces", { n: total.toLocaleString(language() === "en" ? undefined : locale()) })}</b> : null}
+          {list.page ? <span>· {t(ORDER_LINE[list.sort as Sort] ?? ORDER_LINE.newest)}</span> : null}
+          {pills.map((p) => <button key={p.label} type="button" className="stc-pill" aria-label={t("Remove filter {name}", { name: p.label })} onClick={p.off}>{p.label}<Icon name="close" size={13} width={2.2} /></button>)}
+          {pills.length ? <button type="button" className="stc-clear-all" onClick={clearAll}>{t("Clear all")}</button> : null}
           <span className="st-grow" />
-          <span className="stc-checked"><Icon name="check" size={14} width={2.4} />Every face is reviewed before it&apos;s listed</span>
+          <span className="stc-checked"><Icon name="check" size={14} width={2.4} />{t("Every face is reviewed before it's listed")}</span>
         </div>
       </section>
 
-      {list.sort !== sort && sort !== "newest" && faces.length ? <p className="st-hint">The catalog can&apos;t sort that way yet; newest first.</p> : null}
+      {list.sort !== sort && sort !== "newest" && faces.length ? <p className="st-hint">{t("The catalog can't sort that way yet; newest first.")}</p> : null}
 
       <div className="st-grid">
         {faces.map((face) => {
@@ -190,19 +191,19 @@ export function CommunityTab({ target, opening, onOpen }: {
           const animated = isAnimated(face);
           return (
             <article key={face.id} className="st-card stc-card">
-              <button type="button" className="st-stage" disabled={!!opening} onClick={() => open(face)} aria-label={variants ? `${variants} variants of ${face.title}` : `Open ${face.title}`}>
+              <button type="button" className="st-stage" disabled={!!opening} onClick={() => open(face)} aria-label={variants ? t("{n} variants of {title}", { n: variants, title: face.title }) : t("Open {name}", { name: face.title })}>
                 {animated ? <AnimatedFace face={face} /> : <FaceView src={communityPicture(face)} size={140} label={face.title} />}
-                {animated ? <span className="stc-ribbon">Animated</span> : null}
-                {fresh ? <span className={`stc-badges${animated ? " stc-badges-after" : ""}`}><span className="stc-badge stc-new">New</span></span> : null}
+                {animated ? <span className="stc-ribbon">{t("Animated")}</span> : null}
+                {fresh ? <span className={`stc-badges${animated ? " stc-badges-after" : ""}`}><span className="stc-badge stc-new">{t("New")}</span></span> : null}
                 {variants ? <span className="st-badge st-badge-right"><Icon name="layers" size={12} />{variants}</span> : null}
-                {notListed ? <span className="stc-unlisted"><Icon name="warn" size={12} width={2.2} />Not listed for {target.label}</span> : null}
+                {notListed ? <span className="stc-unlisted"><Icon name="warn" size={12} width={2.2} />{t("Not listed for {watch}", { watch: target.label })}</span> : null}
               </button>
               <div className="st-card-foot">
                 <div className="st-card-text">
                   <h3>{face.title}</h3>
                   <span>{busy ?? meta(face)}</span>
                 </div>
-                <button type="button" className="st-pill" disabled={!!opening} onClick={() => open(face)}>{variants ? "View" : "Open"}</button>
+                <button type="button" className="st-pill" disabled={!!opening} onClick={() => open(face)}>{variants ? t("View") : t("Open")}</button>
               </div>
             </article>
           );
@@ -215,29 +216,29 @@ export function CommunityTab({ target, opening, onOpen }: {
         )) : null}
       </div>
 
-      {error ? <div className="notice" role="alert">{error} <Button onClick={loadMore}>Try again</Button></div> : null}
+      {error ? <div className="notice" role="alert">{error} <Button onClick={loadMore}>{t("Try again")}</Button></div> : null}
       {!loading && !error && list.page && !faces.length ? (
-        <div className="st-empty"><Icon name="search" size={24} /><b>No faces match {search ? `“${search}”` : "these filters"}</b>
-          <span>Try another word, or a different watch or style.</span>
+        <div className="st-empty"><Icon name="search" size={24} /><b>{search ? t("No faces match “{search}”", { search }) : t("No faces match these filters")}</b>
+          <span>{t("Try another word, or a different watch or style.")}</span>
           <div className="stc-empty-actions">
-            {watch ? <Button onClick={() => setWatch("")}>Show every watch</Button> : null}
-            {pills.length ? <Button onClick={clearAll}>Clear filters</Button> : null}
+            {watch ? <Button onClick={() => setWatch("")}>{t("Show every watch")}</Button> : null}
+            {pills.length ? <Button onClick={clearAll}>{t("Clear filters")}</Button> : null}
           </div>
         </div>
       ) : null}
 
       <div ref={end} className="stc-end" aria-live="polite">
-        {loading && faces.length ? <><span className="stc-spin" />Loading more faces…</> : null}
-        {!loading && !error && hasMore && faces.length ? <span className="stc-faint">Showing {faces.length} of {total.toLocaleString()} · more load as you scroll</span> : null}
+        {loading && faces.length ? <><span className="stc-spin" />{t("Loading more faces…")}</> : null}
+        {!loading && !error && hasMore && faces.length ? <span className="stc-faint">{t("Showing {n} of {total} · more load as you scroll", { n: faces.length, total: total.toLocaleString(language() === "en" ? undefined : locale()) })}</span> : null}
         {!loading && !error && !hasMore && faces.length > 12 ? (
-          <span className="stc-done"><i />That&apos;s all {total.toLocaleString()} faces<i />
-            <Button onClick={toTop}><Icon name="arrowUp" size={14} />Back to top</Button></span>
+          <span className="stc-done"><i />{t("That's all {total} faces", { total: total.toLocaleString(language() === "en" ? undefined : locale()) })}<i />
+            <Button onClick={toTop}><Icon name="arrowUp" size={14} />{t("Back to top")}</Button></span>
         ) : null}
       </div>
 
       {scrolled ? (
-        <button type="button" className="stc-to-top pop" onClick={toTop} aria-label="Back to top">
-          <Icon name="arrowUp" size={15} />{faces.length} of {total.toLocaleString()}
+        <button type="button" className="stc-to-top pop" onClick={toTop} aria-label={t("Back to top")}>
+          <Icon name="arrowUp" size={15} />{t("{n} of {total}", { n: faces.length, total: total.toLocaleString(language() === "en" ? undefined : locale()) })}
         </button>
       ) : null}
     </div>
@@ -324,10 +325,10 @@ export function FitsDialog({ face, watch, onCancel, onOpen }: { face: CommunityF
   return (
     <div className="st-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="st-dialog st-small-dialog pop" role="dialog" aria-modal="true" aria-labelledby="st-fits-title">
-        <div className="st-dialog-head"><h2 id="st-fits-title">Not listed for {watch}</h2></div>
+        <div className="st-dialog-head"><h2 id="st-fits-title">{t("Not listed for {watch}", { watch })}</h2></div>
         <div className="st-dialog-stack">
-          <p className="st-note">“{face.title}” is made for {face.models.join(", ")}. It opens in Studio, but may not fit your {watch}.</p>
-          <div className="st-dialog-actions"><Button onClick={onCancel}>Cancel</Button><Button variant="primary" onClick={onOpen}>Open anyway</Button></div>
+          <p className="st-note">{t("“{title}” is made for {models}. It opens in Studio, but may not fit your {watch}.", { title: face.title, models: face.models.join(", "), watch })}</p>
+          <div className="st-dialog-actions"><Button onClick={onCancel}>{t("Cancel")}</Button><Button variant="primary" onClick={onOpen}>{t("Open anyway")}</Button></div>
         </div>
       </div>
     </div>

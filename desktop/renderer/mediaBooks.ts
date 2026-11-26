@@ -1,6 +1,7 @@
 // The Audiobooks section's sums: the parts a split will make (shown before anything converts), their names, and
 // lengths as people read them. The main process does the real split (desktop/main/media/bookPlan.ts); these match it.
 import { createStore } from "@/data/local/store";
+import { t } from "@/lib/i18n";
 import type { Book, Chapter, Split } from "./media";
 
 export const MIN_PART_MINUTES = 3;
@@ -54,11 +55,9 @@ export function clockAt(secs: number): string {
   return h ? `${h}:${String(m).padStart(2, "0")}:${r}` : `${m}:${r}`;
 }
 
-export const partsLabel = (n: number) => `${n} ${n === 1 ? "part" : "parts"}`;
-
 /** "12 chapters" or "40 × 10 min". */
 export function partsSummary(book: Pick<Book, "parts" | "split" | "note">): string {
-  if (book.split.mode === "chapters" && !book.note) return `${book.parts.length} ${book.parts.length === 1 ? "chapter" : "chapters"}`;
+  if (book.split.mode === "chapters" && !book.note) return book.parts.length === 1 ? t("1 chapter") : t("{n} chapters", { n: book.parts.length });
   return `${book.parts.length} × ${book.split.minutes} min`;
 }
 

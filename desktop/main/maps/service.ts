@@ -8,6 +8,7 @@ import { AreasService } from "./areasService";
 import { areasDrive } from "./areas/usb";
 import { PackagesService } from "./packagesService";
 import { RoutesService } from "./routesService";
+import { t } from "@/lib/i18n";
 
 export interface MapsHost {
   /** The app's data folder: maps keeps `maps/routes`, `maps/areas` and `maps/packages` in it. */
@@ -62,10 +63,10 @@ export class MapsService {
         const answer = await part.answer(request, sub);
         if (answer) return answer;
       }
-      return Response.json({ error: { code: "notFound", message: "Maps has nothing at that address." } }, { status: 404 });
+      return Response.json({ error: { code: "notFound", message: t("Maps has nothing at that address.") } }, { status: 404 });
     } catch (error) {
       console.error(`Maps ${request.method} ${sub} failed:`, error);
-      return Response.json({ error: { code: "problem", message: error instanceof Error ? error.message : "Maps couldn't do that." } }, { status: 500 });
+      return Response.json({ error: { code: "problem", message: error instanceof Error ? error.message : t("Maps couldn't do that.") } }, { status: 500 });
     }
   }
 }

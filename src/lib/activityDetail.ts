@@ -3,6 +3,7 @@
 import type { Activity, Lap, MuscleWork, Sport, Streams, StrengthExercise, StrengthSet, SwimData, SwimLength, Stroke, WeekShare, ZoneTime } from "@/data/activities";
 import { paceOver, paceUnit, weekKey } from "@/lib/activities";
 import { clock } from "@/lib/format";
+import { msg, t } from "@/lib/i18n";
 
 const sum = (v: readonly number[]) => v.reduce((s, x) => s + x, 0);
 
@@ -12,11 +13,11 @@ export interface EffortLevel { title: string; from: number; hue: string; meaning
 
 /** The five effort levels, by average heart rate as a percent of threshold heart rate. */
 export const EFFORT_LEVELS: readonly EffortLevel[] = [
-  { title: "Easy", from: 0, hue: "cyan", meaning: "Conversational. Builds the base and lets the body recover." },
-  { title: "Aerobic", from: 81, hue: "mint", meaning: "Steady endurance. Comfortable, sustainable for a long time." },
-  { title: "Tempo", from: 90, hue: "gold", meaning: "Comfortably hard. Short sentences only." },
-  { title: "Threshold", from: 94, hue: "coral", meaning: "Right at the edge of what you can hold for an hour." },
-  { title: "Hard", from: 100, hue: "rose", meaning: "Above threshold. Intervals and finishes; short by nature." },
+  { title: msg("Easy"), from: 0, hue: "cyan", meaning: msg("Conversational. Builds the base and lets the body recover.") },
+  { title: msg("Aerobic"), from: 81, hue: "mint", meaning: msg("Steady endurance. Comfortable, sustainable for a long time.") },
+  { title: msg("Tempo"), from: 90, hue: "gold", meaning: msg("Comfortably hard. Short sentences only.") },
+  { title: msg("Threshold"), from: 94, hue: "coral", meaning: msg("Right at the edge of what you can hold for an hour.") },
+  { title: msg("Hard"), from: 100, hue: "rose", meaning: msg("Above threshold. Intervals and finishes; short by nature.") },
 ];
 export const ZONE_HUES = EFFORT_LEVELS.map((l) => l.hue);
 
@@ -36,9 +37,9 @@ export function thresholdPaceSentence(paceS: number | null, thresholdS: number |
   if (paceS == null || !thresholdS) return null;
   const delta = paceS - thresholdS, size = Math.abs(delta);
   const at = `${clock(Math.round(thresholdS))} /km`;
-  if (size < 3) return `Right at your threshold pace of ${at}.`;
+  if (size < 3) return t("Right at your threshold pace of {pace}.", { pace: at });
   const amount = size < 60 ? `${Math.round(size)} s` : clock(Math.round(size));
-  return `${amount}/km ${delta > 0 ? "slower" : "faster"} than your threshold pace of ${at}.`;
+  return delta > 0 ? t("{amount}/km slower than your threshold pace of {pace}.", { amount, pace: at }) : t("{amount}/km faster than your threshold pace of {pace}.", { amount, pace: at });
 }
 
 // ------------------------------------------------------------------- zones
@@ -71,7 +72,7 @@ export function paceZoneOf(paceS: number, thresholdS: number): number {
 
 /** Power zone tops as a share of FTP; zone 7 is everything above the last. */
 export const POWER_ZONE_TOPS = [0.55, 0.75, 0.9, 1.05, 1.2, 1.5] as const;
-export const POWER_ZONE_NAMES = ["Active recovery", "Endurance", "Tempo", "Threshold", "VO2max", "Anaerobic", "Neuromuscular"] as const;
+export const POWER_ZONE_NAMES = [msg("Active recovery"), msg("Endurance"), msg("Tempo"), msg("Threshold"), "VO2max", msg("Anaerobic"), msg("Neuromuscular")] as const;
 
 export function powerZoneOf(watts: number, ftp: number): number {
   for (let i = 0; i < POWER_ZONE_TOPS.length; i++) if (watts <= POWER_ZONE_TOPS[i] * ftp) return i;
@@ -99,21 +100,21 @@ export function zoneShares<T extends { seconds: number }>(rows: readonly T[]): {
 }
 
 export function hrZoneRange(z: ZoneTime): string {
-  if (z.fromBpm == null) return `under ${(z.toBpm ?? 0) + 1} bpm`;
+  if (z.fromBpm == null) return t("under {bpm} bpm", { bpm: (z.toBpm ?? 0) + 1 });
   if (z.toBpm == null) return `${z.fromBpm}+ bpm`;
   return `${z.fromBpm}–${z.toBpm + 1} bpm`;
 }
 
 export function paceZoneRange(i: number, thresholdS: number): string {
   const at = (r: number) => clock(Math.round(r * thresholdS));
-  if (i === 0) return `slower than ${at(PACE_ZONE_RATIOS[0])} /km`;
-  if (i === PACE_ZONE_RATIOS.length) return `faster than ${at(1)} /km`;
+  if (i === 0) return t("slower than {pace} /km", { pace: at(PACE_ZONE_RATIOS[0]) });
+  if (i === PACE_ZONE_RATIOS.length) return t("faster than {pace} /km", { pace: at(1) });
   return `${at(PACE_ZONE_RATIOS[i])}–${at(PACE_ZONE_RATIOS[i - 1])} /km`;
 }
 
 export function powerZoneRange(i: number, ftp: number): string {
   const top = (k: number) => Math.round(POWER_ZONE_TOPS[k] * ftp);
-  if (i === 0) return `under ${top(0)} W`;
+  if (i === 0) return t("under {watts} W", { watts: top(0) });
   if (i === POWER_ZONE_TOPS.length) return `${top(i - 1)}+ W`;
   return `${top(i - 1)}–${top(i)} W`;
 }
@@ -147,7 +148,7 @@ export function trackOf(streams: Streams, sport: Sport, durationS: number): Trac
     const end = time[n - 1];
     // Without speed the time is spread evenly; with it, the clock is stretched to end on the activity's own time.
     if (!(end > 0)) time = dist.map((d) => (dist![n - 1] > 0 ? (d / dist![n - 1]) * durationS : 0));
-    else if (durationS > 0) time = time.map((t) => (t * durationS) / end);
+    else if (durationS > 0) time = time.map((tm) => (tm * durationS) / end);
   }
   const dt = time.map((_, i) => ((time[Math.min(n - 1, i + 1)] - time[Math.max(0, i - 1)]) / 2));
   return { n, time, dist, dt, speed };
@@ -217,9 +218,9 @@ export interface SplitRow {
 
 const mean = (values: readonly number[] | null | undefined, w: readonly number[], from: number, to: number, pick: (i: number) => boolean): number | null => {
   if (!values) return null;
-  let s = 0, t = 0;
-  for (let i = from; i <= to; i++) if (pick(i) && Number.isFinite(values[i])) { s += values[i] * w[i]; t += w[i]; }
-  return t > 0 ? s / t : null;
+  let s = 0, tm = 0;
+  for (let i = from; i <= to; i++) if (pick(i) && Number.isFinite(values[i])) { s += values[i] * w[i]; tm += w[i]; }
+  return tm > 0 ? s / tm : null;
 };
 
 /** Everything the recording says about the stretch between two distances. */
@@ -339,8 +340,8 @@ export function totalRow(rows: readonly SplitRow[], label: string): SplitRow {
   const time = sum(rows.map((r) => r.durationS));
   const weighted = (pick: (r: SplitRow) => number | null) => {
     const have = rows.filter((r) => pick(r) != null);
-    const t = sum(have.map((r) => r.durationS));
-    return have.length > 0 && t > 0 ? sum(have.map((r) => (pick(r) as number) * r.durationS)) / t : null;
+    const tm = sum(have.map((r) => r.durationS));
+    return have.length > 0 && tm > 0 ? sum(have.map((r) => (pick(r) as number) * r.durationS)) / tm : null;
   };
   const added = (pick: (r: SplitRow) => number | null) => (rows.some((r) => pick(r) != null) ? sum(rows.map((r) => pick(r) ?? 0)) : null);
   const top = (pick: (r: SplitRow) => number | null) => {
@@ -381,9 +382,9 @@ export type WorkoutKind = "Intervals" | "Hard effort" | "Threshold" | "Tempo" | 
 
 /** Share of the heart-rate time under 90%, under 100% and at or over 100% of threshold heart rate. */
 export function intensityShares(hr: readonly number[], dt: readonly number[], thresholdHr: number): { low: number; moderate: number; high: number; seconds: number } {
-  const t = timeInZones(hr, dt, (v) => { const p = (v / thresholdHr) * 100; return p < 90 ? 0 : p < 100 ? 1 : 2; }, 3, (v) => v <= 30);
-  const seconds = sum(t) || 0;
-  return { low: seconds ? t[0] / seconds : 0, moderate: seconds ? t[1] / seconds : 0, high: seconds ? t[2] / seconds : 0, seconds };
+  const tm = timeInZones(hr, dt, (v) => { const p = (v / thresholdHr) * 100; return p < 90 ? 0 : p < 100 ? 1 : 2; }, 3, (v) => v <= 30);
+  const seconds = sum(tm) || 0;
+  return { low: seconds ? tm[0] / seconds : 0, moderate: seconds ? tm[1] / seconds : 0, high: seconds ? tm[2] / seconds : 0, seconds };
 }
 
 /** Laps the athlete pressed themselves, uneven enough to be repetitions. */
@@ -402,18 +403,18 @@ export function workoutKind(input: {
   sport: Sport; laps: readonly Lap[]; hr: readonly number[] | null; dt: readonly number[]; movingS: number; thresholdHr: number | null | undefined; avgHr: number | null;
 }): WorkoutKind | null {
   if (input.sport !== "Run" && input.sport !== "Ride") return null;
-  if (looksLikeIntervals(input.laps)) return "Intervals";
+  if (looksLikeIntervals(input.laps)) return msg("Intervals");
   if (!input.hr || !input.thresholdHr || !input.avgHr) return null;
   const s = intensityShares(input.hr, input.dt, input.thresholdHr);
   if (input.movingS <= 0 || s.seconds < input.movingS * 0.6) return null;
   const pct = (input.avgHr / input.thresholdHr) * 100, minutes = input.movingS / 60;
-  if (s.high >= 0.5) return "Hard effort";
-  if (s.moderate + s.high >= 0.6 && pct >= 94) return "Threshold";
-  if (s.moderate >= 0.4) return "Tempo";
-  if (s.low >= 0.7 && minutes >= (input.sport === "Ride" ? 150 : 75)) return "Long";
-  if (s.low >= 0.9 && pct < 80 && minutes <= 45) return "Recovery";
-  if (s.low >= 0.75) return "Easy";
-  return "Steady";
+  if (s.high >= 0.5) return msg("Hard effort");
+  if (s.moderate + s.high >= 0.6 && pct >= 94) return msg("Threshold");
+  if (s.moderate >= 0.4) return msg("Tempo");
+  if (s.low >= 0.7 && minutes >= (input.sport === "Ride" ? 150 : 75)) return msg("Long");
+  if (s.low >= 0.9 && pct < 80 && minutes <= 45) return msg("Recovery");
+  if (s.low >= 0.75) return msg("Easy");
+  return msg("Steady");
 }
 
 /**
@@ -423,17 +424,17 @@ export function workoutKind(input: {
 export function decoupling(track: Track, output: readonly number[] | null, hr: readonly number[] | null): number | null {
   if (!output || !hr) return null;
   const { time, dt, n } = track;
-  const start = time.findIndex((t) => t >= time[0] + 300);
+  const start = time.findIndex((tm) => tm >= time[0] + 300);
   if (start < 0 || time[n - 1] - time[start] < 1200) return null;
   const mid = (time[start] + time[n - 1]) / 2;
   const half = (from: number, to: number) => {
-    let o = 0, h = 0, t = 0, all = 0;
+    let o = 0, h = 0, tm = 0, all = 0;
     for (let i = start; i < n; i++) {
       if (time[i] < from || time[i] > to) continue;
       all += dt[i];
-      if (hr[i] > 30 && output[i] > 0) { o += output[i] * dt[i]; h += hr[i] * dt[i]; t += dt[i]; }
+      if (hr[i] > 30 && output[i] > 0) { o += output[i] * dt[i]; h += hr[i] * dt[i]; tm += dt[i]; }
     }
-    return all > 0 && t / all >= 0.8 && h > 0 ? o / h : null;
+    return all > 0 && tm / all >= 0.8 && h > 0 ? o / h : null;
   };
   const a = half(time[start], mid), b = half(mid, time[n - 1]);
   return a == null || b == null || a <= 0 ? null : ((a - b) / a) * 100;
@@ -441,10 +442,10 @@ export function decoupling(track: Track, output: readonly number[] | null, hr: r
 
 export function decouplingTitle(percent: number): string {
   const x = Math.abs(percent).toFixed(1);
-  if (percent < -2) return `Got more efficient as it went (${x}%)`;
-  if (percent < 5) return `Held steady: ${x}% drift`;
-  if (percent < 10) return `Some drift: ${x}%`;
-  return `Large drift: ${x}%`;
+  if (percent < -2) return t("Got more efficient as it went ({percent}%)", { percent: x });
+  if (percent < 5) return t("Held steady: {percent}% drift", { percent: x });
+  if (percent < 10) return t("Some drift: {percent}%", { percent: x });
+  return t("Large drift: {percent}%", { percent: x });
 }
 
 /** Second half against first, by distance, as a percent: negative when the second half was faster. */
@@ -461,10 +462,10 @@ export function pacingSplit(track: Track, elevation: readonly number[] | null): 
 
 export function pacingFinding(split: number): Finding {
   const x = Math.abs(split).toFixed(1);
-  const note = `Second half ${x}% ${split < 0 ? "faster" : "slower"}`;
-  if (Math.abs(split) <= 2) return { title: "Even pacing", note };
-  if (split < 0) return { title: "Negative split", note };
-  return { title: split <= 5 ? "Slight fade" : "Positive split", note };
+  const note = split < 0 ? t("Second half {percent}% faster", { percent: x }) : t("Second half {percent}% slower", { percent: x });
+  if (Math.abs(split) <= 2) return { title: t("Even pacing"), note };
+  if (split < 0) return { title: t("Negative split"), note };
+  return { title: split <= 5 ? t("Slight fade") : t("Positive split"), note };
 }
 
 // -------------------------------------------------------------------- ride
@@ -490,8 +491,8 @@ export function normalizedPower(time: readonly number[], power: readonly number[
 export interface PowerNumbers { np: number | null; avg: number; max: number; intensity: number | null; stress: number | null; variability: number | null }
 
 export function powerNumbers(track: Track, power: readonly number[], ftp: number | null | undefined): PowerNumbers {
-  const t = sum(track.dt) || 1;
-  const avg = sum(power.map((p, i) => Math.max(0, p) * track.dt[i])) / t;
+  const tm = sum(track.dt) || 1;
+  const avg = sum(power.map((p, i) => Math.max(0, p) * track.dt[i])) / tm;
   const np = normalizedPower(track.time, power);
   const intensity = np != null && ftp ? np / ftp : null;
   const seconds = track.time[track.n - 1] - track.time[0];
@@ -502,8 +503,8 @@ export function powerNumbers(track: Track, power: readonly number[], ftp: number
   };
 }
 
-export const intensityLabel = (f: number): string => (f < 0.75 ? "Endurance" : f < 0.85 ? "Tempo" : f < 0.95 ? "Sweet spot" : "At threshold or above");
-export const variabilityLabel = (v: number): string => (v <= 1.05 ? "Evenly ridden" : v <= 1.15 ? "Some surges" : "Stop-start or attacking");
+export const intensityLabel = (f: number): string => (f < 0.75 ? t("Endurance") : f < 0.85 ? t("Tempo") : f < 0.95 ? t("Sweet spot") : t("At threshold or above"));
+export const variabilityLabel = (v: number): string => (v <= 1.05 ? t("Evenly ridden") : v <= 1.15 ? t("Some surges") : t("Stop-start or attacking"));
 
 export interface Climb { fromM: number; toM: number; gainM: number; grade: number; seconds: number; powerW: number | null; hr: number | null }
 
@@ -574,8 +575,8 @@ export function harderThan(score: number, activity: Pick<Activity, "id" | "start
   const at = new Date(activity.start).getTime(), from = at - 90 * 86_400_000;
   const family = effortFamily(activity);
   const before = all.filter((a) => {
-    const t = new Date(a.start).getTime();
-    return a.id !== activity.id && t < at && t >= from && effortFamily(a) === family && a.avgHr != null && a.durationS > 0;
+    const tm = new Date(a.start).getTime();
+    return a.id !== activity.id && tm < at && tm >= from && effortFamily(a) === family && a.avgHr != null && a.durationS > 0;
   });
   if (before.length < 5) return null;
   const lower = before.filter((a) => effortFromAverage(a.durationS, a.avgHr as number, maxHr) < score).length;
@@ -674,13 +675,22 @@ export function swimSets(data: SwimData): SwimSet[] {
   });
 }
 
+/** A stroke as it reads inside a set's line ("100 m freestyle"). */
+const STROKE_WORD: Record<Stroke | "mixed", string> = {
+  Freestyle: msg("freestyle"), Breaststroke: msg("breaststroke"), Backstroke: msg("backstroke"), Butterfly: msg("butterfly"),
+  Medley: msg("medley"), Drill: msg("drill"), mixed: msg("mixed strokes"),
+};
+
 export function swimSetText(set: SwimSet): { title: string; detail: string } {
-  const stroke = set.stroke === "mixed" ? "mixed strokes" : set.stroke.toLowerCase();
+  const stroke = t(STROKE_WORD[set.stroke] ?? set.stroke.toLowerCase());
   const pace = `${clock(Math.round(set.paceS))} /100 m`;
-  if (set.reps.length === 1) return { title: `${set.distanceM} m ${stroke}`, detail: `${set.lengths} lengths · ${pace}` };
+  if (set.reps.length === 1) return { title: t("{distance} m {stroke}", { distance: set.distanceM, stroke }), detail: t("{lengths} lengths · {pace}", { lengths: set.lengths, pace }) };
+  const avg = clock(Math.round(set.avgRepS));
   return {
-    title: `${set.reps.length} × ${set.distanceM} m ${stroke}${set.intervalS ? ` on ${clock(set.intervalS)}` : ""}`,
-    detail: `Average ${clock(Math.round(set.avgRepS))}${set.avgRestS != null ? `, rest ${clock(Math.round(set.avgRestS))}` : ""}`,
+    title: set.intervalS
+      ? t("{reps} × {distance} m {stroke} on {interval}", { reps: set.reps.length, distance: set.distanceM, stroke, interval: clock(set.intervalS) })
+      : t("{reps} × {distance} m {stroke}", { reps: set.reps.length, distance: set.distanceM, stroke }),
+    detail: set.avgRestS != null ? t("Average {time}, rest {rest}", { time: avg, rest: clock(Math.round(set.avgRestS)) }) : t("Average {time}", { time: avg }),
   };
 }
 
@@ -765,7 +775,7 @@ export function restDrop(time: readonly number[], hr: readonly number[], endS: n
 }
 
 export const MUSCLE_LEVELS = [
-  { from: 8, title: "Hammered" }, { from: 5.5, title: "Hard" }, { from: 3.5, title: "Solid" }, { from: 1.75, title: "Moderate" }, { from: 0.01, title: "Light" },
+  { from: 8, title: msg("Hammered") }, { from: 5.5, title: msg("Hard") }, { from: 3.5, title: msg("Solid") }, { from: 1.75, title: msg("Moderate") }, { from: 0.01, title: msg("Light") },
 ] as const;
 
 export function muscleLevel(sets: number): string | null {
@@ -809,17 +819,17 @@ export function relativeEffort(input: {
   activity: Activity; streams: Streams | null; all: readonly Activity[]; maxHr: number | null; exercises?: readonly StrengthExercise[];
 }): RelativeEffort | null {
   const { activity: a, streams, all, maxHr } = input;
-  let score: number | null = null, basis = "";
+  let score: number | null = null, basis = "", fromSets = false;
   if (maxHr && streams?.hr) score = effortFromSamples(streams.hr, trackOf(streams, a.sport, a.durationS).dt, maxHr);
-  else if (maxHr && a.avgHr) { score = effortFromAverage(a.durationS, a.avgHr, maxHr); basis = "From average heart rate"; }
+  else if (maxHr && a.avgHr) { score = effortFromAverage(a.durationS, a.avgHr, maxHr); basis = t("From average heart rate"); }
   const ends = (input.exercises ?? []).flatMap((ex) => ex.sets.map((s) => s.endS)).filter((v): v is number => v != null);
   if (ends.length > 1) {
     const starts = (input.exercises ?? []).flatMap((ex) => ex.sets.map((s) => (s.endS != null ? s.endS - (s.seconds ?? 0) : null))).filter((v): v is number => v != null);
-    const fromSets = ((Math.max(...ends) - Math.min(...starts)) / 60) * 3;
-    if (score == null || fromSets > score) { score = fromSets; basis = "From your sets"; }
+    const setScore = ((Math.max(...ends) - Math.min(...starts)) / 60) * 3;
+    if (score == null || setScore > score) { score = setScore; basis = t("From your sets"); fromSets = true; }
   }
   if (score == null || !(score > 0)) return null;
   // Other workouts are scored from their average heart rate here, so a score from sets has nothing fair to rank against.
-  const ranked = maxHr && basis !== "From your sets" ? harderThan(score, a, all, maxHr) : null;
+  const ranked = maxHr && !fromSets ? harderThan(score, a, all, maxHr) : null;
   return { score: Math.round(score), harderThanPct: ranked, basis };
 }

@@ -17,6 +17,7 @@ import { WatchProblem } from "./watchDrive";
 import { noWeb, type WebHost } from "./webHost";
 import { YouTube } from "./youtube";
 import { YouTubeMusic } from "./ytmusic";
+import { t } from "@/lib/i18n";
 
 export interface ServicesHost {
   web?: WebHost; sealer?: Sealer; appPath?: string; fetch?: typeof fetch;
@@ -71,7 +72,7 @@ export class MusicServices {
   private songWork(song: Song): Work {
     return async ({ dir, progress, signal }) => {
       const ytDlp = findTool("yt-dlp", this.host.appPath);
-      if (!ytDlp) throw new Error("Downloading needs yt-dlp on this computer.");
+      if (!ytDlp) throw new Error(t("Downloading needs yt-dlp on this computer."));
       await run(ytDlp, ytDlpArgs(song.target, dir, findTool("ffmpeg", this.host.appPath)), (line) => {
         const p = progressOf(line);
         if (p != null) progress(p * 0.9);
@@ -82,7 +83,7 @@ export class MusicServices {
 
   private source(name: string): MusicSource {
     const s = (this.sources as Record<string, MusicSource>)[name];
-    if (!s) throw new SourceProblem("Not a music service.", "notFound");
+    if (!s) throw new SourceProblem(t("Not a music service."), "notFound");
     return s;
   }
 
@@ -109,10 +110,10 @@ export class MusicServices {
   }
 
   private download(name: string, playlist: string, origins: string[] | null, toWatch = false) {
-    if (!this.tools().ytDlp) throw new WatchProblem("Downloading needs yt-dlp on this computer.", "noYtDlp");
+    if (!this.tools().ytDlp) throw new WatchProblem(t("Downloading needs yt-dlp on this computer."), "noYtDlp");
     const source = this.source(name);
     const songs = this.songs.get(`${name}:${playlist}`);
-    if (!songs) throw new SourceProblem("Open the playlist again, then download.", "stale");
+    if (!songs) throw new SourceProblem(t("Open the playlist again, then download."), "stale");
     let queued = 0;
     for (const song of songs) {
       if (origins && !origins.includes(song.origin)) continue;
@@ -131,10 +132,10 @@ export class MusicServices {
    * failed fetches only those, and replaces it.
    */
   combined(name: string, playlist: string, toWatch = false, combine: Partial<Pick<Combine, "fetchTrack" | "join">> = {}) {
-    if (!this.tools().ytDlp) throw new WatchProblem("Downloading needs yt-dlp on this computer.", "noYtDlp");
+    if (!this.tools().ytDlp) throw new WatchProblem(t("Downloading needs yt-dlp on this computer."), "noYtDlp");
     const source = this.source(name);
     const songs = this.songs.get(`${name}:${playlist}`);
-    if (!songs) throw new SourceProblem("Open the playlist again, then download.", "stale");
+    if (!songs) throw new SourceProblem(t("Open the playlist again, then download."), "stale");
     const id = `${name}:${playlist}`;
     const title = this.names.get(id) ?? `${source.source} playlist`;
     const tool = (t: "yt-dlp" | "ffmpeg") => findTool(t, this.host.appPath);
@@ -146,7 +147,7 @@ export class MusicServices {
       join: combine.join ?? ffmpegJoin(() => tool("ffmpeg")),
     });
     const origin = combinedOrigin(id);
-    const queued = this.downloads.add({ source: source.source, title: `${title} (combined)`, artist: null, origin }, work, true);
+    const queued = this.downloads.add({ source: source.source, title: t("{title} (combined)", { title }), artist: null, origin }, work, true);
     if (queued && toWatch) this.toWatch.add(origin);
     return { queued: queued ? 1 : 0 };
   }

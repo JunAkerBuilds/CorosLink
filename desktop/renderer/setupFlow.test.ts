@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { COMPUTER } from "./computer";
 import { backStep, coachSays, countdown, LIST, listIndex, nextStep, placeHref, readPlace, stepNote } from "./setupFlow";
 
 describe("setup steps", () => {
@@ -27,7 +28,7 @@ describe("setup steps", () => {
   });
 
   it("marks the steps before the current one done, with a note each", () => {
-    expect(LIST.map((l) => l.label)).toEqual(["Your data", "Connect", "Your sports", "Coach", "This Mac"]);
+    expect(LIST.map((l) => l.label)).toEqual(["Your data", "Connect", "Your sports", "Coach", `This ${COMPUTER}`]);
     expect(listIndex("phone")).toBe(1);
     expect(listIndex("done")).toBe(LIST.length);
     const notes = { phone: "iPhone 17 Pro", sports: 3, coach: "ChatGPT" };
@@ -44,6 +45,18 @@ describe("setup steps", () => {
     expect(coachSays("phone", { paired: true, hasData: false }).pose).toBe("cheer");
     expect(coachSays("sports", { paired: false, hasData: true }).line).toMatch(/found in your workouts/);
     for (const step of ["source", "phone", "sports", "coach", "mac", "done"] as const) expect(coachSays(step, { paired: false, hasData: false }).line).not.toBe("");
+  });
+
+  it("asks a COROS account to connect, as it does a phone (the watch stays on the COROS app)", () => {
+    expect(readPlace("?step=phone&from=coros")).toEqual({ step: "phone", source: "coros" });
+    expect(nextStep("source", "coros")).toBe("phone");
+    expect(backStep("sports", "coros")).toBe("phone");
+    const notes = { phone: "iPhone 17 Pro", sports: 0, coach: null, account: "Connected" };
+    expect(stepNote("source", "coros", notes)).toBe("COROS account");
+    expect(stepNote("connect", "coros", notes)).toBe("Connected");
+    expect(stepNote("connect", "coros", { ...notes, account: null })).toBe("Later");
+    expect(coachSays("phone", { paired: false, hasData: false, coros: true }).line).toMatch(/COROS app/);
+    expect(coachSays("phone", { paired: true, hasData: false, coros: true }).pose).toBe("cheer");
   });
 
   it("counts the code down", () => {

@@ -12,6 +12,7 @@ import { lengthOf, trackPoint } from "./geo";
 import { makeupOf, segmentsFrom, tallyOf, type Routed } from "./makeup";
 import { asProblem, isTimeout, RoutingProblem, USER_AGENT, type Net } from "./net";
 import { isCycling, profileText, routerFor, STOCK_PROFILE, type ProfileOptions } from "./sports";
+import { t } from "@/lib/i18n";
 
 const BASE = "https://brouter.de/brouter";
 export const BROUTER_MAX_CONCURRENT = 2;
@@ -34,7 +35,7 @@ class HttpError extends Error {
 class ProfileDown extends Error {}
 
 const busy = (seconds: number) =>
-  new RoutingProblem(`brouter.de, the free routing service, asks us to slow down. Try again in about ${seconds} seconds.`, "busy", 503);
+  new RoutingProblem(t("brouter.de, the free routing service, asks us to slow down. Try again in about {seconds} seconds.", { seconds }), "busy", 503);
 
 interface Payload { features?: { geometry?: { coordinates?: number[][] }; properties?: Record<string, unknown> }[] }
 
@@ -60,7 +61,7 @@ export class BRouter {
 
   /** Routes through the points (two or more) with C-LINK's profile, falling back to the stock one. */
   async route(points: LatLon[], o: ProfileOptions): Promise<Routed> {
-    if (points.length < 2) throw new RoutingProblem("Add at least two points.", "points");
+    if (points.length < 2) throw new RoutingProblem(t("Add at least two points."), "points");
     try {
       return await this.withOurProfile(points, o);
     } catch (e) {
@@ -198,8 +199,8 @@ export class BRouter {
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 
 function unroutable(body: string): RoutingProblem {
-  if (/datafile.*not found|segment.*not.*found/i.test(body)) return new RoutingProblem("There's no routing data for this area yet.", "no_route", 422);
-  return new RoutingProblem("No path was found near one of your points. Move it closer to a road or trail, or pick another sport.", "no_route", 422);
+  if (/datafile.*not found|segment.*not.*found/i.test(body)) return new RoutingProblem(t("There's no routing data for this area yet."), "no_route", 422);
+  return new RoutingProblem(t("No path was found near one of your points. Move it closer to a road or trail, or pick another sport."), "no_route", 422);
 }
 
 function serviceError(e: HttpError): string {
@@ -210,7 +211,7 @@ function serviceError(e: HttpError): string {
 export function fromGeoJson(payload: Payload, cycling: boolean): Routed {
   const feature = payload.features?.[0];
   const coords = feature?.geometry?.coordinates?.filter((c) => c.length >= 2) ?? [];
-  if (coords.length < 2) throw new RoutingProblem("No path was found near one of your points. Move it closer to a road or trail.", "no_route", 422);
+  if (coords.length < 2) throw new RoutingProblem(t("No path was found near one of your points. Move it closer to a road or trail."), "no_route", 422);
   const points: TrackPoint[] = coords.map((c) => trackPoint(c[1], c[0], c[2]));
   const num = (key: string) => {
     const v = Number(feature?.properties?.[key]);

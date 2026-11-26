@@ -1,5 +1,6 @@
 // The "Log activity" form: the activity types offered, how each one is uploaded, and the form's values turned
 // into the activity the server writes. Ported from the desktop app's Log activity tab (AddWorkoutModal.tsx).
+import { msg, t } from "@/lib/i18n";
 import type { ManualActivity, TcxSport } from "@/lib/tcx";
 
 export type LogDistanceUnit = "km" | "m" | "none";
@@ -16,22 +17,22 @@ export interface LogSport {
 
 /** The eight types the form opens with. */
 export const SUGGESTED_LOG_SPORTS: readonly LogSport[] = [
-  { id: "suggested-run", label: "Run", uploadSport: "run", distanceUnit: "km", icon: "run" },
-  { id: "suggested-ride", label: "Ride", uploadSport: "bike", distanceUnit: "km", icon: "ride" },
-  { id: "suggested-walk", label: "Walk", uploadSport: "other", distanceUnit: "km", icon: "walk" },
-  { id: "suggested-hike", label: "Hike", uploadSport: "other", distanceUnit: "km", icon: "hike" },
-  { id: "suggested-swim", label: "Swim", uploadSport: "other", distanceUnit: "m", icon: "swim" },
-  { id: "suggested-strength", label: "Strength", uploadSport: "other", distanceUnit: "none", icon: "strength" },
-  { id: "suggested-yoga", label: "Yoga", uploadSport: "other", distanceUnit: "none", icon: "yoga" },
-  { id: "suggested-other", label: "Other", uploadSport: "other", distanceUnit: "none", icon: "other" },
+  { id: "suggested-run", label: msg("Run"), uploadSport: "run", distanceUnit: "km", icon: "run" },
+  { id: "suggested-ride", label: msg("Ride"), uploadSport: "bike", distanceUnit: "km", icon: "ride" },
+  { id: "suggested-walk", label: msg("Walk"), uploadSport: "other", distanceUnit: "km", icon: "walk" },
+  { id: "suggested-hike", label: msg("Hike"), uploadSport: "other", distanceUnit: "km", icon: "hike" },
+  { id: "suggested-swim", label: msg("Swim"), uploadSport: "other", distanceUnit: "m", icon: "swim" },
+  { id: "suggested-strength", label: msg("Strength"), uploadSport: "other", distanceUnit: "none", icon: "strength" },
+  { id: "suggested-yoga", label: msg("Yoga"), uploadSport: "other", distanceUnit: "none", icon: "yoga" },
+  { id: "suggested-other", label: msg("Other"), uploadSport: "other", distanceUnit: "none", icon: "other" },
 ];
 
 /** COROS's activity sport types by name (the desktop's COROS_KNOWN_SPORT_TYPES, without its "All Sports" filter). */
 export const COROS_SPORT_NAMES: readonly string[] = [
-  "Custom Sport", "Run", "Indoor Run", "Trail Run", "Track Run", "Hike", "Mountain Climb", "Climb", "Bike", "Indoor Bike", "Road E-Bike",
-  "Gravel Road Bike", "Mountain Bike", "Mountain E-Bike", "Helmet Bike", "Pool Swim", "Open Water Swim", "Gym Cardio", "GPS Cardio", "Strength",
-  "Ski", "Snowboard", "XC Ski", "Ski Touring", "Rowing", "Indoor Rowing", "Whitewater", "Flatwater", "Windsurfing", "Speedsurfing", "Indoor Climb",
-  "Bouldering", "Walk", "Jump Rope", "Climb Stairs", "Triathlon", "Multi Sport", "Multi-Pitch Climb",
+  msg("Custom Sport"), msg("Run"), msg("Indoor Run"), msg("Trail Run"), msg("Track Run"), msg("Hike"), msg("Mountain Climb"), msg("Climb"), msg("Bike"), msg("Indoor Bike"), msg("Road E-Bike"),
+  msg("Gravel Road Bike"), msg("Mountain Bike"), msg("Mountain E-Bike"), msg("Helmet Bike"), msg("Pool Swim"), msg("Open Water Swim"), msg("Gym Cardio"), msg("GPS Cardio"), msg("Strength"),
+  msg("Ski"), msg("Snowboard"), msg("XC Ski"), msg("Ski Touring"), msg("Rowing"), msg("Indoor Rowing"), msg("Whitewater"), msg("Flatwater"), msg("Windsurfing"), msg("Speedsurfing"), msg("Indoor Climb"),
+  msg("Bouldering"), msg("Walk"), msg("Jump Rope"), msg("Climb Stairs"), msg("Triathlon"), msg("Multi Sport"), msg("Multi-Pitch Climb"),
 ];
 
 const RUN_TERMS = ["run", "running", "treadmill", "trail run", "track"];
@@ -91,7 +92,7 @@ export const logSport = (id: string): LogSport => ALL_LOG_SPORTS.find((s) => s.i
  */
 export function visibleLogSports(search: string, selectedId: string): LogSport[] {
   const query = normal(search);
-  if (query) return ALL_LOG_SPORTS.filter((s) => normal(s.label).includes(query)).slice(0, 12);
+  if (query) return ALL_LOG_SPORTS.filter((s) => normal(s.label).includes(query) || normal(t(s.label)).includes(query)).slice(0, 12);
   const selected = logSport(selectedId);
   return SUGGESTED_LOG_SPORTS.some((s) => s.id === selected.id) ? [...SUGGESTED_LOG_SPORTS] : [selected, ...SUGGESTED_LOG_SPORTS];
 }

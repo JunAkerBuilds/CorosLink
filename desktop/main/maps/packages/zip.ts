@@ -6,6 +6,7 @@ import { createReadStream } from "node:fs";
 import { open, type FileHandle } from "node:fs/promises";
 import { pipeline, Readable, Transform } from "node:stream";
 import zlib from "node:zlib";
+import { t } from "@/lib/i18n";
 
 export interface ZipEntry {
   name: string;
@@ -55,7 +56,7 @@ export async function findDirectory(file: FileHandle, fileSize: number): Promise
     // The comment length must reach exactly to the end, so a signature inside a comment isn't taken.
     if (tail.readUInt32LE(i) === EOCD && i + 22 + tail.readUInt16LE(i + 20) === tail.length) { at = i; break; }
   }
-  if (at < 0) throw new ZipProblem("This map file isn't a complete zip. Download it again.");
+  if (at < 0) throw new ZipProblem(t("This map file isn't a complete zip. Download it again."));
   let entries = tail.readUInt16LE(at + 10);
   let size = tail.readUInt32LE(at + 12);
   let offset = tail.readUInt32LE(at + 16);
@@ -63,14 +64,14 @@ export async function findDirectory(file: FileHandle, fileSize: number): Promise
   if (locator >= 0 && tail.readUInt32LE(locator) === ZIP64_LOCATOR) {
     const recordAt = u64(tail, locator + 8);
     const record = await readAt(file, recordAt, 56);
-    if (record.length < 56 || record.readUInt32LE(0) !== ZIP64_EOCD) throw new ZipProblem("This map file's Zip64 directory is damaged.");
+    if (record.length < 56 || record.readUInt32LE(0) !== ZIP64_EOCD) throw new ZipProblem(t("This map file's Zip64 directory is damaged."));
     entries = u64(record, 32);
     size = u64(record, 40);
     offset = u64(record, 48);
   } else if (entries === 0xffff || size === 0xffffffff || offset === 0xffffffff) {
-    throw new ZipProblem("This map file's Zip64 directory is missing.");
+    throw new ZipProblem(t("This map file's Zip64 directory is missing."));
   }
-  if (offset + size > fileSize) throw new ZipProblem("This map file is cut short. Download it again.");
+  if (offset + size > fileSize) throw new ZipProblem(t("This map file is cut short. Download it again."));
   return { entries, offset, size };
 }
 
@@ -129,11 +130,11 @@ export class ZipReader {
     };
     while (seen < this.directory.entries) {
       if (!(await need(46))) break;
-      if (buffer.readUInt32LE(at) !== CENTRAL) throw new ZipProblem("This map file's directory is damaged.");
+      if (buffer.readUInt32LE(at) !== CENTRAL) throw new ZipProblem(t("This map file's directory is damaged."));
       const flags = buffer.readUInt16LE(at + 8);
       const nameLength = buffer.readUInt16LE(at + 28), extraLength = buffer.readUInt16LE(at + 30), commentLength = buffer.readUInt16LE(at + 32);
       const total = 46 + nameLength + extraLength + commentLength;
-      if (!(await need(total))) throw new ZipProblem("This map file's directory is cut short.");
+      if (!(await need(total))) throw new ZipProblem(t("This map file's directory is cut short."));
       const rawCompressed = buffer.readUInt32LE(at + 20), rawSize = buffer.readUInt32LE(at + 24), rawOffset = buffer.readUInt32LE(at + 42);
       const nameBytes = buffer.subarray(at + 46, at + 46 + nameLength);
       const name = nameBytes.toString(flags & 0x800 ? "utf8" : "latin1");
@@ -150,11 +151,11 @@ export class ZipReader {
 
   /** The entry's uncompressed bytes. Sizes come from the central directory, so data descriptors don't matter. */
   async stream(entry: ZipEntry, options: { signal?: AbortSignal; verify?: boolean } = {}): Promise<Readable> {
-    if (entry.method !== 0 && entry.method !== 8) throw new ZipProblem(`Map file entry ${entry.name} uses a compression C-LINK can't read.`);
+    if (entry.method !== 0 && entry.method !== 8) throw new ZipProblem(t("Map file entry {name} uses a compression C-LINK can't read.", { name: entry.name }));
     const header = await readAt(this.file, entry.offset, 30);
-    if (header.length < 30 || header.readUInt32LE(0) !== LOCAL) throw new ZipProblem("This map file is damaged.");
+    if (header.length < 30 || header.readUInt32LE(0) !== LOCAL) throw new ZipProblem(t("This map file is damaged."));
     const start = entry.offset + 30 + header.readUInt16LE(26) + header.readUInt16LE(28);
-    if (start + entry.compressedSize > this.fileSize) throw new ZipProblem("This map file is cut short. Download it again.");
+    if (start + entry.compressedSize > this.fileSize) throw new ZipProblem(t("This map file is cut short. Download it again."));
     const raw: Readable = entry.compressedSize === 0
       ? Readable.from([])
       : createReadStream(this.path, { start, end: start + entry.compressedSize - 1, signal: options.signal });
@@ -177,7 +178,7 @@ function checker(entry: ZipEntry): Transform {
       done(null, chunk);
     },
     flush(done) {
-      if (length !== entry.size || (crc >>> 0) !== (entry.crc32 >>> 0)) done(new ZipProblem(`Map file entry ${entry.name} is damaged. Download the map again.`));
+      if (length !== entry.size || (crc >>> 0) !== (entry.crc32 >>> 0)) done(new ZipProblem(t("Map file entry {name} is damaged. Download the map again.", { name: entry.name })));
       else done();
     },
   });

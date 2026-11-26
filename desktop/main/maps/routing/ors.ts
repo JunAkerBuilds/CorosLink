@@ -5,6 +5,7 @@ import { lengthOf, trackPoint } from "./geo";
 import { makeupOf, retracedMeters, type Routed, type SurfaceKind, type Tally, type WayKind } from "./makeup";
 import { asProblem, RoutingProblem, type Net } from "./net";
 import type { Prefs } from "./sports";
+import { t } from "@/lib/i18n";
 
 const BASE = "https://api.openrouteservice.org";
 
@@ -35,7 +36,7 @@ export class Ors {
   constructor(private readonly net: Net, private readonly key: string) {}
 
   route(points: LatLon[], prefs: Prefs): Promise<Routed> {
-    if (points.length < 2) throw new RoutingProblem("Add at least two points.", "points");
+    if (points.length < 2) throw new RoutingProblem(t("Add at least two points."), "points");
     return this.directions(points, prefs, {});
   }
 
@@ -67,10 +68,10 @@ export class Ors {
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      if (res.status === 401 || res.status === 403) throw new RoutingProblem("OpenRouteService didn't accept your key. Check it in routing settings.", "ors_key", 401);
-      if (res.status === 429) throw new RoutingProblem("Your OpenRouteService key has used its quota for now. Try later, or switch to keyless routing.", "busy", 503);
-      if (/"code"\s*:\s*20(09|10)/.test(text) || res.status === 404) throw new RoutingProblem("No path was found near one of your points. Move it closer to a road or trail.", "no_route", 422);
-      throw new RoutingProblem(`OpenRouteService had a problem (${res.status}).`, "routing", 502);
+      if (res.status === 401 || res.status === 403) throw new RoutingProblem(t("OpenRouteService didn't accept your key. Check it in routing settings."), "ors_key", 401);
+      if (res.status === 429) throw new RoutingProblem(t("Your OpenRouteService key has used its quota for now. Try later, or switch to keyless routing."), "busy", 503);
+      if (/"code"\s*:\s*20(09|10)/.test(text) || res.status === 404) throw new RoutingProblem(t("No path was found near one of your points. Move it closer to a road or trail."), "no_route", 422);
+      throw new RoutingProblem(t("OpenRouteService had a problem ({status}).", { status: res.status }), "routing", 502);
     }
     return fromOrs((await res.json()) as OrsAnswer);
   }
@@ -79,7 +80,7 @@ export class Ors {
 export function fromOrs(answer: OrsAnswer): Routed {
   const f = answer.features?.[0];
   const coords = f?.geometry?.coordinates?.filter((c) => c.length >= 2) ?? [];
-  if (coords.length < 2) throw new RoutingProblem("OpenRouteService found no route here.", "no_route", 422);
+  if (coords.length < 2) throw new RoutingProblem(t("OpenRouteService found no route here."), "no_route", 422);
   const points: TrackPoint[] = coords.map((c) => trackPoint(c[1], c[0], c[2]));
   const along = [0];
   for (let i = 1; i < points.length; i++) along.push(along[i - 1] + lengthOf([points[i - 1], points[i]]));

@@ -3,6 +3,7 @@
  * `ReadinessHue` and `SleepQuality.paint` in the iOS app), so the web reads the same.
  */
 import type { HueName } from "@/data/training";
+import { msg } from "@/lib/i18n";
 
 /** Readiness: green from 85, yellow for primed and ready (65–84), coral for steady (50–64), rose below. */
 export function readinessHue(score: number): HueName {
@@ -37,18 +38,18 @@ export function loadHue(status: string | undefined): HueName {
 export type FeelTag = "sore" | "stressed" | "unwell" | "heavyLegs";
 
 export const FEEL_LEVELS: readonly { level: number; title: string; hue: HueName }[] = [
-  { level: 1, title: "Awful", hue: "rose" },
-  { level: 2, title: "Low", hue: "orange" },
-  { level: 3, title: "OK", hue: "yellow" },
-  { level: 4, title: "Good", hue: "lime" },
-  { level: 5, title: "Great", hue: "mint" },
+  { level: 1, title: msg("Awful"), hue: "rose" },
+  { level: 2, title: msg("Low"), hue: "orange" },
+  { level: 3, title: msg("OK"), hue: "yellow" },
+  { level: 4, title: msg("Good"), hue: "lime" },
+  { level: 5, title: msg("Great"), hue: "mint" },
 ];
 
 export const FEEL_TAGS: readonly { tag: FeelTag; title: string }[] = [
-  { tag: "sore", title: "Sore" },
-  { tag: "heavyLegs", title: "Heavy legs" },
-  { tag: "stressed", title: "Stressed" },
-  { tag: "unwell", title: "Unwell" },
+  { tag: "sore", title: msg("Sore") },
+  { tag: "heavyLegs", title: msg("Heavy legs") },
+  { tag: "stressed", title: msg("Stressed") },
+  { tag: "unwell", title: msg("Unwell") },
 ];
 
 /** Points a check asks to add to or take from readiness: −15…+7, as `FeelCheck.adjustment`. */

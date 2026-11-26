@@ -1,4 +1,5 @@
 import type { Alarm } from "@/data/watch";
+import { msg, t, tx } from "@/lib/i18n";
 
 /**
  * Watch settings changed at a desk wait in a queue until the phone app carries them to the watch.
@@ -88,24 +89,24 @@ export function alarmRows(onWatch: readonly Alarm[], queue: readonly PendingChan
   return rows;
 }
 
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_NAMES = [msg("Sunday"), msg("Monday"), msg("Tuesday"), msg("Wednesday"), msg("Thursday"), msg("Friday"), msg("Saturday")];
+const DAY_SHORT = [msg("Sun"), msg("Mon"), msg("Tue"), msg("Wed"), msg("Thu"), msg("Fri"), msg("Sat")];
 /** Monday first, as the day picker shows them. */
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
-export const dayName = (day: number) => DAY_NAMES[day] ?? "";
-export const dayShort = (day: number) => DAY_SHORT[day] ?? "";
+export const dayName = (day: number) => (DAY_NAMES[day] ? tx("weekday", DAY_NAMES[day]) : "");
+export const dayShort = (day: number) => (DAY_SHORT[day] ? tx("weekday", DAY_SHORT[day]) : "");
 
 /** "Weekdays", "Sunday", "Mon, Wed, Fri". Days are 0 = Sunday … 6 = Saturday. */
 export function repeatLabel(days: readonly number[]): string {
   const set = new Set(days.filter((d) => d >= 0 && d <= 6));
-  if (set.size === 0) return "Once";
-  if (set.size === 7) return "Every day";
+  if (set.size === 0) return t("Once");
+  if (set.size === 7) return t("Every day");
   const has = (...d: number[]) => d.every((x) => set.has(x));
-  if (set.size === 5 && has(1, 2, 3, 4, 5)) return "Weekdays";
-  if (set.size === 2 && has(0, 6)) return "Weekends";
+  if (set.size === 5 && has(1, 2, 3, 4, 5)) return t("Weekdays");
+  if (set.size === 2 && has(0, 6)) return t("Weekends");
   const ordered = WEEK_ORDER.filter((d) => set.has(d));
-  if (ordered.length === 1) return DAY_NAMES[ordered[0]];
-  return ordered.map((d) => DAY_SHORT[d]).join(", ");
+  if (ordered.length === 1) return dayName(ordered[0]);
+  return ordered.map((d) => dayShort(d)).join(t(", "));
 }
 
 /** The line beside an alarm's time: when it repeats, then its name if it has one. */

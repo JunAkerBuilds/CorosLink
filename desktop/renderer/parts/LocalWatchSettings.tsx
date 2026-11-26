@@ -9,26 +9,27 @@ import {
   findPlaces, readWatchFaces, readWatchSettings, sendWeatherNow, setSleepTimes, setWatchProfile, setWatchSwitch, setWeatherPlace, showWatchFace, whenSynced,
   type FoundPlace, type SleepTimes, type WatchFaces, type WatchOwnSettings, type WatchProfile, type WatchStatus, type WatchSwitch, type ZoneType,
 } from "../watchLink";
+import { msg, t, tx } from "@/lib/i18n";
 import "./localWatchSettings.css";
 
-const said = (e: unknown) => (e instanceof Error ? e.message : "That didn't work.");
+const said = (e: unknown) => (e instanceof Error ? e.message : t("That didn't work."));
 
 const TITLES: Record<string, string> = {
-  raiseToWake: "Raise to wake", raiseToWakeActivity: "Raise to wake in activities", brightness: "Brightness",
-  alwaysOnDaily: "Always-on display", alwaysOnActivity: "Always-on in activities", dialRotation: "Dial direction",
-  screenLock: "Auto lock", wrist: "Wrist", doNotDisturb: "Do Not Disturb", scheduledDoNotDisturb: "Scheduled Do Not Disturb",
-  notificationsInActivity: "Notifications in activities", turnByTurnAlerts: "Turn-by-turn alerts", timeFormat: "Time format",
-  units: "Units", pressureUnit: "Pressure unit", temperatureUnit: "Temperature unit", barometerRange: "Barometer range",
-  stormAlert: "Storm alert", backlight: "Backlight", screenRotation: "Screen orientation", touchscreen: "Touchscreen",
-  nightMode: "Night Mode", batterySaver: "Battery saver", dailyHeartRate: "All-day heart rate", wristHeartRateOff: "Wrist heart rate",
-  sleepHrvOff: "Sleep HRV", hrvStressOff: "Stress", sedentaryReminderOff: "Move reminders", strydDistance: "Run distance from",
+  raiseToWake: msg("Raise to wake"), raiseToWakeActivity: msg("Raise to wake in activities"), brightness: msg("Brightness"),
+  alwaysOnDaily: msg("Always-on display"), alwaysOnActivity: msg("Always-on in activities"), dialRotation: msg("Dial direction"),
+  screenLock: msg("Auto lock"), wrist: msg("Wrist"), doNotDisturb: msg("Do Not Disturb"), scheduledDoNotDisturb: msg("Scheduled Do Not Disturb"),
+  notificationsInActivity: msg("Notifications in activities"), turnByTurnAlerts: msg("Turn-by-turn alerts"), timeFormat: msg("Time format"),
+  units: msg("Units"), pressureUnit: msg("Pressure unit"), temperatureUnit: msg("Temperature unit"), barometerRange: msg("Barometer range"),
+  stormAlert: msg("Storm alert"), backlight: msg("Backlight"), screenRotation: msg("Screen orientation"), touchscreen: msg("Touchscreen"),
+  nightMode: msg("Night Mode"), batterySaver: msg("Battery saver"), dailyHeartRate: msg("All-day heart rate"), wristHeartRateOff: msg("Wrist heart rate"),
+  sleepHrvOff: msg("Sleep HRV"), hrvStressOff: msg("Stress"), sedentaryReminderOff: msg("Move reminders"), strydDistance: msg("Run distance from"),
 };
 /** "wristGesture" is left out as on the phone: the watch stores it, but flipping it changes nothing. */
 const GROUPS: { title: string; keys: string[] }[] = [
-  { title: "Display", keys: ["raiseToWake", "raiseToWakeActivity", "brightness", "alwaysOnDaily", "alwaysOnActivity", "screenLock", "dialRotation", "wrist"] },
-  { title: "Notifications", keys: ["doNotDisturb", "scheduledDoNotDisturb", "notificationsInActivity", "turnByTurnAlerts"] },
-  { title: "Units and formats", keys: ["timeFormat", "units", "pressureUnit", "temperatureUnit"] },
-  { title: "Barometer", keys: ["barometerRange", "stormAlert"] },
+  { title: msg("Display"), keys: ["raiseToWake", "raiseToWakeActivity", "brightness", "alwaysOnDaily", "alwaysOnActivity", "screenLock", "dialRotation", "wrist"] },
+  { title: msg("Notifications"), keys: ["doNotDisturb", "scheduledDoNotDisturb", "notificationsInActivity", "turnByTurnAlerts"] },
+  { title: msg("Units and formats"), keys: ["timeFormat", "units", "pressureUnit", "temperatureUnit"] },
+  { title: msg("Barometer"), keys: ["barometerRange", "stormAlert"] },
 ];
 /** Read-only on every watch: shown as values. */
 const ON_WATCH = ["backlight", "screenRotation", "touchscreen", "nightMode", "batterySaver", "dailyHeartRate", "wristHeartRateOff",
@@ -36,7 +37,7 @@ const ON_WATCH = ["backlight", "screenRotation", "touchscreen", "nightMode", "ba
 /** The switches flipped most, as tiles; they don't repeat in the groups. */
 const QUICK = ["raiseToWakeActivity", "alwaysOnDaily", "alwaysOnActivity", "doNotDisturb", "stormAlert"];
 
-const title = (key: string) => TITLES[key] ?? key;
+const title = (key: string) => (TITLES[key] ? t(TITLES[key]) : key);
 /** The value meaning on, for a setting shown as a switch (two choices, On and Off). */
 function onValue(s: WatchSwitch): number | null {
   const edit = s.edit;
@@ -91,28 +92,28 @@ function SwitchesCard({ settings, loading, problem, onRetry, onSwitches, onSleep
   const unread = settings?.problems?.filter((p) => !p.startsWith("profile")) ?? [];
 
   return (
-    <Card className="wa-card lm-w12 ws-card" aria-label="Watch settings">
+    <Card className="wa-card lm-w12 ws-card" aria-label={t("Watch settings")}>
       <div className="wa-alarms-head">
-        <h2>Watch settings</h2>
-        {saving ? <span className="lm-quiet">Saving to the watch…</span>
-          : loading ? <span className="lm-quiet">Reading the watch…</span>
-          : settings && !problem ? <span className="lm-done">In sync with the watch</span>
-          : problem && settings ? <button type="button" className="set-link" onClick={onRetry}>Read again</button> : null}
+        <h2>{t("Watch settings")}</h2>
+        {saving ? <span className="lm-quiet">{t("Saving to the watch…")}</span>
+          : loading ? <span className="lm-quiet">{t("Reading the watch…")}</span>
+          : settings && !problem ? <span className="lm-done">{t("In sync with the watch")}</span>
+          : problem && settings ? <button type="button" className="set-link" onClick={onRetry}>{t("Read again")}</button> : null}
       </div>
       {problem && !settings ? (
-        <div className="lm-ask"><p>{problem}</p><Button onClick={onRetry}>Try again</Button></div>
+        <div className="lm-ask"><p>{problem}</p><Button onClick={onRetry}>{t("Try again")}</Button></div>
       ) : null}
-      {settings && !switches.length && settings.sleep === undefined ? <p className="lm-quiet">This watch&apos;s settings are changed on the watch.</p> : null}
+      {settings && !switches.length && settings.sleep === undefined ? <p className="lm-quiet">{t("This watch's settings are changed on the watch.")}</p> : null}
 
       {quick.length ? (
-        <div className="ws-quick" role="group" aria-label="Quick settings">
+        <div className="ws-quick" role="group" aria-label={t("Quick settings")}>
           {quick.map((s) => {
             const on = s.value === onValue(s);
             const other = s.edit!.find((v) => v !== s.value)!;
             return (
               <button key={s.key} type="button" className="ws-tile" aria-pressed={on} disabled={!!saving} onClick={() => change(s.key, other)}>
                 <span className="ws-tile-name">{title(s.key)}</span>
-                <span className="ws-tile-state">{saving === s.key ? "Saving…" : on ? "On" : "Off"}</span>
+                <span className="ws-tile-state">{saving === s.key ? t("Saving…") : on ? t("On") : t("Off")}</span>
               </button>
             );
           })}
@@ -124,8 +125,8 @@ function SwitchesCard({ settings, loading, problem, onRetry, onSwitches, onSleep
           const rows = g.keys.map((k) => byKey.get(k)).filter((s): s is WatchSwitch => !!s && !quick.includes(s));
           if (!rows.length) return null;
           return (
-            <section key={g.title} className="ws-group" aria-label={g.title}>
-              <h3>{g.title}</h3>
+            <section key={g.title} className="ws-group" aria-label={t(g.title)}>
+              <h3>{t(g.title)}</h3>
               {rows.map((s) => <SettingRow key={s.key} s={s} saving={saving} onChange={change} />)}
             </section>
           );
@@ -134,15 +135,15 @@ function SwitchesCard({ settings, loading, problem, onRetry, onSwitches, onSleep
       </div>
 
       {onWatch.length ? (
-        <section className="ws-group ws-group-ro" aria-label="Set on the watch">
-          <h3>Set on the watch <span className="ws-h3-note">· change these on the watch</span></h3>
+        <section className="ws-group ws-group-ro" aria-label={t("Set on the watch")}>
+          <h3>{t("Set on the watch")} <span className="ws-h3-note">· {t("change these on the watch")}</span></h3>
           <div className="ws-readonly">
             {onWatch.map((s) => <div key={s.key} className="ws-ro"><span>{title(s.key)}</span><b>{valueName(s)}</b></div>)}
           </div>
         </section>
       ) : null}
       {failed ? <p className="lm-problem" role="alert">{failed}</p> : null}
-      {unread.length ? <p className="lm-quiet">Not read this time: {unread.map((p) => p.split(":")[0]).join(", ")}.</p> : null}
+      {unread.length ? <p className="lm-quiet">{t("Not read this time: {parts}.", { parts: unread.map((p) => p.split(":")[0]).join(", ") })}</p> : null}
     </Card>
   );
 }
@@ -154,7 +155,7 @@ function SettingRow({ s, saving, onChange }: { s: WatchSwitch; saving: string | 
     <div className="ws-row">
       <span className="ws-row-name">{title(s.key)}</span>
       <span className="ws-row-end">
-        {saving === s.key ? <span className="lm-quiet">Saving…</span> : null}
+        {saving === s.key ? <span className="lm-quiet">{t("Saving…")}</span> : null}
         {!edit.length ? <b className="ws-value">{valueName(s)}</b>
           : on !== null ? <Switch label={title(s.key)} checked={s.value === on} disabled={!!saving} onChange={(next) => onChange(s.key, next ? on : edit.find((v) => v !== on)!)} />
           : edit.length <= 3 ? (
@@ -184,15 +185,15 @@ function SleepGroup({ sleep, onSleep }: { sleep: SleepTimes | null; onSleep: (s:
     setSleepTimes({ bedtime, wake: wakeAt }).then((r) => onSleep(r.sleep), (e: unknown) => setProblem(said(e))).finally(() => setSaving(false));
   };
   return (
-    <section className="ws-group" aria-label="Sleep schedule">
-      <h3>Sleep schedule</h3>
+    <section className="ws-group" aria-label={t("Sleep schedule")}>
+      <h3>{t("Sleep schedule")}</h3>
       <div className="ws-row">
-        <span className="ws-row-name">Sleep Mode from<small>The watch quiets down between these times</small></span>
+        <span className="ws-row-name">{t("Sleep Mode from")}<small>{t("The watch quiets down between these times")}</small></span>
         <span className="ws-row-end ws-times">
-          <Field type="time" aria-label="Bedtime" value={bed} onChange={(e) => setBed(e.target.value)} />
-          <span className="lm-quiet">to</span>
-          <Field type="time" aria-label="Wake time" value={wake} onChange={(e) => setWake(e.target.value)} />
-          {changed ? <Button variant="primary" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</Button> : null}
+          <Field type="time" aria-label={t("Bedtime")} value={bed} onChange={(e) => setBed(e.target.value)} />
+          <span className="lm-quiet">{tx("time range", "to")}</span>
+          <Field type="time" aria-label={t("Wake time")} value={wake} onChange={(e) => setWake(e.target.value)} />
+          {changed ? <Button variant="primary" disabled={saving} onClick={save}>{saving ? t("Saving…") : t("Save")}</Button> : null}
         </span>
       </div>
       {problem ? <p className="lm-problem" role="alert">{problem}</p> : null}
@@ -200,7 +201,7 @@ function SleepGroup({ sleep, onSleep }: { sleep: SleepTimes | null; onSleep: (s:
   );
 }
 
-const ZONES: { value: ZoneType; label: string }[] = [{ value: "maxHR", label: "Max HR" }, { value: "reserve", label: "HR reserve" }, { value: "threshold", label: "Threshold" }];
+const ZONES: { value: ZoneType; label: string }[] = [{ value: "maxHR", label: msg("Max HR") }, { value: "reserve", label: msg("HR reserve") }, { value: "threshold", label: msg("Threshold") }];
 
 /** Heart-rate and pace thresholds; each zone set moves with its reference, as on the phone. */
 function ProfileCard({ profile, onProfile }: { profile: WatchProfile; onProfile: (p: WatchProfile) => void }) {
@@ -216,12 +217,12 @@ function ProfileCard({ profile, onProfile }: { profile: WatchProfile; onProfile:
     for (const k of ["maxHR", "restingHR", "thresholdHR"] as const) {
       if (draft[k] === was[k]) continue;
       const n = Number(draft[k]);
-      if (!Number.isInteger(n)) { setProblem("Type heart rates as whole numbers."); return; }
+      if (!Number.isInteger(n)) { setProblem(t("Type heart rates as whole numbers.")); return; }
       edits[k] = n;
     }
     if (draft.pace !== was.pace) {
       const ms = paceMs(draft.pace);
-      if (ms === null) { setProblem("Type threshold pace as minutes:seconds per km, like 4:30."); return; }
+      if (ms === null) { setProblem(t("Type threshold pace as minutes:seconds per km, like 4:30.")); return; }
       edits.thresholdPace = ms;
     }
     if (draft.zoneType !== was.zoneType) edits.zoneType = draft.zoneType;
@@ -234,32 +235,32 @@ function ProfileCard({ profile, onProfile }: { profile: WatchProfile; onProfile:
     </label>
   );
   return (
-    <Card className="wa-card lm-w12 ws-card" aria-label="Training profile">
-      <div className="wa-alarms-head"><h2>Training profile</h2><span className="lm-quiet">Zones and thresholds the watch uses in workouts</span></div>
+    <Card className="wa-card lm-w12 ws-card" aria-label={t("Training profile")}>
+      <div className="wa-alarms-head"><h2>{t("Training profile")}</h2><span className="lm-quiet">{t("Zones and thresholds the watch uses in workouts")}</span></div>
       <div className="ws-profile">
-        {field("maxHR", "Max heart rate")}
-        {field("restingHR", "Resting heart rate")}
-        {field("thresholdHR", "Threshold heart rate")}
-        <label className="ws-num"><span>Threshold pace</span>
+        {field("maxHR", t("Max heart rate"))}
+        {field("restingHR", t("Resting heart rate"))}
+        {field("thresholdHR", t("Threshold heart rate"))}
+        <label className="ws-num"><span>{t("Threshold pace")}</span>
           <span className="ws-num-box"><Field inputMode="numeric" placeholder="4:30" value={draft.pace} onChange={(e) => setDraft({ ...draft, pace: e.target.value.slice(0, 5) })} /><small>/km</small></span>
         </label>
       </div>
       <div className="ws-row">
-        <span className="ws-row-name">Heart-rate zones from</span>
-        <span className="ws-row-end"><Segmented small label="Heart-rate zones from" value={draft.zoneType} onChange={(zoneType) => setDraft({ ...draft, zoneType })} options={ZONES} /></span>
+        <span className="ws-row-name">{t("Heart-rate zones from")}</span>
+        <span className="ws-row-end"><Segmented small label={t("Heart-rate zones from")} value={draft.zoneType} onChange={(zoneType) => setDraft({ ...draft, zoneType })} options={ZONES.map((z) => ({ value: z.value, label: t(z.label) }))} /></span>
       </div>
       {profile.zones.length ? (
-        <div className="ws-zones" aria-label="Heart-rate zones">
+        <div className="ws-zones" aria-label={t("Heart-rate zones")}>
           {[0, ...profile.zones].map((low, i, all) => (
             <span key={i} className="ws-zone" data-zone={i + 1}><b>Z{i + 1}</b>{i === 0 ? `< ${all[1]}` : i === all.length - 1 ? `${low}+` : `${low}–${all[i + 1] - 1}`}</span>
           ))}
         </div>
       ) : null}
-      {profile.ftp > 0 ? <p className="lm-quiet">FTP {profile.ftp} W{profile.criticalPower > 0 ? ` · critical power ${profile.criticalPower} W` : ""}, set on the watch.</p> : null}
+      {profile.ftp > 0 ? <p className="lm-quiet">{profile.criticalPower > 0 ? t("FTP {ftp} W · critical power {cp} W, set on the watch.", { ftp: profile.ftp, cp: profile.criticalPower }) : t("FTP {ftp} W, set on the watch.", { ftp: profile.ftp })}</p> : null}
       {changed ? (
         <div className="lm-actions">
-          <Button variant="primary" disabled={saving} onClick={save}>{saving ? "Saving to the watch…" : "Save to watch"}</Button>
-          <Button variant="plain" disabled={saving} onClick={() => { setDraft(was); setProblem(null); }}>Cancel</Button>
+          <Button variant="primary" disabled={saving} onClick={save}>{saving ? t("Saving to the watch…") : t("Save to watch")}</Button>
+          <Button variant="plain" disabled={saving} onClick={() => { setDraft(was); setProblem(null); }}>{t("Cancel")}</Button>
         </div>
       ) : null}
       {problem ? <p className="lm-problem" role="alert">{problem}</p> : null}
@@ -281,12 +282,12 @@ export function WatchFacesCard() {
     showWatchFace(slot, faceId).then(setFaces, (e: unknown) => setProblem(said(e))).finally(() => setSwitching(null));
   };
   return (
-    <Card className="wa-card lm-w12 ws-card" aria-label="Faces on the watch">
+    <Card className="wa-card lm-w12 ws-card" aria-label={t("Faces on the watch")}>
       <div className="wa-alarms-head">
-        <h2>Faces on the watch</h2>
+        <h2>{t("Faces on the watch")}</h2>
         <span className="lm-actions">
-          {faces ? <button type="button" className="set-link" onClick={() => { setProblem(null); void load(); }}>Refresh</button> : null}
-          <Button onClick={() => navigate("/studio")}>Make one in Studio</Button>
+          {faces ? <button type="button" className="set-link" onClick={() => { setProblem(null); void load(); }}>{t("Refresh")}</button> : null}
+          <Button onClick={() => navigate("/studio")}>{t("Make one in Studio")}</Button>
         </span>
       </div>
       {faces ? (
@@ -294,16 +295,16 @@ export function WatchFacesCard() {
           {faces.slots.map((x) => (
             <div key={x.slot} className="ws-slot" data-empty={x.faceId == null || undefined} data-on={faces.shown === x.slot || undefined}>
               <span className="ws-slot-num">{x.slot + 1}</span>
-              <span className="ws-slot-state">{x.faceId == null ? "Empty" : faces.shown === x.slot ? "On screen" : "Face"}</span>
+              <span className="ws-slot-state">{x.faceId == null ? t("Empty") : faces.shown === x.slot ? t("On screen") : t("Face")}</span>
               {x.faceId != null && faces.shown !== x.slot ? (
-                <button type="button" className="set-link" disabled={switching !== null} onClick={() => show(x.slot, x.faceId!)}>{switching === x.slot ? "Switching…" : "Show"}</button>
+                <button type="button" className="set-link" disabled={switching !== null} onClick={() => show(x.slot, x.faceId!)}>{switching === x.slot ? t("Switching…") : t("Show")}</button>
               ) : null}
             </div>
           ))}
         </div>
-      ) : !problem ? <p className="lm-quiet">Reading the watch…</p> : null}
-      {problem ? <div className="lm-ask"><p>{problem}</p><Button onClick={() => { setProblem(null); void load(); }}>Try again</Button></div> : null}
-      <p className="lm-quiet">Studio&apos;s Send → Watch installs a face into any of these slots over Bluetooth.</p>
+      ) : !problem ? <p className="lm-quiet">{t("Reading the watch…")}</p> : null}
+      {problem ? <div className="lm-ask"><p>{problem}</p><Button onClick={() => { setProblem(null); void load(); }}>{t("Try again")}</Button></div> : null}
+      <p className="lm-quiet">{t("Studio's Send → Watch installs a face into any of these slots over Bluetooth.")}</p>
     </Card>
   );
 }
@@ -325,13 +326,13 @@ export function WeatherRow({ status }: { status: WatchStatus }) {
     <div className="lm-row ws-weather">
       <span className="lm-ico" data-hue="blue"><svg aria-hidden="true" width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }}><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z" /></svg></span>
       <span className="lm-row-text">
-        <strong>Weather</strong>
-        <span>{place ? `${place.city || "Your place"} · ${status.weatherSentAt ? `sent ${whenSynced(status.weatherSentAt)}` : "sent with the next sync"}` : "Pick a place: the forecast goes to the watch with each sync"}</span>
+        <strong>{t("Weather")}</strong>
+        <span>{place ? `${place.city || t("Your place")} · ${status.weatherSentAt ? t("sent {when}", { when: whenSynced(status.weatherSentAt) }) : t("sent with the next sync")}` : t("Pick a place: the forecast goes to the watch with each sync")}</span>
         {editing ? (
           <form className="ws-place" onSubmit={(e) => { e.preventDefault(); search(); }}>
-            <Field autoFocus placeholder="Town or city" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Town or city" />
-            <Button type="submit" disabled={busy || query.trim().length < 2}>Search</Button>
-            <Button variant="plain" onClick={() => { setEditing(false); setFound(null); }}>Cancel</Button>
+            <Field autoFocus placeholder={t("Town or city")} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t("Town or city")} />
+            <Button type="submit" disabled={busy || query.trim().length < 2}>{t("Search")}</Button>
+            <Button variant="plain" onClick={() => { setEditing(false); setFound(null); }}>{t("Cancel")}</Button>
           </form>
         ) : null}
         {editing && found ? (
@@ -339,14 +340,14 @@ export function WeatherRow({ status }: { status: WatchStatus }) {
             <span className="ws-found">
               {found.map((p) => <button key={`${p.latitude},${p.longitude}`} type="button" className="ws-found-row" disabled={busy} onClick={() => pick(p)}><b>{p.city}</b><small>{p.region}</small></button>)}
             </span>
-          ) : <span>No place by that name.</span>
+          ) : <span>{t("No place by that name.")}</span>
         ) : null}
         {problem ? <span className="lm-problem" role="alert">{problem}</span> : null}
       </span>
       {!editing ? (
         <span className="lm-row-end">
-          {place ? <Button disabled={busy} onClick={() => run(sendWeatherNow)}>{busy ? "Sending…" : "Send now"}</Button> : null}
-          <Button onClick={() => setEditing(true)}>{place ? "Change" : "Pick a place"}</Button>
+          {place ? <Button disabled={busy} onClick={() => run(sendWeatherNow)}>{busy ? t("Sending…") : t("Send now")}</Button> : null}
+          <Button onClick={() => setEditing(true)}>{place ? t("Change") : t("Pick a place")}</Button>
         </span>
       ) : null}
     </div>

@@ -1,5 +1,6 @@
 import { fromSample, fromSynced, type Loaded } from "./core";
 import { syncView } from "./sync";
+import { t } from "@/lib/i18n";
 
 export type SleepStage = "awake" | "rem" | "light" | "deep";
 
@@ -67,5 +68,9 @@ export async function loadHealth(): Promise<Loaded<HealthData>> {
     return fromSynced(healthFromItems(view.all("health.day"), view.all("health.night"), view.all("energy.day"), new Date()));
   }
   const { sampleHealth } = await import("./sample/health");
-  return fromSample(sampleHealth);
+  return fromSample({
+    ...sampleHealth,
+    morning: sampleHealth.morning.map((m) => ({ ...m, name: t(m.name) })),
+    trends: sampleHealth.trends.map((s) => ({ ...s, name: t(s.name) })),
+  });
 }

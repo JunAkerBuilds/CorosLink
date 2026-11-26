@@ -3,6 +3,7 @@
 // loop is tested without a network.
 import type { CoachBlock, CoachSource, FailedCard, WorkingCard } from "@/data/coach";
 import type { HistoryTurn } from "./prompt";
+import { t } from "@/lib/i18n";
 import { suggestionsFor } from "./prompt";
 import { runTool, TOOL_WORDS, TOOLS, type ToolContext, type ToolDef, type ToolResult } from "./tools";
 import { withFiles, type CoachFile } from "./files";
@@ -81,14 +82,14 @@ export async function runCoach(run: CoachRun): Promise<CoachOutcome> {
   const extraNames = new Set(run.extra?.defs.map((d) => d.name) ?? []);
   const offered = extraNames.size ? [...TOOLS, ...run.extra!.defs.filter((d) => !TOOLS.some((t) => t.name === d.name))] : TOOLS;
   const shows = (name: string) => !extraNames.has(name) && SHOWS(name);
-  const words = (name: string) => TOOL_WORDS[name] ?? run.extra?.words?.[name];
+  const words = (name: string) => { const w = TOOL_WORDS[name] ?? run.extra?.words?.[name]; return w === undefined ? undefined : t(w); };
   const messages: ModelMessage[] = run.history.map((h) => ({ role: h.role, content: h.content }));
   const newest = messages[messages.length - 1];
   if (run.files?.length && newest?.role === "user" && typeof newest.content === "string") newest.content = withFiles(newest.content, run.files);
   const blocks: CoachBlock[] = [], sources: CoachSource[] = [], steps: WorkingCard["steps"] = [];
   const failures = new Map<string, string>();
   let tokens = 0, rounds = 0;
-  const working = (thinking: boolean) => run.emit({ t: "working", card: { kind: "working", id: "working", title: "Coach is on it", steps: [...steps, ...(thinking ? [{ text: steps.length ? "Putting it together" : "Reading your question", done: false }] : [])] } });
+  const working = (thinking: boolean) => run.emit({ t: "working", card: { kind: "working", id: "working", title: t("Coach is on it"), steps: [...steps, ...(thinking ? [{ text: steps.length ? t("Putting it together") : t("Reading your question"), done: false }] : [])] } });
   working(true);
 
   for (let round = 0; round < maxRounds; round++) {
@@ -103,7 +104,7 @@ export async function runCoach(run: CoachRun): Promise<CoachOutcome> {
     tokens += turn.inputTokens + turn.outputTokens;
     if (turn.stop === "refusal") {
       if (streamed) run.emit({ t: "reset" });
-      blocks.push({ kind: "text", text: "I can't help with that one. Ask me about your training, recovery, food or plan." });
+      blocks.push({ kind: "text", text: t("I can't help with that one. Ask me about your training, recovery, food or plan.") });
       break;
     }
     const calls = last ? [] : turn.calls;
@@ -117,7 +118,7 @@ export async function runCoach(run: CoachRun): Promise<CoachOutcome> {
     messages.push({ role: "assistant", content: turn.content });
     const results: { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean }[] = [];
     for (const call of calls) {
-      const label = words(call.name) ?? "Working";
+      const label = words(call.name) ?? t("Working");
       // A call cut off at the output limit is never run: its input is not what the model meant to send.
       const result: ToolResult = turn.stop === "max_tokens"
         ? { text: "Error: this call was cut off at the output limit, so it wasn't run. Send it again, shorter.", isError: true as const }
@@ -143,12 +144,12 @@ export async function runCoach(run: CoachRun): Promise<CoachOutcome> {
   // A card the model tried for and never got: say so on a card rather than leave a gap.
   for (const [name, why] of failures) {
     if (!shows(name)) continue;
-    const card: FailedCard = { kind: "failed", id: `failed-${name}`, title: `${words(name) ?? "That"} didn't work`, text: why[0].toUpperCase() + why.slice(1), tried: steps.length ? `Tried: ${steps.map((s) => s.text.toLowerCase()).join(", ")}` : "" };
+    const card: FailedCard = { kind: "failed", id: `failed-${name}`, title: words(name) ? t("{step} didn't work", { step: words(name)! }) : t("That didn't work"), text: why[0].toUpperCase() + why.slice(1), tried: steps.length ? t("Tried: {steps}", { steps: steps.map((s) => s.text.toLowerCase()).join(", ") }) : "" };
     blocks.push(card);
     run.emit({ t: "block", block: card });
   }
-  if (!blocks.length) blocks.push({ kind: "text", text: "I didn't get an answer together that time. Ask again." });
+  if (!blocks.length) blocks.push({ kind: "text", text: t("I didn't get an answer together that time. Ask again.") });
   const outcome = { blocks, sources: sources.slice(0, 6), tokens, rounds };
-  run.emit({ t: "done", blocks, sources: outcome.sources, suggestions: suggestionsFor(blocks), tokens });
+  run.emit({ t: "done", blocks, sources: outcome.sources, suggestions: suggestionsFor(blocks).map((s) => t(s)), tokens });
   return outcome;
 }

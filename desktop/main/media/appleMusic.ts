@@ -4,6 +4,7 @@
 import { searchFor, SourceProblem, type MusicSource, type Playlist, type Song, type SourceStatus } from "./sources";
 import type { ServiceVault } from "./vault";
 import type { WebHost } from "./webHost";
+import { t } from "@/lib/i18n";
 
 const PARTITION = "persist:clink-apple";
 const API = "https://amp-api.music.apple.com";
@@ -33,7 +34,7 @@ export class AppleMusic implements MusicSource {
   async connect(): Promise<SourceStatus> {
     let found: Tokens | null = null;
     await this.web.signIn({
-      url: `${ORIGIN}/`, partition: PARTITION, title: "Sign in to Apple Music",
+      url: `${ORIGIN}/`, partition: PARTITION, title: t("Sign in to Apple Music"),
       headers: { urls: ["https://*.music.apple.com/*"], seen: (h) => !!(found = tokensFrom(h) ?? found) },
     });
     if (found) await this.vault.setSecret("apple", found);
@@ -48,14 +49,14 @@ export class AppleMusic implements MusicSource {
 
   private async api<T>(pathOrNext: string): Promise<T> {
     const tokens = await this.vault.secret<Tokens>("apple");
-    if (!tokens) throw new SourceProblem("Sign in to Apple Music first.", "signedOut");
-    if (!pathOrNext.startsWith("/v1/")) throw new SourceProblem("Not an Apple Music address.", "address");
+    if (!tokens) throw new SourceProblem(t("Sign in to Apple Music first."), "signedOut");
+    if (!pathOrNext.startsWith("/v1/")) throw new SourceProblem(t("Not an Apple Music address."), "address");
     const answer = await this.web.fetch(PARTITION, `${API}${pathOrNext}`, {
       headers: { Authorization: `Bearer ${tokens.developer}`, "media-user-token": tokens.user, Origin: ORIGIN, Referer: `${ORIGIN}/`, Accept: "application/json" },
     });
     // The developer token is short-lived: signing in again picks up a fresh one.
-    if (answer.status === 401 || answer.status === 403) { await this.vault.setSecret("apple", null); throw new SourceProblem("Apple Music's sign-in ran out. Sign in again.", "signedOut"); }
-    if (!answer.ok) throw new SourceProblem(`Apple Music didn't answer (${answer.status}).`, "apple");
+    if (answer.status === 401 || answer.status === 403) { await this.vault.setSecret("apple", null); throw new SourceProblem(t("Apple Music's sign-in ran out. Sign in again."), "signedOut"); }
+    if (!answer.ok) throw new SourceProblem(t("Apple Music didn't answer ({status}).", { status: answer.status }), "apple");
     return (await answer.json()) as T;
   }
 
@@ -71,7 +72,7 @@ export class AppleMusic implements MusicSource {
   }
 
   async songs(playlistId: string): Promise<Song[]> {
-    if (!/^[\w.-]{4,80}$/.test(playlistId)) throw new SourceProblem("Not an Apple Music playlist.", "playlist");
+    if (!/^[\w.-]{4,80}$/.test(playlistId)) throw new SourceProblem(t("Not an Apple Music playlist."), "playlist");
     const out: Song[] = [];
     type Page = { data: { id: string; type?: string; attributes?: { name?: string; artistName?: string; albumName?: string; durationInMillis?: number; artwork?: { url?: string } } }[]; next?: string };
     for (let next: string | undefined = `/v1/me/library/playlists/${encodeURIComponent(playlistId)}/tracks?limit=100`; next && out.length < MAX_SONGS;) {

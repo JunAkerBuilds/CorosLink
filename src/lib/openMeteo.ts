@@ -3,6 +3,7 @@
  * and the hourly answer read at the start and finish times. Pure: no fetching here.
  */
 import type { Weather } from "@/data/activities";
+import { t, tx } from "@/lib/i18n";
 
 const HOURLY = ["temperature_2m", "apparent_temperature", "relative_humidity_2m", "dew_point_2m", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "weather_code"] as const;
 
@@ -41,15 +42,15 @@ export const compass = (deg: number): string => COMPASS[Math.round((((deg % 360)
 
 /** WMO weather code in words. */
 export function sky(code: number): string {
-  if (code === 0) return "Clear";
-  if (code === 1) return "Mainly clear";
-  if (code === 2) return "Partly cloudy";
-  if (code === 3) return "Overcast";
-  if (code === 45 || code === 48) return "Fog";
-  if (code >= 51 && code <= 57) return "Drizzle";
-  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return "Rain";
-  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "Snow";
-  if (code >= 95) return "Thunderstorm";
+  if (code === 0) return tx("weather", "Clear");
+  if (code === 1) return t("Mainly clear");
+  if (code === 2) return t("Partly cloudy");
+  if (code === 3) return t("Overcast");
+  if (code === 45 || code === 48) return t("Fog");
+  if (code >= 51 && code <= 57) return t("Drizzle");
+  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return t("Rain");
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return t("Snow");
+  if (code >= 95) return t("Thunderstorm");
   return "";
 }
 
@@ -85,7 +86,7 @@ export function weatherFrom(answer: unknown, start: string, finish: string): Wea
   if (finish.slice(0, 13) !== start.slice(0, 13)) set("finishTempC", at("temperature_2m", finish));
   const code = series("weather_code")?.[Math.floor(minutesFrom(day, start) / 60)];
   if (code != null && Number.isFinite(code) && sky(code)) w.sky = sky(code);
-  w.note = "From Open-Meteo, for where the route starts.";
+  w.note = t("From Open-Meteo, for where the route starts.");
   return w;
 }
 

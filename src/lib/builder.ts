@@ -8,6 +8,7 @@ import type {
   HubClimbSystem, HubExercise, HubIntensity, HubIntensityKind, HubSport, HubStepKind, HubStepTarget, HubStroke, HubWorkout, HubWorkoutBlock, HubWorkoutStep,
 } from "@/data/hub";
 import { thousands } from "@/lib/format";
+import { msg, t, tx } from "@/lib/i18n";
 import { intensityLabel } from "@/lib/hubWorkout";
 import {
   formatClock, paceIntensity, parseClock, shapePaths, type Pacing, type ShapeBucket, type ShapeSegment, type Sport, type StepKind, type StepTarget,
@@ -86,7 +87,7 @@ export interface AthleteNumbers {
   ftp?: number;
 }
 
-export const DEFAULT_NAME = "Structured Workout";
+export const DEFAULT_NAME = msg("Structured Workout");
 export const DESCRIPTION_MAX = 300;
 export const DEFAULT_POOL = 25;
 export const REST_CHIPS: readonly number[] = [30, 45, 60, 90, 120];
@@ -96,12 +97,13 @@ export const QUICK_DISTANCES: readonly number[] = [5, 8, 10, 21.1];
 
 /** The sports in the order the builder lists them. */
 export const SPORTS: readonly { sport: HubSport; label: string }[] = [
-  { sport: "run", label: "Run" }, { sport: "bike", label: "Bike" }, { sport: "swim", label: "Pool Swim" },
-  { sport: "strength", label: "Strength" }, { sport: "trailRun", label: "Trail Run" }, { sport: "indoorClimb", label: "Indoor Climb" },
-  { sport: "bouldering", label: "Bouldering" }, { sport: "xcSki", label: "XC Ski" }, { sport: "hyrox", label: "HYROX" },
+  { sport: "run", label: msg("Run") }, { sport: "bike", label: msg("Bike") }, { sport: "swim", label: msg("Pool Swim") },
+  { sport: "strength", label: msg("Strength") }, { sport: "trailRun", label: msg("Trail Run") }, { sport: "indoorClimb", label: msg("Indoor Climb") },
+  { sport: "bouldering", label: msg("Bouldering") }, { sport: "xcSki", label: msg("XC Ski") }, { sport: "hyrox", label: "HYROX" },
 ];
 
-export const sportLabel = (sport: HubSport): string => SPORTS.find((s) => s.sport === sport)?.label ?? sport;
+/** A sport's name in the app's language. */
+export const sportLabel = (sport: HubSport): string => t(SPORTS.find((s) => s.sport === sport)?.label ?? sport);
 export const isSport = (value: unknown): value is HubSport => SPORTS.some((s) => s.sport === value);
 
 /** The calendar draws four sports; the rest take the nearest one's colour. */
@@ -112,7 +114,7 @@ export function calendarSport(sport: HubSport): Sport {
   return "strength";
 }
 
-export const KIND_LABEL: Record<BuilderKind, string> = { warmup: "Warm-up", training: "Training", rest: "Rest", cooldown: "Cool-down", sendOff: "Send-off" };
+export const KIND_LABEL: Record<BuilderKind, string> = { warmup: msg("Warm-up"), training: msg("Training"), rest: msg("Rest"), cooldown: msg("Cool-down"), sendOff: msg("Send-off") };
 
 export function kindsFor(sport: HubSport): BuilderKind[] {
   return sport === "swim" ? ["warmup", "training", "rest", "cooldown", "sendOff"] : ["warmup", "training", "rest", "cooldown"];
@@ -129,11 +131,11 @@ export function isCard(step: BuilderStep, sport: HubSport): boolean {
 }
 
 export const TARGET_LABEL: Record<HubStepTarget, string> = {
-  distance: "Distance", time: "Time", load: "Training Load", open: "Open", hrRecovery: "HR Recovery", elevationGain: "Elevation Gain", reps: "Reps", routes: "Routes",
+  distance: msg("Distance"), time: msg("Time"), load: msg("Training Load"), open: msg("Open"), hrRecovery: msg("HR Recovery"), elevationGain: msg("Elevation Gain"), reps: msg("Reps"), routes: msg("Routes"),
 };
 /** What a card's "Per set" is counted in. */
-export const PER_SET_LABEL: Partial<Record<HubStepTarget, string>> = { reps: "reps", time: "seconds", distance: "metres", open: "to lap button" };
-export const OPEN_TEXT = "Ends when you press the lap button";
+export const PER_SET_LABEL: Partial<Record<HubStepTarget, string>> = { reps: msg("reps"), time: msg("seconds"), distance: msg("metres"), open: msg("to lap button") };
+export const OPEN_TEXT = msg("Ends when you press the lap button");
 
 const TARGET_ORDER: readonly HubStepTarget[] = ["reps", "routes", "distance", "time", "load", "open", "hrRecovery", "elevationGain"];
 
@@ -143,14 +145,14 @@ const stationKind = (step: BuilderStep): number | undefined => (step.station ? s
 export function targetsFor(sport: HubSport, step: Pick<BuilderStep, "kind" | "station" | "exercise">): HubStepTarget[] {
   const allowed = hubTargetsFor(sport, hubKind(step.kind), stationKind(step as BuilderStep));
   // A HYROX station is counted per set; training load is for its runs.
-  const list = sport === "hyrox" && step.station ? allowed.filter((t) => t !== "load") : allowed;
-  return TARGET_ORDER.filter((t) => list.includes(t));
+  const list = sport === "hyrox" && step.station ? allowed.filter((x) => x !== "load") : allowed;
+  return TARGET_ORDER.filter((x) => list.includes(x));
 }
 
 export const INTENSITY_LABEL: Record<BuilderIntensityKind, string> = {
-  none: "Not set", heartRate: "Heart Rate", heartRatePercent: "% Heart Rate", thresholdPacePercent: "% Threshold Pace", ftpPercent: "% FTP", pace: "Pace",
-  effortPacePercent: "% Effort Pace", effortPace: "Effort Pace", speed: "Speed", power: "Power", cadence: "Cadence", stroke: "Stroke",
-  bodyweight: "Bodyweight", weight: "Weight", rpe: "RPE", grade: "Grade", kept: "From COROS",
+  none: msg("Not set"), heartRate: msg("Heart Rate"), heartRatePercent: msg("% Heart Rate"), thresholdPacePercent: msg("% Threshold Pace"), ftpPercent: "% FTP", pace: msg("Pace"),
+  effortPacePercent: msg("% Effort Pace"), effortPace: msg("Effort Pace"), speed: msg("Speed"), power: msg("Power"), cadence: msg("Cadence"), stroke: msg("Stroke"),
+  bodyweight: msg("Bodyweight"), weight: msg("Weight"), rpe: "RPE", grade: msg("Grade"), kept: msg("From COROS"),
 };
 
 const INTENSITY_ORDER: readonly BuilderIntensityKind[] = [
@@ -174,13 +176,13 @@ export function intensitiesFor(sport: HubSport, step: Pick<BuilderStep, "kind" |
 }
 
 export const STROKES: readonly { stroke: HubStroke; label: string }[] = [
-  { stroke: "freestyle", label: "Freestyle" }, { stroke: "breaststroke", label: "Breaststroke" }, { stroke: "backstroke", label: "Backstroke" },
-  { stroke: "butterfly", label: "Butterfly" }, { stroke: "drills", label: "Drills" }, { stroke: "individualMedley", label: "Individual Medley" },
-  { stroke: "mix", label: "Mix" },
+  { stroke: "freestyle", label: msg("Freestyle") }, { stroke: "breaststroke", label: msg("Breaststroke") }, { stroke: "backstroke", label: msg("Backstroke") },
+  { stroke: "butterfly", label: msg("Butterfly") }, { stroke: "drills", label: msg("Drills") }, { stroke: "individualMedley", label: msg("Individual Medley") },
+  { stroke: "mix", label: msg("Mix") },
 ];
 
 export const GRADE_SYSTEMS: readonly { system: HubClimbSystem; label: string }[] = [
-  { system: "yds", label: "YDS" }, { system: "french", label: "French" }, { system: "uiaa", label: "UIAA" },
+  { system: "yds", label: "YDS" }, { system: "french", label: msg("French") }, { system: "uiaa", label: "UIAA" },
   { system: "ewbank", label: "Ewbank" }, { system: "vScale", label: "V-Scale" }, { system: "font", label: "Font" },
 ];
 
@@ -194,16 +196,16 @@ export interface Zone { key: string; label: string; low: number; high: number }
 const zones = (rows: [string, string, number, number][]): Zone[] => rows.map(([key, label, low, high]) => ({ key, label, low, high }));
 
 export const HEART_BASES: readonly { basis: HeartBasis; label: string }[] = [
-  { basis: "maxHr", label: "% Max Heart Rate" }, { basis: "reserve", label: "% Heart Rate Reserve" }, { basis: "lthr", label: "% Lactate Threshold HR" },
+  { basis: "maxHr", label: msg("% Max Heart Rate") }, { basis: "reserve", label: msg("% Heart Rate Reserve") }, { basis: "lthr", label: msg("% Lactate Threshold HR") },
 ];
 
 export const HEART_ZONES: Record<HeartBasis, readonly Zone[]> = {
-  maxHr: zones([["recovery", "Recovery", 0, 50], ["warmUp", "Warm Up", 51, 60], ["fatBurn", "Fat Burn", 61, 70], ["aerobicEndurance", "Aerobic Endurance", 71, 80], ["threshold", "Threshold", 81, 90], ["anaerobic", "Anaerobic", 91, 100]]),
-  reserve: zones([["recovery", "Recovery", 0, 59], ["warmUp", "Warm Up", 60, 74], ["fatBurn", "Fat Burn", 75, 84], ["aerobicEndurance", "Aerobic Endurance", 85, 88], ["threshold", "Threshold", 89, 95], ["anaerobic", "Anaerobic", 96, 100]]),
-  lthr: zones([["recovery", "Recovery", 0, 80], ["warmUp", "Warm Up", 81, 90], ["fatBurn", "Fat Burn", 91, 95], ["aerobicEndurance", "Aerobic Endurance", 96, 102], ["threshold", "Threshold", 103, 106], ["anaerobic", "Anaerobic", 107, 120]]),
+  maxHr: zones([["recovery", msg("Recovery"), 0, 50], ["warmUp", msg("Warm Up"), 51, 60], ["fatBurn", msg("Fat Burn"), 61, 70], ["aerobicEndurance", msg("Aerobic Endurance"), 71, 80], ["threshold", msg("Threshold"), 81, 90], ["anaerobic", msg("Anaerobic"), 91, 100]]),
+  reserve: zones([["recovery", msg("Recovery"), 0, 59], ["warmUp", msg("Warm Up"), 60, 74], ["fatBurn", msg("Fat Burn"), 75, 84], ["aerobicEndurance", msg("Aerobic Endurance"), 85, 88], ["threshold", msg("Threshold"), 89, 95], ["anaerobic", msg("Anaerobic"), 96, 100]]),
+  lthr: zones([["recovery", msg("Recovery"), 0, 80], ["warmUp", msg("Warm Up"), 81, 90], ["fatBurn", msg("Fat Burn"), 91, 95], ["aerobicEndurance", msg("Aerobic Endurance"), 96, 102], ["threshold", msg("Threshold"), 103, 106], ["anaerobic", msg("Anaerobic"), 107, 120]]),
 };
-export const PACE_ZONES: readonly Zone[] = zones([["recovery", "Recovery", 0, 77], ["aerobicEndurance", "Aerobic Endurance", 78, 87], ["aerobicPower", "Aerobic Power", 88, 94], ["threshold", "Threshold", 95, 108], ["anaerobicEndurance", "Anaerobic Endurance", 109, 118], ["anaerobicPower", "Anaerobic Power", 119, 200]]);
-export const FTP_ZONES: readonly Zone[] = zones([["recovery", "Recovery", 0, 55], ["aerobicEndurance", "Aerobic Endurance", 56, 75], ["aerobicPower", "Aerobic Power", 76, 90], ["threshold", "Threshold", 91, 105], ["anaerobicEndurance", "Anaerobic Endurance", 106, 120], ["anaerobicPower", "Anaerobic Power", 121, 150], ["sprint", "Sprint", 151, 300]]);
+export const PACE_ZONES: readonly Zone[] = zones([["recovery", msg("Recovery"), 0, 77], ["aerobicEndurance", msg("Aerobic Endurance"), 78, 87], ["aerobicPower", msg("Aerobic Power"), 88, 94], ["threshold", msg("Threshold"), 95, 108], ["anaerobicEndurance", msg("Anaerobic Endurance"), 109, 118], ["anaerobicPower", msg("Anaerobic Power"), 119, 200]]);
+export const FTP_ZONES: readonly Zone[] = zones([["recovery", msg("Recovery"), 0, 55], ["aerobicEndurance", msg("Aerobic Endurance"), 56, 75], ["aerobicPower", msg("Aerobic Power"), 76, 90], ["threshold", msg("Threshold"), 91, 105], ["anaerobicEndurance", msg("Anaerobic Endurance"), 106, 120], ["anaerobicPower", msg("Anaerobic Power"), 121, 150], ["sprint", msg("Sprint"), 151, 300]]);
 
 export const CUSTOM_ZONE = "custom";
 
@@ -237,15 +239,15 @@ export function derivedText(intensity: BuilderIntensity, numbers: AthleteNumbers
     if (basis === "reserve") {
       const { maxHr, restingHr } = numbers;
       if (!maxHr || !restingHr) return null;
-      return `${Math.round(restingHr + ((maxHr - restingHr) * range.low) / 100)} to ${Math.round(restingHr + ((maxHr - restingHr) * range.high) / 100)} bpm`;
+      return t("{low} to {high} bpm", { low: Math.round(restingHr + ((maxHr - restingHr) * range.low) / 100), high: Math.round(restingHr + ((maxHr - restingHr) * range.high) / 100) });
     }
     const reference = basis === "lthr" ? numbers.lthr : numbers.maxHr;
-    return reference ? `${of(reference, range.low)} to ${of(reference, range.high)} bpm` : null;
+    return reference ? t("{low} to {high} bpm", { low: of(reference, range.low), high: of(reference, range.high) }) : null;
   }
-  if (intensity.kind === "ftpPercent") return numbers.ftp ? `${of(numbers.ftp, range.low)} to ${of(numbers.ftp, range.high)} W` : null;
+  if (intensity.kind === "ftpPercent") return numbers.ftp ? t("{low} to {high} W", { low: of(numbers.ftp, range.low), high: of(numbers.ftp, range.high) }) : null;
   // A higher percentage of threshold pace is a faster pace: fewer seconds per km.
   if (!numbers.thresholdPace || range.low <= 0) return null;
-  return `${formatClock((numbers.thresholdPace * 100) / range.high)} to ${formatClock((numbers.thresholdPace * 100) / range.low)} /km`;
+  return t("{low} to {high} /km", { low: formatClock((numbers.thresholdPace * 100) / range.high), high: formatClock((numbers.thresholdPace * 100) / range.low) });
 }
 
 /* ───────────── New steps ───────────── */
@@ -317,7 +319,7 @@ export function newRepeat(ids: readonly [string, string, string], doc: Pick<Buil
 /** One run by distance, with a pace when one is given: what Quick training plans. */
 export function quickRunDoc(name: string, km: number, paceSeconds: number | null, id: string): BuilderDoc {
   const intensity: BuilderIntensity = paceSeconds ? { kind: "pace", low: paceSeconds, high: paceSeconds } : { kind: "none" };
-  return { name: name.trim() || "Quick Run", sport: "run", description: "", items: [{ type: "step", id, kind: "training", target: "distance", meters: Math.round(km * 1000), intensity }] };
+  return { name: name.trim() || t("Quick Run"), sport: "run", description: "", items: [{ type: "step", id, kind: "training", target: "distance", meters: Math.round(km * 1000), intensity }] };
 }
 
 /**
@@ -416,10 +418,10 @@ function toHubStep(step: BuilderStep, sport: HubSport): HubWorkoutStep {
 export function docUnwired(doc: BuilderDoc): string[] {
   const found = new Set<string>();
   for (const step of everyStep(doc.items)) {
-    if (step.kind === "sendOff") found.add("Send-off steps");
-    if (isUnwired(step.intensity.kind)) found.add(`${INTENSITY_LABEL[step.intensity.kind]} targets`);
+    if (step.kind === "sendOff") found.add(t("Send-off steps"));
+    if (isUnwired(step.intensity.kind)) found.add(t("{kind} targets", { kind: t(INTENSITY_LABEL[step.intensity.kind]) }));
     // A target only COROS can show survives an edit of the same workout, not a copy onto another day.
-    if (step.intensity.kind === "kept" && !step.coros) found.add("Targets only the COROS app can show");
+    if (step.intensity.kind === "kept" && !step.coros) found.add(t("Targets only the COROS app can show"));
   }
   return [...found];
 }
@@ -499,11 +501,12 @@ export function legacyDoc(workout: { name: string; sport: Sport; items: readonly
 
 /** One target in words, for a calendar line or Coach: "Heart Rate 124–143 bpm", "% Heart Rate · Fat Burn". */
 export function intensityText(intensity: BuilderIntensity): string {
-  if (!isUnwired(intensity.kind)) return intensity.kind === "kept" ? INTENSITY_LABEL.kept : intensityLabel(toHubIntensity(intensity));
-  if (intensity.kind === "effortPace") return intensity.low && intensity.high ? `Effort Pace ${formatPaceRange(intensity.low, intensity.high)}` : INTENSITY_LABEL.effortPace;
+  if (!isUnwired(intensity.kind)) return intensity.kind === "kept" ? t(INTENSITY_LABEL.kept) : intensityLabel(toHubIntensity(intensity));
+  if (intensity.kind === "effortPace") return intensity.low && intensity.high ? t("Effort Pace {range}", { range: formatPaceRange(intensity.low, intensity.high) }) : t(INTENSITY_LABEL.effortPace);
   const range = percentRange(intensity);
   const zone = zonesFor(intensity).find((z) => z.key === intensity.zone);
-  return `${INTENSITY_LABEL[intensity.kind]}${zone ? ` · ${zone.label}` : range ? ` · ${range.low}-${range.high}%` : ""}`;
+  const label = t(INTENSITY_LABEL[intensity.kind]);
+  return zone ? `${label} · ${t(zone.label)}` : range ? `${label} · ${range.low}-${range.high}%` : label;
 }
 
 /**
@@ -538,14 +541,14 @@ export function stepProblem(doc: BuilderDoc, step: BuilderStep, browser = false)
   const sport = doc.sport;
   const i = step.intensity;
   if (i.kind === "effortPace") {
-    if (!(i.low && i.high && i.low >= 60 && i.high <= 3600 && i.low <= i.high)) return "Paces go from 1:00 to 60:00 per km, fast to slow.";
-  } else if (isUnwired(i.kind) && !percentRange(i)) return "A custom range needs both ends, low then high.";
-  if (!intensitiesFor(sport, step).includes(i.kind) && i.kind !== "kept") return "That target isn't available for this step.";
-  if (step.kind === "sendOff" && !(step.sendOffSeconds && step.sendOffSeconds >= 1 && step.sendOffSeconds <= 3600)) return "A send-off needs its time.";
+    if (!(i.low && i.high && i.low >= 60 && i.high <= 3600 && i.low <= i.high)) return t("Paces go from 1:00 to 60:00 per km, fast to slow.");
+  } else if (isUnwired(i.kind) && !percentRange(i)) return t("A custom range needs both ends, low then high.");
+  if (!intensitiesFor(sport, step).includes(i.kind) && i.kind !== "kept") return t("That target isn't available for this step.");
+  if (step.kind === "sendOff" && !(step.sendOffSeconds && step.sendOffSeconds >= 1 && step.sendOffSeconds <= 3600)) return t("A send-off needs its time.");
   const named = Boolean(step.name?.trim());
   if (isCard(step, sport)) {
-    if (!step.exercise && !(browser && named) && !step.coros) return sport === "hyrox" ? "Pick a station." : "Pick an exercise for each strength step.";
-    if (!(step.restSeconds === undefined || (step.restSeconds >= 0 && step.restSeconds <= 3600))) return "Rest between sets goes from 0 to 3600 seconds.";
+    if (!step.exercise && !(browser && named) && !step.coros) return sport === "hyrox" ? t("Pick a station.") : t("Pick an exercise for each strength step.");
+    if (!(step.restSeconds === undefined || (step.restSeconds >= 0 && step.restSeconds <= 3600))) return t("Rest between sets goes from 0 to 3600 seconds.");
   }
   const alone: HubWorkout = { name: "x", sport, description: "", blocks: [{ repeats: null, steps: [toHubStep(step, sport)] }], ...(isClimb(sport) ? { gradeSystem: gradeSystemOf(doc) } : {}) };
   return hubWorkoutProblem(alone, () => step.coros !== undefined || (browser && named));
@@ -558,14 +561,14 @@ export function docChecks(doc: BuilderDoc, browser = false): Check[] {
   const checks: Check[] = [];
   const first = doc.items[0], last = doc.items[doc.items.length - 1];
   if (doc.sport !== "strength") {
-    if (!(first?.type === "step" && first.kind === "warmup")) checks.push({ ok: false, text: "Add a warm-up before the hard work" });
-    if (!(last?.type === "step" && last.kind === "cooldown")) checks.push({ ok: false, text: "Add a cool-down at the end" });
+    if (!(first?.type === "step" && first.kind === "warmup")) checks.push({ ok: false, text: t("Add a warm-up before the hard work") });
+    if (!(last?.type === "step" && last.kind === "cooldown")) checks.push({ ok: false, text: t("Add a cool-down at the end") });
   }
-  if (doc.description.trim().length > DESCRIPTION_MAX) checks.push({ ok: false, text: `Shorten the description to ${DESCRIPTION_MAX} characters` });
+  if (doc.description.trim().length > DESCRIPTION_MAX) checks.push({ ok: false, text: t("Shorten the description to {n} characters", { n: DESCRIPTION_MAX }) });
   const pending = pendingCount(doc, browser);
   checks.push(pending > 0
-    ? { ok: false, text: pending === 1 ? "1 block needs a value" : `${pending} blocks need a value` }
-    : { ok: true, text: "Every step is ready for the watch" });
+    ? { ok: false, text: pending === 1 ? t("1 block needs a value") : t("{n} blocks need a value", { n: pending }) }
+    : { ok: true, text: t("Every step is ready for the watch") });
   return checks;
 }
 
@@ -646,29 +649,29 @@ export interface DocTotals {
 }
 
 export function docTotals(doc: BuilderDoc, pacing: Pacing | null): DocTotals {
-  const t: DocTotals = { seconds: 0, secondsEstimated: false, meters: 0, metersEstimated: false, restSeconds: 0, steps: 0, repeats: 0, exercises: 0, sets: 0, reps: 0, routes: 0 };
+  const tot: DocTotals = { seconds: 0, secondsEstimated: false, meters: 0, metersEstimated: false, restSeconds: 0, steps: 0, repeats: 0, exercises: 0, sets: 0, reps: 0, routes: 0 };
   for (const item of doc.items) {
     const times = item.type === "repeat" ? Math.max(0, Math.min(99, Math.floor(item.count) || 0)) : 1;
-    if (item.type === "repeat") t.repeats += 1;
+    if (item.type === "repeat") tot.repeats += 1;
     for (const step of item.type === "repeat" ? item.steps : [item]) {
-      t.steps += 1;
+      tot.steps += 1;
       const s = stepSeconds(step, doc.sport, pacing);
-      if (!s) t.seconds = null;
-      else if (t.seconds !== null) { t.seconds += times * s.seconds; t.secondsEstimated ||= s.estimated; }
+      if (!s) tot.seconds = null;
+      else if (tot.seconds !== null) { tot.seconds += times * s.seconds; tot.secondsEstimated ||= s.estimated; }
       const m = stepMeters(step, doc.sport);
-      t.meters += times * m.meters;
-      t.metersEstimated ||= m.estimated && m.meters > 0;
-      if (step.kind === "rest" && step.target === "time") t.restSeconds += times * (step.seconds ?? 0);
+      tot.meters += times * m.meters;
+      tot.metersEstimated ||= m.estimated && m.meters > 0;
+      if (step.kind === "rest" && step.target === "time") tot.restSeconds += times * (step.seconds ?? 0);
       if (isCard(step, doc.sport)) {
         const sets = setsOf(step, doc.sport);
-        t.exercises += 1;
-        t.sets += times * sets;
-        if (step.target === "reps") t.reps += times * sets * (step.count ?? 0);
+        tot.exercises += 1;
+        tot.sets += times * sets;
+        if (step.target === "reps") tot.reps += times * sets * (step.count ?? 0);
       }
-      if (step.target === "routes") t.routes += times * (step.count ?? 0);
+      if (step.target === "routes") tot.routes += times * (step.count ?? 0);
     }
   }
-  return t;
+  return tot;
 }
 
 /** A distance as the sport writes it: metres in the pool, kilometres elsewhere. */
@@ -678,30 +681,32 @@ export function distanceText(meters: number, sport: HubSport): string {
 
 /** What a repeat block comes to, all its rounds together: its distance, else its time. */
 export function repeatText(block: BuilderRepeat, doc: BuilderDoc, pacing: Pacing | null): string {
-  const t = docTotals({ ...doc, items: [block] }, pacing);
-  if (t.meters > 0) return distanceText(t.meters, doc.sport);
-  return t.seconds ? formatClock(t.seconds) : "";
+  const tot = docTotals({ ...doc, items: [block] }, pacing);
+  if (tot.meters > 0) return distanceText(tot.meters, doc.sport);
+  return tot.seconds ? formatClock(tot.seconds) : "";
 }
 
 /** One line for a table or the calendar: "49:56 · 9.60 km", "2,400 m", "5 exercises · 17 sets". */
 export function docSummary(doc: BuilderDoc, pacing: Pacing | null): string {
-  const t = docTotals(doc, pacing);
-  if (doc.sport === "strength") return `${t.exercises} ${t.exercises === 1 ? "exercise" : "exercises"} · ${t.sets} ${t.sets === 1 ? "set" : "sets"}`;
-  if (doc.sport === "swim" && t.meters > 0) return distanceText(t.meters, "swim");
+  const tot = docTotals(doc, pacing);
+  if (doc.sport === "strength") {
+    return `${tot.exercises === 1 ? t("1 exercise") : t("{n} exercises", { n: tot.exercises })} · ${tot.sets === 1 ? t("1 set") : t("{n} sets", { n: tot.sets })}`;
+  }
+  if (doc.sport === "swim" && tot.meters > 0) return distanceText(tot.meters, "swim");
   const parts: string[] = [];
-  if (t.seconds) parts.push(formatClock(t.seconds));
-  if (t.meters >= 1) parts.push(distanceText(t.meters, doc.sport));
-  if (t.routes > 0) parts.push(`${t.routes} ${t.routes === 1 ? "route" : "routes"}`);
-  return parts.join(" · ") || `${t.steps} ${t.steps === 1 ? "step" : "steps"}`;
+  if (tot.seconds) parts.push(formatClock(tot.seconds));
+  if (tot.meters >= 1) parts.push(distanceText(tot.meters, doc.sport));
+  if (tot.routes > 0) parts.push(tot.routes === 1 ? tx("climbing", "1 route") : tx("climbing", "{n} routes", { n: tot.routes }));
+  return parts.join(" · ") || (tot.steps === 1 ? t("1 step") : t("{n} steps", { n: tot.steps }));
 }
 
 /** The line under a card's sets: "24 reps in total". */
 export function setsText(step: BuilderStep): string {
   const sets = Math.max(1, step.sets ?? 1);
-  if (step.target === "open") return "Each set ends when you press the lap button";
-  if (step.target === "reps" && step.count) return `${sets * step.count} reps in total`;
-  if (step.target === "time" && step.seconds) return `About ${formatClock(sets * step.seconds + (sets - 1) * (step.restSeconds ?? 0))} in total`;
-  if (step.target === "distance" && step.meters) return `${thousands(sets * step.meters)} m in total`;
+  if (step.target === "open") return t("Each set ends when you press the lap button");
+  if (step.target === "reps" && step.count) return t("{n} reps in total", { n: sets * step.count });
+  if (step.target === "time" && step.seconds) return t("About {time} in total", { time: formatClock(sets * step.seconds + (sets - 1) * (step.restSeconds ?? 0)) });
+  if (step.target === "distance" && step.meters) return t("{n} m in total", { n: thousands(sets * step.meters) });
   return "";
 }
 
@@ -746,9 +751,11 @@ export function docShape(doc: BuilderDoc, pacing: Pacing | null): DocShape {
 
 /** The drawing in words, for people who can't see it. */
 export function shapeLabel(doc: BuilderDoc): string {
-  if (doc.items.length === 0) return "Effort through the workout: no steps yet";
-  const one = (s: BuilderStep) => KIND_LABEL[s.kind].toLowerCase();
-  return `Effort through the workout: ${doc.items.map((item) => (item.type === "step" ? one(item) : `${item.count} times ${item.steps.map(one).join(" then ")}`)).join(", ")}`;
+  if (doc.items.length === 0) return t("Effort through the workout: no steps yet");
+  const one = (s: BuilderStep) => t(KIND_LABEL[s.kind]).toLowerCase();
+  const then = (steps: string[]) => steps.reduce((a, b) => t("{a} then {b}", { a, b }));
+  const rows = doc.items.map((item) => (item.type === "step" ? one(item) : t("{n} times {steps}", { n: item.count, steps: item.steps.length ? then(item.steps.map(one)) : "" })));
+  return t("Effort through the workout: {steps}", { steps: rows.join(", ") });
 }
 
 /* ───────────── Text boxes ───────────── */
@@ -770,8 +777,8 @@ export function parsePaceRange(text: string): { low: number; high: number } | nu
 
 /** Reads a whole or decimal number inside `low`…`high`; null otherwise. `step` snaps to a grid (0.5 kg). */
 export function parseNumber(text: string, low: number, high: number, step = 0): number | null {
-  const t = text.trim().replace(",", ".");
-  if (!/^\d+(\.\d+)?$/.test(t)) return null;
-  const value = step > 0 ? Math.round(parseFloat(t) / step) * step : parseFloat(t);
+  const s = text.trim().replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(s)) return null;
+  const value = step > 0 ? Math.round(parseFloat(s) / step) * step : parseFloat(s);
   return value >= low && value <= high ? value : null;
 }

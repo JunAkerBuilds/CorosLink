@@ -19,6 +19,7 @@ import { mockModel } from "@/server/coach/mockModel";
 import { hostAI } from "@/server/ai/host";
 import { TrainingHub } from "@/server/hub/client";
 import { workout as checkHubWorkout } from "@/server/hub/validate";
+import { t } from "@/lib/i18n";
 
 /** A question with up to 16 MB of files, base64 encoded, and the conversation so far. */
 const MAX_BODY = 24_000_000;
@@ -31,7 +32,7 @@ async function pull(token: string): Promise<Row[] | Response> {
   for (let page = 0; page < MAX_PAGES; page++) {
     const response = await upstream(`/api/v1/me/sync?since=${since}&limit=500`, { token });
     if (response.status === 401) return notReady();
-    if (!response.ok) return fail(502, "sync_unavailable", "The data on this computer couldn't be read, so Coach can't answer yet.");
+    if (!response.ok) return fail(502, "sync_unavailable", t("The data on this computer couldn't be read, so Coach can't answer yet."));
     const body = (await response.json()) as { items?: { collection: string; id: string; deleted?: boolean; body?: unknown }[]; cursor?: number; more?: boolean };
     for (const item of body.items ?? []) if (!item.deleted) rows.push({ collection: item.collection, id: item.id, body: item.body });
     if (!body.more || typeof body.cursor !== "number" || body.cursor <= since) break;
@@ -42,20 +43,20 @@ async function pull(token: string): Promise<Row[] | Response> {
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
-  if (!sameSite(request)) return fail(403, "forbidden", "That request didn't come from this app.");
+  if (!sameSite(request)) return fail(403, "forbidden", t("That request didn't come from this app."));
   const account = await readAccount();
   if (!account) return notReady();
   const raw = await request.text();
-  if (raw.length > MAX_BODY) return fail(413, "too_large", "That conversation is too long to send. Start a new one.");
+  if (raw.length > MAX_BODY) return fail(413, "too_large", t("That conversation is too long to send. Start a new one."));
   let json: unknown = null;
   try { json = JSON.parse(raw); } catch {}
   const asked = parseRequest(json, Date.now(), checkHubWorkout);
-  if (!asked) return fail(400, "invalid", "Type a question for Coach.");
+  if (!asked) return fail(400, "invalid", t("Type a question for Coach."));
 
   // The athlete's own pick in Coach settings; the scripted dev model only with COACH_MODEL=mock and no pick.
   const host = await hostAI.current?.model() ?? null;
-  if (!host && !usingMockModel()) return fail(402, "no_key", "Coach needs an AI. Pick one in Coach settings.");
-  if (!(await askAllowed(account.viewer.id))) return fail(429, "slow_down", "That's a lot of questions in a minute. Give it a moment.");
+  if (!host && !usingMockModel()) return fail(402, "no_key", t("Coach needs an AI. Pick one in Coach settings."));
+  if (!(await askAllowed(account.viewer.id))) return fail(429, "slow_down", t("That's a lot of questions in a minute. Give it a moment."));
 
   const rows = await pull(account.token);
   if (rows instanceof Response) return rows;

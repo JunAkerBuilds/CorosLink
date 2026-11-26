@@ -4,6 +4,7 @@
 // https, and only GET: nothing is ever written to Hevy. The API key travels in the `api-key` header and
 // nowhere else: never in a URL, a log or an answer.
 import { HubInvalid, HubProblem } from "@/server/hub/errors";
+import { t } from "@/lib/i18n";
 
 const ORIGIN = "https://api.hevyapp.com";
 const BASE = ORIGIN + "/v1";
@@ -21,21 +22,21 @@ type Fetch = typeof fetch;
 /** An API key as pasted: printable, no spaces. */
 export function hevyKey(value: unknown): string {
   const found = typeof value === "string" ? value.trim() : "";
-  if (!/^[\x21-\x7e]{8,200}$/.test(found)) throw new HubInvalid("Paste your Hevy API key.");
+  if (!/^[\x21-\x7e]{8,200}$/.test(found)) throw new HubInvalid(t("Paste your Hevy API key."));
   return found;
 }
 
 /** A page number from a query string: 1 to 1000. */
 export function hevyPage(value: unknown): number {
   const page = Number(value);
-  if (!Number.isInteger(page) || page < 1 || page > 1000) throw new HubInvalid("That page isn't valid.");
+  if (!Number.isInteger(page) || page < 1 || page > 1000) throw new HubInvalid(t("That page isn't valid."));
   return page;
 }
 
 /** An ISO time from a query string, written again by this server before it goes to Hevy. */
 export function hevySince(value: unknown): string {
   const ms = typeof value === "string" && value.length <= 40 ? Date.parse(value) : NaN;
-  if (!Number.isFinite(ms)) throw new HubInvalid("That time isn't valid.");
+  if (!Number.isFinite(ms)) throw new HubInvalid(t("That time isn't valid."));
   return new Date(ms).toISOString();
 }
 
@@ -59,7 +60,7 @@ export class Hevy {
   private async get(path: string, apiKey: string, search: Record<string, string | number> = {}, connecting = false): Promise<unknown> {
     const url = new URL(BASE + path);
     for (const [key, value] of Object.entries(search)) url.searchParams.set(key, String(value));
-    if (url.origin !== ORIGIN) throw new HubProblem("C-LINK only talks to Hevy for this.", "blocked");
+    if (url.origin !== ORIGIN) throw new HubProblem(t("C-LINK only talks to Hevy for this."), "blocked");
     let response: Response;
     try {
       response = await this.fetchImpl(url, {
@@ -67,26 +68,26 @@ export class Hevy {
       });
     } catch (error) {
       if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
-        throw new HubProblem("Hevy didn't answer within 30 seconds. Try again.", "unreachable");
+        throw new HubProblem(t("Hevy didn't answer within 30 seconds. Try again."), "unreachable");
       }
-      throw new HubProblem("Hevy couldn't be reached. Check your connection and try again.", "unreachable");
+      throw new HubProblem(t("Hevy couldn't be reached. Check your connection and try again."), "unreachable");
     }
     // The phone reads a 404 on /user/info as a refused key too.
     if (response.status === 401 || response.status === 403 || (response.status === 404 && path === "/user/info")) {
       throw new HubInvalid(connecting
-        ? "Hevy didn't accept that API key. Its API needs Hevy Pro."
-        : "Hevy no longer accepts the saved API key. Disconnect, then connect with a current key.");
+        ? t("Hevy didn't accept that API key. Its API needs Hevy Pro.")
+        : t("Hevy no longer accepts the saved API key. Disconnect, then connect with a current key."));
     }
-    if (response.status === 429) throw new HubProblem("Hevy is asking for fewer requests. Wait a minute and try again.");
-    if (!response.ok) throw new HubProblem(`Hevy couldn't answer right now (HTTP ${response.status}). Try again later.`);
+    if (response.status === 429) throw new HubProblem(t("Hevy is asking for fewer requests. Wait a minute and try again."));
+    if (!response.ok) throw new HubProblem(t("Hevy couldn't answer right now (HTTP {status}). Try again later.", { status: response.status }));
     const raw = await response.arrayBuffer();
-    if (raw.byteLength > MAX_BYTES) throw new HubProblem("Hevy sent more than this app can read at once.");
+    if (raw.byteLength > MAX_BYTES) throw new HubProblem(t("Hevy sent more than this app can read at once."));
     try {
       const parsed: unknown = JSON.parse(new TextDecoder().decode(raw));
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not an object");
       return parsed;
     } catch {
-      throw new HubProblem("Hevy sent an unexpected answer.");
+      throw new HubProblem(t("Hevy sent an unexpected answer."));
     }
   }
 
@@ -94,7 +95,7 @@ export class Hevy {
   async identity(apiKey: string): Promise<HevyIdentity> {
     const answer = await this.get("/user/info", apiKey, {}, true) as { data?: { id?: unknown; name?: unknown; url?: unknown } };
     const userId = text(answer.data?.id);
-    if (!userId) throw new HubProblem("Hevy didn't say whose key that is.");
+    if (!userId) throw new HubProblem(t("Hevy didn't say whose key that is."));
     const name = text(answer.data?.name)?.slice(0, 80), url = profileUrl(answer.data?.url);
     return { userId, ...(name ? { name } : {}), ...(url ? { profileUrl: url } : {}) };
   }

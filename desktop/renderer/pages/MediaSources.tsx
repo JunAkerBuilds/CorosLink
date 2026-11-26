@@ -4,6 +4,8 @@
 import { useEffect, useState } from "react";
 import { Button, Card, Field, Switch } from "@/components/ui";
 import { createStore, useStore } from "@/data/local/store";
+import { locale, msg, t } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/react";
 import {
   cancelDownloads, clearDownloads, connectSource, disconnectSource, downloadEpisode, downloadSongs, MediaProblem, readDownloads,
   combineSongs, lockSpotify, readPlaylists, readShow, readSongs, readTools, searchPodcasts, setSpotifyClient, songsState, sourceStatus, splitEpisode, unlockSpotify,
@@ -13,7 +15,7 @@ import { booksTabStore } from "../mediaBooks";
 import { tabStore } from "../mediaInput";
 import { clock } from "../mediaRows";
 
-const said = (e: unknown) => (e instanceof MediaProblem || e instanceof Error ? e.message : "That didn't work.");
+const said = (e: unknown) => (e instanceof MediaProblem || e instanceof Error ? e.message : t("That didn't work."));
 const LABEL: Record<SourceName, string> = { spotify: "Spotify", ytmusic: "YouTube Music", apple: "Apple Music" };
 /** "Send to watch when downloaded", remembered per service. */
 const toWatchStore = createStore<Partial<Record<SourceName, boolean>>>("media.toWatch", {});
@@ -39,7 +41,7 @@ export function useTools(): Tools | null {
 }
 
 export const NeedsYtDlp = () => (
-  <p className="notice" role="status">Downloading songs needs yt-dlp on this computer. Install it with <code>brew install yt-dlp</code>, then open this page again.</p>
+  <p className="notice" role="status">{tr("Downloading songs needs yt-dlp on this computer. Install it with {command}, then open this page again.", { command: <code>brew install yt-dlp</code> })}</p>
 );
 
 /* ───────────── Spotify, YouTube Music, Apple Music ───────────── */
@@ -101,7 +103,7 @@ export function MusicSourcePanel({ name }: { name: SourceName }) {
   const disconnect = () => act(() => disconnectSource(name), () => { setPlaylists(null); setSongs(null); setPicked(null); });
   const toWatch = !!useStore(toWatchStore, {})[name];
   const unlock = () => {
-    if (!confirm("Unlock followed playlists?\n\nThis signs in a second time as Spotify's own desktop app, which Spotify doesn't officially allow other apps to do. It's used only to read playlists you follow, and Spotify may stop it working.")) return;
+    if (!confirm(`${t("Unlock followed playlists?")}\n\n${t("This signs in a second time as Spotify's own desktop app, which Spotify doesn't officially allow other apps to do. It's used only to read playlists you follow, and Spotify may stop it working.")}`)) return;
     act(unlockSpotify, (s) => { if (s.unlocked) { setSongs(null); void loadPlaylists(); } });
   };
   const lock = () => act(lockSpotify, () => { setSongs(null); void loadPlaylists(); });
@@ -122,7 +124,7 @@ export function MusicSourcePanel({ name }: { name: SourceName }) {
   const missing = songs?.filter((s) => !s.inLibrary && !(s.job && (s.job.state === "waiting" || s.job.state === "working"))) ?? [];
   const here = songs?.filter((s) => s.inLibrary).length ?? 0;
   const length = songs?.reduce((a, s) => a + (s.secs ?? 0), 0) ?? 0;
-  const stateText = !songs ? "Loading…" : !songs.length ? "Nothing to download" : here === songs.length ? "All in your library" : here ? `${here} of ${songs.length} in your library` : "Not downloaded yet";
+  const stateText = !songs ? t("Loading…") : !songs.length ? t("Nothing to download") : here === songs.length ? t("All in your library") : here ? t("{n} of {total} in your library", { n: here, total: songs.length }) : t("Not downloaded yet");
 
   return (<>
     {problem ? <p className="notice" role="alert">{problem}</p> : null}
@@ -131,39 +133,39 @@ export function MusicSourcePanel({ name }: { name: SourceName }) {
         : (
           <Card pad className="ms-connect">
             <h2 className="h2">{LABEL[name]}</h2>
-            <p className="muted">Sign in to {LABEL[name]} in a window of its own to see your playlists here.</p>
-            <div><Button variant="primary" disabled={busy} onClick={connect}>{busy ? "Waiting for sign-in…" : `Sign in to ${LABEL[name]}`}</Button></div>
+            <p className="muted">{t("Sign in to {service} in a window of its own to see your playlists here.", { service: LABEL[name] })}</p>
+            <div><Button variant="primary" disabled={busy} onClick={connect}>{busy ? t("Waiting for sign-in…") : t("Sign in to {service}", { service: LABEL[name] })}</Button></div>
           </Card>
         )
     ) : (<>
-      <Card pad className="ms-account" aria-label={`${LABEL[name]} account`}>
+      <Card pad className="ms-account" aria-label={t("{service} account", { service: LABEL[name] })}>
         <span className="ms-account-icon" aria-hidden="true"><NoteIcon /></span>
         <div className="ms-account-text">
-          <span className="ms-account-name">{LABEL[name]}<span className="ms-live"><i aria-hidden="true" />Connected</span></span>
-          <span className="muted">{[status.account, playlists ? `${playlists.length} ${playlists.length === 1 ? "playlist" : "playlists"}` : "Loading…"].filter(Boolean).join(" · ")}</span>
+          <span className="ms-account-name">{LABEL[name]}<span className="ms-live"><i aria-hidden="true" />{t("Connected")}</span></span>
+          <span className="muted">{[status.account, playlists ? (playlists.length === 1 ? t("1 playlist") : t("{n} playlists", { n: playlists.length })) : t("Loading…")].filter(Boolean).join(" · ")}</span>
         </div>
         <span className="ms-account-actions">
           {name === "spotify" ? (
-            <label className="ms-toggle" title="Reads playlists you follow by signing in as Spotify's own app">
-              <span>{busy && !status.unlocked ? "Waiting for sign-in…" : "Followed playlists"}</span>
-              <Switch checked={!!status.unlocked} disabled={busy} label="Followed playlists" onChange={(on) => (on ? unlock() : lock())} />
+            <label className="ms-toggle" title={t("Reads playlists you follow by signing in as Spotify's own app")}>
+              <span>{busy && !status.unlocked ? t("Waiting for sign-in…") : t("Followed playlists")}</span>
+              <Switch checked={!!status.unlocked} disabled={busy} label={t("Followed playlists")} onChange={(on) => (on ? unlock() : lock())} />
             </label>
           ) : null}
-          <Button onClick={() => { setProblem(null); void loadPlaylists(); if (picked) void readSongs(name, picked).then((s) => { setSongs(s.songs); setCombined(s.combined); }, fail); }}><SyncIcon />Sync</Button>
-          <Button variant="plain" className="ms-quiet" disabled={busy} onClick={disconnect}>Disconnect</Button>
+          <Button onClick={() => { setProblem(null); void loadPlaylists(); if (picked) void readSongs(name, picked).then((s) => { setSongs(s.songs); setCombined(s.combined); }, fail); }}><SyncIcon />{t("Sync")}</Button>
+          <Button variant="plain" className="ms-quiet" disabled={busy} onClick={disconnect}>{t("Disconnect")}</Button>
         </span>
       </Card>
       {tools && !tools.ytDlp ? <NeedsYtDlp /> : null}
       <div className="ms-grid">
-        <Card className="ms-lists" aria-label="Playlists">
-          <div className="ms-lists-head"><h2 className="h2">Playlists</h2>{playlists ? <span className="muted">{playlists.length}</span> : null}</div>
+        <Card className="ms-lists" aria-label={t("Playlists")}>
+          <div className="ms-lists-head"><h2 className="h2">{t("Playlists")}</h2>{playlists ? <span className="muted">{playlists.length}</span> : null}</div>
           <div className="ms-lists-scroll">
-            {playlists === null ? <p className="muted ms-pad">Loading…</p> : !playlists.length ? <p className="muted ms-pad">No playlists</p> : playlists.map((p) => (
+            {playlists === null ? <p className="muted ms-pad">{t("Loading…")}</p> : !playlists.length ? <p className="muted ms-pad">{t("No playlists")}</p> : playlists.map((p) => (
               <button key={p.id} type="button" className="ms-list" data-locked={p.locked || undefined} aria-pressed={p.id === picked} onClick={() => { if (p.id !== picked) { setSongs(null); setCombined(null); setPicked(p.id); } }}>
                 <Cover src={p.artwork} name={p.name} size={58} />
                 <span className="ms-list-text">
                   <b>{p.name}</b>
-                  <span>{p.followed ? `${p.owner ?? "Someone else"}'s playlist` : [p.owner, p.count != null ? `${p.count} ${p.count === 1 ? "song" : "songs"}` : null].filter(Boolean).join(" · ")}</span>
+                  <span>{p.followed ? (p.owner ? t("{owner}'s playlist", { owner: p.owner }) : t("Someone else's playlist")) : [p.owner, p.count != null ? (p.count === 1 ? t("1 song") : t("{n} songs", { n: p.count })) : null].filter(Boolean).join(" · ")}</span>
                 </span>
                 {p.locked ? <LockIcon /> : null}
               </button>
@@ -172,36 +174,36 @@ export function MusicSourcePanel({ name }: { name: SourceName }) {
         </Card>
         <div className="ms-right">
           {playlist ? (
-            <Card pad className="ms-hero" aria-label="Selected playlist">
+            <Card pad className="ms-hero" aria-label={t("Selected playlist")}>
               <Cover src={playlist.artwork} name={playlist.name} size={132} />
               <div className="ms-hero-text">
-                <span className="muted">{LABEL[name]} playlist</span>
+                <span className="muted">{t("{service} playlist", { service: LABEL[name] })}</span>
                 <h2>{playlist.name}</h2>
-                <span className="ms-meta">{[playlist.owner, songs ? `${songs.length} ${songs.length === 1 ? "song" : "songs"}` : playlist.count != null ? `${playlist.count} songs` : null, length ? clock(length) : null].filter(Boolean).join(" · ")}</span>
+                <span className="ms-meta">{[playlist.owner, songs ? (songs.length === 1 ? t("1 song") : t("{n} songs", { n: songs.length })) : playlist.count != null ? (playlist.count === 1 ? t("1 song") : t("{n} songs", { n: playlist.count })) : null, length ? clock(length) : null].filter(Boolean).join(" · ")}</span>
                 {!playlist.locked ? <span className="ms-state" data-done={(songs && songs.length > 0 && here === songs.length) || undefined}>{stateText}</span> : null}
               </div>
               {playlist.locked ? null : (
                 <div className="ms-hero-actions">
-                  {songs && missing.length ? <Button variant="primary" disabled={!tools?.ytDlp} onClick={() => download()}>Download {missing.length === songs.length ? "all" : missing.length}</Button> : null}
+                  {songs && missing.length ? <Button variant="primary" disabled={!tools?.ytDlp} onClick={() => download()}>{missing.length === songs.length ? t("Download all") : t("Download {n}", { n: missing.length })}</Button> : null}
                   {songs && songs.length > 1 && combined ? <Combined state={combined} canDownload={!!tools?.ytDlp} onCombine={combine} /> : null}
-                  {name === "spotify" ? <label className="ms-towatch"><Switch label="Send to watch when downloaded" checked={toWatch} onChange={(on) => toWatchStore.set((v) => ({ ...v, [name]: on }))} />Send to watch</label> : null}
+                  {name === "spotify" ? <label className="ms-towatch"><Switch label={t("Send to watch when downloaded")} checked={toWatch} onChange={(on) => toWatchStore.set((v) => ({ ...v, [name]: on }))} />{t("Send to watch")}</label> : null}
                 </div>
               )}
             </Card>
           ) : null}
           {playlist?.locked ? (
             <Card pad className="ms-locked">
-              <p className="muted">Spotify lets your app read only playlists you made or collaborate on. Unlock followed playlists to read this one.</p>
-              <div><Button variant="primary" disabled={busy} onClick={unlock}>Unlock followed playlists</Button></div>
+              <p className="muted">{t("Spotify lets your app read only playlists you made or collaborate on. Unlock followed playlists to read this one.")}</p>
+              <div><Button variant="primary" disabled={busy} onClick={unlock}>{t("Unlock followed playlists")}</Button></div>
             </Card>
           ) : playlist ? (
-            <Card clip className="ms-songs" aria-label="Songs">
-              {songs === null ? <p className="muted ms-empty">Loading songs…</p>
+            <Card clip className="ms-songs" aria-label={t("Songs")}>
+              {songs === null ? <p className="muted ms-empty">{t("Loading songs…")}</p>
                 : songs.length ? <SongTable songs={songs} onDownload={(o) => download([o])} canDownload={!!tools?.ytDlp} />
-                : <p className="muted ms-empty">This playlist has no songs.</p>}
-              <p className="ms-foot muted">{name === "ytmusic" ? "Songs are saved from YouTube Music as MP3s." : "Songs are found on YouTube and saved as MP3s."} Only download music you have the right to use.</p>
+                : <p className="muted ms-empty">{t("This playlist has no songs.")}</p>}
+              <p className="ms-foot muted">{name === "ytmusic" ? t("Songs are saved from YouTube Music as MP3s.") : t("Songs are found on YouTube and saved as MP3s.")} {t("Only download music you have the right to use.")}</p>
             </Card>
-          ) : <p className="muted">Pick a playlist</p>}
+          ) : <p className="muted">{t("Pick a playlist")}</p>}
         </div>
       </div>
     </>)}
@@ -218,16 +220,16 @@ function SpotifySetup({ status, busy, onStatus, onConnect, onProblem }: {
     <Card pad className="ms-connect">
       <h2 className="h2">Spotify</h2>
       <ol className="ms-steps">
-        <li>Make an app at <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noreferrer">developer.spotify.com</a>, with Web API.</li>
-        <li>Add this Redirect URI to it: <code>{status.redirectUri}</code> <button type="button" className="md-link" onClick={() => void navigator.clipboard.writeText(status.redirectUri ?? "")}>Copy</button></li>
-        <li>Paste its Client ID here.</li>
+        <li>{tr("Make an app at {site}, with Web API.", { site: <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noreferrer">developer.spotify.com</a> })}</li>
+        <li>{tr("Add this Redirect URI to it: {uri}", { uri: <code>{status.redirectUri}</code> })} <button type="button" className="md-link" onClick={() => void navigator.clipboard.writeText(status.redirectUri ?? "")}>{t("Copy")}</button></li>
+        <li>{t("Paste its Client ID here.")}</li>
       </ol>
       <div className="ms-row">
-        <Field aria-label="Spotify Client ID" placeholder="Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} />
-        <Button disabled={!clientId.trim() || clientId.trim() === status.clientId} onClick={save}>Save</Button>
-        <Button variant="primary" disabled={!status.clientId || busy} onClick={onConnect}>{busy ? "Waiting for sign-in…" : "Sign in to Spotify"}</Button>
+        <Field aria-label={t("Spotify Client ID")} placeholder={t("Client ID")} value={clientId} onChange={(e) => setClientId(e.target.value)} />
+        <Button disabled={!clientId.trim() || clientId.trim() === status.clientId} onClick={save}>{t("Save")}</Button>
+        <Button variant="primary" disabled={!status.clientId || busy} onClick={onConnect}>{busy ? t("Waiting for sign-in…") : t("Sign in to {service}", { service: "Spotify" })}</Button>
       </div>
-      <p className="muted ms-small">Spotify lets your own app read the playlists you made or collaborate on.</p>
+      <p className="muted ms-small">{t("Spotify lets your own app read the playlists you made or collaborate on.")}</p>
     </Card>
   );
 }
@@ -246,13 +248,13 @@ function Cover({ src, name, size }: { src: string | null | undefined; name: stri
 }
 
 export function JobState({ job, inLibrary, onDownload, canDownload }: { job: JobLine | null; inLibrary: boolean; onDownload?: () => void; canDownload: boolean }) {
-  if (inLibrary) return <span className="ms-pill" data-state="done">In library</span>;
-  if (job?.state === "working") return <span className="ms-pill" data-state="working">{job.progress != null ? `${Math.round(job.progress * 100)}%` : "Downloading"}</span>;
-  if (job?.state === "waiting") return <span className="ms-pill">Waiting</span>;
+  if (inLibrary) return <span className="ms-pill" data-state="done">{t("In library")}</span>;
+  if (job?.state === "working") return <span className="ms-pill" data-state="working">{job.progress != null ? `${Math.round(job.progress * 100)}%` : t("Downloading")}</span>;
+  if (job?.state === "waiting") return <span className="ms-pill">{t("Waiting")}</span>;
   const button = onDownload && canDownload
-    ? <button type="button" className="ms-get" aria-label={job?.state === "failed" ? "Try again" : "Download"} title={job?.state === "failed" ? "Try again" : "Download"} onClick={onDownload}><DownloadIcon /></button> : null;
-  if (job?.state === "failed") return <><span className="ms-pill" data-state="failed" title={job.error ?? undefined}>Didn&apos;t download</span>{button}</>;
-  return <><span className="ms-pill">Not downloaded</span>{button}</>;
+    ? <button type="button" className="ms-get" aria-label={job?.state === "failed" ? t("Try again") : t("Download")} title={job?.state === "failed" ? t("Try again") : t("Download")} onClick={onDownload}><DownloadIcon /></button> : null;
+  if (job?.state === "failed") return <><span className="ms-pill" data-state="failed" title={job.error ?? undefined}>{t("Didn't download")}</span>{button}</>;
+  return <><span className="ms-pill">{t("Not downloaded")}</span>{button}</>;
 }
 
 const SONG_ROW = 60, SONG_VIEW = 10;
@@ -262,7 +264,7 @@ function SongTable({ songs, onDownload, canDownload }: { songs: Song[]; onDownlo
   const first = Math.max(0, Math.floor(top / SONG_ROW) - 4), last = Math.min(songs.length, first + SONG_VIEW + 8);
   return (
     <div className="ms-table">
-      <div className="ms-tr ms-thead"><span>#</span><span /><span>Title</span><span>Album</span><span className="md-end">Length</span><span className="md-end">Download</span></div>
+      <div className="ms-tr ms-thead"><span>#</span><span /><span>{t("Title")}</span><span>{t("Album")}</span><span className="md-end">{t("Length")}</span><span className="md-end">{t("Download")}</span></div>
       <div className="ms-scroll" style={{ height: Math.min(songs.length, SONG_VIEW) * SONG_ROW }} onScroll={(e) => setTop(e.currentTarget.scrollTop)}>
         <div style={{ height: songs.length * SONG_ROW, position: "relative" }}>
           {songs.slice(first, last).map((s, i) => (
@@ -288,12 +290,12 @@ export function DownloadsCard({ jobs, setJobs }: { jobs: DownloadJob[]; setJobs:
   const active = jobs.filter((j) => j.state === "waiting" || j.state === "working");
   const recent = [...jobs].reverse().slice(0, 30);
   return (
-    <Card pad className="ms-downloads" aria-label="Downloads">
+    <Card pad className="ms-downloads" aria-label={t("Downloads")}>
       <div className="ms-main-head">
-        <div><h3>Downloads</h3><span className="muted">{active.length ? `${active.length} to go` : "Done"}</span></div>
+        <div><h3>{t("Downloads")}</h3><span className="muted">{active.length ? t("{n} to go", { n: active.length }) : t("Done")}</span></div>
         <span className="actions">
-          {active.length ? <Button onClick={() => void cancelDownloads().then((d) => setJobs(d.jobs))}>Cancel all</Button> : null}
-          {jobs.length > active.length ? <Button variant="plain" onClick={() => void clearDownloads().then((d) => setJobs(d.jobs))}>Clear finished</Button> : null}
+          {active.length ? <Button onClick={() => void cancelDownloads().then((d) => setJobs(d.jobs))}>{t("Cancel all")}</Button> : null}
+          {jobs.length > active.length ? <Button variant="plain" onClick={() => void clearDownloads().then((d) => setJobs(d.jobs))}>{t("Clear finished")}</Button> : null}
         </span>
       </div>
       <ul className="ms-jobs">
@@ -303,9 +305,9 @@ export function DownloadsCard({ jobs, setJobs }: { jobs: DownloadJob[]; setJobs:
             <span className="muted md-cell">{j.artist ?? ""}</span>
             <span className="muted">{j.source}</span>
             <span className="ms-job" data-state={j.state} title={j.error ?? j.note}>
-              {j.state === "working" ? (j.progress != null ? `${Math.round(j.progress * 100)}%` : "Downloading…") : j.state === "waiting" ? "Waiting" : j.state === "done" ? "In library" : j.state === "failed" ? "Didn't download" : "Cancelled"}
+              {j.state === "working" ? (j.progress != null ? `${Math.round(j.progress * 100)}%` : t("Downloading…")) : j.state === "waiting" ? t("Waiting") : j.state === "done" ? t("In library") : j.state === "failed" ? t("Didn't download") : t("Cancelled")}
             </span>
-            {j.state === "waiting" || j.state === "working" ? <button type="button" className="md-link" onClick={() => void cancelDownloads([j.id]).then((d) => setJobs(d.jobs))}>Cancel</button> : <span />}
+            {j.state === "waiting" || j.state === "working" ? <button type="button" className="md-link" onClick={() => void cancelDownloads([j.id]).then((d) => setJobs(d.jobs))}>{t("Cancel")}</button> : <span />}
           </li>
         ))}
       </ul>
@@ -317,15 +319,15 @@ export function DownloadsCard({ jobs, setJobs }: { jobs: DownloadJob[]; setJobs:
 
 /** Part lengths offered when an episode is split like an audiobook (each part ends at a pause). */
 const PARTS = [5, 10, 20, 30];
-const TOPICS = ["Running", "Cycling", "Triathlon", "Strength", "Endurance", "Nutrition", "Sleep", "Mindset"];
+const TOPICS = [msg("Running"), msg("Cycling"), msg("Triathlon"), msg("Strength"), msg("Endurance"), msg("Nutrition"), msg("Sleep"), msg("Mindset")];
 /** Shows opened lately, newest first. */
 const recentStore = createStore<Show[]>("media.podcasts.recent", []);
 const topicStore = createStore<string>("media.podcasts.topic", TOPICS[0]);
 /** Topic searches, kept while the app is open so switching tabs doesn't search again. */
 const topicShows = new Map<string, Show[]>();
 
-const published = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "");
-const numbered = (e: Episode) => [e.season ? `Season ${e.season}` : null, e.number ? `Episode ${e.number}` : null].filter(Boolean).join(" · ");
+const published = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString(locale("en-GB"), { day: "numeric", month: "short", year: "numeric" }) : "");
+const numbered = (e: Episode) => [e.season ? t("Season {n}", { n: e.season }) : null, e.number ? t("Episode {n}", { n: e.number }) : null].filter(Boolean).join(" · ");
 
 export function PodcastsPanel() {
   const [query, setQuery] = useState("");
@@ -400,17 +402,17 @@ export function PodcastsPanel() {
   return (<>
     {problem ? <p className="notice" role="alert">{problem}</p> : null}
     <div className="pc">
-      <Card pad className="pc-find" aria-label="Find a show">
+      <Card pad className="pc-find" aria-label={t("Find a show")}>
         <div className="pc-find-head">
           <span className="pc-badge" aria-hidden="true"><PodcastIcon /></span>
-          <h2 className="h2">Find a show</h2>
+          <h2 className="h2">{t("Find a show")}</h2>
         </div>
         <form className="pc-search" onSubmit={(e) => { e.preventDefault(); search(); }}>
-          <Field type="search" aria-label="Search podcasts" placeholder="Show name or link" value={query} onChange={(e) => setQuery(e.target.value)} />
-          <Button type="submit" variant="primary" disabled={busy || !query.trim()}><SearchIcon />Search</Button>
+          <Field type="search" aria-label={t("Search podcasts")} placeholder={t("Show name or link")} value={query} onChange={(e) => setQuery(e.target.value)} />
+          <Button type="submit" variant="primary" disabled={busy || !query.trim()}><SearchIcon />{t("Search")}</Button>
         </form>
         {shows ? (<>
-          <div className="pc-shows-head"><span>Shows</span><span className="pc-count">{shows.length}</span></div>
+          <div className="pc-shows-head"><span>{t("Shows")}</span><span className="pc-count">{shows.length}</span></div>
           {shows.length ? (
             <div className="pc-shows">
               {shows.map((s) => (
@@ -421,9 +423,9 @@ export function PodcastsPanel() {
                 </button>
               ))}
             </div>
-          ) : <p className="muted pc-empty">No shows by that name</p>}
+          ) : <p className="muted pc-empty">{t("No shows by that name")}</p>}
         </>) : recent.length ? (<>
-          <div className="pc-shows-head"><span>Recent</span><button type="button" className="pc-clear" onClick={() => recentStore.set(() => [])}>Clear</button></div>
+          <div className="pc-shows-head"><span>{t("Recent")}</span><button type="button" className="pc-clear" onClick={() => recentStore.set(() => [])}>{t("Clear")}</button></div>
           <div className="pc-shows">
             {recent.map((s) => (
               <button key={s.id} type="button" className="pc-show" aria-pressed={s.id === show?.id} onClick={() => { if (s.id !== show?.id) open(s.id); }}>
@@ -438,19 +440,19 @@ export function PodcastsPanel() {
 
       <div className="pc-right">
         {show ? (<>
-          <button type="button" className="pc-back" onClick={() => { setShow(null); setCutting(null); }}><BackIcon />Browse shows</button>
+          <button type="button" className="pc-back" onClick={() => { setShow(null); setCutting(null); }}><BackIcon />{t("Browse shows")}</button>
           <Card className="pc-hero" aria-label={show.title} style={show.artwork ? { ["--pc-art" as string]: `url("${show.artwork}")` } : undefined}>
             <Cover src={show.artwork} name={show.title} size={124} />
             <div className="pc-hero-text">
               <h2>{show.title}</h2>
-              <span className="pc-hero-meta">{[show.author, `${show.episodes} ${show.episodes === 1 ? "episode" : "episodes"}`].filter(Boolean).join(" · ")}</span>
+              <span className="pc-hero-meta">{[show.author, show.episodes === 1 ? t("1 episode") : t("{n} episodes", { n: show.episodes })].filter(Boolean).join(" · ")}</span>
               {show.about ? <p className="pc-about">{show.about}</p> : null}
-              <a className="pc-apple" href={`https://podcasts.apple.com/podcast/id${show.id}`} target="_blank" rel="noreferrer">Open in Apple Podcasts<ExternalIcon /></a>
+              <a className="pc-apple" href={`https://podcasts.apple.com/podcast/id${show.id}`} target="_blank" rel="noreferrer">{t("Open in Apple Podcasts")}<ExternalIcon /></a>
             </div>
           </Card>
-          <Card className="pc-eps" aria-label="Episodes">
-            {tools && !tools.ffmpeg ? <p className="muted ms-small pc-pad">Episodes that aren&apos;t MP3s need ffmpeg to convert (<code>brew install ffmpeg</code>).</p> : null}
-            <div className="pc-row pc-row-head" aria-hidden="true"><span>Episode</span><span>Published</span><span className="md-end">Length</span><span>Download</span></div>
+          <Card className="pc-eps" aria-label={t("Episodes")}>
+            {tools && !tools.ffmpeg ? <p className="muted ms-small pc-pad">{tr("Episodes that aren't MP3s need ffmpeg to convert ({command}).", { command: <code>brew install ffmpeg</code> })}</p> : null}
+            <div className="pc-row pc-row-head" aria-hidden="true"><span>{t("Episode")}</span><span>{t("Published")}</span><span className="md-end">{t("Length")}</span><span>{t("Download")}</span></div>
             <ul>
               {show.page.map((e) => (
                 <li key={e.id} className="pc-row">
@@ -463,16 +465,16 @@ export function PodcastsPanel() {
                   <span className="pc-dl">
                     <JobState job={e.job} inLibrary={e.inLibrary} onDownload={() => download(e.id)} canDownload />
                     {e.book && e.book.status !== "failed" ? (
-                      <button type="button" className="ms-pill pc-book" data-state={e.book.status === "ready" ? "done" : "working"} title="Open in Audiobooks"
+                      <button type="button" className="ms-pill pc-book" data-state={e.book.status === "ready" ? "done" : "working"} title={t("Open in Audiobooks")}
                         onClick={() => { booksTabStore.set("books"); tabStore.set("books"); }}>
-                        {e.book.status === "ready" ? "In Audiobooks" : `Splitting${e.book.progress != null ? ` ${Math.round(e.book.progress * 100)}%` : "…"}`}
+                        {e.book.status === "ready" ? t("In Audiobooks") : e.book.progress != null ? t("Splitting {pct}%", { pct: Math.round(e.book.progress * 100) }) : t("Splitting…")}
                       </button>
                     ) : tools?.ffmpeg !== false ? (
                       <span className="pc-cut">
-                        <button type="button" className="ms-get" aria-label="Split into parts" title="Split into parts" aria-expanded={cutting === e.id} onClick={() => setCutting((c) => (c === e.id ? null : e.id))}><CutIcon /></button>
+                        <button type="button" className="ms-get" aria-label={t("Split into parts")} title={t("Split into parts")} aria-expanded={cutting === e.id} onClick={() => setCutting((c) => (c === e.id ? null : e.id))}><CutIcon /></button>
                         {cutting === e.id ? (
                           <span className="pc-cut-menu" role="menu">
-                            <span className="pc-cut-title">Split into parts</span>
+                            <span className="pc-cut-title">{t("Split into parts")}</span>
                             {PARTS.filter((m) => !e.secs || e.secs > m * 60).map((m) => <button key={m} type="button" role="menuitem" onClick={() => split(e.id, m)}>{m} min</button>)}
                           </span>
                         ) : null}
@@ -483,8 +485,8 @@ export function PodcastsPanel() {
               ))}
             </ul>
             <div className="pc-foot">
-              <span className="muted">Showing {show.page.length} of {show.episodes} episodes · split ones go to Audiobooks</span>
-              {show.page.length < show.episodes ? <Button disabled={busy} onClick={() => open(show.id, show.page.length)}>Load {Math.min(50, show.episodes - show.page.length)} more</Button> : null}
+              <span className="muted">{t("Showing {n} of {total} episodes · split ones go to Audiobooks", { n: show.page.length, total: show.episodes })}</span>
+              {show.page.length < show.episodes ? <Button disabled={busy} onClick={() => open(show.id, show.page.length)}>{t("Load {n} more", { n: Math.min(50, show.episodes - show.page.length) })}</Button> : null}
             </div>
           </Card>
         </>) : (
@@ -517,21 +519,21 @@ function Browse({ opening, onOpen }: { opening: string | null; onOpen: (id: stri
   }, [topic, attempt]);
 
   return (
-    <Card pad className="pc-browse" aria-label="Browse shows">
-      <div className="pc-topics" role="tablist" aria-label="Topics">
-        {TOPICS.map((t) => (
-          <button key={t} type="button" role="tab" className="pc-topic" aria-selected={t === topic} onClick={() => topicStore.set(() => t)}>{t}</button>
+    <Card pad className="pc-browse" aria-label={t("Browse shows")}>
+      <div className="pc-topics" role="tablist" aria-label={t("Topics")}>
+        {TOPICS.map((name) => (
+          <button key={name} type="button" role="tab" className="pc-topic" aria-selected={name === topic} onClick={() => topicStore.set(() => name)}>{t(name)}</button>
         ))}
       </div>
       {failed ? (
-        <div className="pc-none"><p className="muted">Couldn&apos;t load shows.</p><Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button></div>
+        <div className="pc-none"><p className="muted">{t("Couldn't load shows.")}</p><Button onClick={() => setAttempt((n) => n + 1)}>{t("Try again")}</Button></div>
       ) : shows && !shows.length ? (
-        <div className="pc-none"><p className="muted">No shows for {topic.toLowerCase()} right now.</p></div>
+        <div className="pc-none"><p className="muted">{t("No shows for {topic} right now.", { topic: t(topic).toLowerCase() })}</p></div>
       ) : (
         <div className="pc-grid" aria-busy={!shows || undefined}>
           {shows ? shows.map((s) => (
             <button key={s.id} type="button" className="pc-tile" data-opening={opening === s.id || undefined} disabled={!!opening} onClick={() => onOpen(s.id)}>
-              <span className="pc-tile-art"><Cover src={s.artwork} name={s.title} size={160} />{opening === s.id ? <span className="pc-tile-spin" aria-label="Opening" /> : null}</span>
+              <span className="pc-tile-art"><Cover src={s.artwork} name={s.title} size={160} />{opening === s.id ? <span className="pc-tile-spin" aria-label={t("Opening")} /> : null}</span>
               <b>{s.title}</b>
               <span className="muted">{s.author}</span>
             </button>
@@ -553,15 +555,15 @@ const CutIcon = () => <svg aria-hidden="true" width="16" height="16" viewBox="0 
 const SyncIcon = () => <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 0 0-14.5-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5L20 16M20 20v-4h-4" /></svg>;
 const NoteIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0a3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0a3 3 0 0 1 6 0z" /></svg>;
 const DownloadIcon = () => <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>;
-const LockIcon = () => <svg className="ms-lock" aria-label="Locked" role="img" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3" /></svg>;
+const LockIcon = () => <svg className="ms-lock" aria-label={t("Locked")} role="img" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3" /></svg>;
 
 /** "Download combined MP3", and how that went: working, done (maybe with tracks left out), or failed, with a retry. */
 export function Combined({ state, canDownload, onCombine }: { state: CombinedState; canDownload: boolean; onCombine: () => void }) {
   const job = state.job;
-  if (job?.state === "working") return <span className="md-state">{job.progress != null ? `Combining ${Math.round(job.progress * 100)}%` : "Combining…"}</span>;
-  if (job?.state === "waiting") return <span className="md-state">Combined MP3 waiting</span>;
-  if (job?.state === "failed") return <span className="md-state ms-failed" title={job.error ?? undefined}>Didn&apos;t combine<button type="button" className="md-link" disabled={!canDownload} onClick={onCombine}>Retry</button></span>;
-  if (job?.state === "done" && job.note) return <span className="md-state" title={job.note}><i data-on="true" />Combined, some left out<button type="button" className="md-link" disabled={!canDownload} onClick={onCombine}>Retry missing</button></span>;
-  if (state.inLibrary) return <span className="md-state" data-on="true"><i data-on="true" />Combined MP3 in library</span>;
-  return <Button disabled={!canDownload} onClick={onCombine}>Download combined MP3</Button>;
+  if (job?.state === "working") return <span className="md-state">{job.progress != null ? t("Combining {pct}%", { pct: Math.round(job.progress * 100) }) : t("Combining…")}</span>;
+  if (job?.state === "waiting") return <span className="md-state">{t("Combined MP3 waiting")}</span>;
+  if (job?.state === "failed") return <span className="md-state ms-failed" title={job.error ?? undefined}>{t("Didn't combine")}<button type="button" className="md-link" disabled={!canDownload} onClick={onCombine}>{t("Retry")}</button></span>;
+  if (job?.state === "done" && job.note) return <span className="md-state" title={job.note}><i data-on="true" />{t("Combined, some left out")}<button type="button" className="md-link" disabled={!canDownload} onClick={onCombine}>{t("Retry missing")}</button></span>;
+  if (state.inLibrary) return <span className="md-state" data-on="true"><i data-on="true" />{t("Combined MP3 in library")}</span>;
+  return <Button disabled={!canDownload} onClick={onCombine}>{t("Download combined MP3")}</Button>;
 }

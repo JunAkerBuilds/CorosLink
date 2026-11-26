@@ -5,6 +5,7 @@
 import type { CoachModel, ModelMessage, ModelRequest, ModelTurn, ToolCall } from "@/lib/coach/loop";
 import { textFileBlock, type UserPart } from "@/lib/coach/files";
 import { CoachModelError } from "./anthropic";
+import { t } from "@/lib/i18n";
 
 const MAX_TOKENS = 16_000;
 const TIMEOUT_MS = 150_000;
@@ -68,11 +69,11 @@ export function toOpenAI(request: Pick<ModelRequest, "rules" | "context" | "mess
 }
 
 function statusError(status: number, detail: string, at: Pick<ChatEndpoint, "name">): CoachModelError {
-  if (status === 401 || status === 403) return new CoachModelError("bad_key", `${at.name} didn't accept the key.`);
-  if (status === 402) return new CoachModelError("rate_limited", `The ${at.name} account is out of credit.`);
-  if (status === 429) return new CoachModelError("rate_limited", "The AI is busy right now. Try again in a minute.");
-  if (status === 400 || status === 404) return new CoachModelError("refused_request", `The AI refused the request${detail ? `: ${detail}` : ""}.`);
-  return new CoachModelError("overloaded", "The AI is having trouble right now. Try again shortly.");
+  if (status === 401 || status === 403) return new CoachModelError("bad_key", t("{name} didn't accept the key.", { name: at.name }));
+  if (status === 402) return new CoachModelError("rate_limited", t("The {name} account is out of credit.", { name: at.name }));
+  if (status === 429) return new CoachModelError("rate_limited", t("The AI is busy right now. Try again in a minute."));
+  if (status === 400 || status === 404) return new CoachModelError("refused_request", detail ? t("The AI refused the request: {detail}.", { detail }) : t("The AI refused the request."));
+  return new CoachModelError("overloaded", t("The AI is having trouble right now. Try again shortly."));
 }
 
 type Fetch = typeof fetch;
@@ -91,7 +92,7 @@ export function chatCompletionsModel(at: ChatEndpoint, fetchImpl: Fetch = (...ar
             messages: toOpenAI(request),
             // No tools at all when none are offered: some local servers refuse the field.
             ...(request.tools.length ? {
-              tools: request.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } })),
+              tools: request.tools.map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.input_schema } })),
               tool_choice: request.allowTools ? "auto" : "none",
             } : {}),
           }),
@@ -124,12 +125,12 @@ export function chatCompletionsModel(at: ChatEndpoint, fetchImpl: Fetch = (...ar
         const choice = chunk.choices?.[0];
         const delta = choice?.delta;
         if (delta?.content) { text += delta.content; request.onText(delta.content); }
-        for (const t of delta?.tool_calls ?? []) {
-          const i = t.index ?? calls.length;
+        for (const part of delta?.tool_calls ?? []) {
+          const i = part.index ?? calls.length;
           const call = (calls[i] ??= { id: "", name: "", args: "" });
-          if (t.id) call.id = t.id;
-          if (t.function?.name) call.name += t.function.name;
-          if (t.function?.arguments) call.args += t.function.arguments;
+          if (part.id) call.id = part.id;
+          if (part.function?.name) call.name += part.function.name;
+          if (part.function?.arguments) call.args += part.function.arguments;
         }
         if (choice?.finish_reason) finish = choice.finish_reason;
         if (chunk.usage) { inputTokens = chunk.usage.prompt_tokens ?? inputTokens; outputTokens = chunk.usage.completion_tokens ?? outputTokens; }
@@ -146,7 +147,7 @@ export function chatCompletionsModel(at: ChatEndpoint, fetchImpl: Fetch = (...ar
         take(buffer.trim());
       } catch (error) {
         if (error instanceof CoachModelError || request.signal?.aborted) throw error;
-        throw new CoachModelError("unreachable", "The AI's answer was cut off. Try again.");
+        throw new CoachModelError("unreachable", t("The AI's answer was cut off. Try again."));
       }
 
       const toolCalls: ToolCall[] = calls.filter((c) => c && c.name).map((c, k) => {

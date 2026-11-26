@@ -11,8 +11,9 @@ import { agentModel, type AgentAsk } from "./agent";
 import { BRIDGE_NAME } from "./bridge";
 import { findProgram, programEnv, runProgram } from "./cli";
 import type { AccountProvider } from "./service";
+import { msg, t } from "@/lib/i18n";
 
-const NOT_INSTALLED = "Install OpenCode first: opencode.ai";
+const NOT_INSTALLED = msg("Install OpenCode first: opencode.ai");
 const COACH_AGENT = "clink-coach";
 const MCP_TIMEOUT_MS = 5 * 60_000;
 
@@ -49,7 +50,7 @@ export class OpenCodeAccount implements AccountProvider {
 
   private program(): string {
     const found = findProgram("opencode");
-    if (!found) throw new CoachModelError("unreachable", NOT_INSTALLED);
+    if (!found) throw new CoachModelError("unreachable", t(NOT_INSTALLED));
     return found;
   }
 
@@ -62,15 +63,15 @@ export class OpenCodeAccount implements AccountProvider {
 
   async status() {
     const program = findProgram("opencode");
-    if (!program) return { ready: false, problem: NOT_INSTALLED };
+    if (!program) return { ready: false, problem: t(NOT_INSTALLED) };
     const out = await runProgram(program, ["auth", "list"], { env: programEnv() });
     const signedIn = /stored|oauth|api key/i.test(`${out?.stdout ?? ""}${out?.stderr ?? ""}`);
-    return signedIn ? { ready: true, program } : { ready: false, program, problem: "Run `opencode auth login` in a terminal first." };
+    return signedIn ? { ready: true, program } : { ready: false, program, problem: t("Run `opencode auth login` in a terminal first.") };
   }
 
   /** OpenCode signs in in a terminal: there is nothing for C-LINK to open. */
   async signIn(): Promise<void> {
-    if (!(await this.status()).ready) throw new CoachModelError("bad_key", "Run `opencode auth login` in a terminal, then try again.");
+    if (!(await this.status()).ready) throw new CoachModelError("bad_key", t("Run `opencode auth login` in a terminal, then try again."));
   }
 
   async signOut(): Promise<void> {}
@@ -106,7 +107,7 @@ export class OpenCodeAccount implements AccountProvider {
     }
     await agent.request("session/set_config_option", { sessionId, configId: "mode", value: COACH_AGENT })
       .catch(() => agent.request("session/set_mode", { sessionId, modeId: COACH_AGENT }))
-      .catch(() => { throw new CoachModelError("refused_request", "This OpenCode didn't load C-LINK's Coach setup. Update OpenCode and try again."); });
+      .catch(() => { throw new CoachModelError("refused_request", t("This OpenCode didn't load C-LINK's Coach setup. Update OpenCode and try again.")); });
   }
 
   async models(): Promise<string[]> {

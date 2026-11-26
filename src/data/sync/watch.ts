@@ -2,10 +2,13 @@
 // Pure: plain bodies and `now` in. Contract sections 5.3 and 5.4.
 import type { Alarm, Goal, GoalKey, GpsMode, Watch } from "../watch";
 import { alarmKey, queueChange, sameValue, type Json, type PendingChange } from "@/lib/watch";
+import { locale, msg, t, tx } from "@/lib/i18n";
 import { dateToRef, refToDate, refToMs, type WatchAlarmBody, type WatchChangeBody, type WatchChangeKey, type WatchStateBody } from "./native";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTHS = [msg("Jan"), msg("Feb"), msg("Mar"), msg("Apr"), msg("May"), msg("Jun"), msg("Jul"), msg("Aug"), msg("Sep"), msg("Oct"), msg("Nov"), msg("Dec")];
+const MONTH_NAMES = [
+  msg("January"), msg("February"), msg("March"), msg("April"), msg("May"), msg("June"), msg("July"), msg("August"), msg("September"), msg("October"), msg("November"), msg("December"),
+];
 const two = (n: number) => String(n).padStart(2, "0");
 const dayKey = (d: Date) => `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
 const round1 = (v: number) => Math.round(v * 10) / 10;
@@ -19,9 +22,13 @@ const daysBetween = (a: Date, b: Date) => Math.round((midnight(b) - midnight(a))
 export function whenText(at: Date, now: Date): string {
   const time = `${two(at.getHours())}:${two(at.getMinutes())}`;
   const back = daysBetween(at, now);
-  if (back === 0) return `today at ${time}`;
-  if (back === 1) return `yesterday at ${time}`;
-  return `${at.getDate()} ${MONTHS[at.getMonth()]}${at.getFullYear() === now.getFullYear() ? "" : ` ${at.getFullYear()}`} at ${time}`;
+  if (back === 0) return t("today at {time}", { time });
+  if (back === 1) return t("yesterday at {time}", { time });
+  const month = tx("month", MONTHS[at.getMonth()]);
+  const date = at.getFullYear() === now.getFullYear()
+    ? t("{day} {month}", { day: at.getDate(), month })
+    : t("{day} {month} {year}", { day: at.getDate(), month, year: at.getFullYear() });
+  return t("{date} at {time}", { date, time });
 }
 
 export const alarmTime = (a: Pick<WatchAlarmBody, "hour" | "minute">): string => `${two(a.hour)}:${two(a.minute)}`;
@@ -38,9 +45,9 @@ export function alarmsOf(state: WatchStateBody | undefined): Alarm[] {
 }
 
 const GOALS: { key: GoalKey; field: "calories" | "exerciseMinutes" | "steps"; name: string; unit: string; step: number; max: number }[] = [
-  { key: "calories", field: "calories", name: "Active calories", unit: "kcal", step: 50, max: 9999 },
-  { key: "exercise", field: "exerciseMinutes", name: "Exercise", unit: "min", step: 5, max: 1440 },
-  { key: "steps", field: "steps", name: "Steps", unit: "steps", step: 500, max: 99999 },
+  { key: "calories", field: "calories", name: msg("Active calories"), unit: "kcal", step: 50, max: 9999 },
+  { key: "exercise", field: "exerciseMinutes", name: msg("Exercise"), unit: "min", step: 5, max: 1440 },
+  { key: "steps", field: "steps", name: msg("Steps"), unit: "steps", step: 500, max: 99999 },
 ];
 
 export function goalsOf(state: WatchStateBody | undefined): Goal[] {
@@ -49,17 +56,17 @@ export function goalsOf(state: WatchStateBody | undefined): Goal[] {
     const goal = state?.goals?.[g.field];
     if (goal == null) continue;
     const done = state?.today?.[g.field];
-    const count = done == null ? "" : Math.round(done).toLocaleString("en-US");
-    const soFar = done == null ? "" : g.key === "steps" ? `${count} so far today` : `${count} ${g.unit} so far today`;
-    out.push({ key: g.key, name: g.name, unit: g.unit, goal, soFar, done: done ?? 0, step: g.step, max: g.max });
+    const count = done == null ? "" : Math.round(done).toLocaleString(locale("en-US"));
+    const soFar = done == null ? "" : g.key === "steps" ? t("{count} so far today", { count }) : t("{count} {unit} so far today", { count, unit: g.unit });
+    out.push({ key: g.key, name: t(g.name), unit: g.unit, goal, soFar, done: done ?? 0, step: g.step, max: g.max });
   }
   return out;
 }
 
 const GPS_OPTIONS: Watch["gpsOptions"] = [
-  { mode: "standard", name: "Standard", detail: "Longest battery", accuracy: 1, battery: 3 },
-  { mode: "all", name: "All systems", detail: "Better in cities and under trees", accuracy: 2, battery: 2 },
-  { mode: "dual", name: "Dual frequency", detail: "Best accuracy, shortest battery", accuracy: 3, battery: 1 },
+  { mode: "standard", name: msg("Standard"), detail: msg("Longest battery"), accuracy: 1, battery: 3 },
+  { mode: "all", name: msg("All systems"), detail: msg("Better in cities and under trees"), accuracy: 2, battery: 2 },
+  { mode: "dual", name: msg("Dual frequency"), detail: msg("Best accuracy, shortest battery"), accuracy: 3, battery: 1 },
 ];
 
 /** One level per local day from the first reading's day to the last: the day's last reading; a day without one keeps the level before it. */
@@ -90,34 +97,34 @@ function batteryAlt(firstDay: string, levels: readonly number[]): string {
   const n = levels.length;
   let charged = -1;
   for (let i = n - 1; i > 0; i--) if (levels[i] > levels[i - 1]) { charged = i; break; }
-  const parts: string[] = [];
+  const last = levels[n - 1];
   if (charged > 0) {
     const [y, m, d] = firstDay.split("-").map(Number);
     const day = new Date(y, m - 1, d + charged);
-    parts.push(`charged to ${levels[charged]} percent on ${day.getDate()} ${MONTH_NAMES[day.getMonth()]}`);
+    const date = t("{day} {month}", { day: day.getDate(), month: tx("month", MONTH_NAMES[day.getMonth()]) });
+    return t("Battery level over {n} days: charged to {level} percent on {date}, now {now} percent", { n, level: levels[charged], date, now: last });
   }
-  parts.push(`now ${levels[n - 1]} percent`);
-  return `Battery level over ${n} ${n === 1 ? "day" : "days"}: ${parts.join(", ")}`;
+  return n === 1 ? t("Battery level over 1 day: now {now} percent", { now: last }) : t("Battery level over {n} days: now {now} percent", { n, now: last });
 }
 
 const SETTING_NAMES: Record<string, string> = {
-  "goal.calories": "Active calories goal", "goal.exerciseMinutes": "Exercise goal", "goal.steps": "Steps goal",
-  gpsMode: "Satellite systems", alarms: "Alarms",
+  "goal.calories": msg("Active calories goal"), "goal.exerciseMinutes": msg("Exercise goal"), "goal.steps": msg("Steps goal"),
+  gpsMode: msg("Satellite systems"), alarms: msg("Alarms"),
 };
 
 /** "The watch refused: Steps goal (today at 06:58), Alarms (18 Nov at 21:10)". Empty when it refused nothing. */
 export function refusedText(refused: WatchStateBody["refused"], now: Date): string {
   const lines = (refused ?? []).map((r) => {
-    const name = SETTING_NAMES[r.key] ?? r.key;
+    const name = SETTING_NAMES[r.key] ? t(SETTING_NAMES[r.key]) : r.key;
     return Number.isFinite(r.at) ? `${name} (${whenText(refToDate(r.at), now)})` : name;
   });
-  return lines.length ? `The watch refused: ${lines.join(", ")}` : "";
+  return lines.length ? t("The watch refused: {list}", { list: lines.join(", ") }) : "";
 }
 
 /** The page with nothing from the phone on it. */
 export function emptyWatch(): Watch {
   return {
-    name: "Watch", synced: "", battery: { percent: null, left: "" }, storage: null, firmware: { version: "", state: "" },
+    name: t("Watch"), synced: "", battery: { percent: null, left: "" }, storage: null, firmware: { version: "", state: "" },
     goals: [], alarms: [], gpsMode: null, gpsOptions: [], gpsReadOnly: true,
     batteryHistory: { firstDay: "", levels: [], summary: "", perDay: "", alt: "" },
     pending: [], empty: true,
@@ -128,7 +135,7 @@ export function watchFromState(state: WatchStateBody | undefined, changes: reado
   if (!state) return emptyWatch();
   const { firstDay, levels } = batteryLevels(state.batteryHistory);
   const drop = averageDailyDrop(levels);
-  const perDay = drop != null && drop > 0 ? `${round1(drop)}% a day` : "";
+  const perDay = drop != null && drop > 0 ? t("{n}% a day", { n: round1(drop) }) : "";
   const percent = state.battery?.percent ?? null;
   const daysLeft = percent != null && drop != null && drop > 0 ? Math.round(percent / drop) : null;
   const settable = (state.gpsModes ?? []).filter((m): m is GpsMode => GPS_OPTIONS.some((o) => o.mode === m));
@@ -136,24 +143,27 @@ export function watchFromState(state: WatchStateBody | undefined, changes: reado
   const gpsOptions = settable.length
     ? GPS_OPTIONS.filter((o) => settable.includes(o.mode) || o.mode === gpsMode)
     : GPS_OPTIONS.filter((o) => o.mode === gpsMode);
+  const shownOptions = gpsOptions.map((o) => ({ ...o, name: t(o.name), detail: t(o.detail) }));
   const storage = state.storage && state.storage.totalBytes > 0
     ? { usedGb: round1(state.storage.usedBytes / 1e9), totalGb: round1(state.storage.totalBytes / 1e9) }
     : null;
   const refused = refusedText(state.refused, now);
   return {
-    name: state.name || state.model || "Watch",
-    synced: state.syncedAt != null ? `Synced ${state.via === "computer" ? "with this computer" : "through your phone"} ${whenText(refToDate(state.syncedAt), now)}` : "",
-    battery: { percent, left: daysLeft == null ? "" : `About ${daysLeft} ${daysLeft === 1 ? "day" : "days"} left` },
+    name: state.name || state.model || t("Watch"),
+    synced: state.syncedAt == null ? ""
+      : state.via === "computer" ? t("Synced with this computer {when}", { when: whenText(refToDate(state.syncedAt), now) })
+      : t("Synced through your phone {when}", { when: whenText(refToDate(state.syncedAt), now) }),
+    battery: { percent, left: daysLeft == null ? "" : daysLeft === 1 ? t("About 1 day left") : t("About {n} days left", { n: daysLeft }) },
     storage,
     firmware: { version: state.firmware ?? "", state: "" },
     goals: goalsOf(state),
     alarms: alarmsOf(state),
     gpsMode,
-    gpsOptions,
+    gpsOptions: shownOptions,
     gpsReadOnly: settable.length === 0,
     batteryHistory: {
       firstDay, levels,
-      summary: levels.length ? `Last ${levels.length} days${perDay ? ` · ${perDay} on average` : ""}` : "",
+      summary: !levels.length ? "" : perDay ? t("Last {n} days · {perDay} on average", { n: levels.length, perDay }) : t("Last {n} days", { n: levels.length }),
       perDay,
       alt: batteryAlt(firstDay, levels),
     },

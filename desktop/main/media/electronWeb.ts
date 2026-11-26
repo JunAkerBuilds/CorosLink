@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { BrowserWindow, session, WebContentsView } from "electron";
 import { BUTTON_CSS, BUTTON_WORLD, buttonsScript, readClick } from "./youtubeButtons";
 import type { Browse, Browser, BrowserView, SignIn, WebHost } from "./webHost";
+import { t } from "@/lib/i18n";
 
 const PLATFORM = process.platform === "darwin" ? "Macintosh; Intel Mac OS X 10_15_7" : process.platform === "win32" ? "Windows NT 10.0; Win64; x64" : "X11; Linux x86_64";
 
@@ -66,7 +67,7 @@ const HIDDEN_FOR = 30_000;
 
 function browse(o: Browse, parent: () => BrowserWindow | null): Browser {
   const host = parent();
-  if (!host || host.isDestroyed()) throw new Error("The app's window isn't open.");
+  if (!host || host.isDestroyed()) throw new Error(t("The app's window isn't open."));
   const ses = sessionOf(o.partition);
   // No fullscreen: a video going fullscreen would take the whole app's window with it.
   ses.setPermissionRequestHandler((_w, permission, callback) => callback(permission === "media"));

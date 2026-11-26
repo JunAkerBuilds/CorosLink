@@ -5,6 +5,7 @@ import type { Sport } from "@/data/activities";
 import { paceUnit } from "@/lib/activities";
 import { exact, fastestIndex, groupRows, rowPace, showsGap, totalRow, type SplitRow } from "@/lib/activityDetail";
 import { clock, signed, thousands } from "@/lib/format";
+import { t } from "@/lib/i18n";
 
 interface Column { key: string; head: string; unit: string; width: number; soft?: boolean; has: (r: SplitRow) => boolean; cell: (r: SplitRow) => string }
 
@@ -15,16 +16,16 @@ function columnsFor(sport: Sport, rows: readonly SplitRow[], gap: boolean): Colu
   const all: Column[] = [
     { key: "gap", head: "GAP", unit: "/km", width: 64, soft: true, has: () => gap, cell: (r) => (r.gapS == null ? "—" : clock(Math.round(r.gapS))) },
     { key: "bar", head: "", unit: "", width: 0, has: () => true, cell: () => "" },
-    { key: "hr", head: "Avg HR", unit: "bpm", width: 68, has: (r) => r.avgHr != null, cell: (r) => whole(r.avgHr) },
-    { key: "max", head: "Max HR", unit: "bpm", width: 68, soft: true, has: (r) => r.maxHr != null, cell: (r) => whole(r.maxHr) },
-    { key: "cad", head: "Cadence", unit: ride ? "rpm" : "spm", width: 68, has: (r) => r.cadence != null, cell: (r) => whole(r.cadence) },
-    { key: "stride", head: "Stride", unit: "m", width: 68, has: (r) => run && r.strideM != null, cell: (r) => (r.strideM == null ? "—" : r.strideM.toFixed(2)) },
+    { key: "hr", head: t("Avg HR"), unit: "bpm", width: 68, has: (r) => r.avgHr != null, cell: (r) => whole(r.avgHr) },
+    { key: "max", head: t("Max HR"), unit: "bpm", width: 68, soft: true, has: (r) => r.maxHr != null, cell: (r) => whole(r.maxHr) },
+    { key: "cad", head: t("Cadence"), unit: ride ? "rpm" : "spm", width: 68, has: (r) => r.cadence != null, cell: (r) => whole(r.cadence) },
+    { key: "stride", head: t("Stride"), unit: "m", width: 68, has: (r) => run && r.strideM != null, cell: (r) => (r.strideM == null ? "—" : r.strideM.toFixed(2)) },
     { key: "gct", head: "GCT", unit: "ms", width: 68, has: (r) => r.groundContactMs != null, cell: (r) => whole(r.groundContactMs) },
-    { key: "vo", head: "Vert. osc.", unit: "cm", width: 78, has: (r) => r.verticalOscCm != null, cell: (r) => (r.verticalOscCm == null ? "—" : r.verticalOscCm.toFixed(1)) },
-    { key: "pw", head: "Power", unit: "W", width: 68, has: (r) => r.powerW != null, cell: (r) => whole(r.powerW) },
-    { key: "maxpw", head: "Max power", unit: "W", width: 84, soft: true, has: (r) => ride && r.maxPowerW != null, cell: (r) => whole(r.maxPowerW) },
-    { key: "asc", head: "Ascent", unit: "m", width: 68, soft: true, has: (r) => r.ascentM != null, cell: (r) => (r.ascentM == null ? "—" : signed(Math.round(r.ascentM))) },
-    { key: "desc", head: "Descent", unit: "m", width: 68, soft: true, has: (r) => r.descentM != null, cell: (r) => (r.descentM == null ? "—" : signed(-Math.round(r.descentM))) },
+    { key: "vo", head: t("Vert. osc."), unit: "cm", width: 78, has: (r) => r.verticalOscCm != null, cell: (r) => (r.verticalOscCm == null ? "—" : r.verticalOscCm.toFixed(1)) },
+    { key: "pw", head: t("Power"), unit: "W", width: 68, has: (r) => r.powerW != null, cell: (r) => whole(r.powerW) },
+    { key: "maxpw", head: t("Max power"), unit: "W", width: 84, soft: true, has: (r) => ride && r.maxPowerW != null, cell: (r) => whole(r.maxPowerW) },
+    { key: "asc", head: t("Ascent"), unit: "m", width: 68, soft: true, has: (r) => r.ascentM != null, cell: (r) => (r.ascentM == null ? "—" : signed(Math.round(r.ascentM))) },
+    { key: "desc", head: t("Descent"), unit: "m", width: 68, soft: true, has: (r) => r.descentM != null, cell: (r) => (r.descentM == null ? "—" : signed(-Math.round(r.descentM))) },
   ];
   return all.filter((c) => rows.some(c.has));
 }
@@ -78,28 +79,28 @@ export function SplitsCard({ sport, base, lengths, startLength, laps, total, hue
   const unit = speed ? "km/h" : swim ? "/100 m" : "/km";
 
   return (
-    <Card aria-label={lapMode ? "Laps" : "Splits"} className="ad-table">
+    <Card aria-label={lapMode ? t("Laps") : t("Splits")} className="ad-table">
       <div style={{ minWidth }}>
         <div className="ad-table-head">
           <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
-            <h2 className="h2">{lapMode ? "Laps" : "Splits"}</h2>
-            {fastest >= 0 && !timed ? <span className="ad-note">Fastest {rowPace(sport, rows[fastest])} {unit}</span> : null}
+            <h2 className="h2">{lapMode ? t("Laps") : t("Splits")}</h2>
+            {fastest >= 0 && !timed ? <span className="ad-note">{t("Fastest {pace} {unit}", { pace: rowPace(sport, rows[fastest]), unit })}</span> : null}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
             {laps && base.length > 0 ? (
-              <Segmented small label="Rows" value={mode} options={[{ value: "splits", label: "Splits" }, { value: "laps", label: "Laps" }]} onChange={(m) => { setMode(m); onChoose(null); }} />
+              <Segmented small label={t("Rows")} value={mode} options={[{ value: "splits", label: t("Splits") }, { value: "laps", label: t("Laps") }]} onChange={(m) => { setMode(m); onChoose(null); }} />
             ) : null}
             {!lapMode && lengths.length > 1 ? (
-              <Segmented small label="Split length" value={String(km)} options={lengths.map((l) => ({ value: String(l), label: `${l} km` }))} onChange={(v) => { setKm(Number(v)); onChoose(null); }} />
+              <Segmented small label={t("Split length")} value={String(km)} options={lengths.map((l) => ({ value: String(l), label: `${l} km` }))} onChange={(v) => { setKm(Number(v)); onChoose(null); }} />
             ) : null}
           </div>
         </div>
-        <div role="table" aria-label={lapMode ? "Laps" : "Splits"}>
+        <div role="table" aria-label={lapMode ? t("Laps") : t("Splits")}>
           <div className="ad-th" role="row" style={grid}>
-            <span role="columnheader">{lapMode ? "Lap" : "Km"}</span>
+            <span role="columnheader">{lapMode ? t("Lap") : "Km"}</span>
             {lapMode ? <span role="columnheader" className="ad-r">{swim ? "M" : "Km"}</span> : null}
-            <span role="columnheader" className="ad-r">Time</span>
-            {timed ? null : <span role="columnheader" className="ad-r">{speed ? "Speed" : "Pace"}</span>}
+            <span role="columnheader" className="ad-r">{t("Time")}</span>
+            {timed ? null : <span role="columnheader" className="ad-r">{speed ? t("Speed") : t("Pace")}</span>}
             {columns.map((c) => <span key={c.key} role="columnheader" className="ad-r" aria-hidden={c.key === "bar" || undefined}>{c.head}</span>)}
           </div>
           <div className="ad-tu" aria-hidden="true" style={grid}>
@@ -116,7 +117,7 @@ export function SplitsCard({ sport, base, lengths, startLength, laps, total, hue
               <div key={k} className="ad-tr" role="row" style={grid} data-current={current} data-chosen={picked} data-pick={can || undefined} onClick={can ? pick : undefined}>
                 <span role="cell" className="ad-dimcell" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {can ? (
-                    <button type="button" className="ad-rowbtn" aria-pressed={picked} title={r.name} aria-label={`${lapMode ? "Lap" : "Split"} ${r.label}${r.name ? `, ${r.name}` : ""}, show on the map`} onClick={(e) => { e.stopPropagation(); pick(); }}>{r.name ?? r.label}</button>
+                    <button type="button" className="ad-rowbtn" aria-pressed={picked} title={r.name} aria-label={r.name ? (lapMode ? t("Lap {n}, {name}, show on the map", { n: r.label, name: r.name }) : t("Split {n}, {name}, show on the map", { n: r.label, name: r.name })) : lapMode ? t("Lap {n}, show on the map", { n: r.label }) : t("Split {n}, show on the map", { n: r.label })} onClick={(e) => { e.stopPropagation(); pick(); }}>{r.name ?? r.label}</button>
                   ) : (r.name ?? r.label)}
                 </span>
                 {lapMode ? <span role="cell" className="ad-r">{r.distanceM > 0 ? dist(r) : "—"}</span> : null}
@@ -127,7 +128,7 @@ export function SplitsCard({ sport, base, lengths, startLength, laps, total, hue
                     <svg aria-hidden="true" width="100%" height="10" viewBox="0 0 100 10" preserveAspectRatio="none">
                       <rect x="0" y="0" width={bar(speeds[k])} height="10" rx="2" style={{ fill: zoneColor ? zoneColor(r) : `var(--h-${hue})` }} />
                     </svg>
-                    <span>{k === fastest ? "Fastest" : ""}</span>
+                    <span>{k === fastest ? t("Fastest") : ""}</span>
                   </span>
                 ) : (
                   <span key={c.key} role="cell" className={`ad-r${c.soft ? " ad-softcell" : ""}`}>{c.has(r) ? c.cell(r) : "—"}</span>
@@ -136,14 +137,14 @@ export function SplitsCard({ sport, base, lengths, startLength, laps, total, hue
             );
           })}
           <div className="ad-total" role="row" style={grid}>
-            <span role="cell">Total</span>
+            <span role="cell">{t("Total")}</span>
             {lapMode ? <span role="cell" className="ad-r">{sumRow.distanceM > 0 ? dist(sumRow) : "—"}</span> : null}
             <span role="cell" className="ad-r">{exact(sumRow.durationS)}</span>
             {timed ? null : <span role="cell" className="ad-r">{rowPace(sport, sumRow)}</span>}
             {columns.map((c) => <span key={c.key} role="cell" className="ad-r">{c.key === "bar" ? "" : c.cell(sumRow)}</span>)}
           </div>
         </div>
-        {stopped >= 0.5 ? <div className="ad-note" style={{ padding: "10px 20px 14px" }}>Elapsed time {clock(Math.round(elapsedS as number))}, with {clock(Math.round(stopped))} stopped</div> : null}
+        {stopped >= 0.5 ? <div className="ad-note" style={{ padding: "10px 20px 14px" }}>{t("Elapsed time {elapsed}, with {stopped} stopped", { elapsed: clock(Math.round(elapsedS as number)), stopped: clock(Math.round(stopped)) })}</div> : null}
       </div>
     </Card>
   );

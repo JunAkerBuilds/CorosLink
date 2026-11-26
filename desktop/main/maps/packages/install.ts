@@ -7,6 +7,7 @@ import path from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { ZipReader, type ZipEntry } from "./zip";
+import { t } from "@/lib/i18n";
 
 export class InstallProblem extends Error {
   constructor(message: string, readonly code: string) { super(message); }
@@ -49,7 +50,7 @@ export function overlaps(a: string, b: string, platform: NodeJS.Platform = proce
 
 /** Refuses to copy from the watch's own folder onto itself. */
 export function assertNotOwnFolder(source: string, mapFolder: string, platform: NodeJS.Platform = process.platform): void {
-  if (overlaps(source, mapFolder, platform)) throw new InstallProblem("These maps are already in the watch's own Map folder.", "ownFolder");
+  if (overlaps(source, mapFolder, platform)) throw new InstallProblem(t("These maps are already in the watch's own Map folder."), "ownFolder");
 }
 
 /**
@@ -89,7 +90,7 @@ export async function plan(zips: string[], mapFolder: string, signal?: AbortSign
     const zip = await ZipReader.open(file);
     try {
       for await (const entry of zip.entries()) {
-        if (signal?.aborted) throw new InstallProblem("Transfer cancelled.", "cancelled");
+        if (signal?.aborted) throw new InstallProblem(t("Transfer cancelled."), "cancelled");
         const target = targetOf(mapFolder, entry);
         if (!target) continue;
         const key = target.toLowerCase();
@@ -123,7 +124,7 @@ export async function unpack(
   let copiedBytes = 0, filesDone = 0;
   const seen = new Set<string>();
   const made = new Set<string>();
-  const stop = () => { if (signal?.aborted) throw new InstallProblem("Transfer cancelled.", "cancelled"); };
+  const stop = () => { if (signal?.aborted) throw new InstallProblem(t("Transfer cancelled."), "cancelled"); };
   for (const { file, label } of zips) {
     const zip = await ZipReader.open(file);
     try {
@@ -153,7 +154,7 @@ export async function unpack(
           await rename(temp, target);
         } catch (error) {
           await rm(temp, { force: true }).catch(() => undefined);
-          if (signal?.aborted) throw new InstallProblem("Transfer cancelled.", "cancelled");
+          if (signal?.aborted) throw new InstallProblem(t("Transfer cancelled."), "cancelled");
           throw error;
         }
         copiedBytes = base + entry.size;
@@ -186,7 +187,7 @@ export async function fingerprint(file: string): Promise<Fingerprint> {
       out.bytes += entry.size;
       if ((index - 1) % step === 0 && out.sample.length < SAMPLE) out.sample.push([rel.split(path.sep).join("/"), entry.size]);
     }
-    if (!out.files) throw new InstallProblem("This download has no map files in it.", "empty");
+    if (!out.files) throw new InstallProblem(t("This download has no map files in it."), "empty");
     return out;
   } finally {
     await zip.close();

@@ -3,7 +3,8 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { LoadingPage } from "@/components/training/LoadStates";
-import { findRoute } from "./routes";
+import { t } from "@/lib/i18n";
+import { findRoute, pageTitle } from "./routes";
 import { navigate, ParamsContext, useLocation } from "./router";
 import { readDeveloper } from "./developer";
 import { INTRO_SEEN, introPending } from "./welcome";
@@ -42,20 +43,20 @@ export function App() {
   // Setup comes after the intro: it waits until the athlete has left the intro (setup.ts).
   const firstRun = useFirstRun(intro === "seen", pathname);
 
-  useEffect(() => { document.title = found?.route.title ?? "C-LINK"; }, [found]);
+  useEffect(() => { document.title = found ? pageTitle(found.route) : "C-LINK"; }, [found]);
 
   if (onWelcome) return <Suspense fallback={<LoadingPage label="C-LINK" />}>{pathname === "/welcome/move" ? <Move /> : <Intro />}</Suspense>;
   if (intro !== "seen") return <LoadingPage label="C-LINK" />;
   if (firstRun === "checking") return <LoadingPage label="C-LINK" />;
   if (pathname === SETUP_PATH) return <Suspense fallback={<LoadingPage label="C-LINK" />}><Setup /></Suspense>;
   if (!found) {
-    return <AppShell><main className="page"><div className="notice" role="alert">There is no page at {pathname}.</div></main></AppShell>;
+    return <AppShell><main className="page"><div className="notice" role="alert">{t("There is no page at {path}.", { path: pathname })}</div></main></AppShell>;
   }
   const { route, params } = found;
   const Page = route.page;
   const screen = route.layouts.reduceRight(
     (children, layout) => { const Layout = layout.default; return <Layout>{children}</Layout>; },
-    <Suspense fallback={<LoadingPage label={route.title} />}><Page key={key} /></Suspense>,
+    <Suspense fallback={<LoadingPage label={pageTitle(route)} />}><Page key={key} /></Suspense>,
   );
   return (
     <Suspense>
@@ -63,7 +64,7 @@ export function App() {
         <ParamsContext value={params}>{screen}</ParamsContext>
       </AppShell>
       {/* Never mistaken for the real thing: sample data says so on every screen. */}
-      {sample ? <a className="dev-sample-pill" href="/developer" onClick={(e) => { e.preventDefault(); navigate("/developer"); }}>Sample data</a> : null}
+      {sample ? <a className="dev-sample-pill" href="/developer" onClick={(e) => { e.preventDefault(); navigate("/developer"); }}>{t("Sample data")}</a> : null}
     </Suspense>
   );
 }

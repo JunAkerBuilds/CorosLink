@@ -5,19 +5,21 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, Card, Field, Segmented } from "@/components/ui";
 import { useStore } from "@/data/local/store";
+import { t } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/react";
 import {
   addFreeBook, cancelBook, chooseBook, continueBook, convertBook, deleteBook, discardDraft, MediaProblem, readBooks, readFreeBook, readFreeBooks,
   sendBook, unsendBook, uploadBook, type Book, type BooksState, type Chapter, type FreeBook, type FreeBookDetail, type Split,
 } from "../media";
 import {
   booksTabStore, BYTES_PER_SECOND, canContinueFrom, clampMinutes, clockAt, fileStem, length, LONG_PART, MAX_PART_MINUTES, MIN_PART_MINUTES,
-  partName, partsLabel, partsSummary, partStarts, previewParts, splitStore, watchState,
+  partName, partsSummary, partStarts, previewParts, splitStore, watchState,
 } from "../mediaBooks";
 import { carriesFiles, droppedFiles } from "../mediaInput";
 import { megabytes } from "../mediaRows";
 import "./mediaBooks.css";
 
-const said = (e: unknown) => (e instanceof MediaProblem || e instanceof Error ? e.message : "That didn't work.");
+const said = (e: unknown) => (e instanceof MediaProblem || e instanceof Error ? e.message : t("That didn't work."));
 const PREVIEW = 5;
 
 /** What the convert dialog is converting: a file read in the main process, or a book it downloads. */
@@ -98,44 +100,48 @@ export default function BooksPanel() {
 
   const books = state?.books ?? [];
   const connected = !!state?.watch.connected;
-  const model = state?.watch.model ?? "the watch";
+  const model = state?.watch.model ?? t("the watch");
 
   return (
     <div className="bk">
       <div className="bk-bar">
-        <Segmented small label="Audiobooks" value={tab} onChange={(t) => booksTabStore.set(t)}
-          options={[{ value: "books", label: `Your books${books.length ? ` · ${books.length}` : ""}` }, { value: "free", label: "Free classics" }]} />
+        <Segmented small label={t("Audiobooks")} value={tab} onChange={(v) => booksTabStore.set(v)}
+          options={[{ value: "books", label: `${t("Your books")}${books.length ? ` · ${books.length}` : ""}` }, { value: "free", label: t("Free classics") }]} />
         <span className="bk-grow" />
-        <Button variant="primary" disabled={reading} onClick={choose}><PlusIcon />{reading ? "Reading…" : "Import a book"}</Button>
+        <Button variant="primary" disabled={reading} onClick={choose}><PlusIcon />{reading ? t("Reading…") : t("Import a book")}</Button>
       </div>
-      {state && !state.ffmpeg ? <p className="notice" role="alert">Converting books needs ffmpeg (<code>brew install ffmpeg</code>).</p> : null}
+      {state && !state.ffmpeg ? <p className="notice" role="alert">{tr("Converting books needs ffmpeg ({command}).", { command: <code>brew install ffmpeg</code> })}</p> : null}
       {problem ? <p className="notice" role="alert">{problem}</p> : null}
       {note ? <p className="notice" role="status">{note}</p> : null}
 
       {tab === "free" ? <FreeClassics onAdd={addFree} onShow={(id) => { setOpen(id); booksTabStore.set("books"); }} /> : !state ? null : books.length === 0 ? (
         <Card pad className="bk-empty">
           <div className="bk-empty-covers" aria-hidden="true"><Cover title="Moby Dick" size={64} /><Cover title="Dracula" size={64} /><Cover title="Emma" size={64} /></div>
-          <h2 className="h2">Put a book on your wrist</h2>
-          <p className="muted">Books are cut into short MP3 parts and sent in order, so a sync costs you one part at most.</p>
+          <h2 className="h2">{t("Put a book on your wrist")}</h2>
+          <p className="muted">{t("Books are cut into short MP3 parts and sent in order, so a sync costs you one part at most.")}</p>
           <div className="actions">
-            <Button variant="primary" onClick={() => booksTabStore.set("free")}><SearchIcon />Browse free classics</Button>
-            <Button onClick={choose}>Import a book</Button>
+            <Button variant="primary" onClick={() => booksTabStore.set("free")}><SearchIcon />{t("Browse free classics")}</Button>
+            <Button onClick={choose}>{t("Import a book")}</Button>
           </div>
-          <p className="muted bk-small">DRM-free .m4b, .m4a, .mp3, .flac and similar. Choose several files to join them, or drop them here.</p>
+          <p className="muted bk-small">{t("DRM-free .m4b, .m4a, .mp3, .flac and similar. Choose several files to join them, or drop them here.")}</p>
         </Card>
       ) : (
         <ul className="bk-list">
           {books.map((b) => (
             <BookRow key={b.id} book={b} connected={connected} model={model} busy={busy} job={state.job?.book === b.id ? state.job : null} jobRunning={sending}
               open={open === b.id} onToggle={() => setOpen((o) => (o === b.id ? null : b.id))}
-              onSend={() => run(b.id, () => sendBook(b.id).then((r) => { setNote(r.copying ? null : `${b.title} is already on ${model}.`); return r; }))}
-              onUnsend={() => { if (confirm(`Remove ${b.title} from ${model}?`)) run(b.id, () => unsendBook(b.id), `Removed ${b.title} from ${model}.`); }}
+              onSend={() => run(b.id, () => sendBook(b.id).then((r) => { setNote(r.copying ? null : t("{title} is already on {model}.", { title: b.title, model })); return r; }))}
+              onUnsend={() => { if (confirm(t("Remove {title} from {model}?", { title: b.title, model }))) run(b.id, () => unsendBook(b.id), t("Removed {title} from {model}.", { title: b.title, model })); }}
               onCancel={() => run(b.id, () => cancelBook(b.id))}
-              onDelete={() => { if (confirm(`Delete ${b.title} from this computer?${b.source.kind === "file" ? " Your original file stays." : ""}`)) run(b.id, () => deleteBook(b.id)); }}
+              onDelete={() => { if (confirm(b.source.kind === "file" ? t("Delete {title} from this computer? Your original file stays.", { title: b.title }) : t("Delete {title} from this computer?", { title: b.title }))) run(b.id, () => deleteBook(b.id)); }}
               onContinue={(part) => {
                 const earlier = b.parts.filter((p) => p.onWatch && p.index < part).length;
-                if (earlier && !confirm(`Remove the ${partsLabel(earlier)} before part ${part} from ${model}? Anything you send next plays after this book.`)) return;
-                run(b.id, () => continueBook(b.id, part), earlier ? `${b.title} continues from part ${part}. ${partsLabel(earlier)} came off ${model}.` : `${b.title} will be sent from part ${part}.`);
+                if (earlier && !confirm(earlier === 1
+                  ? t("Remove the part before part {part} from {model}? Anything you send next plays after this book.", { part, model })
+                  : t("Remove the {n} parts before part {part} from {model}? Anything you send next plays after this book.", { n: earlier, part, model }))) return;
+                run(b.id, () => continueBook(b.id, part), !earlier ? t("{title} will be sent from part {part}.", { title: b.title, part })
+                  : earlier === 1 ? t("{title} continues from part {part}. 1 part came off {model}.", { title: b.title, part, model })
+                  : t("{title} continues from part {part}. {n} parts came off {model}.", { title: b.title, part, n: earlier, model }));
               }} />
           ))}
         </ul>
@@ -159,7 +165,7 @@ function BookRow({ book, connected, model, busy, job, jobRunning, open, onToggle
   const sendingThis = !!job?.running;
   const locked = !!busy || jobRunning;
   const cover = book.source.kind === "file" ? null : book.source.cover;
-  const sendLabel = sendingThis ? "Sending…" : w.all ? `On ${model}` : w.onWatch ? `Send ${w.toPlay - w.onWatch} more` : "Send to watch";
+  const sendLabel = sendingThis ? t("Sending…") : w.all ? t("On {model}", { model }) : w.onWatch ? t("Send {n} more", { n: w.toPlay - w.onWatch }) : t("Send to watch");
   const parts = `bk-parts-${book.id}`;
 
   return (
@@ -169,36 +175,36 @@ function BookRow({ book, connected, model, busy, job, jobRunning, open, onToggle
           <Cover title={book.title} src={cover} size={72} />
           <div className="bk-body">
             <div className="bk-name"><h3>{book.title}</h3>{book.author ? <span className="muted">{book.author}</span> : null}</div>
-            {book.status === "converting" ? <Bar value={book.progress?.progress ?? 0} label={book.progress?.message ?? "Starting"} />
-              : book.status === "failed" ? <p className="bk-error">{book.error ?? "The conversion failed."}</p>
+            {book.status === "converting" ? <Bar value={book.progress?.progress ?? 0} label={book.progress?.message ?? t("Starting")} />
+              : book.status === "failed" ? <p className="bk-error">{book.error ?? t("The conversion failed.")}</p>
               : (<>
                 <span className="bk-facts muted"><span>{length(book.secs)}</span><span>{partsSummary(book)}</span><span>{megabytes(book.bytes)}</span></span>
-                {sendingThis ? <Bar value={job!.totalBytes ? job!.sentBytes / job!.totalBytes : 0} label={`Copying part ${Math.min(job!.done + 1, job!.total)} of ${job!.total}`} />
+                {sendingThis ? <Bar value={job!.totalBytes ? job!.sentBytes / job!.totalBytes : 0} label={t("Copying part {n} of {total}", { n: Math.min(job!.done + 1, job!.total), total: job!.total })} />
                   : job?.error ? <p className="bk-error">{job.error}</p> : <Ticks book={book} />}
                 {book.note ? <span className="bk-small muted">{book.note}</span> : null}
               </>)}
           </div>
           <div className="bk-acts">
-            {ready ? <button type="button" className="bk-icon" aria-expanded={open} aria-controls={parts} aria-label={`${open ? "Hide" : "Show"} parts of ${book.title}`} title={open ? "Hide parts" : "Show parts"} onClick={onToggle}><ChevronIcon /></button> : null}
-            {ready ? <button type="button" className="bk-icon" aria-label={`Remove ${book.title} from the watch`} title="Remove from watch" disabled={!connected || locked || !w.anyOnWatch} onClick={onUnsend}><UnwatchIcon /></button> : null}
-            <button type="button" className="bk-icon bk-delete" aria-label={`Delete ${book.title}`} title="Delete" disabled={busy === book.id || sendingThis} onClick={onDelete}><TrashIcon /></button>
-            {book.status === "converting" ? <Button onClick={onCancel}>Cancel</Button> : null}
-            {ready ? <Button variant={w.all ? "glass" : "primary"} className="bk-send" disabled={!connected || locked || w.all} title={connected ? undefined : "Plug in your watch"} onClick={onSend}>{w.all ? <CheckIcon /> : <UploadIcon />}{sendLabel}</Button> : null}
+            {ready ? <button type="button" className="bk-icon" aria-expanded={open} aria-controls={parts} aria-label={open ? t("Hide parts of {title}", { title: book.title }) : t("Show parts of {title}", { title: book.title })} title={open ? t("Hide parts") : t("Show parts")} onClick={onToggle}><ChevronIcon /></button> : null}
+            {ready ? <button type="button" className="bk-icon" aria-label={t("Remove {title} from the watch", { title: book.title })} title={t("Remove from watch")} disabled={!connected || locked || !w.anyOnWatch} onClick={onUnsend}><UnwatchIcon /></button> : null}
+            <button type="button" className="bk-icon bk-delete" aria-label={t("Delete {title}", { title: book.title })} title={t("Delete")} disabled={busy === book.id || sendingThis} onClick={onDelete}><TrashIcon /></button>
+            {book.status === "converting" ? <Button onClick={onCancel}>{t("Cancel")}</Button> : null}
+            {ready ? <Button variant={w.all ? "glass" : "primary"} className="bk-send" disabled={!connected || locked || w.all} title={connected ? undefined : t("Plug in your watch")} onClick={onSend}>{w.all ? <CheckIcon /> : <UploadIcon />}{sendLabel}</Button> : null}
           </div>
         </div>
         {open && ready ? (
           <div className="bk-parts" id={parts}>
-            {book.parts.length > 1 && connected ? <p className="muted bk-small">{w.anyOnWatch ? "Finished some? Choose the part you're on: the ones before it come off the watch." : "Choose where the next send starts."}</p> : null}
+            {book.parts.length > 1 && connected ? <p className="muted bk-small">{w.anyOnWatch ? t("Finished some? Choose the part you're on: the ones before it come off the watch.") : t("Choose where the next send starts.")}</p> : null}
             <ol>
               {book.parts.map((p, i) => {
                 const listened = p.index < book.resume;
                 return (
                   <li key={p.index} data-state={listened ? "listened" : p.onWatch ? "on" : undefined}>
                     <span className="bk-num num">{p.index}</span>
-                    <span className="bk-pname"><span>{p.chapter ?? `From ${clockAt(starts[i] ?? 0)}`}</span><small className="muted">{p.name}</small></span>
+                    <span className="bk-pname"><span>{p.chapter ?? t("From {time}", { time: clockAt(starts[i] ?? 0) })}</span><small className="muted">{p.name}</small></span>
                     <span className="num muted">{length(p.secs)}</span>
-                    <span className="bk-pstate">{p.onWatch ? <><CheckIcon />On watch</> : listened ? "Listened" : "Not sent"}</span>
-                    <span>{connected && !locked && canContinueFrom(book, p) ? <button type="button" className="md-link" aria-label={`Continue ${book.title} from part ${p.index}`} onClick={() => onContinue(p.index)}>{w.anyOnWatch ? "I'm here" : "Start here"}</button> : null}</span>
+                    <span className="bk-pstate">{p.onWatch ? <><CheckIcon />{t("On watch")}</> : listened ? t("Listened") : t("Not sent")}</span>
+                    <span>{connected && !locked && canContinueFrom(book, p) ? <button type="button" className="md-link" aria-label={t("Continue {title} from part {part}", { title: book.title, part: p.index })} onClick={() => onContinue(p.index)}>{w.anyOnWatch ? t("I'm here") : t("Start here")}</button> : null}</span>
                   </li>
                 );
               })}
@@ -223,8 +229,8 @@ function Bar({ value, label }: { value: number; label: string }) {
 /** One tick per part, in play order: listened ones dim, the ones on the watch lit. */
 function Ticks({ book }: { book: Book }) {
   const w = watchState(book);
-  const status = w.onWatch === 0 ? "Not on the watch" : w.all ? (w.listened ? "The rest is on the watch" : "On the watch") : `${w.onWatch} of ${w.toPlay} on the watch`;
-  const label = w.listened ? `From part ${book.resume} of ${book.parts.length} · ${status}` : status;
+  const status = w.onWatch === 0 ? t("Not on the watch") : w.all ? (w.listened ? t("The rest is on the watch") : t("On the watch")) : t("{n} of {total} on the watch", { n: w.onWatch, total: w.toPlay });
+  const label = w.listened ? `${t("From part {part} of {total}", { part: book.resume, total: book.parts.length })} · ${status}` : status;
   return (
     <span className="bk-ticks" role="img" aria-label={label}>
       {book.parts.length <= 80 ? (
@@ -266,11 +272,11 @@ function FreeClassics({ onAdd, onShow }: { onAdd: (d: FreeBookDetail) => void; o
   return (
     <div className="bk-free">
       <form className="bk-search" role="search" onSubmit={(e) => { e.preventDefault(); ask(query.trim()); }}>
-        <Field type="search" aria-label="Search free audiobooks" placeholder="Title or author" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <Button type="submit" variant="primary"><SearchIcon />Search</Button>
-        {asked ? <Button onClick={() => { setQuery(""); ask(""); }}>Most popular</Button> : null}
+        <Field type="search" aria-label={t("Search free audiobooks")} placeholder={t("Title or author")} value={query} onChange={(e) => setQuery(e.target.value)} />
+        <Button type="submit" variant="primary"><SearchIcon />{t("Search")}</Button>
+        {asked ? <Button onClick={() => { setQuery(""); ask(""); }}>{t("Most popular")}</Button> : null}
         <span className="bk-grow" />
-        <span className="muted bk-small">Public-domain recordings from LibriVox</span>
+        <span className="muted bk-small">{t("Public-domain recordings from LibriVox")}</span>
       </form>
       {problem ? <p className="notice" role="alert">{problem}</p> : null}
 
@@ -279,12 +285,12 @@ function FreeClassics({ onAdd, onShow }: { onAdd: (d: FreeBookDetail) => void; o
           <div className="bk-detail-head">
             <Cover title={detail.title} src={detail.cover} size={120} />
             <div className="bk-body">
-              <button type="button" className="md-link bk-back" onClick={() => setDetail(null)}>← All books</button>
+              <button type="button" className="md-link bk-back" onClick={() => setDetail(null)}>← {t("All books")}</button>
               <h2 className="h2">{detail.title}</h2>
-              <span className="muted">{[detail.author, detail.language, detail.secs ? length(detail.secs) : null, `${detail.sections.length} sections`, detail.bytes ? megabytes(detail.bytes) : null].filter(Boolean).join(" · ")}</span>
+              <span className="muted">{[detail.author, detail.language, detail.secs ? length(detail.secs) : null, detail.sections.length === 1 ? t("1 section") : t("{n} sections", { n: detail.sections.length }), detail.bytes ? megabytes(detail.bytes) : null].filter(Boolean).join(" · ")}</span>
               {detail.about ? <p className="bk-about">{detail.about}</p> : null}
               <div className="actions">
-                {detail.added ? <Button onClick={() => onShow(detail.added!)}><CheckIcon />In your books</Button> : <Button variant="primary" onClick={() => onAdd(detail)}><DownloadIcon />Download and convert</Button>}
+                {detail.added ? <Button onClick={() => onShow(detail.added!)}><CheckIcon />{t("In your books")}</Button> : <Button variant="primary" onClick={() => onAdd(detail)}><DownloadIcon />{t("Download and convert")}</Button>}
                 <a className="md-link bk-ext" href={detail.page} target="_blank" rel="noreferrer">archive.org</a>
               </div>
             </div>
@@ -293,7 +299,7 @@ function FreeClassics({ onAdd, onShow }: { onAdd: (d: FreeBookDetail) => void; o
             {detail.sections.map((s, i) => <li key={s.name}><span className="bk-num num">{i + 1}</span><span className="bk-pname"><span>{s.title}</span></span><span className="num muted">{s.secs ? length(s.secs) : ""}</span></li>)}
           </ol>
         </Card>
-      ) : !list ? <p className="muted bk-small">Loading…</p> : list.length === 0 ? <Card pad><p className="muted">No recordings match. Try fewer words.</p></Card> : (
+      ) : !list ? <p className="muted bk-small">{t("Loading…")}</p> : list.length === 0 ? <Card pad><p className="muted">{t("No recordings match. Try fewer words.")}</p></Card> : (
         <ul className="bk-grid">
           {list.map((b) => (
             <li key={b.id}>
@@ -301,7 +307,7 @@ function FreeClassics({ onAdd, onShow }: { onAdd: (d: FreeBookDetail) => void; o
                 <Cover title={b.title} src={b.cover} size={132} />
                 <b>{b.title}</b>
                 <span className="muted">{b.author ?? ""}</span>
-                <span className="muted bk-small">{[b.secs ? length(b.secs) : null, b.language].filter(Boolean).join(" · ")}{b.added ? <span className="bk-added"> · In your books</span> : null}</span>
+                <span className="muted bk-small">{[b.secs ? length(b.secs) : null, b.language].filter(Boolean).join(" · ")}{b.added ? <span className="bk-added"> · {t("In your books")}</span> : null}</span>
               </button>
             </li>
           ))}
@@ -343,7 +349,7 @@ function ConvertDialog({ request, onClose, onDone }: { request: Request; onClose
     void request.confirm(split).then(onDone, (e) => { setProblem(said(e)); setWorking(false); });
   };
   const step = (by: number) => { setMode("minutes"); setTyped(String(clampMinutes(minutes + by))); };
-  const chapterHint = request.chapterSource === "marks" ? "From the file's chapter marks" : request.kind === "librivox" ? "One per LibriVox section" : "One per file";
+  const chapterHint = request.chapterSource === "marks" ? t("From the file's chapter marks") : request.kind === "librivox" ? t("One per LibriVox section") : t("One per file");
 
   return createPortal(
     <div className="bk-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget && !working) onClose(); }}>
@@ -354,55 +360,55 @@ function ConvertDialog({ request, onClose, onDone }: { request: Request; onClose
             <h2 id={titleId} className="h2">{request.title}</h2>
             <span className="muted">{[request.author, request.secs ? length(request.secs) : null].filter(Boolean).join(" · ")}</span>
           </div>
-          <button type="button" className="bk-icon" aria-label="Close" disabled={working} onClick={onClose}><CloseIcon /></button>
+          <button type="button" className="bk-icon" aria-label={t("Close")} disabled={working} onClick={onClose}><CloseIcon /></button>
         </header>
 
         <fieldset className="bk-split">
-          <legend>Split into</legend>
+          <legend>{t("Split into")}</legend>
           <label data-on={mode === "chapters" || undefined} data-off={!hasChapters || undefined}>
             <input type="radio" name="split" checked={mode === "chapters"} disabled={!hasChapters} onChange={() => setMode("chapters")} />
-            <b>Chapters</b>
-            <span className="bk-count">{hasChapters ? <><strong className="num">{request.chapters.length}</strong> parts</> : "None in this book"}</span>
-            {hasChapters ? <span className="muted bk-small">{chapterHint} · longest {length(longest)}</span> : null}
+            <b>{t("Chapters")}</b>
+            <span className="bk-count">{hasChapters ? tr("{n} parts", { n: <strong className="num">{request.chapters.length}</strong> }) : t("None in this book")}</span>
+            {hasChapters ? <span className="muted bk-small">{chapterHint} · {t("longest {length}", { length: length(longest) })}</span> : null}
           </label>
           <label data-on={mode === "minutes" || undefined}>
             <input type="radio" name="split" checked={mode === "minutes"} onChange={() => setMode("minutes")} />
-            <b>Equal parts</b>
-            <span className="bk-count">{request.secs ? <><strong className="num">{equalCount}</strong> {equalCount === 1 ? "part" : "parts"}</> : `${minutes} min each`}</span>
+            <b>{t("Equal parts")}</b>
+            <span className="bk-count">{request.secs ? (equalCount === 1 ? tr("{n} part", { n: <strong className="num">{equalCount}</strong> }) : tr("{n} parts", { n: <strong className="num">{equalCount}</strong> })) : t("{n} min each", { n: minutes })}</span>
             <span className="bk-stepper">
-              <button type="button" aria-label="Shorter parts" disabled={minutes <= MIN_PART_MINUTES} onClick={() => step(-1)}>−</button>
-              <input type="number" inputMode="numeric" min={MIN_PART_MINUTES} max={MAX_PART_MINUTES} value={typed} aria-label="Part length in minutes"
+              <button type="button" aria-label={t("Shorter parts")} disabled={minutes <= MIN_PART_MINUTES} onClick={() => step(-1)}>−</button>
+              <input type="number" inputMode="numeric" min={MIN_PART_MINUTES} max={MAX_PART_MINUTES} value={typed} aria-label={t("Part length in minutes")}
                 onFocus={() => setMode("minutes")} onChange={(e) => setTyped(e.target.value)} onBlur={() => setTyped(String(minutes))} />
               <span className="muted">min</span>
-              <button type="button" aria-label="Longer parts" disabled={minutes >= MAX_PART_MINUTES} onClick={() => step(1)}>+</button>
+              <button type="button" aria-label={t("Longer parts")} disabled={minutes >= MAX_PART_MINUTES} onClick={() => step(1)}>+</button>
             </span>
-            <span className="muted bk-small">Each ends at a pause, not mid-word</span>
+            <span className="muted bk-small">{t("Each ends at a pause, not mid-word")}</span>
           </label>
         </fieldset>
 
-        {mode === "chapters" && longest > LONG_PART ? <p className="notice">Some chapters run {length(longest)}. Plugging the watch in sends you back to the start of the one you&apos;re in.</p> : null}
+        {mode === "chapters" && longest > LONG_PART ? <p className="notice">{t("Some chapters run {length}. Plugging the watch in sends you back to the start of the one you're in.", { length: length(longest) })}</p> : null}
 
-        <section className="bk-preview" aria-label="Parts">
+        <section className="bk-preview" aria-label={t("Parts")}>
           <ol>
             {parts.slice(0, PREVIEW).map((p, i) => (
               <li key={i}>
                 <span className="bk-num num">{i + 1}</span>
-                <span className="bk-pname"><span>{p.title ?? `From ${clockAt(p.start)}`}</span><small className="muted">{partName(stem, i + 1, parts.length)}</small></span>
+                <span className="bk-pname"><span>{p.title ?? t("From {time}", { time: clockAt(p.start) })}</span><small className="muted">{partName(stem, i + 1, parts.length)}</small></span>
                 <span className="num muted">{mode === "minutes" ? "≈ " : ""}{length(p.secs)}</span>
               </li>
             ))}
           </ol>
-          {parts.length > PREVIEW ? <span className="muted bk-small">+ {partsLabel(parts.length - PREVIEW)} more</span> : null}
+          {parts.length > PREVIEW ? <span className="muted bk-small">{parts.length - PREVIEW === 1 ? t("+ 1 more part") : t("+ {n} more parts", { n: parts.length - PREVIEW })}</span> : null}
         </section>
 
         {problem ? <p className="notice" role="alert">{problem}</p> : null}
         <footer className="bk-dialog-foot">
           <span className="muted bk-small">
-            {request.download ? `Downloads ${megabytes(request.download)} · ` : ""}mono 64 kbps MP3 · about {megabytes(request.secs * BYTES_PER_SECOND)}{request.kind === "file" ? " · your file stays as it is" : ""}
+            {[request.download ? t("Downloads {size}", { size: megabytes(request.download) }) : null, "mono 64 kbps MP3", t("about {size}", { size: megabytes(request.secs * BYTES_PER_SECOND) }), request.kind === "file" ? t("your file stays as it is") : null].filter(Boolean).join(" · ")}
           </span>
           <span className="bk-grow" />
-          <Button disabled={working} onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={working} onClick={go}>{working ? "Starting…" : request.kind === "librivox" ? "Download and convert" : `Convert into ${partsLabel(parts.length)}`}</Button>
+          <Button disabled={working} onClick={onClose}>{t("Cancel")}</Button>
+          <Button variant="primary" disabled={working} onClick={go}>{working ? t("Starting…") : request.kind === "librivox" ? t("Download and convert") : parts.length === 1 ? t("Convert into 1 part") : t("Convert into {n} parts", { n: parts.length })}</Button>
         </footer>
       </div>
     </div>,

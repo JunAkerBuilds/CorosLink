@@ -4,6 +4,7 @@
 // opens, list its layers, draw it at the 800 master, apply the edits the screens offer, and compose what the main
 // process builds into the watch's archive. Rewritten from CorosLink's WatchfaceEditor.tsx (its template-loading
 // effect, setDesign, renderExportPreview and createArchive), keeping their order of steps.
+import { msg } from "@/lib/i18n";
 import type { WatchfaceCarriedPreferences } from "../watchface/engine/watchfaceCarriedPreferences";
 import type {
   CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceDesignState, CorosWatchfaceTemplateAsset,
@@ -337,10 +338,10 @@ const SPOT_DEFS: { id: string; label: string; primary: string; canAdd: boolean; 
     id: g.id === "bluetooth" ? "bluetoothStatus" : "doNotDisturbStatus", label: g.label, primary: g.primary, canAdd: true,
     states: g.states.map((s) => ({ key: s.key, label: s.label })),
   })),
-  { id: "bluetoothOff", label: "Bluetooth (data slot)", primary: "control_bluetooth_off_icon", canAdd: false,
-    states: [{ key: "control_bluetooth_on_icon", label: "On" }, { key: "control_bluetooth_off_icon", label: "Off" }] },
-  { id: "doNotDisturbOn", label: "Do Not Disturb (data slot)", primary: "control_no_disturb_on_icon", canAdd: false,
-    states: [{ key: "control_no_disturb_on_icon", label: "On" }, { key: "control_no_disturb_off_icon", label: "Off" }] },
+  { id: "bluetoothOff", label: msg("Bluetooth (data slot)"), primary: "control_bluetooth_off_icon", canAdd: false,
+    states: [{ key: "control_bluetooth_on_icon", label: msg("On") }, { key: "control_bluetooth_off_icon", label: msg("Off") }] },
+  { id: "doNotDisturbOn", label: msg("Do Not Disturb (data slot)"), primary: "control_no_disturb_on_icon", canAdd: false,
+    states: [{ key: "control_no_disturb_on_icon", label: msg("On") }, { key: "control_no_disturb_off_icon", label: msg("Off") }] },
 ];
 
 /** The spots a face has: every set with at least one image on the face. `all` is the engine's full list (allLayersOf). */
@@ -426,15 +427,15 @@ export function rowOf(rows: EditorLayer[], id: string | null | undefined): Edito
 
 /** The Layers panel's and the Add library's categories, from the design's Studio boards, in panel order. */
 export const LAYER_GROUPS = [
-  { id: "basic", label: "Text and shapes" },
-  { id: "time", label: "Time and date" },
-  { id: "health", label: "Health" },
-  { id: "activity", label: "Activity" },
-  { id: "weather", label: "Weather" },
-  { id: "training", label: "Training" },
-  { id: "charts", label: "Charts" },
-  { id: "device", label: "Status" },
-  { id: "background", label: "Background" },
+  { id: "basic", label: msg("Text and shapes") },
+  { id: "time", label: msg("Time and date") },
+  { id: "health", label: msg("Health") },
+  { id: "activity", label: msg("Activity") },
+  { id: "weather", label: msg("Weather") },
+  { id: "training", label: msg("Training") },
+  { id: "charts", label: msg("Charts") },
+  { id: "device", label: msg("Status") },
+  { id: "background", label: msg("Background") },
 ] as const;
 export type LayerGroup = (typeof LAYER_GROUPS)[number]["id"];
 

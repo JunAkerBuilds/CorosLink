@@ -14,36 +14,37 @@ import {
 import { readMcp, type McpStatus } from "../mcp";
 import { McpServers } from "../parts/McpServers";
 import { ThisComputer } from "../parts/ThisComputer";
+import { language, locale, msg, t, tx } from "@/lib/i18n";
 import "./coachSettings.css";
 
 type Section = "display" | "instructions" | "memory" | "remote" | "mcp" | string;
 
 /** How each provider is shown: its badge, one line about it, and what it means for the athlete's data. */
 const SHOWN: Record<string, { mono: string; hue: string; line: string; note: string; guide?: string }> = {
-  chatgpt: { mono: "GP", hue: "mint", line: "Your ChatGPT account", note: "Usage counts against your ChatGPT plan." },
-  "claude-code": { mono: "CL", hue: "orange", line: "Your Claude subscription, through Claude Code", note: "C-LINK never reads your Claude sign-in.", guide: "https://claude.com/code" },
-  "gemini-cli": { mono: "GC", hue: "cyan", line: "Gemini CLI on this computer", note: "Needs a Gemini API key or Vertex AI set up in Gemini CLI.", guide: "https://github.com/google-gemini/gemini-cli" },
-  antigravity: { mono: "AG", hue: "amber", line: "Google's Antigravity agent", note: "Signing in opens Google in your browser." },
-  opencode: { mono: "OC", hue: "grey", line: "OpenCode with the providers you set up in it", note: "Uses the models you connected in OpenCode.", guide: "https://opencode.ai" },
-  openai: { mono: "OA", hue: "mint", line: "Your own OpenAI key", note: "" },
-  anthropic: { mono: "AN", hue: "orange", line: "Your own Anthropic key", note: "" },
-  gemini: { mono: "GE", hue: "blue", line: "Your own Gemini key", note: "" },
-  deepseek: { mono: "DS", hue: "blue", line: "Your own DeepSeek key", note: "" },
-  openrouter: { mono: "OR", hue: "iris", line: "Your own key, any model", note: "Pick a model with tool calling." },
-  qwen: { mono: "QW", hue: "iris", line: "Your own Qwen key", note: "" },
-  "qwen-cn": { mono: "QC", hue: "iris", line: "Your own Qwen key, China region", note: "" },
-  mimo: { mono: "MI", hue: "coral", line: "Your own Xiaomi MiMo key", note: "" },
-  local: { mono: "LM", hue: "mint", line: "Ollama, LM Studio or any OpenAI-compatible server", note: "Nothing leaves this computer when the server runs here." },
+  chatgpt: { mono: "GP", hue: "mint", line: msg("Your ChatGPT account"), note: msg("Usage counts against your ChatGPT plan.") },
+  "claude-code": { mono: "CL", hue: "orange", line: msg("Your Claude subscription, through Claude Code"), note: msg("C-LINK never reads your Claude sign-in."), guide: "https://claude.com/code" },
+  "gemini-cli": { mono: "GC", hue: "cyan", line: msg("Gemini CLI on this computer"), note: msg("Needs a Gemini API key or Vertex AI set up in Gemini CLI."), guide: "https://github.com/google-gemini/gemini-cli" },
+  antigravity: { mono: "AG", hue: "amber", line: msg("Google's Antigravity agent"), note: msg("Signing in opens Google in your browser.") },
+  opencode: { mono: "OC", hue: "grey", line: msg("OpenCode with the providers you set up in it"), note: msg("Uses the models you connected in OpenCode."), guide: "https://opencode.ai" },
+  openai: { mono: "OA", hue: "mint", line: msg("Your own OpenAI key"), note: "" },
+  anthropic: { mono: "AN", hue: "orange", line: msg("Your own Anthropic key"), note: "" },
+  gemini: { mono: "GE", hue: "blue", line: msg("Your own Gemini key"), note: "" },
+  deepseek: { mono: "DS", hue: "blue", line: msg("Your own DeepSeek key"), note: "" },
+  openrouter: { mono: "OR", hue: "iris", line: msg("Your own key, any model"), note: msg("Pick a model with tool calling.") },
+  qwen: { mono: "QW", hue: "iris", line: msg("Your own Qwen key"), note: "" },
+  "qwen-cn": { mono: "QC", hue: "iris", line: msg("Your own Qwen key, China region"), note: "" },
+  mimo: { mono: "MI", hue: "coral", line: msg("Your own Xiaomi MiMo key"), note: "" },
+  local: { mono: "LM", hue: "mint", line: msg("Ollama, LM Studio or any OpenAI-compatible server"), note: msg("Nothing leaves this computer when the server runs here.") },
 };
 
 const GROUPS = [
-  { group: "account", title: "Sign in" },
-  { group: "key", title: "API key" },
-  { group: "computer", title: "On this computer" },
+  { group: "account", title: msg("Sign in") },
+  { group: "key", title: msg("API key") },
+  { group: "computer", title: msg("On this computer") },
 ] as const;
 
-const said = (error: unknown) => (error instanceof AIProblem || error instanceof Error ? error.message : "That didn't work.");
-const day = (ms: number) => (ms ? new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "");
+const said = (error: unknown) => (error instanceof AIProblem || error instanceof Error ? error.message : t("That didn't work."));
+const day = (ms: number) => (ms ? new Date(ms).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" }) : "");
 
 function Tag({ tone, children }: { tone?: "ok"; children: ReactNode }) {
   return <span className="cs-tag" data-tone={tone}>{children}</span>;
@@ -75,7 +76,7 @@ export default function CoachSettings() {
     const timer = setTimeout(() => { readMcp().then(setMcp, () => {}); }, 1500);
     return () => clearTimeout(timer);
   }, [connecting, mcp]);
-  const mcpOn = mcp?.servers.reduce((n, s) => n + (s.enabled ? s.tools.filter((t) => t.on).length : 0), 0) ?? 0;
+  const mcpOn = mcp?.servers.reduce((n, s) => n + (s.enabled ? s.tools.filter((tool) => tool.on).length : 0), 0) ?? 0;
 
   const picked = status?.providers.find((p) => p.id === status.picked && p.ready) ?? null;
   const pickedId = picked?.id ?? null;
@@ -89,10 +90,10 @@ export default function CoachSettings() {
   const pickedChoices = picked ? [...new Set([...(picked.group === "account" ? [""] : []), picked.model, ...pickedModels])] : [];
   const lastPhone = phones?.phones.slice().sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))[0] ?? null;
   const tiles = [
-    { id: "instructions", label: "Instructions", value: "None", sub: "Not in this app yet" },
-    { id: "memory", label: "Memory", value: facts.length === 1 ? "1 fact" : `${facts.length} facts`, sub: facts[0] ? `Last saved ${day(facts[0].at)}` : "Nothing yet" },
-    { id: "remote", label: "iPhone", value: !phones ? "…" : !phones.phones.length ? "None" : phones.listening ? "Online" : "Off", sub: lastPhone?.label ?? "Only this computer" },
-    { id: "mcp", label: "Tools", value: String(TOOLS.length + mcpOn), sub: mcpOn ? `${mcpOn} from MCP` : "Coach's own" },
+    { id: "instructions", label: t("Instructions"), value: t("None"), sub: t("Not in this app yet") },
+    { id: "memory", label: t("Memory"), value: facts.length === 1 ? t("1 fact") : t("{n} facts", { n: facts.length }), sub: facts[0] ? t("Last saved {date}", { date: day(facts[0].at) }) : t("Nothing yet") },
+    { id: "remote", label: "iPhone", value: !phones ? "…" : !phones.phones.length ? t("None") : phones.listening ? t("Online") : t("Off"), sub: lastPhone?.label ?? t("Only this computer") },
+    { id: "mcp", label: t("Tools"), value: String(TOOLS.length + mcpOn), sub: mcpOn ? t("{n} from MCP", { n: mcpOn }) : t("Coach's own") },
   ];
   const shown = section ?? picked?.id ?? "memory";
   const current = status?.providers.find((p) => p.id === shown) ?? null;
@@ -108,70 +109,70 @@ export default function CoachSettings() {
     <main className="page cs-page">
       <div className="cs-head">
         <div className="cs-head-title">
-          <Link href="/coach" className="cs-back" aria-label="Back to Coach">
+          <Link href="/coach" className="cs-back" aria-label={t("Back to Coach")}>
             <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 1.9, strokeLinecap: "round", strokeLinejoin: "round" }}><path d="M19 12H5M11 6l-6 6 6 6" /></svg>
           </Link>
-          <h1>Coach settings</h1>
+          <h1>{t("Coach settings")}</h1>
         </div>
-        <span className="cs-kbd"><kbd>⌘ ,</kbd>from Coach</span>
+        <span className="cs-kbd"><kbd>⌘ ,</kbd>{t("from Coach")}</span>
       </div>
       {problem ? <p className="notice" role="alert">{problem}</p> : null}
 
-      <section className="cs-now" aria-label="Who's coaching">
+      <section className="cs-now" aria-label={t("Who's coaching")}>
         <div className="cs-now-who">
           <span aria-hidden="true" className="cs-coach"><img src="/img/coach-wave.webp" alt="" /></span>
           <div className="cs-now-what">
-            <span className="cs-now-label">Coaching with</span>
+            <span className="cs-now-label">{t("Coaching with")}</span>
             <span className="cs-now-name">
-              <strong>{picked?.name ?? "No AI yet"}</strong>
-              {picked ? <span className="cs-pill" data-tone="ok">{picked.group === "account" ? "Signed in" : "Connected"}</span> : null}
+              <strong>{picked?.name ?? t("No AI yet")}</strong>
+              {picked ? <span className="cs-pill" data-tone="ok">{picked.group === "account" ? t("Signed in") : t("Connected")}</span> : null}
             </span>
             <span className="cs-line">
               {picked ? (
-                <Select aria-label="Model" className="cs-now-model" value={picked.model}
+                <Select aria-label={t("Model")} className="cs-now-model" value={picked.model}
                   onChange={(e) => void setAIModel(picked.id, e.target.value).then(setStatus, (err: unknown) => setProblem(said(err)))}>
-                  {pickedChoices.map((m) => <option key={m} value={m}>{m || "Default"}</option>)}
+                  {pickedChoices.map((m) => <option key={m} value={m}>{m || t("Default")}</option>)}
                 </Select>
               ) : null}
-              <button type="button" className="cs-now-link" onClick={() => setSection(picked?.id ?? "claude-code")}>{picked ? "Provider settings" : "Pick one"}</button>
+              <button type="button" className="cs-now-link" onClick={() => setSection(picked?.id ?? "claude-code")}>{picked ? t("Provider settings") : t("Pick one")}</button>
             </span>
           </div>
         </div>
         <div className="cs-tiles">
-          {tiles.map((t) => (
-            <button key={t.id} type="button" className="cs-tile" onClick={() => setSection(t.id)}>
-              <span>{t.label}</span><strong>{t.value}</strong><span>{t.sub}</span>
+          {tiles.map((tile) => (
+            <button key={tile.id} type="button" className="cs-tile" onClick={() => setSection(tile.id)}>
+              <span>{tile.label}</span><strong>{tile.value}</strong><span>{tile.sub}</span>
             </button>
           ))}
         </div>
       </section>
 
       <div className="cs-grid">
-        <nav className="cs-nav" aria-label="Coach settings">
-          <h2>Coach</h2>
-          {nav("display", "Display", glyph("◧"), <Tag tone="ok">On</Tag>)}
-          {nav("instructions", "Instructions", glyph("¶"))}
-          {nav("memory", "Memory", glyph("✳"), facts.length ? <Tag>{facts.length}</Tag> : null)}
-          {nav("remote", "Remote access", glyph("⌁"), phones?.phones.length ? <Tag tone={phones.listening ? "ok" : undefined}>{phones.listening ? "Online" : "Off"}</Tag> : null)}
+        <nav className="cs-nav" aria-label={t("Coach settings")}>
+          <h2>{t("Coach")}</h2>
+          {nav("display", t("Display"), glyph("◧"), <Tag tone="ok">{t("On")}</Tag>)}
+          {nav("instructions", t("Instructions"), glyph("¶"))}
+          {nav("memory", t("Memory"), glyph("✳"), facts.length ? <Tag>{facts.length}</Tag> : null)}
+          {nav("remote", t("Remote access"), glyph("⌁"), phones?.phones.length ? <Tag tone={phones.listening ? "ok" : undefined}>{phones.listening ? t("Online") : t("Off")}</Tag> : null)}
           {GROUPS.map(({ group, title }) => (
             <div key={group} className="cs-nav-group">
-              <h2>{title}</h2>
+              <h2>{t(title)}</h2>
               {status?.providers.filter((p) => p.group === group).map((p) =>
-                nav(p.id, p.group === "computer" ? "Local model" : p.name, <Mono id={p.id} />,
-                  status.picked === p.id && p.ready ? <Tag tone="ok">In use</Tag> : p.ready ? <Tag>Ready</Tag> : null))}
+                nav(p.id, p.group === "computer" ? t("Local model") : p.name, <Mono id={p.id} />,
+                  status.picked === p.id && p.ready ? <Tag tone="ok">{t("In use")}</Tag> : p.ready ? <Tag>{tx("set up", "Ready")}</Tag> : null))}
             </div>
           ))}
-          <h2>Tools</h2>
-          {nav("mcp", "MCP servers", glyph("⧉"), mcp?.servers.length ? <Tag tone={mcpOn ? "ok" : undefined}>{mcpOn ? `${mcpOn} on` : mcp.servers.length}</Tag> : null)}
+          <h2>{t("Tools")}</h2>
+          {nav("mcp", t("MCP servers"), glyph("⧉"), mcp?.servers.length ? <Tag tone={mcpOn ? "ok" : undefined}>{mcpOn ? t("{n} on", { n: mcpOn }) : mcp.servers.length}</Tag> : null)}
         </nav>
 
         <div className="cs-panel" key={shown}>
           {current && status ? <ProviderPage p={current} picked={status.picked === current.id} localUrl={status.localUrl} onChange={setStatus} />
             : shown === "memory" ? <Memory facts={facts} />
-            : shown === "remote" ? <Panel title="Remote access"><ThisComputer /></Panel>
-            : shown === "display" ? <Panel title="Display"><p className="cs-empty">Hiding charts in chat isn&apos;t in this app yet. Coach draws a chart when it fits the question.</p></Panel>
-            : shown === "instructions" ? <Panel title="Instructions"><p className="cs-empty">Custom instructions aren&apos;t in this app yet. Tell Coach in a chat what to keep in mind and it saves it to Memory.</p></Panel>
-            : shown === "mcp" ? <Panel title="Tools"><McpServers status={mcp} onChange={setMcp} /></Panel>
+            : shown === "remote" ? <Panel title={t("Remote access")}><ThisComputer /></Panel>
+            : shown === "display" ? <Panel title={t("Display")}><p className="cs-empty">{t("Hiding charts in chat isn't in this app yet. Coach draws a chart when it fits the question.")}</p></Panel>
+            : shown === "instructions" ? <Panel title={t("Instructions")}><p className="cs-empty">{t("Custom instructions aren't in this app yet. Tell Coach in a chat what to keep in mind and it saves it to Memory.")}</p></Panel>
+            : shown === "mcp" ? <Panel title={t("Tools")}><McpServers status={mcp} onChange={setMcp} /></Panel>
             : null}
         </div>
       </div>
@@ -195,32 +196,32 @@ function Memory({ facts }: { facts: ReturnType<typeof factsFrom> }) {
   const run = (work: Promise<void>) => work.catch((e: unknown) => setProblem(said(e)));
   const add = (e: FormEvent) => { e.preventDefault(); if (text.trim()) void run(rememberOwnFact(text).then(() => setText(""))); };
   return (
-    <Panel title="What Coach remembers" side={<span className="muted">{facts.length === 1 ? "1 fact" : `${facts.length} facts`}</span>}>
+    <Panel title={t("What Coach remembers")} side={<span className="muted">{facts.length === 1 ? t("1 fact") : t("{n} facts", { n: facts.length })}</span>}>
       {facts.length ? (
         <ul className="cs-facts">
           {facts.map((f) => (
             <li key={f.id}>
               <span className="cs-fact-text">{f.text}</span>
               <span className="muted">{day(f.at)}</span>
-              <button type="button" className="cs-x" aria-label={`Forget: ${f.text}`} onClick={() => void run(forgetMemory([f.id]))}>×</button>
+              <button type="button" className="cs-x" aria-label={t("Forget: {fact}", { fact: f.text })} onClick={() => void run(forgetMemory([f.id]))}>×</button>
             </li>
           ))}
         </ul>
-      ) : <p className="cs-empty">Nothing yet. Coach saves lasting facts you tell it, like a goal race or an injury.</p>}
+      ) : <p className="cs-empty">{t("Nothing yet. Coach saves lasting facts you tell it, like a goal race or an injury.")}</p>}
       <form className="cs-line" onSubmit={add}>
-        <Field aria-label="New fact" placeholder="New fact" value={text} maxLength={300} onChange={(e) => setText(e.target.value)} />
-        <Button type="submit" disabled={!text.trim()}>Add</Button>
+        <Field aria-label={t("New fact")} placeholder={t("New fact")} value={text} maxLength={300} onChange={(e) => setText(e.target.value)} />
+        <Button type="submit" disabled={!text.trim()}>{t("Add")}</Button>
       </form>
       {problem ? <p className="notice" role="alert">{problem}</p> : null}
       {facts.length ? (
         <div className="cs-line">
           {clearing ? (
             <>
-              <span>Forget all {facts.length}?</span>
-              <Button onClick={() => { setClearing(false); void run(forgetMemory(facts.map((f) => f.id))); }}>Clear memory</Button>
-              <Button variant="plain" onClick={() => setClearing(false)}>Cancel</Button>
+              <span>{t("Forget all {n}?", { n: facts.length })}</span>
+              <Button onClick={() => { setClearing(false); void run(forgetMemory(facts.map((f) => f.id))); }}>{t("Clear memory")}</Button>
+              <Button variant="plain" onClick={() => setClearing(false)}>{t("Cancel")}</Button>
             </>
-          ) : <Button variant="plain" onClick={() => setClearing(true)}>Clear memory</Button>}
+          ) : <Button variant="plain" onClick={() => setClearing(true)}>{t("Clear memory")}</Button>}
         </div>
       ) : null}
     </Panel>
@@ -252,62 +253,62 @@ function ProviderPage({ p, picked, localUrl, onChange }: { p: ProviderView; pick
   const update = (s: AIStatus) => { onChange(s); setKey(""); };
 
   const choices = [...new Set([...(p.group === "account" ? [""] : []), ...(p.model ? [p.model] : []), ...(models ?? [])])];
-  const note = shown?.note || (p.group === "key" ? `The key is kept encrypted on this computer and sent only to ${p.name}.` : "");
-  const status = p.ready ? (p.group === "account" ? "Signed in" : p.group === "key" ? "Key saved" : "Connected") : p.group === "account" ? "Not signed in" : "Not set up";
+  const note = shown?.note ? t(shown.note) : p.group === "key" ? t("The key is kept encrypted on this computer and sent only to {provider}.", { provider: p.name }) : "";
+  const status = p.ready ? (p.group === "account" ? t("Signed in") : p.group === "key" ? t("Key saved") : t("Connected")) : p.group === "account" ? t("Not signed in") : t("Not set up");
 
   return (
     <Card pad className="cs-card">
       <div className="cs-prov-head">
         <Mono id={p.id} />
         <div className="cs-prov-name">
-          <div><h2>{p.group === "computer" ? "Local model" : p.name}</h2><Tag tone={p.ready ? "ok" : undefined}>{status}</Tag></div>
-          <span className="muted">{shown?.line}</span>
+          <div><h2>{p.group === "computer" ? t("Local model") : p.name}</h2><Tag tone={p.ready ? "ok" : undefined}>{status}</Tag></div>
+          <span className="muted">{shown ? t(shown.line) : null}</span>
         </div>
-        {picked && p.ready ? <Tag tone="ok">Coaching now</Tag>
-          : p.ready ? <Button variant="primary" disabled={!!busy} onClick={() => run("use", () => pickAI(p.id), update)}>Use for Coach</Button> : null}
+        {picked && p.ready ? <Tag tone="ok">{t("Coaching now")}</Tag>
+          : p.ready ? <Button variant="primary" disabled={!!busy} onClick={() => run("use", () => pickAI(p.id), update)}>{t("Use for Coach")}</Button> : null}
       </div>
 
       <div className="cs-fields">
         {p.program !== undefined || (p.group === "account" && shown?.guide) ? (
-          <label className="cs-field">Program
+          <label className="cs-field">{t("Program")}
             <div className="cs-line">
-              <Field readOnly value={p.program ?? ""} placeholder="Not found on this computer" />
-              <Button disabled={!!busy} onClick={() => run("check", readAI, onChange)}>Check</Button>
+              <Field readOnly value={p.program ?? ""} placeholder={t("Not found on this computer")} />
+              <Button disabled={!!busy} onClick={() => run("check", readAI, onChange)}>{t("Check")}</Button>
             </div>
           </label>
         ) : null}
         {p.account ? (
-          <label className="cs-field">Account
+          <label className="cs-field">{t("Account")}
             <div className="cs-line">
               <Field readOnly value={p.account} />
-              {p.canForget ? <Button disabled={!!busy} onClick={() => run("forget", () => forgetAI(p.id), update)}>Sign out</Button> : null}
+              {p.canForget ? <Button disabled={!!busy} onClick={() => run("forget", () => forgetAI(p.id), update)}>{t("Sign out")}</Button> : null}
             </div>
           </label>
         ) : null}
         {p.group === "computer" ? (
-          <label className="cs-field">Server URL
+          <label className="cs-field">{t("Server URL")}
             <div className="cs-line">
               <Field spellCheck={false} value={url} onChange={(e) => setUrl(e.target.value)} />
-              <Button disabled={!!busy} onClick={() => run("detect", detectLocalAI, (d) => setUrl(d.url))}>Detect</Button>
+              <Button disabled={!!busy} onClick={() => run("detect", detectLocalAI, (d) => setUrl(d.url))}>{t("Detect")}</Button>
             </div>
           </label>
         ) : null}
         {p.group !== "account" ? (
-          <label className="cs-field">{p.group === "computer" ? "Key (optional)" : "API key"}
+          <label className="cs-field">{p.group === "computer" ? t("Key (optional)") : t("API key")}
             <div className="cs-line">
               {p.ready && p.group === "key"
-                ? <Field readOnly value="Saved on this computer" />
+                ? <Field readOnly value={t("Saved on this computer")} />
                 : <Field type="password" autoComplete="off" spellCheck={false} placeholder={p.keyHint} value={key} onChange={(e) => setKey(e.target.value)} />}
               {p.ready && p.group === "key"
-                ? <Button disabled={!!busy} onClick={() => run("forget", () => forgetAI(p.id), update)}>Clear</Button>
-                : <Button variant="primary" disabled={!!busy || (p.group === "key" && !key.trim())} onClick={() => run("connect", () => connectAI(p.id, p.group === "computer" ? { url, key } : { key }), update)}>{busy === "connect" ? "Checking…" : "Connect"}</Button>}
+                ? <Button disabled={!!busy} onClick={() => run("forget", () => forgetAI(p.id), update)}>{t("Clear")}</Button>
+                : <Button variant="primary" disabled={!!busy || (p.group === "key" && !key.trim())} onClick={() => run("connect", () => connectAI(p.id, p.group === "computer" ? { url, key } : { key }), update)}>{busy === "connect" ? t("Checking…") : t("Connect")}</Button>}
             </div>
           </label>
         ) : null}
         {p.ready ? (
-          <label className="cs-field">Model
+          <label className="cs-field">{t("Model")}
             <Select value={p.model} disabled={!!busy} onChange={(e) => run("model", () => setAIModel(p.id, e.target.value), onChange)}>
-              {choices.map((m) => <option key={m} value={m}>{m || "Default"}</option>)}
+              {choices.map((m) => <option key={m} value={m}>{m || t("Default")}</option>)}
             </Select>
           </label>
         ) : null}
@@ -319,11 +320,11 @@ function ProviderPage({ p, picked, localUrl, onChange }: { p: ProviderView; pick
       {tested ? <p className="cs-ok" role="status">{tested}</p> : null}
 
       <div className="cs-line">
-        {shown?.guide && !p.ready ? <a className="cs-link" href={shown.guide} target="_blank" rel="noreferrer">Setup guide</a> : null}
-        {p.keyPage && !p.ready ? <a className="cs-link" href={p.keyPage} target="_blank" rel="noreferrer">Get API key</a> : null}
-        {p.group === "account" && !p.ready ? <Button variant="primary" disabled={!!busy} onClick={() => run("signin", () => signInAI(p.id), update)}>{busy === "signin" ? "Waiting for sign-in…" : "Sign in"}</Button> : null}
-        {p.ready ? <Button disabled={!!busy} onClick={() => run("test", () => testAI(p.id), (t) => setTested(`Answered in ${(t.ms / 1000).toFixed(1)} s`))}>{busy === "test" ? "Testing…" : "Test connection"}</Button> : null}
-        {p.group === "computer" && p.ready ? <Button disabled={!!busy} onClick={() => run("forget", () => forgetAI(p.id), update)}>Forget</Button> : null}
+        {shown?.guide && !p.ready ? <a className="cs-link" href={shown.guide} target="_blank" rel="noreferrer">{t("Setup guide")}</a> : null}
+        {p.keyPage && !p.ready ? <a className="cs-link" href={p.keyPage} target="_blank" rel="noreferrer">{t("Get API key")}</a> : null}
+        {p.group === "account" && !p.ready ? <Button variant="primary" disabled={!!busy} onClick={() => run("signin", () => signInAI(p.id), update)}>{busy === "signin" ? t("Waiting for sign-in…") : t("Sign in")}</Button> : null}
+        {p.ready ? <Button disabled={!!busy} onClick={() => run("test", () => testAI(p.id), (answer) => setTested(t("Answered in {s} s", { s: (answer.ms / 1000).toFixed(1) })))}>{busy === "test" ? t("Testing…") : t("Test connection")}</Button> : null}
+        {p.group === "computer" && p.ready ? <Button disabled={!!busy} onClick={() => run("forget", () => forgetAI(p.id), update)}>{t("Forget")}</Button> : null}
       </div>
     </Card>
   );

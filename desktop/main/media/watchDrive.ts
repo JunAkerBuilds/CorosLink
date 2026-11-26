@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { lowercaseMp3, readMp3, safeName, withFile, type Mp3Info } from "./mp3";
+import { t } from "@/lib/i18n";
 
 const run = promisify(execFile);
 
@@ -252,7 +253,7 @@ export class WatchDrive {
   private async mounted(): Promise<{ root: string; music: string }> {
     const volumes = await this.volumes();
     const volume = volumes.filter((v) => v.explicit || isWatchVolume(v.name)).sort((a, b) => a.name.localeCompare(b.name))[0];
-    if (!volume) throw new WatchProblem("Plug in your watch first.", "noWatch");
+    if (!volume) throw new WatchProblem(t("Plug in your watch first."), "noWatch");
     return { root: volume.root, music: findFolder(volume.root, ["Music", "music"]) ?? path.join(volume.root, "Music") };
   }
 
@@ -260,7 +261,7 @@ export class WatchDrive {
   copyIn(source: string, name: string, progress?: (copied: number) => void): Promise<string> {
     return this.exclusive(async () => {
       const { music } = await this.mounted();
-      if (!/\.mp3$/i.test(name)) throw new WatchProblem("The watch plays MP3 files only.", "notMp3");
+      if (!/\.mp3$/i.test(name)) throw new WatchProblem(t("The watch plays MP3 files only."), "notMp3");
       await mkdir(music, { recursive: true });
       const target = await freeName(music, lowercaseMp3(safeName(name)));
       try {
@@ -281,7 +282,7 @@ export class WatchDrive {
       try {
         for (const p of paths) {
           const target = inside(music, p);
-          if (!isTrack(path.basename(target))) throw new WatchProblem("Only MP3s can be removed from the watch.", "notMp3");
+          if (!isTrack(path.basename(target))) throw new WatchProblem(t("Only MP3s can be removed from the watch."), "notMp3");
           await rm(target, { force: true });
           removed++;
         }
@@ -301,11 +302,11 @@ export class WatchDrive {
       const { music } = await this.mounted();
       const source = inside(music, p);
       const name = path.basename(source), fixed = lowercaseMp3(name);
-      if (!isTrack(name)) throw new WatchProblem("Only MP3s on the watch can be renamed.", "notMp3");
+      if (!isTrack(name)) throw new WatchProblem(t("Only MP3s on the watch can be renamed."), "notMp3");
       if (fixed === name) return name;
       const dir = path.dirname(source);
       const others = (await readdir(dir)).filter((n) => n !== name).map((n) => n.toLowerCase());
-      if (others.includes(fixed.toLowerCase())) throw new WatchProblem(`Another file on the watch is already called ${fixed}.`, "taken");
+      if (others.includes(fixed.toLowerCase())) throw new WatchProblem(t("Another file on the watch is already called {name}.", { name: fixed }), "taken");
       const temp = path.join(dir, `${fixed}.rename-${process.pid}`);
       try {
         await rename(source, temp);
@@ -320,27 +321,27 @@ export class WatchDrive {
   /** Ejects the watch so it can be unplugged. */
   eject(): Promise<void> {
     return this.exclusive(async () => {
-      if (process.env.CLINK_WATCH_PATH) throw new WatchProblem("This watch folder was set by CLINK_WATCH_PATH and can't be ejected.", "explicit");
+      if (process.env.CLINK_WATCH_PATH) throw new WatchProblem(t("This watch folder was set by CLINK_WATCH_PATH and can't be ejected."), "explicit");
       const { root, music } = await this.mounted();
       await clearAppleDouble(music);
       try {
         await (this.host.eject ?? ejectVolume)(root);
       } catch (error) {
         const detail = error instanceof Error ? error.message.split("\n").find(Boolean) : String(error);
-        throw new WatchProblem(`The watch couldn't be ejected. Close anything using its files and try again. (${detail})`, "eject");
+        throw new WatchProblem(`${t("The watch couldn't be ejected. Close anything using its files and try again.")} (${detail})`, "eject");
       } finally {
         this.invalidate();
       }
       const deadline = this.now() + 10_000;
       while (existsSync(root) && this.now() < deadline) await new Promise((r) => setTimeout(r, 250));
-      if (existsSync(root)) throw new WatchProblem("The watch is still mounted. Close anything using its files and try again.", "eject");
+      if (existsSync(root)) throw new WatchProblem(t("The watch is still mounted. Close anything using its files and try again."), "eject");
     });
   }
 }
 
 function inside(base: string, relative: string): string {
   const resolved = path.resolve(base, relative);
-  if (!resolved.startsWith(path.resolve(base) + path.sep)) throw new WatchProblem("That file isn't in the watch's Music folder.", "outside");
+  if (!resolved.startsWith(path.resolve(base) + path.sep)) throw new WatchProblem(t("That file isn't in the watch's Music folder."), "outside");
   return resolved;
 }
 
@@ -385,7 +386,7 @@ async function ejectVolume(root: string): Promise<void> {
   if (process.platform === "darwin") { await run("/usr/sbin/diskutil", ["eject", root], { timeout: 30_000 }); return; }
   if (process.platform === "win32") {
     const drive = root.replace(/[\\/]+$/, "");
-    if (!/^[A-Z]:$/i.test(drive)) throw new Error("Unexpected drive letter.");
+    if (!/^[A-Z]:$/i.test(drive)) throw new Error(t("Unexpected drive letter."));
     await run("powershell.exe", ["-NoProfile", "-Command", `(New-Object -ComObject Shell.Application).Namespace(17).ParseName('${drive}').InvokeVerb('Eject')`], { windowsHide: true, timeout: 30_000 });
     return;
   }

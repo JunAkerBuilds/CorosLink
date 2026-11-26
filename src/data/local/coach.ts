@@ -1,4 +1,5 @@
 "use client";
+import { msg } from "@/lib/i18n";
 import { createStore } from "./store";
 
 /** A message typed here. Coach has not answered it: there is no Coach server for the web yet. */
@@ -24,7 +25,8 @@ export interface CoachSaved {
 }
 
 export const COACH_EMPTY: CoachSaved = { conversations: [], messages: [] };
-export const NEW_TITLE = "New conversation";
+/** A new conversation's title until its first question names it. Kept and compared in English; shown with t(NEW_TITLE). */
+export const NEW_TITLE = msg("New conversation");
 
 export const coachStore = createStore<CoachSaved>("coach.v1", COACH_EMPTY);
 

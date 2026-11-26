@@ -14,6 +14,7 @@ import {
 import type { LibriVox } from "./librivox";
 import type { Podcasts } from "./podcasts";
 import { WatchProblem, type WatchTrack } from "./watchDrive";
+import { t } from "@/lib/i18n";
 
 export interface BookPart { index: number; name: string; bytes: number; secs: number; chapter: string | null }
 export type BookSource = { kind: "file" } | { kind: "librivox" | "podcast"; id: string; page: string | null; cover: string | null };
@@ -61,7 +62,7 @@ const clockOf = (s: number) => { const t = Math.floor(s); return `${Math.floor(t
 /** Runs ffmpeg, handing over each line; resolves with its exit code and the last lines (it prints to stderr). */
 function ffmpegRun(bin: string, args: string[], onLine?: (line: string) => void, signal?: AbortSignal): Promise<{ code: number | null; lines: string[] }> {
   return new Promise((resolve, reject) => {
-    if (signal?.aborted) { reject(new Error("Cancelled.")); return; }
+    if (signal?.aborted) { reject(new Error(t("Cancelled."))); return; }
     const child = spawn(bin, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"], signal });
     const lines: string[] = [];
     const rest = { out: "", err: "" };
@@ -77,7 +78,7 @@ function ffmpegRun(bin: string, args: string[], onLine?: (line: string) => void,
     };
     child.stdout.on("data", feed("out"));
     child.stderr.on("data", feed("err"));
-    child.on("error", (e) => reject(signal?.aborted ? new Error("Cancelled.") : e));
+    child.on("error", (e) => reject(signal?.aborted ? new Error(t("Cancelled.")) : e));
     child.on("close", (code) => {
       for (const r of [rest.out, rest.err]) if (r.trim()) lines.push(r);
       resolve({ code, lines });
@@ -102,7 +103,7 @@ export class Audiobooks {
   }
 
   private dir(id: string): string {
-    if (!BOOK_ID.test(id)) throw new WatchProblem("That book isn't here any more.", "missing");
+    if (!BOOK_ID.test(id)) throw new WatchProblem(t("That book isn't here any more."), "missing");
     return path.join(this.root, id);
   }
 
@@ -117,7 +118,7 @@ export class Audiobooks {
 
   private need(id: string): Manifest {
     const m = this.read(id);
-    if (!m) throw new WatchProblem("That book isn't here any more.", "missing");
+    if (!m) throw new WatchProblem(t("That book isn't here any more."), "missing");
     return m;
   }
 
@@ -148,7 +149,7 @@ export class Audiobooks {
       if (!m) continue;
       if (m.status === "converting" && !this.running.has(m.id)) {
         m.status = "failed";
-        m.error = "The conversion was cut off when the app closed. Delete it and try again.";
+        m.error = t("The conversion was cut off when the app closed. Delete it and try again.");
         this.write(m);
       }
       books.push(this.toBook(m, watch));
@@ -172,12 +173,12 @@ export class Audiobooks {
 
   private ffmpeg(): string {
     const bin = this.host.ffmpeg();
-    if (!bin) throw new WatchProblem("Converting books needs ffmpeg on this computer.", "noFfmpeg");
+    if (!bin) throw new WatchProblem(t("Converting books needs ffmpeg on this computer."), "noFfmpeg");
     return bin;
   }
 
   private async probe(file: string): Promise<Probe> {
-    if (!path.isAbsolute(file) || !isBookFile(file)) throw new WatchProblem("Only audio files on this computer can be converted.", "notAudio");
+    if (!path.isAbsolute(file) || !isBookFile(file)) throw new WatchProblem(t("Only audio files on this computer can be converted."), "notAudio");
     const { lines } = await ffmpegRun(this.ffmpeg(), ["-hide_banner", ...INPUT_GUARD, "-i", file]);
     try { return parseProbe(lines); } catch (error) { throw new WatchProblem(`${path.basename(file)}: ${(error as Error).message}`, "unreadable"); }
   }
@@ -186,7 +187,7 @@ export class Audiobooks {
   async draft(files: string[], names: string[] = files, temp: string | null = null): Promise<Draft> {
     const named0 = new Map(files.map((f, i) => [f, names[i] ?? f]));
     const usable = files.filter((f) => isBookFile(named0.get(f)!) && isBookFile(f));
-    if (!usable.length) throw new WatchProblem("Choose a DRM-free audiobook: .m4b, .m4a, .mp3 or similar.", "notAudio");
+    if (!usable.length) throw new WatchProblem(t("Choose a DRM-free audiobook: .m4b, .m4a, .mp3 or similar."), "notAudio");
     const byName = new Map(usable.map((f) => [named0.get(f)!, f]));
     const named = sortFiles([...byName.keys()]);
     const sorted = named.map((n) => byName.get(n)!);
@@ -208,10 +209,10 @@ export class Audiobooks {
 
   /** An upload (a file dropped on the page) saved for a draft; `group` gathers the files of one book. */
   async upload(group: string, name: string, body: ReadableStream<Uint8Array> | null, length: number): Promise<string> {
-    if (!/^[\w-]{8,64}$/.test(group)) throw new WatchProblem("That upload wasn't recognised.", "problem");
-    if (!body) throw new WatchProblem("Nothing came with that file.", "empty");
-    if (!isBookFile(name)) throw new WatchProblem("Choose a DRM-free audiobook: .m4b, .m4a, .mp3 or similar.", "notAudio");
-    if (length > MAX_UPLOAD) throw new WatchProblem("That file is too big.", "tooBig");
+    if (!/^[\w-]{8,64}$/.test(group)) throw new WatchProblem(t("That upload wasn't recognised."), "problem");
+    if (!body) throw new WatchProblem(t("Nothing came with that file."), "empty");
+    if (!isBookFile(name)) throw new WatchProblem(t("Choose a DRM-free audiobook: .m4b, .m4a, .mp3 or similar."), "notAudio");
+    if (length > MAX_UPLOAD) throw new WatchProblem(t("That file is too big."), "tooBig");
     const folder = path.join(this.root, ".uploads", group);
     await mkdir(folder, { recursive: true });
     const n = readdirSync(folder).length;
@@ -225,7 +226,7 @@ export class Audiobooks {
         const { done, value } = await reader.read();
         if (done) break;
         size += value.length;
-        if (size > MAX_UPLOAD) throw new WatchProblem("That file is too big.", "tooBig");
+        if (size > MAX_UPLOAD) throw new WatchProblem(t("That file is too big."), "tooBig");
         if (!out.write(value)) await once(out, "drain");
       }
       out.end();
@@ -240,10 +241,10 @@ export class Audiobooks {
 
   /** The uploads of one group, read as a draft. */
   draftUploads(group: string): Promise<Draft> {
-    if (!/^[\w-]{8,64}$/.test(group)) throw new WatchProblem("That upload wasn't recognised.", "problem");
+    if (!/^[\w-]{8,64}$/.test(group)) throw new WatchProblem(t("That upload wasn't recognised."), "problem");
     const folder = path.join(this.root, ".uploads", group);
     const files = existsSync(folder) ? readdirSync(folder).filter((n) => !n.endsWith(".name")).map((n) => path.join(folder, n)) : [];
-    if (!files.length) throw new WatchProblem("Nothing was uploaded.", "empty");
+    if (!files.length) throw new WatchProblem(t("Nothing was uploaded."), "empty");
     const names = files.map((f) => { try { return readFileSync(`${f}.name`, "utf8"); } catch { return path.basename(f); } });
     return this.draft(files, names, folder).catch((error) => { rmSync(folder, { recursive: true, force: true }); throw error; });
   }
@@ -257,7 +258,7 @@ export class Audiobooks {
   /** Converts a draft. Each draft converts once. */
   convert(draftId: string, split: Partial<Split>): Book {
     const d = this.drafts.get(draftId);
-    if (!d || Date.now() - d.at > DRAFT_TTL) { this.dropDraft(draftId); throw new WatchProblem("That import expired. Choose the file again.", "expired"); }
+    if (!d || Date.now() - d.at > DRAFT_TTL) { this.dropDraft(draftId); throw new WatchProblem(t("That import expired. Choose the file again."), "expired"); }
     this.drafts.delete(draftId);
     const m = this.create(titleFromFiles(d.names), split, { kind: "file" });
     return this.launch(m, async (signal) => {
@@ -286,7 +287,7 @@ export class Audiobooks {
         let done = 0;
         for (const [i, s] of detail.sections.entries()) {
           const target = path.join(folder, `${String(i + 1).padStart(4, "0")}.mp3`);
-          const say = (got: number) => this.report(m.id, 0.3 * Math.min(1, known ? (done + got) / known : (i + (s.bytes ? got / s.bytes : 0)) / detail.sections.length), `Downloading section ${i + 1} of ${detail.sections.length}`);
+          const say = (got: number) => this.report(m.id, 0.3 * Math.min(1, known ? (done + got) / known : (i + (s.bytes ? got / s.bytes : 0)) / detail.sections.length), t("Downloading section {n} of {total}", { n: i + 1, total: detail.sections.length }));
           say(0);
           done += await this.host.librivox.download(s, target, signal, say);
           files.push(target);
@@ -315,7 +316,7 @@ export class Audiobooks {
       try {
         const ext = path.extname(new URL(ep.url).pathname).slice(1).toLowerCase();
         const file = path.join(folder, `episode.${isBookFile(`x.${ext}`) ? ext : "mp3"}`);
-        await this.fetchEpisode(ep.url, file, ep.bytes, signal, (f) => this.report(m.id, 0.3 * f, "Downloading the episode"));
+        await this.fetchEpisode(ep.url, file, ep.bytes, signal, (f) => this.report(m.id, 0.3 * f, t("Downloading the episode")));
         await this.encode(m, [file], [file], [], signal, 0.3);
       } finally {
         rmSync(folder, { recursive: true, force: true });
@@ -331,10 +332,10 @@ export class Audiobooks {
     const out = createWriteStream(target);
     try {
       const answer = await this.get(url, { signal: AbortSignal.any([signal, stall.signal]) });
-      if (!/^https?:$/.test(new URL(answer.url || url).protocol)) throw new Error("The episode's download left http(s), so it was stopped.");
-      if (!answer.ok || !answer.body) throw new Error(`The episode didn't download (${answer.status}).`);
+      if (!/^https?:$/.test(new URL(answer.url || url).protocol)) throw new Error(t("The episode's download left http(s), so it was stopped."));
+      if (!answer.ok || !answer.body) throw new Error(t("The episode didn't download ({status}).", { status: answer.status }));
       const declared = Number(answer.headers.get("content-length"));
-      if (declared > MAX_EPISODE) { await answer.body.cancel(); throw new Error("That episode is over 1 GB, so it was stopped."); }
+      if (declared > MAX_EPISODE) { await answer.body.cancel(); throw new Error(t("That episode is over 1 GB, so it was stopped.")); }
       const total = declared > 0 ? declared : expected ?? 0;
       let got = 0;
       const reader = answer.body.getReader();
@@ -343,16 +344,16 @@ export class Audiobooks {
         if (done) break;
         touch();
         got += value.length;
-        if (got > MAX_EPISODE) throw new Error("That episode is over 1 GB, so it was stopped.");
+        if (got > MAX_EPISODE) throw new Error(t("That episode is over 1 GB, so it was stopped."));
         if (!out.write(value)) await once(out, "drain");
         if (total) onShare(Math.min(1, got / total));
       }
       out.end();
       await once(out, "finish");
-      if (!got) throw new Error("The episode's download was empty.");
+      if (!got) throw new Error(t("The episode's download was empty."));
     } catch (error) {
       out.destroy();
-      if (stall.signal.aborted && !signal.aborted) throw new Error("The download stalled. Try again.");
+      if (stall.signal.aborted && !signal.aborted) throw new Error(t("The download stalled. Try again."));
       throw error;
     } finally {
       clearTimeout(timer);
@@ -375,7 +376,7 @@ export class Audiobooks {
   private launch(m: Manifest, work: (signal: AbortSignal) => Promise<void>): Book {
     const abort = new AbortController();
     this.running.set(m.id, abort);
-    this.report(m.id, 0, "Starting");
+    this.report(m.id, 0, t("Starting"));
     void work(abort.signal)
       .then(() => { m.status = "ready"; m.error = null; })
       .catch((error: unknown) => {
@@ -400,10 +401,10 @@ export class Audiobooks {
 
   private async ff(args: string[], signal: AbortSignal, onLine?: (line: string) => void): Promise<void> {
     const { code, lines } = await ffmpegRun(this.ffmpeg(), args, onLine, signal);
-    if (signal.aborted) throw new Error("Cancelled.");
+    if (signal.aborted) throw new Error(t("Cancelled."));
     if (code !== 0) {
       const tail = lines.filter((l) => !l.includes("=")).slice(-3).join(" ").trim();
-      throw new Error(`ffmpeg couldn't convert it${tail ? `: ${tail}` : ""}.`.slice(0, 400));
+      throw new Error((tail ? t("ffmpeg couldn't convert it: {reason}.", { reason: tail }) : t("ffmpeg couldn't convert it.")).slice(0, 400));
     }
   }
 
@@ -420,9 +421,9 @@ export class Audiobooks {
   private async encode(m: Manifest, files: string[], names: string[], titles: string[], signal: AbortSignal, start = 0): Promise<void> {
     const span = 1 - start;
     const say = (p: number, message: string) => this.report(m.id, start + span * p, message);
-    say(0, "Reading the book");
+    say(0, t("Reading the book"));
     const probes: Probe[] = [];
-    for (const f of files) { if (signal.aborted) throw new Error("Cancelled."); probes.push(await this.probe(f)); }
+    for (const f of files) { if (signal.aborted) throw new Error(t("Cancelled.")); probes.push(await this.probe(f)); }
     const tags = probes[0]?.tags ?? {};
     if (m.source.kind === "file") {
       // A joined book's first file is titled after its first chapter, so only one file's title names the book.
@@ -449,8 +450,8 @@ export class Audiobooks {
       const graph = joined ? ["-filter_complex", `${Audiobooks.join(files.length)};[book]${detect}[quiet]`, "-map", "[quiet]"] : ["-map", "0:a:0", "-af", `aformat=channel_layouts=mono,${detect}`];
       const pauses = pauseCollector();
       await this.ff(["-hide_banner", "-nostats", ...inputs, ...graph, "-vn", "-progress", "pipe:1", "-f", "null", "-"], signal, (line) => {
-        const t = /^out_time_us=(\d+)$/.exec(line);
-        if (t) say((Math.min(Number(t[1]) / 1e6 / Math.max(m.secs, 1), 1)) * PAUSE_SHARE, "Finding pauses between sentences");
+        const tm = /^out_time_us=(\d+)$/.exec(line);
+        if (tm) say((Math.min(Number(tm[1]) / 1e6 / Math.max(m.secs, 1), 1)) * PAUSE_SHARE, t("Finding pauses between sentences"));
         else pauses.push(line);
       });
       const cuts = pauseCuts(m.secs, plan.partSecs, pauses.finish(m.secs));
@@ -461,15 +462,15 @@ export class Audiobooks {
       "-hide_banner", "-nostats", "-y", ...inputs, ...map, "-vn", "-map_metadata", "-1", "-ac", "1", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "64k",
       "-f", "segment", ...segments, "-segment_format", "mp3", "-reset_timestamps", "1", "-progress", "pipe:1", path.join(work, "segment_%05d.mp3"),
     ], signal, (line) => {
-      const t = /^out_time_us=(\d+)$/.exec(line);
-      if (t && m.secs > 0) {
-        const secs = Number(t[1]) / 1e6;
-        say(from + Math.min(secs / m.secs, 1) * (CONVERT_END - from), `Converting ${clockOf(secs)} of ${clockOf(m.secs)}`);
+      const tm = /^out_time_us=(\d+)$/.exec(line);
+      if (tm && m.secs > 0) {
+        const secs = Number(tm[1]) / 1e6;
+        say(from + Math.min(secs / m.secs, 1) * (CONVERT_END - from), t("Converting {done} of {total}", { done: clockOf(secs), total: clockOf(m.secs) }));
       }
     });
 
     const list = readdirSync(work).filter((n) => /^segment_\d+\.mp3$/.test(n)).sort();
-    if (!list.length) throw new Error("ffmpeg made no audio. Is it a DRM-free audiobook?");
+    if (!list.length) throw new Error(t("ffmpeg made no audio. Is it a DRM-free audiobook?"));
     await this.foldTail(work, list, signal);
 
     const stem = fileStem(m.title);
@@ -485,7 +486,7 @@ export class Audiobooks {
       await this.ff(["-hide_banner", "-nostats", "-y", ...INPUT_GUARD, "-i", path.join(work, seg), "-map", "0:a", "-c", "copy", "-map_metadata", "-1", "-id3v2_version", "3",
         ...Object.entries(tag).flatMap(([k, v]) => ["-metadata", `${k}=${v}`]), target], signal);
       parts.push({ index, name, bytes: statSync(target).size, secs: (await this.probe(target)).secs, chapter });
-      say(CONVERT_END + (index / list.length) * (1 - CONVERT_END), `Tagging part ${index} of ${list.length}`);
+      say(CONVERT_END + (index / list.length) * (1 - CONVERT_END), t("Tagging part {n} of {total}", { n: index, total: list.length }));
     }
     m.parts = parts;
   }
@@ -521,10 +522,10 @@ export class Audiobooks {
   /** The parts still to send, in play order: from the resume point, not already on the watch. */
   toSend(id: string, watch: readonly WatchTrack[]): { book: Book; parts: { file: string; name: string; bytes: number; title: string }[] } {
     const m = this.need(id);
-    if (m.status !== "ready") throw new WatchProblem("That book isn't ready yet.", "notReady");
+    if (m.status !== "ready") throw new WatchProblem(t("That book isn't ready yet."), "notReady");
     const book = this.toBook(m, watch);
     const parts = book.parts.filter((p) => p.index >= book.resume && !p.onWatch)
-      .map((p) => ({ file: path.join(this.dir(id), p.name), name: p.name, bytes: p.bytes, title: `${book.title} · part ${p.index}` }));
+      .map((p) => ({ file: path.join(this.dir(id), p.name), name: p.name, bytes: p.bytes, title: t("{title} · part {n}", { title: book.title, n: p.index }) }));
     return { book, parts };
   }
 
@@ -540,9 +541,9 @@ export class Audiobooks {
    */
   continueFrom(id: string, index: number, watch: readonly WatchTrack[]): WatchTrack[] {
     const m = this.need(id);
-    if (m.status !== "ready") throw new WatchProblem("That book isn't ready yet.", "notReady");
+    if (m.status !== "ready") throw new WatchProblem(t("That book isn't ready yet."), "notReady");
     const at = Math.round(Number(index));
-    if (!m.parts.some((p) => p.index === at)) throw new WatchProblem("That part isn't in this book.", "missing");
+    if (!m.parts.some((p) => p.index === at)) throw new WatchProblem(t("That part isn't in this book."), "missing");
     m.resume = at;
     this.write(m);
     const earlier = m.parts.filter((p) => p.index < at);

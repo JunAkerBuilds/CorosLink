@@ -1,4 +1,5 @@
 // The Studio pages' calls to the main process (desktop/main/watchface/studio.ts), at /api/desktop/studio.
+import { language, locale, t } from "@/lib/i18n";
 import type { WatchfaceCarriedPreferences } from "../watchface/engine/watchfaceCarriedPreferences";
 import type { CorosWatchfaceDesignState, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../watchface/types";
 import type { WatchfaceBuildInput } from "../watchface/archive/build";
@@ -21,7 +22,7 @@ const BASE = "/api/desktop/studio";
 
 async function parse<T>(answer: Response): Promise<T> {
   const body = (await answer.json().catch(() => ({}))) as T & { error?: { code: string; message: string } };
-  if (!answer.ok || body.error) throw new StudioProblem(body.error?.message ?? "That didn't work.", body.error?.code ?? "problem");
+  if (!answer.ok || body.error) throw new StudioProblem(body.error?.message ?? t("That didn't work."), body.error?.code ?? "problem");
   return body;
 }
 
@@ -152,20 +153,20 @@ export const corosPicture = (catalog: CorosCatalog, id: string) => `${BASE}/coro
 export const openCorosFace = (catalog: CorosCatalog, id: string, watch: string, name?: string) =>
   post<{ project: ProjectSummary }>(`/coros/faces/${id}/open`, { catalog, watch, name }).then((b) => b.project);
 
-export const said = (e: unknown): string => (e instanceof Error ? e.message : "That didn't work.");
+export const said = (e: unknown): string => (e instanceof Error ? e.message : t("That didn't work."));
 
 /** "12 minutes ago", "Yesterday", "3 Nov". */
 export function edited(at: number | string, now = Date.now()): string {
   const time = typeof at === "string" ? Date.parse(at) : at;
   const mins = Math.round((now - time) / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins} min ago`;
+  if (mins < 1) return t("Just now");
+  if (mins < 60) return t("{mins} min ago", { mins });
   const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} h ago`;
+  if (hours < 24) return t("{hours} h ago", { hours });
   const days = Math.round(hours / 24);
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days} days ago`;
-  return new Date(time).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (days === 1) return t("Yesterday");
+  if (days < 7) return t("{days} days ago", { days });
+  return new Date(time).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
 }
 
 /** The watch Studio makes new faces for, remembered on this computer. */

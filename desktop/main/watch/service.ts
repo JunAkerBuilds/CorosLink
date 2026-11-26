@@ -12,6 +12,7 @@ import type { Sealer } from "../secrets";
 import type { LocalStore } from "../localStore";
 import { parseWatchKey } from "./engine/systemBind";
 import { HelperProblem, type HelperEvent, type WatchDriver } from "./helper";
+import { t } from "@/lib/i18n";
 
 export type Region = "us" | "eu" | "sg" | "cn";
 const REGIONS: readonly Region[] = ["us", "eu", "sg", "cn"];
@@ -157,9 +158,9 @@ export class LocalWatch {
 
   /** One activity-page exchange with the connected watch: read (0x9E) or write (0x9F), raw bytes. */
   async activityExchange(op: "read" | "write", payload: Buffer): Promise<Buffer> {
-    if (!this.connected) throw new HelperProblem("Connect the watch first.");
+    if (!this.connected) throw new HelperProblem(t("Connect the watch first."));
     const answer = await this.need().call<{ payload: string }>("activityScreens", { op, payload: payload.toString("hex") });
-    if (typeof answer.payload !== "string" || !/^([0-9a-f]{2})*$/.test(answer.payload)) throw new HelperProblem("The watch sent something unexpected.");
+    if (typeof answer.payload !== "string" || !/^([0-9a-f]{2})*$/.test(answer.payload)) throw new HelperProblem(t("The watch sent something unexpected."));
     return Buffer.from(answer.payload, "hex");
   }
 
@@ -208,7 +209,7 @@ export class LocalWatch {
   // ── Key ──
 
   private async key(): Promise<string> {
-    if (!existsSync(this.keyFile)) throw new HelperProblem("Sign in to COROS once to get your watch key.");
+    if (!existsSync(this.keyFile)) throw new HelperProblem(t("Sign in to COROS once to get your watch key."));
     const { text, stale } = await this.host.sealer.decrypt(await readFile(this.keyFile));
     if (stale) await writeFile(this.keyFile, await this.host.sealer.encrypt(text), { mode: 0o600 });
     return text;
@@ -244,12 +245,12 @@ export class LocalWatch {
   // ── Link ──
 
   private need(): WatchDriver {
-    if (!this.helper) throw new HelperProblem("Local mode needs the Bluetooth helper, and this copy of C-LINK doesn't have it. Build it with cargo build --release in native/ble, then reopen C-LINK.");
+    if (!this.helper) throw new HelperProblem(t("Local mode needs the Bluetooth helper, and this copy of C-LINK doesn't have it. Build it with cargo build --release in native/ble, then reopen C-LINK."));
     return this.helper;
   }
 
   private async run<T>(busy: NonNullable<LocalWatch["busy"]>, work: () => Promise<T>): Promise<T> {
-    if (this.busy) throw new HelperProblem("The watch is busy. Try again when it's done.");
+    if (this.busy) throw new HelperProblem(t("The watch is busy. Try again when it's done."));
     this.busy = busy;
     this.lastProblem = null;
     try { return await work(); } catch (error) {
@@ -261,8 +262,8 @@ export class LocalWatch {
   private async hello(): Promise<void> {
     const answer = await this.need().call<{ bluetooth: string }>("hello");
     this.bluetooth = answer.bluetooth;
-    if (answer.bluetooth === "off") throw new HelperProblem("Turn on Bluetooth to connect your watch.");
-    if (answer.bluetooth === "denied") throw new HelperProblem("Allow Bluetooth for C-LINK in System Settings → Privacy & Security → Bluetooth.");
+    if (answer.bluetooth === "off") throw new HelperProblem(t("Turn on Bluetooth to connect your watch."));
+    if (answer.bluetooth === "denied") throw new HelperProblem(t("Allow Bluetooth for C-LINK in System Settings → Privacy & Security → Bluetooth."));
   }
 
   private async scan(): Promise<Found[]> {
@@ -297,8 +298,8 @@ export class LocalWatch {
   /** Connects to the paired watch if it isn't connected, in Local mode only. */
   private async ensureConnected(): Promise<void> {
     const paired = this.saved.paired;
-    if (!paired) throw new HelperProblem("Pair a watch first.");
-    if (!this.host.localMode()) throw new HelperProblem("Turn on Local mode to change the watch from here.");
+    if (!paired) throw new HelperProblem(t("Pair a watch first."));
+    if (!this.host.localMode()) throw new HelperProblem(t("Turn on Local mode to change the watch from here."));
     // A sync or connection under way (often the one the page itself started): wait for it rather than refuse.
     for (let waited = 0; this.busy && waited < 120_000; waited += 250) await new Promise((r) => setTimeout(r, 250));
     if (!this.connected) await this.run("connecting", () => this.connect(paired.name));
@@ -312,9 +313,9 @@ export class LocalWatch {
 
   /** Whether Studio can install on the paired watch, and if not, why (Studio's Send → Watch). */
   faceConnection(): { connected: boolean; reason?: string; model?: string } {
-    if (!this.helper) return { connected: false, reason: "Installing over Bluetooth needs Local mode, which needs the Bluetooth helper." };
-    if (!this.host.localMode()) return { connected: false, reason: "Installing over Bluetooth needs Local mode: turn it on from the Watch page." };
-    if (!this.saved.paired) return { connected: false, reason: "Pair your watch on the Watch page to install faces over Bluetooth." };
+    if (!this.helper) return { connected: false, reason: t("Installing over Bluetooth needs Local mode, which needs the Bluetooth helper.") };
+    if (!this.host.localMode()) return { connected: false, reason: t("Installing over Bluetooth needs Local mode: turn it on from the Watch page.") };
+    if (!this.saved.paired) return { connected: false, reason: t("Pair your watch on the Watch page to install faces over Bluetooth.") };
     return { connected: true, model: this.saved.paired.model };
   }
 
@@ -341,9 +342,9 @@ export class LocalWatch {
     const base = paired ? { name: paired.name, display: paired.display, model: this.connected?.model ?? paired.model } : {};
     const connected = !!this.connected;
     const battery = this.connected?.battery;
-    if (!this.helper) return { usable: false, connected, ...base, reason: "Sending to the watch over Bluetooth needs Local mode, which needs the Bluetooth helper." };
-    if (!this.host.localMode()) return { usable: false, connected, ...base, reason: "Turn on Local mode on the Watch page to send to the watch over Bluetooth." };
-    if (!paired) return { usable: false, connected, reason: "Pair your watch on the Watch page to send to it over Bluetooth." };
+    if (!this.helper) return { usable: false, connected, ...base, reason: t("Sending to the watch over Bluetooth needs Local mode, which needs the Bluetooth helper.") };
+    if (!this.host.localMode()) return { usable: false, connected, ...base, reason: t("Turn on Local mode on the Watch page to send to the watch over Bluetooth.") };
+    if (!paired) return { usable: false, connected, reason: t("Pair your watch on the Watch page to send to it over Bluetooth.") };
     return { usable: true, connected, ...base, ...(battery !== undefined ? { battery } : {}) };
   }
 
@@ -352,7 +353,7 @@ export class LocalWatch {
 
   /** Sends one route (skipped when the watch holds the same track ID and CRC16), reporting progress as it goes. */
   async syncRoute(route: RouteForWatch, progress?: (phase: string, percent?: number) => void): Promise<RouteSent> {
-    if (route.points.length < 2 || route.points.length > 40_000) throw new HelperProblem("A route must contain between 2 and 40,000 GPS points to sync.");
+    if (route.points.length < 2 || route.points.length > 40_000) throw new HelperProblem(t("A route must contain between 2 and 40,000 GPS points to sync."));
     await this.ensureConnected();
     return this.run("route", async () => {
       const file = path.join(this.folder, `route-${cryptoId()}.json`);
@@ -387,14 +388,14 @@ export class LocalWatch {
 
   /** Hands the watch COROS's task id (it checks it's ready first); answers the task list. */
   async startMapTask(taskId: string): Promise<MapTask[]> {
-    if (!isMapTaskId(taskId)) throw new HelperProblem("COROS returned an invalid map download id.");
+    if (!isMapTaskId(taskId)) throw new HelperProblem(t("COROS returned an invalid map download id."));
     await this.ensureConnected();
     return this.run("maps", async () => (await this.need().call<{ tasks: MapTask[] }>("mapStart", { taskId })).tasks);
   }
 
   /** Takes one download off the watch's list. Never an empty id or eight 0xFF bytes: the watch reads those as every task. */
   async removeMapTask(taskId: string): Promise<MapTask[]> {
-    if (!isMapTaskId(taskId)) throw new HelperProblem("Choose a download from the watch's list.");
+    if (!isMapTaskId(taskId)) throw new HelperProblem(t("Choose a download from the watch's list."));
     await this.ensureConnected();
     return this.run("maps", async () => (await this.need().call<{ tasks: MapTask[] }>("mapRemove", { taskId })).tasks);
   }
@@ -425,10 +426,10 @@ export class LocalWatch {
   /** Connects if needed, writes the waiting changes, reads the watch, and writes what it read to the store. */
   async sync(): Promise<LastSync> {
     const paired = this.saved.paired;
-    if (!paired) throw new HelperProblem("Pair a watch first.");
-    if (!this.host.localMode()) throw new HelperProblem("Turn on Local mode to sync with the watch here.");
+    if (!paired) throw new HelperProblem(t("Pair a watch first."));
+    if (!this.host.localMode()) throw new HelperProblem(t("Turn on Local mode to sync with the watch here."));
     const store = this.host.store();
-    if (!store) throw new HelperProblem("This app isn't keeping data on this computer.");
+    if (!store) throw new HelperProblem(t("This app isn't keeping data on this computer."));
     return this.run("syncing", async () => {
       if (!this.connected) { this.step = { step: "searching" }; await this.connect(paired.name); }
       const changes = store.list("watch.change").map((c) => ({ id: c.id, body: JSON.stringify(c.body), version: c.version }));
@@ -515,15 +516,15 @@ export class LocalWatch {
         case "POST /signin": {
           const email = String(body.email ?? "").trim(), password = String(body.password ?? "");
           const region = REGIONS.includes(body.region as Region) ? (body.region as Region) : "us";
-          if (!email || !password) return problem("Type your COROS email and password.");
+          if (!email || !password) return problem(t("Type your COROS email and password."));
           await this.run("signingIn", () => this.signIn(email, password, region, body.takeOver === true));
           return json(await this.status());
         }
         case "POST /scan": await this.scan(); return json(await this.status());
         case "POST /pair": {
-          if (!this.host.localMode()) return problem("Turn on Local mode first.");
+          if (!this.host.localMode()) return problem(t("Turn on Local mode first."));
           const name = String(body.name ?? "");
-          if (!name.startsWith("COROS")) return problem("Pick a COROS watch.");
+          if (!name.startsWith("COROS")) return problem(t("Pick a COROS watch."));
           await this.pair(name);
           return json(await this.status());
         }
@@ -534,7 +535,7 @@ export class LocalWatch {
         case "POST /forget-key": this.unpair(); rmSync(this.keyFile, { force: true }); this.saved.account = null; this.save(); return json(await this.status());
         case "POST /autosync": {
           const minutes = Number(body.minutes);
-          if (!(AUTO_SYNC_MINUTES as readonly number[]).includes(minutes)) return problem("Pick off, or one of the times on the list.");
+          if (!(AUTO_SYNC_MINUTES as readonly number[]).includes(minutes)) return problem(t("Pick off, or one of the times on the list."));
           this.saved.autoSyncMinutes = minutes;
           this.save();
           this.schedule();
@@ -544,7 +545,7 @@ export class LocalWatch {
         case "GET /settings": return json(await this.onWatch("settings"));
         case "POST /setting": {
           const key = String(body.key ?? ""), value = Number(body.value);
-          if (!/^[a-zA-Z]{1,40}$/.test(key) || !Number.isInteger(value) || value < 0 || value > 15) return problem("Pick a setting and a value.");
+          if (!/^[a-zA-Z]{1,40}$/.test(key) || !Number.isInteger(value) || value < 0 || value > 15) return problem(t("Pick a setting and a value."));
           return json(await this.onWatch("setSwitch", { key, value }));
         }
         case "POST /profile": {
@@ -552,11 +553,11 @@ export class LocalWatch {
           for (const k of ["maxHR", "restingHR", "thresholdHR", "thresholdPace"] as const) {
             if (body[k] === undefined) continue;
             const n = Number(body[k]);
-            if (!Number.isInteger(n) || n <= 0) return problem("Type whole numbers.");
+            if (!Number.isInteger(n) || n <= 0) return problem(t("Type whole numbers."));
             fields[k] = n;
           }
           if (body.zoneType !== undefined) {
-            if (!["maxHR", "reserve", "threshold"].includes(String(body.zoneType))) return problem("Pick how the zones are set.");
+            if (!["maxHR", "reserve", "threshold"].includes(String(body.zoneType))) return problem(t("Pick how the zones are set."));
             fields.zoneType = String(body.zoneType);
           }
           return json(await this.onWatch("setProfile", fields));
@@ -564,14 +565,14 @@ export class LocalWatch {
         case "POST /sleep": {
           const bedtime = Number(body.bedtime), wake = Number(body.wake);
           const ok = (n: number) => Number.isInteger(n) && n >= 0 && n < 1440;
-          if (!ok(bedtime) || !ok(wake)) return problem("Pick a bedtime and a wake time.");
+          if (!ok(bedtime) || !ok(wake)) return problem(t("Pick a bedtime and a wake time."));
           return json(await this.onWatch("setSleep", { bedtime, wake }));
         }
         case "POST /ring": return json(await this.onWatch("ring"));
         case "GET /faces": return json(await this.faces());
         case "POST /faces/show": {
           const slot = Number(body.slot), faceId = Number(body.faceId);
-          if (!Number.isInteger(slot) || slot < 0 || slot > 9 || !Number.isInteger(faceId) || faceId < 0 || faceId > 0xfffffffe) return problem("Pick a face on the watch.");
+          if (!Number.isInteger(slot) || slot < 0 || slot > 9 || !Number.isInteger(faceId) || faceId < 0 || faceId > 0xfffffffe) return problem(t("Pick a face on the watch."));
           return json(await this.onWatch("showFace", { slot, faceId }));
         }
         // Where the watch's weather is for: a place picked on the Watch page, or none.
@@ -579,7 +580,7 @@ export class LocalWatch {
           if (body.place === null) { this.saved.weather = null; this.save(); return json(await this.status()); }
           const p = (body.place ?? {}) as Record<string, unknown>;
           const latitude = Number(p.latitude), longitude = Number(p.longitude), city = String(p.city ?? "").trim().slice(0, 40);
-          if (!(Math.abs(latitude) <= 90) || !(Math.abs(longitude) <= 180)) return problem("Pick a place for the weather.");
+          if (!(Math.abs(latitude) <= 90) || !(Math.abs(longitude) <= 180)) return problem(t("Pick a place for the weather."));
           // Two decimals (about a kilometre) is all the forecast needs, and all that leaves the computer.
           this.saved.weather = { latitude: Math.round(latitude * 100) / 100, longitude: Math.round(longitude * 100) / 100, city };
           this.save();
@@ -597,18 +598,18 @@ export class LocalWatch {
           return json({ places: await findPlaces(q) });
         }
         case "POST /weather/send": {
-          if (!this.saved.weather) return problem("Pick a place for the weather first.");
+          if (!this.saved.weather) return problem(t("Pick a place for the weather first."));
           await this.onWatch("weather", { place: this.saved.weather, folder: this.folder });
           this.saved.weatherSentAt = new Date().toISOString();
           this.save();
           return json(await this.status());
         }
-        default: return problem("Not a watch action.", "notFound", 404);
+        default: return problem(t("Not a watch action."), "notFound", 404);
       }
     } catch (error) {
       if (error instanceof HelperProblem) return problem(error.message, "watch");
       this.host.log(`Watch ${route} failed: ${String(error)}`);
-      return problem("That didn't work.", "internal", 500);
+      return problem(t("That didn't work."), "internal", 500);
     }
   }
 }
@@ -617,7 +618,7 @@ export class LocalWatch {
 async function findPlaces(name: string): Promise<{ latitude: number; longitude: number; city: string; region: string }[]> {
   const url = `https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({ name, count: "5", language: "en", format: "json" })}`;
   const answer = await fetch(url, { signal: AbortSignal.timeout(8000) }).catch(() => null);
-  if (!answer?.ok) throw new HelperProblem("Places couldn't be looked up. Check the connection.");
+  if (!answer?.ok) throw new HelperProblem(t("Places couldn't be looked up. Check the connection."));
   const body = (await answer.json().catch(() => ({}))) as { results?: { name?: string; latitude?: number; longitude?: number; admin1?: string; country?: string }[] };
   return (body.results ?? []).filter((r) => typeof r.latitude === "number" && typeof r.longitude === "number" && r.name)
     .map((r) => ({ latitude: r.latitude!, longitude: r.longitude!, city: r.name!, region: [r.admin1, r.country].filter(Boolean).join(", ") }));

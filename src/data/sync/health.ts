@@ -4,6 +4,7 @@ import type { EnergyDayBody, NativeDayVitals, NativeSleepNight } from "./native"
 import { refToDate } from "./native";
 import { dayKey, parseDay } from "@/lib/format";
 import { addDays, mean, present } from "@/lib/health";
+import { t } from "@/lib/i18n";
 
 interface Item<B> { id: string; body: B }
 
@@ -105,20 +106,20 @@ export function healthFromItems(
   };
   const whole = (v: number) => String(Math.round(v));
   row("HRV", "cyan", hrv, (v) => `${v} ms`, whole);
-  row("Resting heart rate", "rose", rhr, (v) => `${v} bpm`, whole);
-  row("Sleep", "violet", sleep, hoursMinutes, hoursMinutes);
-  row("Stress", "coral", stress, String, whole);
+  row(t("Resting heart rate"), "rose", rhr, (v) => `${v} bpm`, whole);
+  row(t("Sleep"), "violet", sleep, hoursMinutes, hoursMinutes);
+  row(t("Stress"), "coral", stress, String, whole);
   const nightScore = daily(first, count, (k) => nightBy.get(k)?.score ?? dayBy.get(k)?.sleepScore);
-  row("Sleep score", "violet", nightScore, String, whole);
-  row("Energy on waking", "mint", waking, (v) => String(Math.round(v)), whole);
+  row(t("Sleep score"), "violet", nightScore, String, whole);
+  row(t("Energy on waking"), "mint", waking, (v) => String(Math.round(v)), whole);
 
   const all: TrendSeries[] = [
     { id: "hrv", name: "HRV", hue: "cyan", unit: " ms", format: "int", values: hrv },
-    { id: "rhr", name: "Resting heart rate", hue: "rose", unit: " bpm", format: "int", values: rhr },
-    { id: "sleep", name: "Sleep", hue: "violet", unit: "", format: "hours", values: sleep.map((m) => (m == null ? null : m / 60)) },
-    { id: "stress", name: "Stress", hue: "coral", unit: "", format: "int", values: stress },
-    { id: "steps", name: "Steps", hue: "orange", unit: "", format: "thousands", values: steps },
-    { id: "energy", name: "Energy on waking", hue: "mint", unit: "", format: "int", values: waking },
+    { id: "rhr", name: t("Resting heart rate"), hue: "rose", unit: " bpm", format: "int", values: rhr },
+    { id: "sleep", name: t("Sleep"), hue: "violet", unit: "", format: "hours", values: sleep.map((m) => (m == null ? null : m / 60)) },
+    { id: "stress", name: t("Stress"), hue: "coral", unit: "", format: "int", values: stress },
+    { id: "steps", name: t("Steps"), hue: "orange", unit: "", format: "thousands", values: steps },
+    { id: "energy", name: t("Energy on waking"), hue: "mint", unit: "", format: "int", values: waking },
   ];
-  return { lastDay, energyNow, night, morning, trends: all.filter((t) => t.values.some((v) => v != null)) };
+  return { lastDay, energyNow, night, morning, trends: all.filter((series) => series.values.some((v) => v != null)) };
 }

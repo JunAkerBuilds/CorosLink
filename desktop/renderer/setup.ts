@@ -1,5 +1,6 @@
 // First-run setup as the main process keeps it (desktop/main/setup.ts), and whether to show it at launch.
 import { useEffect, useState } from "react";
+import { t } from "@/lib/i18n";
 import { navigate } from "./router";
 import { SETUP_PATH } from "./setupFlow";
 
@@ -31,7 +32,7 @@ export async function readSetup(): Promise<SetupState | null> {
 
 export async function changeSetup(change: { setupDone?: boolean; sports?: SportTile[]; openAtLogin?: boolean; weeklyBackup?: boolean }): Promise<SetupState> {
   const answer = await fetch("/api/desktop/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(change) });
-  if (!answer.ok) throw new Error("That didn't save.");
+  if (!answer.ok) throw new Error(t("That didn't save."));
   return (await answer.json()) as SetupState;
 }
 

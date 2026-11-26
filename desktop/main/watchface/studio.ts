@@ -41,6 +41,7 @@ import { AccountProblem, type CorosAccount } from "./corosAccount";
 import type { CorosCatalog } from "./corosMobile";
 import { OfficialAssetLibrary, OfficialProblem } from "./officialAssets";
 import { GoogleFonts, GoogleFontsProblem } from "./googleFonts";
+import { t } from "@/lib/i18n";
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const problem = (message: string, code = "problem", status = 400) => json({ error: { code, message } }, status);
@@ -113,14 +114,14 @@ export function templatesFor(watch: WatchfaceTarget): { savedAt: string; themes:
 
 function themeFor(watch: WatchfaceTarget, id: string): CorosWatchfaceTheme {
   const theme = templatesFor(watch).themes.find((t) => t.id === id);
-  if (!theme?.packageUrl) throw new StudioProblem("That template isn't in the catalog.", "noTemplate", 404);
+  if (!theme?.packageUrl) throw new StudioProblem(t("That template isn't in the catalog."), "noTemplate", 404);
   return theme;
 }
 
 export function sanitizeProjectName(value: unknown): string {
   // eslint-disable-next-line no-control-regex
   const name = String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim();
-  if (!name || name.length > 80) throw new StudioProblem("Project names must contain between 1 and 80 characters.", "badName");
+  if (!name || name.length > 80) throw new StudioProblem(t("Project names must contain between 1 and 80 characters."), "badName");
   return name;
 }
 
@@ -149,16 +150,16 @@ function carriedOf(value: unknown): { carried?: WatchfaceCarriedPreferences } {
 }
 
 function checkDesign(design: unknown): CorosWatchfaceDesignState {
-  if (!design || typeof design !== "object" || (design as { version?: unknown }).version !== 1) throw new StudioProblem("The watchface project design is invalid.", "badDesign");
-  if (Buffer.byteLength(JSON.stringify(design), "utf8") > MAX_PROJECT) throw new StudioProblem("The watchface project is too large to save.", "tooBig", 413);
+  if (!design || typeof design !== "object" || (design as { version?: unknown }).version !== 1) throw new StudioProblem(t("The watchface project design is invalid."), "badDesign");
+  if (Buffer.byteLength(JSON.stringify(design), "utf8") > MAX_PROJECT) throw new StudioProblem(t("The watchface project is too large to save."), "tooBig", 413);
   return design as CorosWatchfaceDesignState;
 }
 
 function pngFromDataUrl(value: unknown): Buffer | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string" || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) throw new StudioProblem("The preview is not a PNG image.", "badPreview");
+  if (typeof value !== "string" || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) throw new StudioProblem(t("The preview is not a PNG image."), "badPreview");
   const bytes = Buffer.from(value.slice(22), "base64");
-  if (!bytes.length || bytes.length > MAX_PREVIEW || bytes.readUInt32BE(0) !== 0x89504e47) throw new StudioProblem("The preview is not a PNG image.", "badPreview");
+  if (!bytes.length || bytes.length > MAX_PREVIEW || bytes.readUInt32BE(0) !== 0x89504e47) throw new StudioProblem(t("The preview is not a PNG image."), "badPreview");
   return bytes;
 }
 
@@ -185,13 +186,13 @@ function buildInWorker(starter: Buffer, input: WatchfaceBuildInput, script: stri
       settled = true; clearTimeout(timer); action();
       void worker.terminate();
     };
-    const timer = setTimeout(() => finish(() => reject(new Error("The watch face took too long to build."))), 120_000);
+    const timer = setTimeout(() => finish(() => reject(new Error(t("The watch face took too long to build.")))), 120_000);
     worker.once("message", (answer: ArchiveWorkerResponse) => finish(() => {
       if ("error" in answer) reject(new StudioProblem(answer.error, "buildFailed"));
       else resolve(Buffer.from(answer.archive.buffer, answer.archive.byteOffset, answer.archive.byteLength));
     }));
     worker.once("error", () => finish(() => { inProcess().then(resolve, reject); }));
-    worker.once("exit", () => finish(() => reject(new Error("The watch-face builder stopped unexpectedly."))));
+    worker.once("exit", () => finish(() => reject(new Error(t("The watch-face builder stopped unexpectedly.")))));
     worker.postMessage({ starter, input, ...(native ? { native: { model: native.target.model, carrier: native.carrier } } : {}) } satisfies ArchiveWorkerRequest);
   });
 }
@@ -279,7 +280,7 @@ export class WatchfaceStudio {
   private get projects(): string { return path.join(this.root, "projects"); }
 
   private projectDir(id: string): string {
-    if (!/^[a-f0-9-]{36}$/i.test(id)) throw new StudioProblem("That project isn't here.", "missing", 404);
+    if (!/^[a-f0-9-]{36}$/i.test(id)) throw new StudioProblem(t("That project isn't here."), "missing", 404);
     return path.join(this.projects, id);
   }
 
@@ -302,7 +303,7 @@ export class WatchfaceStudio {
   private async download(url: string, kind: "package" | "preview", get?: (url: string) => Promise<Buffer>): Promise<Buffer> {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:" || !(parsed.hostname === "coros.com" || parsed.hostname.endsWith(".coros.com"))) {
-      throw new StudioProblem("Templates only come from COROS.", "badUrl");
+      throw new StudioProblem(t("Templates only come from COROS."), "badUrl");
     }
     const folder = path.join(this.root, "templates", kind === "package" ? "packages" : "pictures");
     const cached = path.join(folder, `${createHash("sha256").update(url).digest("hex").slice(0, 40)}.${kind === "package" ? "bin" : "png"}`);
@@ -321,15 +322,15 @@ export class WatchfaceStudio {
     if (get) bytes = await get(url);
     else {
       let answer: Response;
-      try { answer = await this.fetch(url); } catch { throw new StudioProblem("COROS couldn't be reached. Check the connection and try again.", "offline", 502); }
-      if (!answer.ok) throw new StudioProblem(`COROS answered ${answer.status} for that template.`, "download", 502);
+      try { answer = await this.fetch(url); } catch { throw new StudioProblem(t("COROS couldn't be reached. Check the connection and try again."), "offline", 502); }
+      if (!answer.ok) throw new StudioProblem(t("COROS answered {status} for that template.", { status: answer.status }), "download", 502);
       bytes = Buffer.from(await answer.arrayBuffer());
     }
     if (bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
       // Package CDNs sometimes serve the archive gzip-wrapped.
       try { bytes = (await import("node:zlib")).gunzipSync(bytes); } catch { /* checked below */ }
     }
-    if (!bytes.length || bytes.length > MAX_PACKAGE || !valid(bytes)) throw new StudioProblem("COROS sent something that isn't a template.", "download", 502);
+    if (!bytes.length || bytes.length > MAX_PACKAGE || !valid(bytes)) throw new StudioProblem(t("COROS sent something that isn't a template."), "download", 502);
     await fs.promises.mkdir(folder, { recursive: true });
     await writeWhole(cached, bytes).catch(() => {});
     if (kind === "package") await this.prunePackages(folder);
@@ -346,7 +347,7 @@ export class WatchfaceStudio {
 
   async templatePicture(watch: WatchfaceTarget, id: string): Promise<Buffer> {
     const theme = templatesFor(watch).themes.find((t) => t.id === id) ?? this.account?.theme("editable", id);
-    if (!theme?.previewImageUrl) throw new StudioProblem("That template has no picture.", "missing", 404);
+    if (!theme?.previewImageUrl) throw new StudioProblem(t("That template has no picture."), "missing", 404);
     return this.download(theme.previewImageUrl, "preview");
   }
 
@@ -360,12 +361,12 @@ export class WatchfaceStudio {
       if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_PROJECT) throw new Error("size");
       parsed = JSON.parse(await fs.promises.readFile(manifest, "utf8")) as StoredProject & { sourceTemplateId: string | number };
     } catch {
-      throw new StudioProblem("That project isn't here any more.", "missing", 404);
+      throw new StudioProblem(t("That project isn't here any more."), "missing", 404);
     }
     const sourceTemplateId = typeof parsed.sourceTemplateId === "number" && Number.isSafeInteger(parsed.sourceTemplateId) ? String(parsed.sourceTemplateId) : parsed.sourceTemplateId;
     if (parsed.projectId !== id || typeof parsed.name !== "string" || typeof parsed.updatedAt !== "string" ||
       typeof sourceTemplateId !== "string" || !/^\d{1,20}$/.test(sourceTemplateId) || parsed.design?.version !== 1) {
-      throw new StudioProblem("The saved watchface project metadata is invalid.", "damaged", 500);
+      throw new StudioProblem(t("The saved watchface project metadata is invalid."), "damaged", 500);
     }
     return { ...parsed, sourceTemplateId };
   }
@@ -375,7 +376,7 @@ export class WatchfaceStudio {
     const primary = path.join(dir, "starter.dat"), legacy = path.join(dir, "starter.zip");
     const target = fs.existsSync(primary) ? primary : legacy;
     let stat: fs.Stats;
-    try { stat = await fs.promises.stat(target); } catch { throw new StudioProblem("This project's template is missing.", "missing", 404); }
+    try { stat = await fs.promises.stat(target); } catch { throw new StudioProblem(t("This project's template is missing."), "missing", 404); }
     const known = this.starters.get(target);
     if (known && known.mtimeMs === stat.mtimeMs) return known.bytes;
     const bytes = await fs.promises.readFile(target);
@@ -451,11 +452,11 @@ export class WatchfaceStudio {
     const theme = live?.packageUrl && !templatesFor(watch).themes.some((t) => t.id === id) ? live : themeFor(watch, id);
     const starter = await this.download(theme.packageUrl!, "package", theme === live ? (u) => this.account!.fetchPackage(u) : undefined);
     let info: TemplateInfo;
-    try { info = inspectTemplate(starter); } catch (e) { throw new StudioProblem(`That template can't be edited: ${e instanceof Error ? e.message : "it isn't a DIY template"}`, "notTemplate"); }
+    try { info = inspectTemplate(starter); } catch (e) { throw new StudioProblem(e instanceof Error ? t("That template can't be edited: {reason}", { reason: e.message }) : t("That template can't be edited: it isn't a DIY template"), "notTemplate"); }
     const blank = input.blank === true;
     return this.writeProject({
       projectId: randomUUID(),
-      name: sanitizeProjectName(input.name ?? (blank ? "Blank face" : theme.name)),
+      name: sanitizeProjectName(input.name ?? (blank ? t("Blank face") : theme.name)),
       updatedAt: new Date(this.now()).toISOString(),
       sourceTemplateId: info.sourceTemplateId,
       firmwareType: watch.firmwareType,
@@ -492,7 +493,7 @@ export class WatchfaceStudio {
    */
   async convert(id: string, input: { watch?: unknown; design?: unknown; name?: unknown; scratch?: unknown; build?: unknown; carried?: unknown }): Promise<{ project: ProjectSummary; result: ConversionResult }> {
     const target = typeof input.watch === "string" ? getWatchfaceTarget(input.watch) : undefined;
-    if (!target || target.model !== input.watch) throw new StudioProblem("Choose a watch to convert to.", "badInput");
+    if (!target || target.model !== input.watch) throw new StudioProblem(t("Choose a watch to convert to."), "badInput");
     const stored = await this.readStored(id);
     const info = inspectTemplate(await this.starter(id));
     if (buildsFromNativeLayout(info, target, watchOf(stored.firmwareType))) return this.convertBuilt(id, stored, target, input);
@@ -502,7 +503,7 @@ export class WatchfaceStudio {
     try {
       converted = await this.converter.convert(await this.starter(id), target, { configTextEdits: edits });
     } catch (e) {
-      throw new StudioProblem(e instanceof Error ? e.message : "The face couldn't be converted.", "convert");
+      throw new StudioProblem(e instanceof Error ? e.message : t("The face couldn't be converted."), "convert");
     }
     const ported = prepareWatchfaceConversion(design, {
       rawEditsApplied: converted.appliedRawConfigEditCount === Object.keys(edits).length,
@@ -527,7 +528,7 @@ export class WatchfaceStudio {
    * project's starter. The edits are part of that starter, so the new project starts from it with an empty design.
    */
   private async convertBuilt(id: string, stored: StoredProject, target: WatchfaceTarget, input: { name?: unknown; scratch?: unknown; build?: unknown; carried?: unknown }): Promise<{ project: ProjectSummary; result: ConversionResult }> {
-    if (!input.build || typeof input.build !== "object") throw new StudioProblem("This face is rebuilt for the other watch; send its composition.", "badInput");
+    if (!input.build || typeof input.build !== "object") throw new StudioProblem(t("This face is rebuilt for the other watch; send its composition."), "badInput");
     const { archive } = await this.buildFinal(id, input.build as WatchfaceBuildInput, target.model);
     const info = inspectTemplate(archive);
     const preview = await fs.promises.readFile(path.join(this.projectDir(id), "preview.png")).catch(() => null);
@@ -550,7 +551,7 @@ export class WatchfaceStudio {
   }
 
   async preview(id: string): Promise<Buffer> {
-    try { return await fs.promises.readFile(path.join(this.projectDir(id), "preview.png")); } catch { throw new StudioProblem("No preview yet.", "missing", 404); }
+    try { return await fs.promises.readFile(path.join(this.projectDir(id), "preview.png")); } catch { throw new StudioProblem(t("No preview yet."), "missing", 404); }
   }
 
   /**
@@ -558,24 +559,24 @@ export class WatchfaceStudio {
    * plain DAT/ZIP face opens as a template. The watch is the one the face has layouts for, `watch` first.
    */
   async importFile(bytes: Buffer, fileName: string, preferred?: unknown, name?: string): Promise<StoredProject> {
-    if (!bytes.length || bytes.length > MAX_PROJECT_ZIP) throw new StudioProblem("Choose a watch face ZIP, DAT or BIN smaller than 100 MB.", "tooBig", 413);
+    if (!bytes.length || bytes.length > MAX_PROJECT_ZIP) throw new StudioProblem(t("Choose a watch face ZIP, DAT or BIN smaller than 100 MB."), "tooBig", 413);
     if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
-      if (!parseCorosFaceMagic(bytes.toString("latin1", 0, 4))) throw new StudioProblem("That file is not a watch face ZIP, DAT or BIN.", "notFace");
+      if (!parseCorosFaceMagic(bytes.toString("latin1", 0, 4))) throw new StudioProblem(t("That file is not a watch face ZIP, DAT or BIN."), "notFace");
       // A compiled face: recovered into an editable starter (CorosLink's selectCompiledWatchface).
-      const label = (name ?? fileName.replace(/\.(bin|zip|dat)$/i, "").trim()) || "Imported face";
-      try { bytes = recoverCompiledCorosWatchface(bytes, label.slice(0, 80)).zip; } catch (e) { throw new StudioProblem(e instanceof Error ? e.message : "That BIN can't be opened.", "notFace"); }
+      const label = (name ?? fileName.replace(/\.(bin|zip|dat)$/i, "").trim()) || t("Imported face");
+      try { bytes = recoverCompiledCorosWatchface(bytes, label.slice(0, 80)).zip; } catch (e) { throw new StudioProblem(e instanceof Error ? e.message : t("That BIN can't be opened."), "notFace"); }
     }
     const packaged = this.readProjectPackage(bytes);
     const starter = packaged?.starter ?? bytes;
     let info: TemplateInfo;
-    try { info = inspectTemplate(starter); } catch (e) { throw new StudioProblem(e instanceof Error ? e.message : "That file is not a watch face.", "notFace"); }
+    try { info = inspectTemplate(starter); } catch (e) { throw new StudioProblem(e instanceof Error ? e.message : t("That file is not a watch face."), "notFace"); }
     const sizes = new Set(info.resolutionDirectories.map((d) => Number(d.match(/_(\d+)x/)?.[1])));
     const fits = (t: WatchfaceTarget) => sizes.has(t.previewSize);
     const asked = typeof preferred === "string" ? getWatchfaceTarget(preferred) : undefined;
     const listed = packaged?.firmwareType ? getWatchfaceTarget(packaged.firmwareType) : undefined;
     const watch = [listed, asked, ...WATCHFACE_TARGETS].find((t): t is WatchfaceTarget => !!t && fits(t));
-    if (!watch) throw new StudioProblem("This face has no layout for a supported watch.", "noWatch");
-    const named = name ?? packaged?.name ?? info.name ?? (fileName.replace(/\.(zip|dat|bin)$/i, "").trim() || "Imported face");
+    if (!watch) throw new StudioProblem(t("This face has no layout for a supported watch."), "noWatch");
+    const named = name ?? packaged?.name ?? info.name ?? (fileName.replace(/\.(zip|dat|bin)$/i, "").trim() || t("Imported face"));
     return this.writeProject({
       projectId: randomUUID(),
       name: sanitizeProjectName(named.slice(0, 80)),
@@ -592,19 +593,19 @@ export class WatchfaceStudio {
     const { files } = openTemplate(bytes);
     const visible = files.filter((e) => !e.path.startsWith("__MACOSX/"));
     const manifests = visible.filter((e) => /^(?:[^/]+\/)?(?:coroslink-project|project)\.json$/i.test(e.path));
-    if (manifests.length > 1) throw new StudioProblem("The editable watch-face package contains multiple project manifests.", "notFace");
+    if (manifests.length > 1) throw new StudioProblem(t("The editable watch-face package contains multiple project manifests."), "notFace");
     const manifestEntry = manifests[0];
     if (!manifestEntry) return null;
     validateArchiveInventory(readZip(bytes), 100, 130 * 1024 * 1024, MAX_PROJECT_ZIP, 8, "editable watch-face package");
     const prefix = manifestEntry.path.slice(0, manifestEntry.path.lastIndexOf("/") + 1);
     const dats = visible.filter((e) => e.path.startsWith(prefix) && !e.path.slice(prefix.length).includes("/") && /\.dat$/i.test(e.path));
-    if (dats.length !== 1) throw new StudioProblem("The editable watch-face package must contain exactly one DAT archive.", "notFace");
+    if (dats.length !== 1) throw new StudioProblem(t("The editable watch-face package must contain exactly one DAT archive."), "notFace");
     const previewEntry = visible.find((e) => e.path === `${prefix}preview.png`);
     let manifest: Record<string, unknown>;
-    try { manifest = JSON.parse(manifestEntry.read().toString("utf8")) as Record<string, unknown>; } catch { throw new StudioProblem("The editable watch-face project manifest is not valid JSON.", "notFace"); }
+    try { manifest = JSON.parse(manifestEntry.read().toString("utf8")) as Record<string, unknown>; } catch { throw new StudioProblem(t("The editable watch-face project manifest is not valid JSON."), "notFace"); }
     if (manifest.format !== "coroslink-watchface-project" || manifest.version !== 1 || typeof manifest.name !== "string" ||
       typeof manifest.sourceTemplateId !== "string" || !/^\d{1,20}$/.test(manifest.sourceTemplateId)) {
-      throw new StudioProblem("This is not a supported CorosLink watch-face project.", "notFace");
+      throw new StudioProblem(t("This is not a supported CorosLink watch-face project."), "notFace");
     }
     const preview = previewEntry?.read();
     return {
@@ -621,7 +622,7 @@ export class WatchfaceStudio {
     const name = sanitizeProjectName(input.name ?? stored.name);
     const design = checkDesign(input.design ?? stored.design);
     const preview = pngFromDataUrl(input.previewDataUrl) ?? await this.preview(id).catch(() => undefined);
-    if (!preview) throw new StudioProblem("The editable project needs a preview picture.", "badPreview");
+    if (!preview) throw new StudioProblem(t("The editable project needs a preview picture."), "badPreview");
     const starterBytes = await this.starter(id);
     const all = readZip(starterBytes);
     const standard = standardizeWatchfacePackage(
@@ -631,7 +632,7 @@ export class WatchfaceStudio {
       { name: "starter.dat", data: standard.changed ? createStoreZip(standard.entries) : starterBytes },
       { name: "preview.png", data: preview },
     ]);
-    if (zip.length > MAX_PROJECT_ZIP) throw new StudioProblem("The editable watch-face package is too large to export.", "tooBig", 413);
+    if (zip.length > MAX_PROJECT_ZIP) throw new StudioProblem(t("The editable watch-face package is too large to export."), "tooBig", 413);
     return { zip, name };
   }
 
@@ -644,13 +645,13 @@ export class WatchfaceStudio {
     const stored = await this.readStored(id);
     const own = watchOf(stored.firmwareType);
     const watch = watchModel === undefined || watchModel === null ? own : typeof watchModel === "string" ? getWatchfaceTarget(watchModel) : undefined;
-    if (!watch || (watchModel != null && watch.model !== watchModel)) throw new StudioProblem("Choose a supported watch.", "badInput");
+    if (!watch || (watchModel != null && watch.model !== watchModel)) throw new StudioProblem(t("Choose a supported watch."), "badInput");
     const starter = await this.starter(id);
     const native = buildsFromNativeLayout(inspectTemplate(starter), watch, own);
-    if (!native && watch.model !== own.model) throw new StudioProblem(`Convert this face for ${watch.label} first.`, "badInput");
+    if (!native && watch.model !== own.model) throw new StudioProblem(t("Convert this face for {watch} first.", { watch: watch.label }), "badInput");
     let carrier;
     try { carrier = native ? await this.converter.nativeCarrier(starter, watch) : undefined; } catch (e) {
-      throw new StudioProblem(e instanceof Error ? e.message : "The face couldn't be built for that watch.", "convert");
+      throw new StudioProblem(e instanceof Error ? e.message : t("The face couldn't be built for that watch."), "convert");
     }
     const archive = await buildInWorker(starter, { ...input, firmwareType: watch.firmwareType, watchModel: watch.model }, this.archiveWorker,
       carrier ? { target: watch, carrier } : undefined);
@@ -686,7 +687,7 @@ export class WatchfaceStudio {
   // ───── Sources: COROS's catalogs and Community ─────
 
   private requireAccount(): CorosAccount {
-    if (!this.account) throw new StudioProblem("Sign in to your COROS account first.", "signedOut", 401);
+    if (!this.account) throw new StudioProblem(t("Sign in to your COROS account first."), "signedOut", 401);
     return this.account;
   }
 
@@ -706,13 +707,13 @@ export class WatchfaceStudio {
 
   private listedFace(catalog: CorosCatalog, id: string): CorosWatchfaceTheme {
     const theme = this.requireAccount().theme(catalog, id);
-    if (!theme?.packageUrl) throw new StudioProblem("That face isn't in the list any more. Refresh and try again.", "missing", 404);
+    if (!theme?.packageUrl) throw new StudioProblem(t("That face isn't in the list any more. Refresh and try again."), "missing", 404);
     return theme;
   }
 
   async corosPicture(catalog: CorosCatalog, id: string): Promise<Buffer> {
     const theme = this.listedFace(catalog, id);
-    if (!theme.previewImageUrl) throw new StudioProblem("That face has no picture.", "missing", 404);
+    if (!theme.previewImageUrl) throw new StudioProblem(t("That face has no picture."), "missing", 404);
     return this.download(theme.previewImageUrl, "preview");
   }
 
@@ -748,7 +749,7 @@ export class WatchfaceStudio {
       m = /^\/community\/animations\/([a-f0-9-]{36})$/i.exec(route);
       if (get && m) {
         const animation = await this.community.animation(m[1]);
-        return animation ? picture(animation.bytes, animation.type) : problem("That face has no animation.", "notFound", 404);
+        return animation ? picture(animation.bytes, animation.type) : problem(t("That face has no animation."), "notFound", 404);
       }
       m = /^\/community\/([a-z0-9-]{1,100})$/.exec(route);
       if (get && m) return json({ face: await this.community.face(m[1], q.get("model") || undefined) });
@@ -758,7 +759,7 @@ export class WatchfaceStudio {
         const { project, title } = await this.openCommunity(m[1], body.model, body.watch);
         return json({ project: summaryOf(project), title });
       }
-      return problem("Not a Studio action.", "notFound", 404);
+      return problem(t("Not a Studio action."), "notFound", 404);
     }
     if (route === "/coros" || route.startsWith("/coros/")) {
       if (get && route === "/coros") return json({ account: this.account ? await this.account.status() : null });
@@ -769,7 +770,7 @@ export class WatchfaceStudio {
       }
       let m = /^\/coros\/faces\/(\d{1,24})\/picture$/.exec(route);
       if (get && m) return picture(await this.corosPicture(catalogOf(q.get("catalog")), m[1]));
-      if (get) return problem("Not a Studio action.", "notFound", 404);
+      if (get) return problem(t("Not a Studio action."), "notFound", 404);
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
       m = /^\/coros\/faces\/(\d{1,24})\/open$/.exec(route);
       if (m) return json({ project: summaryOf(await this.openCorosFace(catalogOf(body.catalog), m[1], body.watch, body.name)) });
@@ -778,7 +779,7 @@ export class WatchfaceStudio {
       if (route === "/coros/sign-in/saved") return json({ account: await account.signInSaved(body) });
       if (route === "/coros/sign-out") return json({ account: await account.signOut() });
       if (route === "/coros/forget") return json({ account: await account.forget() });
-      return problem("Not a Studio action.", "notFound", 404);
+      return problem(t("Not a Studio action."), "notFound", 404);
     }
     return null;
   }
@@ -793,7 +794,7 @@ export class WatchfaceStudio {
     if (get && route === "/phone") return json({ status: this.phone.status() });
     if (!get && route === "/phone/stop") { this.phone.stop(); return json({ status: this.phone.status() }); }
     if (!get && route === "/folders/pick") {
-      if (!this.pickFolder) throw new SendProblem("Folders can't be picked here.", "folder");
+      if (!this.pickFolder) throw new SendProblem(t("Folders can't be picked here."), "folder");
       const picked = await this.pickFolder();
       return json({ folder: picked ? this.folders.add(picked) : null });
     }
@@ -817,7 +818,7 @@ export class WatchfaceStudio {
     if (action === "/phone") {
       try {
         return json({ send: await this.phone.start({ data: item.archive, name, model: item.watch.model }) });
-      } catch (e) { throw new SendProblem(e instanceof Error ? e.message : "The face couldn't be offered to the iPhone.", "phone"); }
+      } catch (e) { throw new SendProblem(e instanceof Error ? e.message : t("The face couldn't be offered to the iPhone."), "phone"); }
     }
     if (action === "/coros") {
       const { sourceTemplateId, watchFaceVersion } = archiveTemplate(item.archive);
@@ -838,17 +839,17 @@ export class WatchfaceStudio {
         : undefined;
       try {
         return json({ ...(await this.watch.installFace(bin, target)), warnings });
-      } catch (e) { throw new SendProblem(e instanceof Error ? e.message : "The face didn't install.", "install"); }
+      } catch (e) { throw new SendProblem(e instanceof Error ? e.message : t("The face didn't install."), "install"); }
     }
-    return problem("Not a Studio action.", "notFound", 404);
+    return problem(t("Not a Studio action."), "notFound", 404);
   }
 
   async answer(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const route = url.pathname.slice("/api/desktop/studio".length) || "/";
     const get = request.method === "GET";
-    if (!get && request.headers.get("x-clink-hub") !== "1") return problem("Not from this app.", "forbidden", 403);
-    if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) return problem("That's too big for a watch face.", "tooBig", 413);
+    if (!get && request.headers.get("x-clink-hub") !== "1") return problem(t("Not from this app."), "forbidden", 403);
+    if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) return problem(t("That's too big for a watch face."), "tooBig", 413);
     try {
       const sourced = await this.answerSources(request, route, url, get);
       if (sourced) return sourced;
@@ -870,13 +871,13 @@ export class WatchfaceStudio {
       const body = !get ? ((await request.json().catch(() => ({}))) as Record<string, unknown>) : {};
       if (!get && route === "/projects") return json({ project: summaryOf(await this.create(body)) });
       m = /^\/projects\/([a-f0-9-]{36})(\/[a-z/-]+)?$/i.exec(route);
-      if (!m) return problem("Not a Studio action.", "notFound", 404);
+      if (!m) return problem(t("Not a Studio action."), "notFound", 404);
       const [, id, action = ""] = m;
       if (get && action === "") return json(await this.open(id));
       if (get && action === "/preview") return new Response(new Uint8Array(await this.preview(id)), { headers: { "Content-Type": "image/png", "Cache-Control": "no-store" } });
       if (get && action === "/template") return json({ details: describeTemplate(await this.starter(id), id) });
       if (get && action === "/config-texts") return json({ files: templateConfigTexts(await this.starter(id)) });
-      if (get) return problem("Not a Studio action.", "notFound", 404);
+      if (get) return problem(t("Not a Studio action."), "notFound", 404);
       if (action === "") return json({ project: await this.save(id, body) });
       if (action === "/assets") return json({ assets: templateAssets(await this.starter(id), body.paths, body.skipMissing === true) });
       if (action === "/duplicate") return json({ project: await this.duplicate(id) });
@@ -901,10 +902,10 @@ export class WatchfaceStudio {
         const { bin, warnings, name } = await this.buildBin(id, body as unknown as WatchfaceBuildInput);
         return file(bin, "application/octet-stream", `${name}.bin`, { "X-Clink-Warnings": encodeURIComponent(JSON.stringify(warnings)) });
       }
-      return problem("Not a Studio action.", "notFound", 404);
+      return problem(t("Not a Studio action."), "notFound", 404);
     } catch (e) {
       if (e instanceof StudioProblem || e instanceof CommunityProblem || e instanceof AccountProblem || e instanceof SendProblem || e instanceof OfficialProblem || e instanceof GoogleFontsProblem) return problem(e.message, e.code, e.status);
-      return problem(e instanceof Error ? e.message : "Studio couldn't do that.", "failed", 500);
+      return problem(e instanceof Error ? e.message : t("Studio couldn't do that."), "failed", 500);
     }
   }
 }

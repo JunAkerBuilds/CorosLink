@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { CountUp, OriginBadge } from "@/components/ui";
 import type { Origin } from "@/data/core";
 import { coachHref, isMissing, type BarChart, type Chip, type Figure, type Hue, type LineChart, type Missing, type Reading, type SplitShare, type Tile } from "@/data/sports";
+import { msg, t } from "@/lib/i18n";
 import { includesSport, type Family } from "@/lib/sports";
 
 export const SPORT_HUE: Record<Family, Hue> = { run: "run", ride: "ride", swim: "swim", strength: "strength", walk: "slate", other: "slate" };
@@ -37,11 +38,11 @@ export function Icon({ name, size = 17, width = 2.1 }: { name: string; size?: nu
 /* ───────────── Head ───────────── */
 
 const SWITCH: { family: Family | null; label: string; href: string }[] = [
-  { family: null, label: "All sports", href: "/sports" },
-  { family: "run", label: "Running", href: "/sports/running" },
-  { family: "ride", label: "Riding", href: "/sports/riding" },
-  { family: "swim", label: "Swimming", href: "/sports/swimming" },
-  { family: "strength", label: "Strength", href: "/strength" },
+  { family: null, label: msg("All sports"), href: "/sports" },
+  { family: "run", label: msg("Running"), href: "/sports/running" },
+  { family: "ride", label: msg("Riding"), href: "/sports/riding" },
+  { family: "swim", label: msg("Swimming"), href: "/sports/swimming" },
+  { family: "strength", label: msg("Strength"), href: "/strength" },
 ];
 
 /** Breadcrumb and title, where the numbers come from, and the switcher between the person's sports. */
@@ -49,15 +50,15 @@ export function SportHead({ title, crumb, current, families, origin }: { title: 
   return (
     <div className="sp-head">
       <div className="sp-head-text">
-        <nav aria-label="Breadcrumb" className="sp-crumb">
-          {crumb ? <span>{crumb}</span> : <><Link href="/sports">Sports</Link><span aria-hidden="true">/</span><span>{title}</span></>}
+        <nav aria-label={t("Breadcrumb")} className="sp-crumb">
+          {crumb ? <span>{crumb}</span> : <><Link href="/sports">{t("Sports")}</Link><span aria-hidden="true">/</span><span>{title}</span></>}
           <OriginBadge origin={origin} />
         </nav>
         <h1>{title}</h1>
       </div>
-      <nav aria-label="Sport" className="sp-switch">
+      <nav aria-label={t("Sport")} className="sp-switch">
         {SWITCH.filter((s) => s.family == null || s.family === current || includesSport(families, s.family)).map((s) => (
-          <Link key={s.href} href={s.href} aria-current={s.family === current ? "page" : undefined}>{s.label}</Link>
+          <Link key={s.href} href={s.href} aria-current={s.family === current ? "page" : undefined}>{t(s.label)}</Link>
         ))}
       </nav>
     </div>
@@ -69,7 +70,7 @@ export function NotYourSport({ name, families, origin, current }: { name: string
   return (
     <main className="page sp-page">
       <SportHead title={name} current={current} families={families.filter((f) => f !== current)} origin={origin} />
-      <p className="notice">{name} isn&apos;t one of your sports in the last 90 days.<Link href="/sports" className="sp-link">All sports</Link></p>
+      <p className="notice">{t("{sport} isn't one of your sports in the last 90 days.", { sport: name })}<Link href="/sports" className="sp-link">{t("All sports")}</Link></p>
     </main>
   );
 }
@@ -147,14 +148,14 @@ export function Spark({ values, hue }: { values: readonly number[]; hue: Hue }) 
 export function Tiles({ tiles }: { tiles: readonly Tile[] }) {
   return (
     <div className="sp-row tight">
-      {tiles.map((t) => (
-        <a key={t.label} href={t.href} className="sp-tile">
-          <div className="sp-tile-top"><span>{t.label}</span><ToneChip chip={t.chip} /></div>
+      {tiles.map((tile) => (
+        <a key={tile.label} href={tile.href} className="sp-tile">
+          <div className="sp-tile-top"><span>{tile.label}</span><ToneChip chip={tile.chip} /></div>
           <div className="sp-tile-mid">
-            <b className="num"><CountUp text={t.value} />{t.unit ? <small>{t.unit}</small> : null}</b>
-            {t.spark && t.spark.length > 1 ? <Spark values={t.spark} hue={t.hue} /> : null}
+            <b className="num"><CountUp text={tile.value} />{tile.unit ? <small>{tile.unit}</small> : null}</b>
+            {tile.spark && tile.spark.length > 1 ? <Spark values={tile.spark} hue={tile.hue} /> : null}
           </div>
-          <span>{t.text}</span>
+          <span>{tile.text}</span>
         </a>
       ))}
     </div>
@@ -189,7 +190,7 @@ export function Section({ id, title, icon, hue, how, flex, reading, sample, ask,
           {sample ? <OriginBadge origin="sample" /> : null}
           {none || sample ? null : <ToneChip chip={reading.chip} />}
           {how ? (
-            <button type="button" className="sp-how" aria-label={`How ${title} is read: ${how}`}>
+            <button type="button" className="sp-how" aria-label={t("How {title} is read: {how}", { title, how })}>
               <Icon name="info" size={18} width={1.8} /><span className="tip">{how}</span>
             </button>
           ) : null}
@@ -210,7 +211,7 @@ export function Section({ id, title, icon, hue, how, flex, reading, sample, ask,
 export function CoachRow({ title, headline, questions }: { title: string; headline: string; questions: readonly string[] }) {
   return (
     <div className="sp-foot">
-      <Link className="sp-ask strong" href={coachHref(`Explain my "${title}" reading: ${headline}`)}><Icon name="spark" size={15} width={2} />Explain this</Link>
+      <Link className="sp-ask strong" href={coachHref(t('Explain my "{title}" reading: {headline}', { title, headline }))}><Icon name="spark" size={15} width={2} />{t("Explain this")}</Link>
       {questions.map((q) => <Link key={q} className="sp-ask" href={coachHref(q)}>{q}</Link>)}
     </div>
   );
@@ -238,7 +239,7 @@ export function BarsLegend({ chart }: { chart: BarChart }) {
   return (
     <span className="sp-legend">
       {chart.line ? <span><i aria-hidden="true" className="sp-swatch-dash" style={{ background: "none", borderRadius: 0, height: 0 }} />{chart.line.text}</span> : null}
-      {chart.planned ? <span><i aria-hidden="true" className="sp-swatch-plan" style={{ background: "none" }} />Planned</span> : null}
+      {chart.planned ? <span><i aria-hidden="true" className="sp-swatch-plan" style={{ background: "none" }} />{t("Planned")}</span> : null}
     </span>
   );
 }
@@ -307,7 +308,7 @@ export function Split({ shares, label, band }: { shares: readonly SplitShare[]; 
   );
   return (
     <>
-      {band ? <div className="sp-split-wrap"><em>Easy target 75–80%</em><u aria-hidden="true" />{bar}</div> : bar}
+      {band ? <div className="sp-split-wrap"><em>{t("Easy target 75–80%")}</em><u aria-hidden="true" />{bar}</div> : bar}
       <div className="sp-shares">
         {shares.map((s) => (
           <div key={s.name} style={{ flex: `${Math.max(s.percent, 18)} 1 0` }}><b className="num">{s.percent}%</b><span><i aria-hidden="true" data-hue={s.hue} />{s.name} · {s.detail}</span></div>
@@ -317,4 +318,4 @@ export function Split({ shares, label, band }: { shares: readonly SplitShare[]; 
   );
 }
 
-export const DISCLAIMER = "C-LINK's reading of your COROS data with published sports-science methods. It isn't medical advice: if something feels wrong, rest and ask a doctor.";
+export const DISCLAIMER = msg("C-LINK's reading of your COROS data with published sports-science methods. It isn't medical advice: if something feels wrong, rest and ask a doctor.");

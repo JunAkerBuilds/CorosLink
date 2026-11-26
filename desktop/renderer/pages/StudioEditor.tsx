@@ -9,6 +9,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { CorosWatchfaceNativeDataStyle, CorosWatchfaceTemplateDetails } from "../../watchface/types";
 import { Button, Segmented } from "@/components/ui";
+import { t, tx } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/react";
 import { getWatchfaceTarget } from "../../watchface/watchfaceTargets";
 import {
   activeSimulationScenario, advanceSimulationDateTime, createWatchfaceSimulation,
@@ -164,7 +166,7 @@ export default function StudioEditor() {
   }, [id]);
 
   const say = (text: string) => setToast(text);
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3200); return () => clearTimeout(t); }, [toast]);
+  useEffect(() => { if (!toast) return; const tm = setTimeout(() => setToast(null), 3200); return () => clearTimeout(tm); }, [toast]);
 
   /** A change that can be undone. Changes made during one gesture (studioGesture.ts) are one undo step. */
   const lastGesture = useRef<number | null>(null);
@@ -212,8 +214,8 @@ export default function StudioEditor() {
     if (!doc.now || !dirty.current) return;
     setSaving("saving");
     const snapshot = doc.now;
-    const t = setTimeout(() => { dirty.current = false; void saveNow(snapshot); }, 700);
-    return () => clearTimeout(t);
+    const tm = setTimeout(() => { dirty.current = false; void saveNow(snapshot); }, 700);
+    return () => clearTimeout(tm);
   }, [doc.now, saveNow]);
 
   // The MCP server and Watchmaker edit this face through the same history: one applied step is one undo step
@@ -227,8 +229,8 @@ export default function StudioEditor() {
   // The simulation's clock: one tick a tenth of a second, at the chosen speed.
   useEffect(() => {
     if (!sim.playing) return;
-    const t = setInterval(() => setSim((s) => ({ ...s, dateTime: advanceSimulationDateTime(s.dateTime, SIM_SPEEDS[speed] / 10) })), 100);
-    return () => clearInterval(t);
+    const tm = setInterval(() => setSim((s) => ({ ...s, dateTime: advanceSimulationDateTime(s.dateTime, SIM_SPEEDS[speed] / 10) })), 100);
+    return () => clearInterval(tm);
   }, [sim.playing, speed]);
   const scenario = useMemo(() => activeSimulationScenario(sim), [sim]);
 
@@ -279,7 +281,7 @@ export default function StudioEditor() {
     return { ctx, items: libraryItems(active, ctx) };
   }, [source, design, active, mode]);
   // The selectable slot's types, for stepping through them in the simulation.
-  const slotNow = useMemo(() => (library && active && slotOnFace(library.ctx.layers) ? slotTypes(library.ctx.details, active, mode, library.ctx.layers).filter((t) => t.on) : []), [library, active, mode]);
+  const slotNow = useMemo(() => (library && active && slotOnFace(library.ctx.layers) ? slotTypes(library.ctx.details, active, mode, library.ctx.layers).filter((tm) => tm.on) : []), [library, active, mode]);
   const layer = rowOf(layers, sel) ?? null;
   const selected = useMemo(() => (layer ? [...new Set([layer, ...extra.map((i) => rowOf(layers, i)).filter((l): l is EditorLayer => !!l)])] : []), [layer, extra, layers]);
   const pick = (id: string, add: boolean) => {
@@ -302,7 +304,7 @@ export default function StudioEditor() {
       return g ? { label: g.label, bounds: g.bounds, move: (x, dx, dy) => { const o = iconOffsetOf(x, g.id); return setIconOffset(x, g.id, o.dx + dx, o.dy + dy); } } : null;
     }
     const bounds = nativeIconBox(active, layer);
-    return bounds ? { label: `${layer.label} icon`, bounds, move: (x, dx, dy) => moveNativeIcon(x, layer, dx, dy) } : null;
+    return bounds ? { label: t("{label} icon", { label: t(layer.label) }), bounds, move: (x, dx, dy) => moveNativeIcon(x, layer, dx, dy) } : null;
   })();
   // Its corners resize it when one layer is picked and something sizes it.
   const resizable = !!layer && !extra.length && !!active && canResize(active, layer, resolution);
@@ -337,12 +339,12 @@ export default function StudioEditor() {
     const have = framesNow.current;
     if (have && have.key === dragSetKey && have.design === design) return;
     let live = true;
-    const t = setTimeout(() => {
+    const tm = setTimeout(() => {
       composeDragFrames(source, design, mode, dragSet, pixels, scenarioNow.current, choiceNow.current)
         .then((f) => { if (live) setFrames(f); })
         .catch((e) => console.warn("Studio couldn't prepare the drag.", e));
     }, 40);
-    return () => { live = false; clearTimeout(t); };
+    return () => { live = false; clearTimeout(tm); };
     // dragSet is keyed by dragSetKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, design, mode, pixels, dragSetKey, waiting]);
@@ -360,15 +362,15 @@ export default function StudioEditor() {
     const move = iconMove.current;
     if (!move) return;
     let live = true;
-    const t = setTimeout(() => {
+    const tm = setTimeout(() => {
       composePartFrames(source, design, mode, iconKey, (x) => move(x, master, master), pixels, scenarioNow.current, choiceNow.current)
         .then((f) => { if (live) setIconFrames(f); })
         .catch((e) => console.warn("Studio couldn't prepare the icon drag.", e));
     }, 40);
-    return () => { live = false; clearTimeout(t); };
+    return () => { live = false; clearTimeout(tm); };
   }, [source, design, mode, pixels, iconKey, waiting, master]);
 
-  const hide = (l: EditorLayer) => { edit((x) => setVisible(x, l, false, source ?? undefined, mode)); if (layer?.id === l.id) setSel(null); say(`Hid ${l.label}. Bring it back from Add, or undo with ⌘Z.`); };
+  const hide = (l: EditorLayer) => { edit((x) => setVisible(x, l, false, source ?? undefined, mode)); if (layer?.id === l.id) setSel(null); say(t("Hid {name}. Bring it back from Add, or undo with ⌘Z.", { name: t(l.label) })); };
 
   // Delete: the row's trash, the context bar, the inspector and the Delete key. A locked layer, or several, ask first.
   const remove = (ls: EditorLayer[]) => {
@@ -377,11 +379,11 @@ export default function StudioEditor() {
     const gone = ls.filter((l) => canRemove(active, l, ctx));
     if (!gone.length) return;
     const locked = gone.filter((l) => isLocked(active, l));
-    if (gone.length > 1 && !confirm(`Delete ${gone.length} layers?${locked.length ? ` ${locked.length} of them ${locked.length === 1 ? "is" : "are"} locked.` : ""}`)) return;
-    if (gone.length === 1 && locked.length && !confirm(`${gone[0]!.label} is locked. Unlock and delete it?`)) return;
+    if (gone.length > 1 && !confirm(!locked.length ? t("Delete {n} layers?", { n: gone.length }) : locked.length === 1 ? t("Delete {n} layers? 1 of them is locked.", { n: gone.length }) : t("Delete {n} layers? {locked} of them are locked.", { n: gone.length, locked: locked.length }))) return;
+    if (gone.length === 1 && locked.length && !confirm(t("{name} is locked. Unlock and delete it?", { name: t(gone[0]!.label) }))) return;
     edit((x) => gone.reduce((acc, l) => deleteLayer(acc, l, ctx), x));
     if (layer && gone.some((l) => l.id === layer.id)) setSel(null);
-    say(`${gone.length === 1 ? `Deleted ${gone[0]!.label}` : `Deleted ${gone.length} layers`}. Undo with ⌘Z.`);
+    say(gone.length === 1 ? t("Deleted {name}. Undo with ⌘Z.", { name: t(gone[0]!.label) }) : t("Deleted {n} layers. Undo with ⌘Z.", { n: gone.length }));
   };
 
   // The face's own artwork: a copy just above it (⌘D), and its paint order (Alt+↑ / Alt+↓, Shift for the front or back).
@@ -390,19 +392,19 @@ export default function StudioEditor() {
     try {
       const out = duplicate(resolveWatchfaceModeDesign(design, mode), l.id);
       if (!out) return;
-      edit((x) => duplicate(x, l.id)?.design ?? x); setSel(out.layerId); say(`Copied ${l.label}.`);
+      edit((x) => duplicate(x, l.id)?.design ?? x); setSel(out.layerId); say(t("Copied {name}.", { name: t(l.label) }));
     } catch (e) { say(e instanceof Error ? e.message : String(e)); }
   };
   const orderArtwork = (l: EditorLayer, step: ArrangeStep) => {
     edit((x) => arrange(x, l.id, step));
-    say({ forward: "Brought forward", backward: "Sent backward", front: "Brought to the front", back: "Sent to the back" }[step] + ".");
+    say({ forward: t("Brought forward."), backward: t("Sent backward."), front: t("Brought to the front."), back: t("Sent to the back.") }[step]);
   };
 
   // Keys: save, undo/redo, hide, nudge, clear. Not while typing in a field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      if (t.closest("input, textarea, select, [contenteditable]")) return;
+      const tm = e.target as HTMLElement;
+      if (tm.closest("input, textarea, select, [contenteditable]")) return;
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); if (doc.now) { dirty.current = false; void saveNow(doc.now); } return; }
       if ((mod && e.key.toLowerCase() === "z") || (e.ctrlKey && e.key.toLowerCase() === "y")) { e.preventDefault(); if (e.shiftKey || e.key.toLowerCase() === "y") redo(); else undo(); return; }
@@ -426,8 +428,8 @@ export default function StudioEditor() {
   // pressed. Kept above the early returns below so the hooks run in the same order on every render.
   const [backTried, setBackTried] = useState(backButtonTried);
 
-  if (problem && !doc.now) return <main className="page"><div className="notice" role="alert">{problem} <a href="/studio" onClick={(e) => { e.preventDefault(); navigate("/studio"); }}>Back to Studio</a></div></main>;
-  if (!doc.now || !design || !active || !source || !project) return <main className="page"><div className="st-loading">Opening the face…</div></main>;
+  if (problem && !doc.now) return <main className="page"><div className="notice" role="alert">{problem} <a href="/studio" onClick={(e) => { e.preventDefault(); navigate("/studio"); }}>{t("Back to Studio")}</a></div></main>;
+  if (!doc.now || !design || !active || !source || !project) return <main className="page"><div className="st-loading">{t("Opening the face…")}</div></main>;
 
   const watch = getWatchfaceTarget(project.firmwareType) ?? source.watch;
   const hasChart = layers.some((l) => l.nativeDataId === "chart");
@@ -456,9 +458,9 @@ export default function StudioEditor() {
         if (l) change = (x) => [l, ...back.filter((y) => y !== l)].reduce((d, y) => restoreTemplateLayer(d, y, ctx.details, mode, y === l ? at : undefined), x);
       } else if (kind === "slot") {
         change = (x) => addSlotField(x, ctx, at);
-        const types = slotTypes(ctx.details, addSlotField(active, ctx, at), mode, ctx.layers).filter((t) => t.on);
+        const types = slotTypes(ctx.details, addSlotField(active, ctx, at), mode, ctx.layers).filter((tm) => tm.on);
         edit(change); select(item.layerId);
-        say(`Added ${item.label}: ${types.map((t) => t.label).join(", ")}.`);
+        say(t("Added {name}: {types}.", { name: t(item.label), types: types.map((tm) => t(tm.label)).join(", ") }));
         return;
       } else if (kind === "status") {
         const art = await renderDefaultStatusIndicator(id, ctx.face.height, active.digitColor);
@@ -480,7 +482,7 @@ export default function StudioEditor() {
         // Hands go on both displays at once, so this is one step on the whole face.
         apply((s) => ({ ...s, design: addAnalogHands(s.design, mode, sourceDetailsOf(source, s.design), (d) => renderDefaultAnalogHands(ctx.face.width, d.digitColor, d.accentColor)) }));
         select(item.layerId);
-        say(mode === "current" && supportsAlwaysOn(source) ? "Added Analog hands. Always-on gets the hour and minute hands." : "Added Analog hands.");
+        say(mode === "current" && supportsAlwaysOn(source) ? t("Added Analog hands. Always-on gets the hour and minute hands.") : t("Added Analog hands."));
         return;
       } else if (kind === "date") change = (x) => addDatePart(x, id as WatchfaceDatePartId, ctx, at);
       else if (kind === "sign") {
@@ -500,7 +502,7 @@ export default function StudioEditor() {
     if (!change) return;
     edit(change);
     select(layerId);
-    say(`Added ${item.label}.`);
+    say(t("Added {name}.", { name: t(item.label) }));
   };
   /** Add → Official: the picked frame becomes an image layer in the middle of the face. */
   const addOfficial = (set: OfficialFrames, frame: number) => {
@@ -510,7 +512,7 @@ export default function StudioEditor() {
     place(active); // says why not (the face is full) before anything changes
     edit(place);
     select(watchfaceSpriteLayerId(spriteId));
-    say("Added the official image. Drag it into place.");
+    say(t("Added the official image. Drag it into place."));
   };
   /** A picture from this computer (Add → Image, or dropped on the watch) as a free image layer. */
   const addPicture = async (file: File, at?: { x: number; y: number }) => {
@@ -519,7 +521,7 @@ export default function StudioEditor() {
       const sprite = newImage(active, await readPicture(file), crypto.randomUUID(), library.ctx, at);
       edit((x) => addImage(x, sprite));
       select(imageLayerId(sprite.id));
-      say("Added Image. Drag it on the watch to place it.");
+      say(t("Added Image. Drag it on the watch to place it."));
     } catch (e) { say(said(e)); }
   };
   /** A folder of PNG frames as the face's animation, sized in watch pixels. */
@@ -530,7 +532,7 @@ export default function StudioEditor() {
       const imported = await importAnimationFrames(await readFrames(files), ctx.face.width / (ctx.watchWidth ?? ctx.face.width));
       edit((x) => addAnimation(x, imported, ctx, at));
       select("animation");
-      say(`Added Animation: ${imported.frames.length} ${imported.frames.length === 1 ? "frame" : "frames"}.`);
+      say(imported.frames.length === 1 ? t("Added Animation: 1 frame.") : t("Added Animation: {n} frames.", { n: imported.frames.length }));
     } catch (e) { say(said(e)); }
   };
   /** Studio's own image for a state a spot lacks (the inspector's Add image), where the spot already is. */
@@ -541,7 +543,7 @@ export default function StudioEditor() {
     edit((x) => addStatusField(x, key, art, library.ctx, undefined, defaultStatusIndicatorPosition));
     showLayer(`configAsset:config:${key}`);
   };
-  const stateLabel = (l: EditorLayer) => (l.spot ? ` · ${spotActive(l.spot, choice).label}` : "");
+  const stateLabel = (l: EditorLayer) => (l.spot ? ` · ${t(spotActive(l.spot, choice).label)}` : "");
   // Add → Chart: one entry for the whole chart. On a face with one it selects it; else it asks for the first page.
   const chartOn = !!active.nativeData?.chart?.enabled;
   const chartRows = library ? chartPageRows(active, library.ctx.details) : [];
@@ -573,9 +575,9 @@ export default function StudioEditor() {
     const { ctx } = library;
     edit((x) => addChartPageField(x, option.key.slice("chart:".length), ctx));
     setPicking(false); setSel("native:chart"); setInsp("layer"); setLeft("layers");
-    say(`Added ${option.label}.`);
+    say(t("Added {name}.", { name: t(option.label) }));
   };
-  const splitTime = () => { edit(separateTime); setSel("hours"); setInsp("layer"); say("Hours and minutes are separate layers now."); };
+  const splitTime = () => { edit(separateTime); setSel("hours"); setInsp("layer"); say(t("Hours and minutes are separate layers now.")); };
 
   /** Master pixels for a point on the screen. */
   const toMaster = (clientX: number, clientY: number) => {
@@ -604,7 +606,7 @@ export default function StudioEditor() {
       const f = framesNow.current?.key === key && framesNow.current.design === from ? framesNow.current : null;
       if (lineUp && lineUp.frames === f) return lineUp;
       const targets = snapTargets(layers, new Set([...ids, ...(f?.lifted ?? [])]))
-        .map((t) => ({ ...t, box: f?.ink.targets.get(t.id) ?? t.box }));
+        .map((tm) => ({ ...tm, box: f?.ink.targets.get(tm.id) ?? tm.box }));
       return (lineUp = { frames: f, moving: f?.ink.moving ?? b, targets });
     };
     let moved = false, last = { dx: 0, dy: 0 }, snaps = NO_SNAP, hold: Partial<Record<"x" | "y", SnapHold>> = {}, raf = 0;
@@ -625,7 +627,7 @@ export default function StudioEditor() {
         last = { dx: Math.round(dx), dy: Math.round(dy) };
         const moved = moveBox(at.moving, last.dx, last.dy);
         const lines = snapGuides(moved, at.targets, master), gaps = snapGaps(moved, at.targets), against = snapPartners(lines, gaps);
-        snaps = { lines, gaps, outlines: at.targets.filter((t) => against.has(t.id)).map((t) => t.box) };
+        snaps = { lines, gaps, outlines: at.targets.filter((tm) => against.has(tm.id)).map((tm) => tm.box) };
       } else {
         hold = {};
         last = { dx: Math.round(dx), dy: Math.round(dy) };
@@ -763,17 +765,17 @@ export default function StudioEditor() {
     await downloadEditable(id, { name: name.trim() || "Untitled face", design: await attachWatchfaceFontSnapshots(design).catch(() => design), previewDataUrl });
   };
   const downloads = {
-    editable: () => run("Making the editable project…", async () => {
+    editable: () => run(t("Making the editable project…"), async () => {
       await makeEditable();
-      return "Editable project ready. It opens in Studio here and in CorosLink.";
+      return t("Editable project ready. It opens in Studio here and in CorosLink.");
     }),
-    final: () => run("Building the watch archive…", async () => {
+    final: () => run(t("Building the watch archive…"), async () => {
       await downloadFinal(id, await buildInput(source, design));
-      return `Final watch ZIP for ${watch.label} ready.`;
+      return t("Final watch ZIP for {watch} ready.", { watch: watch.label });
     }),
-    bin: () => run("Compiling for the watch…", async () => {
+    bin: () => run(t("Compiling for the watch…"), async () => {
       const { warnings } = await downloadBin(id, await buildInput(source, design));
-      return warnings.length ? `BIN ready. ${warnings[0]}` : `BIN for ${watch.label} ready and checked.`;
+      return warnings.length ? `${t("BIN ready.")} ${warnings[0]}` : t("BIN for {watch} ready and checked.", { watch: watch.label });
     }),
   };
 
@@ -805,71 +807,71 @@ export default function StudioEditor() {
     {sprite ? <img className="st-drag-sprite" src={sprite.src} alt="" draggable={false}
       style={{ left: sprite.x * k, top: sprite.y * k, width: sprite.w * k, height: sprite.h * k, transform: `translate(${lifted.dx * scale}px, ${lifted.dy * scale}px)` }} /> : null}
   </> : null;
-  const savedText = saving === "saving" ? "Saving…" : saving === "failed" ? "Not saved" : "Saved";
+  const savedText = saving === "saving" ? t("Saving…") : saving === "failed" ? t("Not saved") : t("Saved");
   const canColour = !!layer?.capabilities.color;
 
   return (
     <main className="st-editor">
       <header className="st-top">
-        <a className="st-back" href="/studio" onClick={(e) => { e.preventDefault(); navigate("/studio"); }}><Icon name="chevL" size={16} width={2.2} />Studio</a>
+        <a className="st-back" href="/studio" onClick={(e) => { e.preventDefault(); navigate("/studio"); }}><Icon name="chevL" size={16} width={2.2} />{t("Studio")}</a>
         <span className="st-sep" aria-hidden="true" />
         <FaceView src={frame} size={30} />
-        <input className="st-name" aria-label="Face name" value={name} maxLength={80}
+        <input className="st-name" aria-label={t("Face name")} value={name} maxLength={80}
           onChange={(e) => { const value = e.target.value; dirty.current = true; setDoc((d) => (d.now ? { ...d, now: { ...d.now, name: value } } : d)); }}
           onBlur={(e) => { if (!e.target.value.trim()) setDoc((d) => (d.now ? { ...d, now: { ...d.now, name: "Untitled face" } } : d)); }} />
         <span className="st-saved" data-state={saving}><i aria-hidden="true" />{savedText}</span>
         <span className="st-watch-chip"><Icon name="watch" size={15} />{watch.label} <span className="muted">{watch.previewSize} × {watch.previewSize}</span></span>
         <span className="st-grow" />
-        <button type="button" className="st-icon-btn" aria-label="Undo" title="Undo ⌘Z" disabled={!doc.past.length} onClick={undo}><Icon name="undo" /></button>
-        <button type="button" className="st-icon-btn" aria-label="Redo" title="Redo ⇧⌘Z" disabled={!doc.future.length} onClick={redo}><Icon name="redo" /></button>
+        <button type="button" className="st-icon-btn" aria-label={t("Undo")} title={t("Undo ⌘Z")} disabled={!doc.past.length} onClick={undo}><Icon name="undo" /></button>
+        <button type="button" className="st-icon-btn" aria-label={t("Redo")} title={t("Redo ⇧⌘Z")} disabled={!doc.future.length} onClick={redo}><Icon name="redo" /></button>
         <div className="st-menu-wrap">
-          <Button disabled={!!busy} aria-expanded={menu} onClick={() => setMenu((m) => !m)}><Icon name="download" size={16} />{busy ?? "Download"}</Button>
+          <Button disabled={!!busy} aria-expanded={menu} onClick={() => setMenu((m) => !m)}><Icon name="download" size={16} />{busy ?? t("Download")}</Button>
           {menu ? (
             <div className="st-menu st-menu-down" role="menu">
-              <button type="button" role="menuitem" onClick={() => void downloads.bin()}><Icon name="watch" size={16} /><span><b>Save BIN</b><small>Compiled for {watch.label}, ready to install</small></span></button>
-              <button type="button" role="menuitem" onClick={() => void downloads.final()}><Icon name="download" size={16} /><span><b>Final watch ZIP</b><small>The face as the COROS app takes it</small></span></button>
-              <button type="button" role="menuitem" onClick={() => void downloads.editable()}><Icon name="folder" size={16} /><span><b>Editable project ZIP</b><small>Opens in Studio and CorosLink</small></span></button>
-              <button type="button" role="menuitem" onClick={() => { setMenu(false); setSendTab("file"); }}><Icon name="watch" size={16} /><span><b>All watches</b><small>Final ZIPs for every model, one folder</small></span></button>
-              <button type="button" role="menuitem" onClick={() => { setMenu(false); setConverting(true); }}><Icon name="convert" size={16} /><span><b>Convert for another watch…</b><small>APEX 4, VERTIX 2S, NOMAD and more</small></span></button>
-              <button type="button" role="menuitem" onClick={() => { setMenu(false); setSendTab("file"); }}><Icon name="code" size={16} /><span><b>Development export</b><small>Config and images, unpacked</small></span></button>
+              <button type="button" role="menuitem" onClick={() => void downloads.bin()}><Icon name="watch" size={16} /><span><b>{t("Save BIN")}</b><small>{t("Compiled for {watch}, ready to install", { watch: watch.label })}</small></span></button>
+              <button type="button" role="menuitem" onClick={() => void downloads.final()}><Icon name="download" size={16} /><span><b>{t("Final watch ZIP")}</b><small>{t("The face as the COROS app takes it")}</small></span></button>
+              <button type="button" role="menuitem" onClick={() => void downloads.editable()}><Icon name="folder" size={16} /><span><b>{t("Editable project ZIP")}</b><small>{t("Opens in Studio and CorosLink")}</small></span></button>
+              <button type="button" role="menuitem" onClick={() => { setMenu(false); setSendTab("file"); }}><Icon name="watch" size={16} /><span><b>{t("All watches")}</b><small>{t("Final ZIPs for every model, one folder")}</small></span></button>
+              <button type="button" role="menuitem" onClick={() => { setMenu(false); setConverting(true); }}><Icon name="convert" size={16} /><span><b>{t("Convert for another watch…")}</b><small>{t("APEX 4, VERTIX 2S, NOMAD and more")}</small></span></button>
+              <button type="button" role="menuitem" onClick={() => { setMenu(false); setSendTab("file"); }}><Icon name="code" size={16} /><span><b>{t("Development export")}</b><small>{t("Config and images, unpacked")}</small></span></button>
             </div>
           ) : null}
         </div>
-        <Button onClick={() => { setMenu(false); setConverting(true); }}><Icon name="convert" size={16} />Convert</Button>
-        <Button variant="primary" onClick={() => { setMenu(false); setSendTab("watch"); }}><Icon name="send" size={16} />Send</Button>
+        <Button onClick={() => { setMenu(false); setConverting(true); }}><Icon name="convert" size={16} />{t("Convert")}</Button>
+        <Button variant="primary" onClick={() => { setMenu(false); setSendTab("watch"); }}><Icon name="send" size={16} />{t("Send")}</Button>
       </header>
       {problem ? <div className="notice st-editor-notice" role="alert">{problem}</div> : null}
 
       <div className="st-work">
         {/* ───── Left: layers and what can be added ───── */}
-        <aside className="st-left" aria-label="Layers and library">
-          <Segmented label="Left panel" value={left} onChange={setLeft} className="st-tabs"
-            options={[{ value: "layers", label: <><Icon name="layers" size={15} />Layers</> }, { value: "add", label: <><Icon name="plus" size={15} width={2.2} />Add</> }]} />
+        <aside className="st-left" aria-label={t("Layers and library")}>
+          <Segmented label={t("Left panel")} value={left} onChange={setLeft} className="st-tabs"
+            options={[{ value: "layers", label: <><Icon name="layers" size={15} />{t("Layers")}</> }, { value: "add", label: <><Icon name="plus" size={15} width={2.2} />{t("Add")}</> }]} />
           {left === "layers" ? (
             <div className="st-layers">
               {grouped(layers).map((g) => (
-                <section key={g.id} className="st-layer-group" aria-label={g.label}>
-                  <h3>{g.label}</h3>
+                <section key={g.id} className="st-layer-group" aria-label={t(g.label)}>
+                  <h3>{t(g.label)}</h3>
                   {g.layers.map((l) => (
                     <div key={l.spot?.id ?? l.id} className="st-layer-row" data-on={l.id === layer?.id || undefined} data-hidden={!l.visible || undefined}>
                       <button type="button" className="st-layer-pick" data-picked={(l.id !== layer?.id && selected.includes(l)) || undefined} onClick={(e) => { pick(l.id, e.shiftKey); setInsp("layer"); }}>
-                        <Icon name={l.spot ? SPOT_ICON[l.spot.id] ?? "image" : ICON[l.kind] ?? "rect"} size={16} /><span>{l.label}</span>
-                        {l.spot ? <span className="st-layer-state">{spotActive(l.spot, choice).label}</span> : null}
+                        <Icon name={l.spot ? SPOT_ICON[l.spot.id] ?? "image" : ICON[l.kind] ?? "rect"} size={16} /><span>{t(l.label)}</span>
+                        {l.spot ? <span className="st-layer-state">{t(spotActive(l.spot, choice).label)}</span> : null}
                       </button>
                       {library && canRemove(active, l, library.ctx) ? (
-                        <button type="button" className="st-icon-btn st-row-act" aria-label={`Delete ${l.label}`} title={isLocked(active, l) ? "Unlock and delete" : "Delete"} onClick={() => remove([l])}>
+                        <button type="button" className="st-icon-btn st-row-act" aria-label={t("Delete {name}", { name: t(l.label) })} title={isLocked(active, l) ? t("Unlock and delete") : t("Delete")} onClick={() => remove([l])}>
                           <Icon name="trash" size={15} />
                         </button>
                       ) : null}
                       {canMove(l) && l.bounds ? (
                         <button type="button" className="st-icon-btn st-row-act st-lock" data-locked={isLocked(active, l) || undefined} aria-pressed={isLocked(active, l)}
-                          aria-label={`${isLocked(active, l) ? "Unlock" : "Lock"} ${l.label} position`} title={isLocked(active, l) ? "Unlock position" : "Lock position"}
+                          aria-label={isLocked(active, l) ? t("Unlock {name} position", { name: t(l.label) }) : t("Lock {name} position", { name: t(l.label) })} title={isLocked(active, l) ? t("Unlock position") : t("Lock position")}
                           onClick={() => edit((x) => setLocked(x, l, !isLocked(x, l)))}>
                           <Icon name={isLocked(active, l) ? "lock" : "unlock"} size={15} />
                         </button>
                       ) : null}
                       {l.canHide ? (
-                        <button type="button" className="st-icon-btn st-eye" aria-label={`${l.visible ? "Hide" : "Show"} ${l.label}`} onClick={() => edit((x) => setVisible(x, l, !l.visible, source, mode))}>
+                        <button type="button" className="st-icon-btn st-eye" aria-label={l.visible ? t("Hide {name}", { name: t(l.label) }) : t("Show {name}", { name: t(l.label) })} onClick={() => edit((x) => setVisible(x, l, !l.visible, source, mode))}>
                           <Icon name={l.visible ? "eye" : "eyeOff"} size={16} />
                         </button>
                       ) : null}
@@ -881,30 +883,30 @@ export default function StudioEditor() {
               {supportsAlwaysOn(source) ? (
                 <div className="st-aod-card">
                   <span className="st-aod-icon"><Icon name="moon" size={16} /></span>
-                  <span><b>Always-on</b><small>Its own layout, edited on its own.</small></span>
-                  <Button className="st-wide" onClick={() => { setMode(mode === "aod" ? "current" : "aod"); setSel(null); }}>{mode === "aod" ? "Back to the face" : "Edit always-on"}</Button>
+                  <span><b>{t("Always-on")}</b><small>{t("Its own layout, edited on its own.")}</small></span>
+                  <Button className="st-wide" onClick={() => { setMode(mode === "aod" ? "current" : "aod"); setSel(null); }}>{mode === "aod" ? t("Back to the face") : t("Edit always-on")}</Button>
                 </div>
               ) : (
-                <div className="st-aod-card"><span className="st-aod-icon"><Icon name="moon" size={16} /></span><span><b>Always-on</b><small>On {watch.label} the face itself stays on.</small></span></div>
+                <div className="st-aod-card"><span className="st-aod-icon"><Icon name="moon" size={16} /></span><span><b>{t("Always-on")}</b><small>{t("On {watch} the face itself stays on.", { watch: watch.label })}</small></span></div>
               )}
             </div>
           ) : picking && !chartOn && library ? (
             <div className="st-ch-pick">
               <div className="st-ch-pick-head">
-                <button type="button" className="st-icon-btn" aria-label="Back to Add" onClick={() => setPicking(false)}><Icon name="chevL" size={18} width={2.2} /></button>
-                <b>Chart</b>
+                <button type="button" className="st-icon-btn" aria-label={t("Back to Add")} onClick={() => setPicking(false)}><Icon name="chevL" size={18} width={2.2} /></button>
+                <b>{t("Chart")}</b>
               </div>
-              <p className="st-hint">One page at a time; the watch's Back button goes to the next. Pick the first:</p>
+              <p className="st-hint">{t("One page at a time; the watch's Back button goes to the next. Pick the first:")}</p>
               {chartStartOptions(active, library.ctx.details).map((o) => (
-                <button key={o.key} type="button" className="st-ch-opt" aria-label={`Add ${o.label}`} onClick={() => startChart(o)}>
+                <button key={o.key} type="button" className="st-ch-opt" aria-label={t("Add {name}", { name: t(o.label) })} onClick={() => startChart(o)}>
                   <span className="st-ch-opt-top">
                     <span className="st-ch-mini"><Icon name={CHART_GRAPH_ICON[o.graph]} size={20} /></span>
-                    <span><b>{o.label}</b><small>{o.sub}</small></span>
-                    <span className="st-ch-kind">{CHART_GRAPH_SHORT[o.graph]}</span>
+                    <span><b>{t(o.label)}</b><small>{t(o.sub)}</small></span>
+                    <span className="st-ch-kind">{t(CHART_GRAPH_SHORT[o.graph])}</span>
                   </span>
                   {o.hides.length || o.note ? <span className="st-ch-fx">
-                    {o.hides.length ? <span className="st-ch-wx"><span className="st-ch-fx-label">Hides</span>{o.hides.map((f) => <span key={f.id} className="st-ch-tag" data-kind="minus">{f.label}</span>)}</span> : null}
-                    {o.note ? <span className="st-ch-tag" data-kind="note">{o.note}</span> : null}
+                    {o.hides.length ? <span className="st-ch-wx"><span className="st-ch-fx-label">{t("Hides")}</span>{o.hides.map((f) => <span key={f.id} className="st-ch-tag" data-kind="minus">{t(f.label)}</span>)}</span> : null}
+                    {o.note ? <span className="st-ch-tag" data-kind="note">{t(o.note)}</span> : null}
                   </span> : null}
                 </button>
               ))}
@@ -912,82 +914,82 @@ export default function StudioEditor() {
           ) : (
             <div className="st-lib">
               <label className="st-search"><Icon name="search" size={15} />
-                <input type="search" aria-label="Search what can be added" placeholder="Text, seconds, heart rate, weather…" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <input type="search" aria-label={t("Search what can be added")} placeholder={t("Text, seconds, heart rate, weather…")} value={query} onChange={(e) => setQuery(e.target.value)} />
               </label>
               {hasAutoTime ? (
                 <div className="st-lib-section">
-                  <h3>Time</h3>
+                  <h3>{tx("clock", "Time")}</h3>
                   <div className="st-tiles">
                     <button type="button" className="st-tile" onClick={splitTime}>
                       <span className="st-tile-prev"><span className="st-prev-time"><span>10</span><span style={{ color: "#53cba1" }}>08</span></span></span>
-                      <span className="st-tile-name"><span>Hours and minutes apart</span></span>
+                      <span className="st-tile-name"><span>{t("Hours and minutes apart")}</span></span>
                     </button>
                   </div>
                 </div>
               ) : null}
-              {[{ id: "artwork", label: "Artwork", note: " · part of the picture", rows: items.filter((i) => i.repeat) },
-                ...LIBRARY_ORDER.map((gid) => ({ id: gid as string, label: gid === "basic" ? "Template images" : gid === "charts" && !query.trim() ? "Chart" : LAYER_GROUPS.find((g) => g.id === gid)?.label,
-                  note: gid === "charts" && query.trim() ? " · pages" : "", rows: items.filter((i) => i.group === gid && !i.repeat) }))].map((section) => section.rows.length || (section.id === "artwork" && officialShown) ? (
+              {[{ id: "artwork", label: t("Artwork"), note: ` · ${t("part of the picture")}`, rows: items.filter((i) => i.repeat) },
+                ...LIBRARY_ORDER.map((gid) => ({ id: gid as string, label: gid === "basic" ? t("Template images") : gid === "charts" && !query.trim() ? t("Chart") : t(LAYER_GROUPS.find((g) => g.id === gid)?.label ?? ""),
+                  note: gid === "charts" && query.trim() ? ` · ${t("pages")}` : "", rows: items.filter((i) => i.group === gid && !i.repeat) }))].map((section) => section.rows.length || (section.id === "artwork" && officialShown) ? (
                 <div key={section.id} className="st-lib-section">
                   <h3>{section.label}{section.note ? <span className="st-lib-note">{section.note}</span> : null}</h3>
                   <div className="st-tiles">
                     {section.id === "charts" && !query.trim() ? (
-                      <button type="button" className="st-ch-card" aria-label="Chart" onClick={openChart}>
+                      <button type="button" className="st-ch-card" aria-label={t("Chart")} onClick={openChart}>
                         <span className="st-ch-card-prev">
                           <span className="st-ch-mini"><Icon name="chart" size={20} /></span><Icon name="chevR" size={13} width={2.4} />
                           <span className="st-ch-mini"><Icon name="wave" size={20} /></span><Icon name="chevR" size={13} width={2.4} />
                           <span className="st-ch-mini"><Icon name="nums" size={20} /></span>
                         </span>
-                        <span className="st-ch-card-name"><span>Chart</span>{chartOn ? <Icon name="check" size={13} width={2.6} /> : null}
-                          <small>{chartOn ? `${chartPages} ${chartPages === 1 ? "page" : "pages"}` : "6 pages to pick from"}</small></span>
+                        <span className="st-ch-card-name"><span>{t("Chart")}</span>{chartOn ? <Icon name="check" size={13} width={2.6} /> : null}
+                          <small>{chartOn ? (chartPages === 1 ? t("1 page") : t("{n} pages", { n: chartPages })) : t("6 pages to pick from")}</small></span>
                       </button>
                     ) : section.rows.map((i) => (
                       // A row that opens a file picker can't be dropped: the picker needs a click.
                       <button key={i.key} type="button" className="st-tile" data-added={i.added || undefined} draggable={!i.added && !PICKS.has(i.key)}
-                        aria-label={`${i.added ? "Select" : "Add"} ${i.label}`} title={i.hint}
+                        aria-label={i.added ? t("Select {name}", { name: t(i.label) }) : t("Add {name}", { name: t(i.label) })} title={i.hint ? t(i.hint) : undefined}
                         onDragStart={(e) => { e.dataTransfer.setData(LAYER_TYPE, i.key); e.dataTransfer.effectAllowed = "copy"; }}
                         onClick={() => void add(i)}>
                         <span className="st-tile-prev">{i.icons ? i.icons.map((n) => <Icon key={n} name={n} size={18} />) : <Icon name={i.icon} size={18} />}{i.sample ? <span className="st-tile-sample">{i.sample}</span> : null}</span>
-                        <span className="st-tile-name"><span>{i.label}</span>{i.added ? <Icon name="check" size={13} width={2.6} /> : null}</span>
+                        <span className="st-tile-name"><span>{t(i.label)}</span>{i.added ? <Icon name="check" size={13} width={2.6} /> : null}</span>
                       </button>
                     ))}
                     {section.id === "artwork" && officialShown ? (
                       // Digits, icons and backgrounds cut from COROS's own faces (parts/StudioOfficialPicker.tsx).
-                      <button type="button" className="st-tile" aria-label="Add an image from COROS faces" title="Digits, icons and backgrounds from COROS's own faces" onClick={() => setOfficial(true)}>
+                      <button type="button" className="st-tile" aria-label={t("Add an image from COROS faces")} title={t("Digits, icons and backgrounds from COROS's own faces")} onClick={() => setOfficial(true)}>
                         <span className="st-tile-prev"><Icon name="image" size={18} /></span>
-                        <span className="st-tile-name"><span>From COROS faces</span></span>
+                        <span className="st-tile-name"><span>{t("From COROS faces")}</span></span>
                       </button>
                     ) : null}
                   </div>
                 </div>
               ) : null)}
-              <input ref={imageInput} type="file" hidden accept="image/png,image/jpeg,image/webp" aria-label="Image file"
+              <input ref={imageInput} type="file" hidden accept="image/png,image/jpeg,image/webp" aria-label={t("Image file")}
                 onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void addPicture(f, pickAt.current); }} />
-              <input ref={framesInput} type="file" hidden multiple accept="image/png" aria-label="Animation frames folder" {...{ webkitdirectory: "" }}
+              <input ref={framesInput} type="file" hidden multiple accept="image/png" aria-label={t("Animation frames folder")} {...{ webkitdirectory: "" }}
                 onChange={(e) => { const files = e.target.files; if (files?.length) void addFrames(files, pickAt.current).finally(() => { e.target.value = ""; }); }} />
-              {!items.length && !officialShown ? <p className="st-hint">Nothing by that name.</p> : null}
+              {!items.length && !officialShown ? <p className="st-hint">{t("Nothing by that name.")}</p> : null}
             </div>
           )}
         </aside>
 
         {/* ───── The watch ───── */}
-        <section className="st-canvas" aria-label="Watch" data-pages={pageStrip.length ? true : undefined} onDragOver={(e) => { if (e.dataTransfer.types.includes(LAYER_TYPE) || e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={onDrop}
+        <section className="st-canvas" aria-label={t("Watch")} data-pages={pageStrip.length ? true : undefined} onDragOver={(e) => { if (e.dataTransfer.types.includes(LAYER_TYPE) || e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={onDrop}
           onPointerDown={(e) => { if (e.target === e.currentTarget) setSel(null); }}>
           <div className="st-canvas-top">
             {layer ? (
-              <div className="st-context" role="toolbar" aria-label={`${layer.label} tools`}>
-                {canColour ? <Dots value={colourOf(active, layer)} onPick={(c) => edit((x) => colour(x, layer, c))} /> : <span className="st-context-name">{layer.label}</span>}
-                {layer.id === "autoTime" ? <><span className="st-sep" aria-hidden="true" /><Button onClick={splitTime}>Separate hours and minutes</Button></> : null}
+              <div className="st-context" role="toolbar" aria-label={t("{name} tools", { name: t(layer.label) })}>
+                {canColour ? <Dots value={colourOf(active, layer)} onPick={(c) => edit((x) => colour(x, layer, c))} /> : <span className="st-context-name">{t(layer.label)}</span>}
+                {layer.id === "autoTime" ? <><span className="st-sep" aria-hidden="true" /><Button onClick={splitTime}>{t("Separate hours and minutes")}</Button></> : null}
                 {layer.capabilities.position ? <>
                   <span className="st-sep" aria-hidden="true" />
-                  <button type="button" className="st-icon-btn" aria-label="Back to the template's place" title="Back to the template's place" onClick={() => edit((x) => moveTo(x, layer, 0, 0))}><Icon name="refresh" /></button>
+                  <button type="button" className="st-icon-btn" aria-label={t("Back to the template's place")} title={t("Back to the template's place")} onClick={() => edit((x) => moveTo(x, layer, 0, 0))}><Icon name="refresh" /></button>
                 </> : null}
-                {layer.canHide ? <button type="button" className="st-icon-btn" aria-label="Hide" title={library && canRemove(active, layer, library.ctx) ? "Hide" : "Hide (⌫)"} onClick={() => hide(layer)}><Icon name="eyeOff" /></button> : null}
+                {layer.canHide ? <button type="button" className="st-icon-btn" aria-label={t("Hide")} title={library && canRemove(active, layer, library.ctx) ? t("Hide") : t("Hide (⌫)")} onClick={() => hide(layer)}><Icon name="eyeOff" /></button> : null}
                 {canMove(layer) && layer.bounds ? (
-                  <button type="button" className="st-icon-btn" aria-pressed={isLocked(active, layer)} aria-label={isLocked(active, layer) ? "Unlock position" : "Lock position"} title={isLocked(active, layer) ? "Unlock position" : "Lock position"}
+                  <button type="button" className="st-icon-btn" aria-pressed={isLocked(active, layer)} aria-label={isLocked(active, layer) ? t("Unlock position") : t("Lock position")} title={isLocked(active, layer) ? t("Unlock position") : t("Lock position")}
                     onClick={() => edit((x) => setLocked(x, layer, !isLocked(x, layer)))}><Icon name={isLocked(active, layer) ? "lock" : "unlock"} /></button>
                 ) : null}
-                {library && canRemove(active, layer, library.ctx) ? <button type="button" className="st-icon-btn" aria-label="Delete" title="Delete (⌫)" onClick={() => remove(selected)}><Icon name="trash" /></button> : null}
+                {library && canRemove(active, layer, library.ctx) ? <button type="button" className="st-icon-btn" aria-label={t("Delete")} title={t("Delete (⌫)")} onClick={() => remove(selected)}><Icon name="trash" /></button> : null}
               </div>
             ) : null}
           </div>
@@ -995,7 +997,7 @@ export default function StudioEditor() {
           <div className="st-canvas-face" onPointerDown={(e) => { if (e.target === e.currentTarget) setSel(null); }}>
             <div className="st-bezel" style={{ width: FACE_PX * zoom, height: FACE_PX * zoom }}>
               <div ref={faceBox} className="st-face-box" onDragStart={(e) => e.preventDefault()}>
-                <FaceView src={frame} size={FACE_PX * zoom} label={`${name} on ${watch.label}`} over={over} onShown={shownNow}>
+                <FaceView src={frame} size={FACE_PX * zoom} label={t("{name} on {watch}", { name, watch: watch.label })} over={over} onShown={shownNow}>
                   {guides ? <div className="st-safe" aria-hidden="true" /> : null}
                   {snapped.outlines.map((b, i) => <div key={`o${i}`} className="st-snap-to" style={{ left: b.x0 * scale - 2, top: b.y0 * scale - 2, width: (b.x1 - b.x0) * scale + 4, height: (b.y1 - b.y0) * scale + 4 }} aria-hidden="true" />)}
                   {snapped.lines.map((g, i) => <div key={i} className="st-snap" style={guide(g)} aria-hidden="true" />)}
@@ -1003,11 +1005,11 @@ export default function StudioEditor() {
                     <div key={`g${i}`} className="st-gap" data-axis={g.axis} data-equal={g.equal || undefined} style={gap(g)} aria-hidden="true"><span>{Math.round(g.to - g.from)}</span></div>
                   ))}
                   {left === "add" ? items.filter((i) => !i.added && i.bounds).map((i) => (
-                    <button key={i.key} type="button" className="st-spot" aria-label={`Add ${i.label} here`} title={i.label} style={spot(i.bounds!)} onClick={() => void add(i)}>
+                    <button key={i.key} type="button" className="st-spot" aria-label={t("Add {name} here", { name: t(i.label) })} title={t(i.label)} style={spot(i.bounds!)} onClick={() => void add(i)}>
                       <Icon name="plus" size={14} width={2.6} />
                     </button>
                   )) : shown.map((l) => (
-                    <button key={l.spot?.id ?? l.id} type="button" className="st-hit" data-fixed={!canMove(l) || isLocked(active, l) || undefined} aria-label={`Select ${l.label}`} style={box(l)}
+                    <button key={l.spot?.id ?? l.id} type="button" className="st-hit" data-fixed={!canMove(l) || isLocked(active, l) || undefined} aria-label={t("Select {name}", { name: t(l.label) })} style={box(l)}
                       draggable={false} onPointerEnter={(e) => { if (!e.buttons) setHover(l.id); }} onPointerDown={startDrag(l)} />
                   ))}
                   {left === "layers" && !drag && mode === "current" && library ? (
@@ -1018,15 +1020,15 @@ export default function StudioEditor() {
                   {layer?.bounds && layer.visible && left === "layers" ? (
                     <div className="st-sel" style={box(layer)} aria-hidden="true">
                       {([0, 1, 2, 3] as const).map((c) => (
-                        resizable ? <i key={c} data-resize={c} title="Drag to resize (Alt: from the middle)" onPointerDown={startResize(layer, c)} /> : <i key={c} />
+                        resizable ? <i key={c} data-resize={c} title={t("Drag to resize (Alt: from the middle)")} onPointerDown={startResize(layer, c)} /> : <i key={c} />
                       ))}
-                      <span>{selected.length > 1 ? `${selected.length} layers` : `${layer.label}${stateLabel(layer)}`}</span>
+                      <span>{selected.length > 1 ? t("{n} layers", { n: selected.length }) : `${t(layer.label)}${stateLabel(layer)}`}</span>
                     </div>
                   ) : null}
                   {iconGrip && layer?.visible && left === "layers" && !drag ? (
                     <div className="st-icon-grip" data-dragging={iconLive ? true : undefined}
-                      style={spot(iconLive ? { x0: iconGrip.bounds.x0 + iconLive.dx, y0: iconGrip.bounds.y0 + iconLive.dy, x1: iconGrip.bounds.x1 + iconLive.dx, y1: iconGrip.bounds.y1 + iconLive.dy } : iconGrip.bounds)} role="button" aria-label={`Move the ${iconGrip.label.toLowerCase()}`}
-                      title="Drag to move the icon (Shift: one direction)" onPointerDown={(e) => startIconDrag(iconGrip.move, e)} />
+                      style={spot(iconLive ? { x0: iconGrip.bounds.x0 + iconLive.dx, y0: iconGrip.bounds.y0 + iconLive.dy, x1: iconGrip.bounds.x1 + iconLive.dx, y1: iconGrip.bounds.y1 + iconLive.dy } : iconGrip.bounds)} role="button" aria-label={t("Move the {name}", { name: iconGrip.label.toLowerCase() })}
+                      title={t("Drag to move the icon (Shift: one direction)")} onPointerDown={(e) => startIconDrag(iconGrip.move, e)} />
                   ) : null}
                 </FaceView>
               </div>
@@ -1034,24 +1036,24 @@ export default function StudioEditor() {
                 {/* The slab is drawn behind the bezel; the button that takes the click sits above the face's own
                     click areas, shaped to the slab's stretch of the case outside the dial (studio.css). */}
                 <span className="st-ch-backglow" data-hint={!backTried || undefined} aria-hidden="true"><i className="st-ch-backslab" /></span>
-                <button type="button" className="st-ch-backbtn" aria-label={nextPage ? "Back: next page" : "Back: next selectable data"}
-                  title={nextPage ? "The watch's Back button: next page" : "The watch's Back button: the next data in Selectable data"} onClick={stepBack} />
-                <button type="button" className="st-ch-backlabel" data-hint={!backTried || undefined} tabIndex={-1} aria-hidden="true" onClick={stepBack}>{backTried ? "Back" : "Press me"}</button>
+                <button type="button" className="st-ch-backbtn" aria-label={nextPage ? t("Back: next page") : t("Back: next selectable data")}
+                  title={nextPage ? t("The watch's Back button: next page") : t("The watch's Back button: the next data in Selectable data")} onClick={stepBack} />
+                <button type="button" className="st-ch-backlabel" data-hint={!backTried || undefined} tabIndex={-1} aria-hidden="true" onClick={stepBack}>{backTried ? t("Back") : t("Press me")}</button>
               </> : null}
             </div>
           </div>
 
           {pageStrip.length ? (
-            <div className="st-ch-strip" role="toolbar" aria-label="Watch pages">
-              <button type="button" className="st-ch-step" disabled={!canBack} title={nextPage || !slotNext ? "Next page, as the watch's Back button does" : "Next data in Selectable data, as the watch's Back button does"} onClick={stepBack}><Icon name="undo" size={16} />Back</button>
+            <div className="st-ch-strip" role="toolbar" aria-label={t("Watch pages")}>
+              <button type="button" className="st-ch-step" disabled={!canBack} title={nextPage || !slotNext ? t("Next page, as the watch's Back button does") : t("Next data in Selectable data, as the watch's Back button does")} onClick={stepBack}><Icon name="undo" size={16} />{t("Back")}</button>
               <span className="st-sep" aria-hidden="true" />
               {pageStrip.map((r) => (
                 <button key={r.id} type="button" className="st-ch-chip" aria-pressed={r.shown} data-dim={!canPreviewPage(r) || undefined}
-                  title={canPreviewPage(r) ? undefined : "The preview shows this page once it has a readout"}
-                  onClick={() => { if (canPreviewPage(r) && !r.shown) void lookAtPage(r.id, edit); }}><b>{r.number}</b>{r.label}</button>
+                  title={canPreviewPage(r) ? undefined : t("The preview shows this page once it has a readout")}
+                  onClick={() => { if (canPreviewPage(r) && !r.shown) void lookAtPage(r.id, edit); }}><b>{r.number}</b>{t(r.label)}</button>
               ))}
               <span className="st-sep" aria-hidden="true" />
-              <button type="button" className="st-icon-btn" aria-label="Pages" title="Add or remove pages" onClick={openChart}><Icon name="plus" /></button>
+              <button type="button" className="st-icon-btn" aria-label={t("Pages")} title={t("Add or remove pages")} onClick={openChart}><Icon name="plus" /></button>
             </div>
           ) : null}
 
@@ -1059,25 +1061,25 @@ export default function StudioEditor() {
             slot={slotNow} slotShown={slotPreview(slotNow, active)} onSlot={(id) => edit((x) => setSlotPreview(x, id))} /> : null}
           {toast ? <div className="st-toast" role="status"><Icon name="check" size={15} width={2.6} />{toast}</div> : null}
 
-          <div className="st-tools" role="toolbar" aria-label="Canvas tools">
+          <div className="st-tools" role="toolbar" aria-label={t("Canvas tools")}>
             {supportsAlwaysOn(source) ? <>
-              <Segmented small label="Display" value={mode} onChange={(v) => { setMode(v); setSel(null); }} options={[{ value: "current", label: "Current" }, { value: "aod", label: "Always-on" }]} />
+              <Segmented small label={t("Display")} value={mode} onChange={(v) => { setMode(v); setSel(null); }} options={[{ value: "current", label: t("Current") }, { value: "aod", label: t("Always-on") }]} />
               <span className="st-sep" aria-hidden="true" />
             </> : null}
-            <button type="button" className="st-icon-btn" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.1).toFixed(1)))}><Icon name="minus" /></button>
+            <button type="button" className="st-icon-btn" aria-label={t("Zoom out")} onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.1).toFixed(1)))}><Icon name="minus" /></button>
             <span className="st-zoom">{Math.round(zoom * 100)}%</span>
-            <button type="button" className="st-icon-btn" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(1)))}><Icon name="plus" /></button>
+            <button type="button" className="st-icon-btn" aria-label={t("Zoom in")} onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(1)))}><Icon name="plus" /></button>
             <span className="st-sep" aria-hidden="true" />
-            <button type="button" className="st-icon-btn" aria-label="Snap" title="Snap to layers and the centre (hold Alt to skip)" aria-pressed={snap} onClick={() => setSnap((s) => !s)}><Icon name="snap" /></button>
-            <button type="button" className="st-icon-btn" aria-label="Safe-area guide" title="Safe-area guide" aria-pressed={guides} onClick={() => setGuides((g) => !g)}><Icon name="safe" /></button>
+            <button type="button" className="st-icon-btn" aria-label={t("Snap")} title={t("Snap to layers and the centre (hold Alt to skip)")} aria-pressed={snap} onClick={() => setSnap((s) => !s)}><Icon name="snap" /></button>
+            <button type="button" className="st-icon-btn" aria-label={t("Safe-area guide")} title={t("Safe-area guide")} aria-pressed={guides} onClick={() => setGuides((g) => !g)}><Icon name="safe" /></button>
             <span className="st-sep" aria-hidden="true" />
-            <button type="button" className="chip" aria-pressed={sim.enabled} onClick={() => setSim((s) => ({ ...s, enabled: !s.enabled, playing: false }))}><Icon name="play" size={14} width={2.2} />Simulate</button>
+            <button type="button" className="chip" aria-pressed={sim.enabled} onClick={() => setSim((s) => ({ ...s, enabled: !s.enabled, playing: false }))}><Icon name="play" size={14} width={2.2} />{t("Simulate")}</button>
           </div>
         </section>
 
         {/* ───── Right: the inspector, from the design's StudioEditor and StudioFace boards ───── */}
-        <div className="st-resize" role="separator" aria-orientation="vertical" aria-label="Inspector width" aria-valuemin={INSPECTOR_WIDTH.min} aria-valuemax={INSPECTOR_WIDTH.max} aria-valuenow={inspWidth}
-          tabIndex={0} title="Drag to resize. Double-click for the usual width."
+        <div className="st-resize" role="separator" aria-orientation="vertical" aria-label={t("Inspector width")} aria-valuemin={INSPECTOR_WIDTH.min} aria-valuemax={INSPECTOR_WIDTH.max} aria-valuenow={inspWidth}
+          tabIndex={0} title={t("Drag to resize. Double-click for the usual width.")}
           onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); inspDrag.current = { x: e.clientX, w: inspWidth }; }}
           onPointerMove={(e) => { const d = inspDrag.current; if (d) setInspWidth(clampInspector(d.w + d.x - e.clientX)); }}
           onPointerUp={(e) => { if (!inspDrag.current) return; inspDrag.current = null; keepInspWidth(clampInspector(inspWidth)); e.currentTarget.releasePointerCapture(e.pointerId); }}
@@ -1090,9 +1092,9 @@ export default function StudioEditor() {
             e.preventDefault(); e.stopPropagation();
             const w = clampInspector(next); setInspWidth(w); keepInspWidth(w);
           }} />
-        <aside className="st-right" aria-label="Inspector" data-tab={insp} style={{ width: inspWidth }}>
-          <Segmented label="Inspector" value={insp} onChange={setInsp} className="st-tabs"
-            options={[{ value: "layer", label: "Layer" }, { value: "face", label: "Face" }, { value: "ai", label: <><Icon name="spark" size={14} />AI</> }]} />
+        <aside className="st-right" aria-label={t("Inspector")} data-tab={insp} style={{ width: inspWidth }}>
+          <Segmented label={t("Inspector")} value={insp} onChange={setInsp} className="st-tabs"
+            options={[{ value: "layer", label: t("Layer") }, { value: "face", label: t("Face") }, { value: "ai", label: <><Icon name="spark" size={14} />AI</> }]} />
           {insp === "ai" ? (
             <Suspense fallback={null}><Watchmaker projectId={id} /></Suspense>
           ) : insp === "layer" ? (
@@ -1109,29 +1111,29 @@ export default function StudioEditor() {
                 onHome={layer.capabilities.position && layer.layoutGroupId ? () => edit((x) => moveTo(x, layer, 0, 0)) : null}
                 showsOn={layer.canHide && layer.kind !== "background" ? (supportsAlwaysOn(source) ? (["current", "aod"] as const) : (["current"] as const)).flatMap((m) => {
                   const there = m === mode ? layer : (otherLayers.find((l) => (layer.spot ? l.spot?.id === layer.spot.id : l.id === layer.id) && l.canHide) ?? null);
-                  return there ? [{ label: m === "current" ? "Current display" : "Always-on", on: there.visible,
+                  return there ? [{ label: m === "current" ? t("Current display") : t("Always-on"), on: there.visible,
                     toggle: () => apply((s) => ({ ...s, design: editMode(s.design, m, (x) => setVisible(x, there, !there.visible, source, m)) })) }] : [];
                 }) : []} />
             ) : (
               <div className="st-empty">
                 <Icon name="cursor" size={22} />
-                <p>Click something on the watch to change it, or open <button type="button" className="st-link" onClick={() => setLeft("add")}>Add</button> for artwork, time and live data.</p>
+                <p>{tr("Click something on the watch to change it, or open {add} for artwork, time and live data.", { add: <button type="button" className="st-link" onClick={() => setLeft("add")}>{t("Add")}</button> })}</p>
               </div>
             )
           ) : (<>
             <FaceInspector design={active} edit={edit} details={detailsOf(source, design, mode)} resolution={resolution} loadAssets={source.loadAssets} fail={(e) => say(e instanceof Error ? e.message : String(e))}
               watchRow={<div className="st-watch-row"><FaceView src={frame} size={44} />
-                <span><b>{watch.label}</b><small>{watch.previewSize} × {watch.previewSize} · {watch.display === "amoled" ? "AMOLED" : "Memory-in-pixel"}{project.sourceTemplateId ? ` · template ${project.sourceTemplateId}` : ""}</small></span></div>} />
+                <span><b>{watch.label}</b><small>{watch.previewSize} × {watch.previewSize} · {watch.display === "amoled" ? "AMOLED" : t("Memory-in-pixel")}{project.sourceTemplateId ? ` · ${t("template {id}", { id: project.sourceTemplateId })}` : ""}</small></span></div>} />
             <ProjectFolds design={design} editRoot={(fn) => apply((s) => { const next = fn(s.design); return next === s.design ? s : { ...s, design: next }; })}
               details={source.details} baselines={source.baselines} mode={mode} sourceTemplateId={project.sourceTemplateId} />
           </>)}
         </aside>
       </div>
 
-      {official ? <OfficialPicker watch={watch.model} request={{ mode: "image", title: "Images from COROS faces" }} onPick={addOfficial} onClose={() => setOfficial(false)} /> : null}
+      {official ? <OfficialPicker watch={watch.model} request={{ mode: "image", title: t("Images from COROS faces") }} onPick={addOfficial} onClose={() => setOfficial(false)} /> : null}
       {sendTab ? <SendDialog projectId={id} name={name} source={source} design={design} watch={watch} tab={sendTab} onTab={setSendTab}
         onRename={(value) => { dirty.current = true; setDoc((d) => (d.now ? { ...d, now: { ...d.now, name: value } } : d)); }}
-        layerLabel={(lid) => rowOf(layers, lid)?.label ?? lid.replace(/[_-]+/g, " ").replace(/^./, (c) => c.toUpperCase())}
+        layerLabel={(lid) => { const row = rowOf(layers, lid); return row ? t(row.label) : lid.replace(/[_-]+/g, " ").replace(/^./, (c) => c.toUpperCase()); }}
         onShowLayer={(lid) => { setSendTab(null); setMode("current"); setLeft("layers"); setInsp("layer"); showLayer(lid); }}
         onLanguages={() => { setSendTab(null); setInsp("face"); }}
         onEditable={makeEditable}
@@ -1192,7 +1194,7 @@ function ChartMates({ design, row, details, loadAssets, spot, onPick }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, editing, chart?.readouts, details, loadAssets]);
   return <>{mates.map((m) => (
-    <button key={`mate:${m.source}`} type="button" className="st-hit" aria-label={`Edit ${chartReadoutName(m.source)}`} title={`${chartReadoutName(m.source)}: click to move it`}
+    <button key={`mate:${m.source}`} type="button" className="st-hit" aria-label={t("Edit {name}", { name: t(chartReadoutName(m.source)) })} title={t("{name}: click to move it", { name: t(chartReadoutName(m.source)) })}
       style={spot(m.bounds)} onPointerDown={(e) => { e.stopPropagation(); onPick(m.readout); }} />
   ))}</>;
 }

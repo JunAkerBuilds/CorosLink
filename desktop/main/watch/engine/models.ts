@@ -15,31 +15,31 @@ export interface WatchTarget {
   display: Display;
 }
 
-const t = (id: string, label: string, hardware: string, screen: number, display: Display): WatchTarget => ({ id, label, hardware, screen, display });
+const target = (id: string, label: string, hardware: string, screen: number, display: Display): WatchTarget => ({ id, label, hardware, screen, display });
 
-export const PACE_PRO = t("pace-pro", "PACE Pro", "W332", 416, "amoled");
+export const PACE_PRO = target("pace-pro", "PACE Pro", "W332", 416, "amoled");
 
 export const TARGETS: readonly WatchTarget[] = [
   PACE_PRO,
-  t("pace-4-pro", "PACE 4 Pro", "W337", 466, "amoled"),
-  t("pace-4", "PACE 4", "W336", 390, "amoled"),
-  t("pace-3", "PACE 3", "W331", 240, "mip"),
-  t("apex-4", "APEX 4", "W541", 260, "mip"),
-  t("nomad", "NOMAD", "W942", 260, "mip"),
-  t("vertix-2", "VERTIX 2", "B19", 280, "mip"),
-  t("vertix-2s", "VERTIX 2S", "B19S", 280, "mip"),
+  target("pace-4-pro", "PACE 4 Pro", "W337", 466, "amoled"),
+  target("pace-4", "PACE 4", "W336", 390, "amoled"),
+  target("pace-3", "PACE 3", "W331", 240, "mip"),
+  target("apex-4", "APEX 4", "W541", 260, "mip"),
+  target("nomad", "NOMAD", "W942", 260, "mip"),
+  target("vertix-2", "VERTIX 2", "B19", 280, "mip"),
+  target("vertix-2s", "VERTIX 2S", "B19S", 280, "mip"),
   // COROS's catalog lists faces for "COROS B20" and "COROS B21"; an APEX 2 Pro's serial starts B20.
-  t("apex-2-pro", "APEX 2 Pro", "B20", 260, "mip"),
-  t("apex-2", "APEX 2", "B21", 240, "mip"),
+  target("apex-2-pro", "APEX 2 Pro", "B20", 260, "mip"),
+  target("apex-2", "APEX 2", "B21", 240, "mip"),
   // Seen in Sentry as "COROS W542" from watches named "COROS APEX 4 42mm".
-  t("apex-4-42mm", "APEX 4 42mm", "W542", 240, "mip"),
+  target("apex-4-42mm", "APEX 4 42mm", "W542", 240, "mip"),
   // Seen in Sentry as "COROS B16" from watches named "COROS VERTIX".
-  t("vertix", "VERTIX", "B16", 240, "mip"),
-  t("apex-pro", "APEX Pro", "B17", 240, "mip"),
-  t("pace-2", "PACE 2", "B18", 240, "mip"),
+  target("vertix", "VERTIX", "B16", 240, "mip"),
+  target("apex-pro", "APEX Pro", "B17", 240, "mip"),
+  target("pace-2", "PACE 2", "B18", 240, "mip"),
   // COROS's catalog lists faces for "COROS W706" (466 × 466 AMOLED, magic 664A, so PACE 4 Pro's BIN). Not yet seen
   // on a real watch.
-  t("vertix-4", "VERTIX 4", "W706", 466, "amoled"),
+  target("vertix-4", "VERTIX 4", "W706", 466, "amoled"),
 ];
 
 /** The screen size reversed, then A (AMOLED) or R (memory-in-pixel): "614A", "062R". */

@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import type { CookieJar } from "./cookieJar";
 import { runInRequest } from "./requestScope";
 import { API_ROUTES } from "./apiRoutes.gen";
+import { t } from "@/lib/i18n";
 
 type Handler = (request: NextRequest, context: { params: Promise<Record<string, string>> }) => Promise<Response> | Response;
 
@@ -44,7 +45,7 @@ export async function answerApi(request: Request, jar: CookieJar): Promise<Respo
       return await runInRequest({ jar, path: url.pathname, headers }, async () => handler(next, { params: Promise.resolve(params) }));
     } catch (error) {
       console.error(`API ${request.method} ${url.pathname} failed:`, error);
-      return Response.json({ error: "internal", message: "Something went wrong in the app." }, { status: 500 });
+      return Response.json({ error: "internal", message: t("Something went wrong in the app.") }, { status: 500 });
     } finally {
       void jar.save();
     }

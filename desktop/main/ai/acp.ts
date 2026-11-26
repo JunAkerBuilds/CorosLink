@@ -7,6 +7,7 @@ import { textFileBlock } from "@/lib/coach/files";
 import { CoachModelError } from "@/server/coach/anthropic";
 import type { AgentAsk, AgentDone } from "./agent";
 import { BRIDGE_NAME, type ToolBridge } from "./bridge";
+import { t } from "@/lib/i18n";
 
 type Json = Record<string, unknown>;
 
@@ -33,8 +34,8 @@ export class AcpAgent {
     });
     this.done = new Promise((resolve) => {
       const end = (why: string) => { this.fail(new AcpError(why)); resolve(); };
-      child.on("error", () => end("The program couldn't be started."));
-      child.on("close", () => end("The program stopped."));
+      child.on("error", () => end(t("The program couldn't be started.")));
+      child.on("close", () => end(t("The program stopped.")));
     });
   }
 
@@ -47,7 +48,7 @@ export class AcpAgent {
   }
 
   request(method: string, params: unknown): Promise<unknown> {
-    if (this.exited) return Promise.reject(new AcpError("The program isn't running."));
+    if (this.exited) return Promise.reject(new AcpError(t("The program isn't running.")));
     const id = this.next++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -152,7 +153,7 @@ export async function setModel(agent: AcpAgent, sessionId: string, model: string
   if (!model) return;
   await agent.request("session/set_config_option", { sessionId, configId: "model", value: model })
     .catch(() => agent.request("session/set_model", { sessionId, modelId: model }))
-    .catch(() => { throw new CoachModelError("refused_request", `The model ${model} isn't available. Pick another on the AI page.`); });
+    .catch(() => { throw new CoachModelError("refused_request", t("The model {model} isn't available. Pick another on the AI page.", { model })); });
 }
 
 /** What an ACP failure means for the athlete. The agent's own words are kept when they say more than ours. */
@@ -160,10 +161,10 @@ export function acpFailure(name: string, error: unknown, log = ""): CoachModelEr
   if (error instanceof CoachModelError) return error;
   const said = error instanceof Error ? error.message.slice(0, 240) : "";
   const text = `${said} ${(error as AcpError)?.data ? JSON.stringify((error as AcpError).data) : ""} ${log}`;
-  if (/quota|balance|credit|rate.?limit|usage limit|resource.?exhausted|\b429\b/i.test(text)) return new CoachModelError("rate_limited", said ? `${name}: ${said.replace(/^Internal error: /, "")}` : `${name} has reached its usage limit for now.`);
+  if (/quota|balance|credit|rate.?limit|usage limit|resource.?exhausted|\b429\b/i.test(text)) return new CoachModelError("rate_limited", said ? `${name}: ${said.replace(/^Internal error: /, "")}` : t("{name} has reached its usage limit for now.", { name }));
   if (/no longer supported|migrate/i.test(said)) return new CoachModelError("bad_key", `${name}: ${said}`);
-  if (/unauthenticated|authentication required|not (signed|logged) in|sign.?in required|log.?in required|credential|\b401\b/i.test(text)) return new CoachModelError("bad_key", said && !/^internal error$/i.test(said) ? `${name}: ${said}` : `${name} isn't signed in. Sign in on the AI page.`);
-  return new CoachModelError("overloaded", `${name} couldn't answer${said ? `: ${said}` : "."}`);
+  if (/unauthenticated|authentication required|not (signed|logged) in|sign.?in required|log.?in required|credential|\b401\b/i.test(text)) return new CoachModelError("bad_key", said && !/^internal error$/i.test(said) ? `${name}: ${said}` : t("{name} isn't signed in. Sign in on the AI page.", { name }));
+  return new CoachModelError("overloaded", said ? t("{name} couldn't answer: {reason}", { name, reason: said }) : t("{name} couldn't answer.", { name }));
 }
 
 const IDLE_MS = 3 * 60_000;
@@ -198,7 +199,7 @@ export async function acpAnswer(agent: AcpAgent, ask: AgentAsk, options: {
     await agent.initialize(options.protocolVersion ?? 1);
     const session = (await agent.request("session/new", { cwd: options.cwd, mcpServers: options.bridgeInSession === false ? [] : [bridgeServer(ask.bridge)], ...options.extra })) as Json;
     const sessionId = typeof session?.sessionId === "string" ? session.sessionId : "";
-    if (!sessionId) throw new AcpError(`${options.name} didn't start a session.`);
+    if (!sessionId) throw new AcpError(t("{name} didn't start a session.", { name: options.name }));
     await options.started?.(session, sessionId);
     await setModel(agent, sessionId, options.model);
     const result = (await agent.request("session/prompt", { sessionId, prompt: acpPrompt(ask.prompt, ask.files) })) as { stopReason?: string; usage?: { inputTokens?: number; outputTokens?: number; thoughtTokens?: number } } | null;
@@ -207,7 +208,7 @@ export async function acpAnswer(agent: AcpAgent, ask: AgentAsk, options: {
     const usage = result?.usage ?? {};
     return { text, inputTokens: usage.inputTokens ?? 0, outputTokens: (usage.outputTokens ?? 0) + (usage.thoughtTokens ?? 0) };
   } catch (error) {
-    if (ask.signal.aborted) throw new CoachModelError("unreachable", "Stopped.");
+    if (ask.signal.aborted) throw new CoachModelError("unreachable", t("Stopped."));
     throw acpFailure(options.name, error, options.log?.() ?? "");
   } finally {
     clearTimeout(idle);

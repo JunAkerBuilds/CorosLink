@@ -4,6 +4,8 @@
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { beginGesture, endGesture } from "../studioGesture";
 import { Segmented, Select, Switch } from "@/components/ui";
+import { language, locale, msg, t, tx } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/react";
 import type { CorosWatchfaceArtwork, CorosWatchfaceNativePart, CorosWatchfaceResolutionDetails } from "../../watchface/types";
 import { WATCH_LANGUAGE_NAMES } from "../../watchface/engine/watchfaceLanguages";
 import { watchThemeSupport, watchThemeSwatch } from "../../watchface/engine/watchfaceThemeColor";
@@ -47,9 +49,9 @@ import type { CorosWatchfaceTemplateDetails } from "../../watchface/types";
 export const PALETTE = ["#ffffff", "#53cba1", "#ff8a3d", "#6aa5ff", "#ff6b9a", "#ffd166"] as const;
 
 export const KIND: Partial<Record<PanelKind, string>> = {
-  time: "Time digits", metric: "Live data", date: "Date", selectable: "Wearer picks", ampm: "12-hour clock", separator: "Separator",
-  native: "Live data", weather: "Day and night", batteryIcon: "12 states", image: "Template image", animation: "Animation",
-  sprite: "Image", shape: "Shape", text: "Text", background: "Face", chart: "Chart", other: "Layer",
+  time: msg("Time digits"), metric: msg("Live data"), date: msg("Date"), selectable: msg("Wearer picks"), ampm: msg("12-hour clock"), separator: msg("Separator"),
+  native: msg("Live data"), weather: msg("Day and night"), batteryIcon: msg("12 states"), image: msg("Template image"), animation: msg("Animation"),
+  sprite: msg("Image"), shape: msg("Shape"), text: msg("Text"), background: msg("Face"), chart: msg("Chart"), other: msg("Layer"),
 };
 
 type Edit = (fn: (d: Design) => Design) => void;
@@ -110,30 +112,30 @@ export function LayerInspector(p: LayerInspectorProps) {
     <div className="st-insp">
       <div className="st-insp-head">
         <span className="st-insp-icon"><Icon name={p.icon} size={19} /></span>
-        <span><b>{layer.label}</b><small>{layer.spot ? "Status" : KIND[kind]}{p.aodNote ? " · always-on" : ""}</small></span>
+        <span><b>{t(layer.label)}</b><small>{layer.spot ? t("Status") : KIND[kind] ? t(KIND[kind]!) : ""}{p.aodNote ? ` · ${t("always-on")}` : ""}</small></span>
         <div className="st-menu-wrap">
-          <button type="button" className="st-icon-btn" aria-label="More actions" title="More actions" aria-expanded={more} onClick={() => setMore((m) => !m)}><Icon name="more" /></button>
+          <button type="button" className="st-icon-btn" aria-label={t("More actions")} title={t("More actions")} aria-expanded={more} onClick={() => setMore((m) => !m)}><Icon name="more" /></button>
           {more ? (
             <div className="st-menu st-menu-down st-insp-more" role="menu" onClick={() => setMore(false)}>
-              {p.onHome ? <button type="button" role="menuitem" onClick={p.onHome}><Icon name="refresh" size={16} />Back to the template's place</button> : null}
+              {p.onHome ? <button type="button" role="menuitem" onClick={p.onHome}><Icon name="refresh" size={16} />{t("Back to the template's place")}</button> : null}
               {p.arrange ? <ArrangeItems {...p.arrange} /> : null}
-              <button type="button" role="menuitem" onClick={() => edit((x) => setLocked(x, layer, !locked))}><Icon name="lock" size={16} />{locked ? "Unlock" : "Lock"}</button>
-              {layer.canHide && layer.visible ? <button type="button" role="menuitem" onClick={p.onHide}><Icon name="eyeOff" size={16} />Hide from the face</button> : null}
-              {layer.canHide && !layer.visible ? <button type="button" role="menuitem" onClick={p.onShow}><Icon name="eye" size={16} />Show on the face</button> : null}
-              {p.onRemove ? <button type="button" role="menuitem" onClick={p.onRemove}><Icon name="trash" size={16} />{locked ? "Unlock and delete" : layer.id === "seconds" ? "Remove seconds" : "Delete"}</button> : null}
+              <button type="button" role="menuitem" onClick={() => edit((x) => setLocked(x, layer, !locked))}><Icon name="lock" size={16} />{locked ? t("Unlock") : t("Lock")}</button>
+              {layer.canHide && layer.visible ? <button type="button" role="menuitem" onClick={p.onHide}><Icon name="eyeOff" size={16} />{t("Hide from the face")}</button> : null}
+              {layer.canHide && !layer.visible ? <button type="button" role="menuitem" onClick={p.onShow}><Icon name="eye" size={16} />{t("Show on the face")}</button> : null}
+              {p.onRemove ? <button type="button" role="menuitem" onClick={p.onRemove}><Icon name="trash" size={16} />{locked ? t("Unlock and delete") : layer.id === "seconds" ? t("Remove seconds") : t("Delete")}</button> : null}
             </div>
           ) : null}
         </div>
       </div>
 
       <section className="st-insp-body">
-        {kind === "time" && layer.id === "autoTime" ? <div className="st-row"><span>Separate hours and minutes</span><Switch label="Separate hours and minutes" checked={false} onChange={(v) => { if (v) p.onSplitTime(); }} /></div> : null}
+        {kind === "time" && layer.id === "autoTime" ? <div className="st-row"><span>{t("Separate hours and minutes")}</span><Switch label={t("Separate hours and minutes")} checked={false} onChange={(v) => { if (v) p.onSplitTime(); }} /></div> : null}
         {kind === "selectable" ? <SlotTop {...p} fail={fail} /> : null}
         {kind === "date" ? <DateTop {...p} /> : null}
         {typed ? <>
           <LayerFontPicker design={design} layer={layer} edit={edit} resolution={resolution} loadAssets={p.loadAssets} fail={fail} watch={p.watch} />
-          {kind === "ampm" ? <ColourRow label="Color" value={colourOf(design, layer)} onPick={(c) => edit((x) => setTypo(x, layer, { color: c }))} />
-            : layer.capabilities.color ? <ColourRow label={kind === "selectable" ? "Values and icons" : "Color"} {...layerColour(design, layer, edit)} /> : null}
+          {kind === "ampm" ? <ColourRow label={t("Color")} value={colourOf(design, layer)} onPick={(c) => edit((x) => setTypo(x, layer, { color: c }))} />
+            : layer.capabilities.color ? <ColourRow label={kind === "selectable" ? t("Values and icons") : t("Color")} {...layerColour(design, layer, edit)} /> : null}
           <TypeFields design={design} layer={layer} edit={edit} kind={kind} fontSize={fontSize} resolution={resolution} />
         </> : null}
         {kind === "ampm" ? <AmPmPictures design={design} edit={edit} fail={fail} /> : null}
@@ -146,13 +148,13 @@ export function LayerInspector(p: LayerInspectorProps) {
         {kind === "shape" || kind === "text" ? <ElementTop {...p} /> : null}
         {kind === "chart" ? <ChartTop {...p} /> : null}
         {kind === "background" ? <BackgroundFields design={design} edit={edit} fail={fail} /> : null}
-        {kind === "other" && layer.capabilities.color ? <ColourRow label="Color" {...layerColour(design, layer, edit)} /> : null}
+        {kind === "other" && layer.capabilities.color ? <ColourRow label={t("Color")} {...layerColour(design, layer, edit)} /> : null}
       </section>
 
       {kind === "animation" ? <AnimationFolds {...p} fail={fail} /> : null}
 
       {kind === "metric" && layer.metricId === "battery" && resolution?.config.battery_level_percent_icon ? (
-        <Fold title="% sign">
+        <Fold title={t("% sign")}>
           <PercentLook design={design} edit={edit}
             replaced={["config", "aod"].some((scope) => design.configAssetOverrides?.[`${scope}:battery_level_percent_icon`]?.replacement)} />
         </Fold>
@@ -161,26 +163,26 @@ export function LayerInspector(p: LayerInspectorProps) {
       {kind === "metric" && layer.metricId === "exercise" ? <ExerciseSeparatorFold design={design} edit={edit} details={p.details} fail={fail} /> : null}
 
       {progress ? (
-        <Fold title="Progress">
+        <Fold title={t("Progress")}>
           <div className="st-nums">
-            <Toggle label="Arc" on={progress.arcEnabled} set={(v) => edit((x) => setProgress(x, layer, resolution, { arcEnabled: v }))} />
-            <Toggle label="Bar" on={progressBarOn(progress)} set={(v) => edit((x) => setProgress(x, layer, resolution, { barEnabled: v }))} />
+            <Toggle label={t("Arc")} on={progress.arcEnabled} set={(v) => edit((x) => setProgress(x, layer, resolution, { arcEnabled: v }))} />
+            <Toggle label={t("Bar")} on={progressBarOn(progress)} set={(v) => edit((x) => setProgress(x, layer, resolution, { barEnabled: v }))} />
           </div>
-          <ColourRow label={progressKind(layer) === "kcal" ? "Arc and bar color" : "Color"} value={progressColour(progress)} onPick={(c) => edit((x) => setProgress(x, layer, resolution, { color: c }))} />
+          <ColourRow label={progressKind(layer) === "kcal" ? t("Arc and bar color") : t("Color")} value={progressColour(progress)} onPick={(c) => edit((x) => setProgress(x, layer, resolution, { color: c }))} />
           {progress.arcEnabled ? <>
             <div className="st-nums">
-              <NumberField label="Start" unit="°" value={progress.arc.startAngle} min={-360} max={360} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { arc: { startAngle: v } }))} />
-              <NumberField label="End" unit="°" value={progress.arc.endAngle} min={-360} max={360} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { arc: { endAngle: v } }))} />
-              <NumberField label="Thick" unit="px" value={progress.arc.strokeWidth} min={1} max={200} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { arc: { strokeWidth: v } }))} />
+              <NumberField label={t("Start")} unit="°" value={progress.arc.startAngle} min={-360} max={360} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { arc: { startAngle: v } }))} />
+              <NumberField label={t("End")} unit="°" value={progress.arc.endAngle} min={-360} max={360} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { arc: { endAngle: v } }))} />
+              <NumberField label={t("Thick")} unit="px" value={progress.arc.strokeWidth} min={1} max={200} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { arc: { strokeWidth: v } }))} />
               <NumberField label="R" value={progress.arc.radiusX} min={1} max={800} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { arc: { radiusX: v, radiusY: v } }))} />
               <NumberField label="CX" value={progress.arc.centerX} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { arc: { centerX: v } }))} />
               <NumberField label="CY" value={progress.arc.centerY} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { arc: { centerY: v } }))} />
             </div>
-            <div className="st-row"><span>Draw remaining portion</span><Switch label="Draw remaining portion" checked={progress.arc.background} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { arc: { background: v } }))} /></div>
+            <div className="st-row"><span>{t("Draw remaining portion")}</span><Switch label={t("Draw remaining portion")} checked={progress.arc.background} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { arc: { background: v } }))} /></div>
           </> : null}
           {progressBarOn(progress) ? <>
-            <div className="st-row"><span>Fills toward</span>
-              <Segmented small label="Fill direction" value={progress.rect.direction} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { rect: { direction: v } }))}
+            <div className="st-row"><span>{t("Fills toward")}</span>
+              <Segmented small label={t("Fill direction")} value={progress.rect.direction} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { rect: { direction: v } }))}
                 options={[{ value: "right", label: "→" }, { value: "left", label: "←" }, { value: "top", label: "↑" }, { value: "bottom", label: "↓" }]} /></div>
             <div className="st-nums">
               <NumberField label="X0" value={progress.rect.x0} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { rect: { x0: v } }))} />
@@ -189,12 +191,12 @@ export function LayerInspector(p: LayerInspectorProps) {
               <NumberField label="Y1" value={progress.rect.y1} onChange={(v) => edit((x) => setProgress(x, layer, resolution, { rect: { y1: v } }))} />
             </div>
           </> : null}
-          <Slider label="Preview fill" value={Math.round(progress.previewPercent)} min={0} max={100} unit="%" onCommit={(v) => edit((x) => setProgress(x, layer, resolution, { previewPercent: v }))} />
+          <Slider label={t("Preview fill")} value={Math.round(progress.previewPercent)} min={0} max={100} unit="%" onCommit={(v) => edit((x) => setProgress(x, layer, resolution, { previewPercent: v }))} />
         </Fold>
       ) : null}
 
       {position || (typo && "rotation" in (typo ?? {})) || kind === "time" || kind === "metric" || kind === "date" || kind === "selectable" ? (
-        <Fold title="Position and size" note={at ? `${Math.round(at.x)}, ${Math.round(at.y)}` : undefined}>
+        <Fold title={t("Position and size")} note={at ? `${Math.round(at.x)}, ${Math.round(at.y)}` : undefined}>
           {position && at ? <>
             <div className="st-nums">
               <NumberField label="X" value={Math.round(at.x)} onChange={(v) => edit((x) => nudge(x, layer, v - at.x, 0))} />
@@ -204,41 +206,41 @@ export function LayerInspector(p: LayerInspectorProps) {
           </> : null}
           {layer.spot && layer.capabilities.scale && layer.bounds ? <SpotHeight layer={layer} scale={scaleOf(design, layer) ?? 1} set={(v) => edit((x) => setSpotScale(x, layer, v))} /> : null}
           {kind === "time" || kind === "metric" || kind === "date" || kind === "selectable" ? (
-            <NumberField label="Rotation" unit="°" value={Math.round(typo?.rotation ?? 0)} min={0} max={360} onChange={(v) => edit((x) => setTypo(x, layer, { rotation: ((v % 360) + 360) % 360 }))} />
+            <NumberField label={t("Rotation")} unit="°" value={Math.round(typo?.rotation ?? 0)} min={0} max={360} onChange={(v) => edit((x) => setTypo(x, layer, { rotation: ((v % 360) + 360) % 360 }))} />
           ) : null}
-          {position ? <span className="st-note">Arrow keys nudge 1 px, Shift 10.</span> : null}
+          {position ? <span className="st-note">{t("Arrow keys nudge 1 px, Shift 10.")}</span> : null}
         </Fold>
       ) : null}
 
       {kind === "date" ? <LanguagesFold {...p} /> : null}
 
-      <Fold title="Look and visibility">
-        {hasLayerOpacity(layer) ? <Slider key={`o:${layer.id}`} label="Opacity" value={Math.round(opacityOf(design, layer) * 100)} min={0} max={100} unit="%" onCommit={(v) => edit((x) => setOpacity(x, layer, v / 100))} /> : null}
+      <Fold title={t("Look and visibility")}>
+        {hasLayerOpacity(layer) ? <Slider key={`o:${layer.id}`} label={t("Opacity")} value={Math.round(opacityOf(design, layer) * 100)} min={0} max={100} unit="%" onCommit={(v) => edit((x) => setOpacity(x, layer, v / 100))} /> : null}
         {layer.capabilities.stroke ? <Strokes list={strokesOf(design, layer)} add={() => edit((x) => addStroke(x, layer))} set={(list) => edit((x) => setStrokes(x, layer, list))} /> : null}
         {layer.capabilities.effects || layer.capabilities.stroke ? <Shadows list={shadowsOf(design, layer)} add={() => edit((x) => addShadow(x, layer))} set={(list) => edit((x) => setShadows(x, layer, list))} /> : null}
         {p.showsOn.length ? (
-          <div className="st-row-col st-shows"><span>Shows on</span>
+          <div className="st-row-col st-shows"><span>{t("Shows on")}</span>
             <div className="st-chips">{p.showsOn.map((s) => <button key={s.label} type="button" className="chip" aria-pressed={s.on} onClick={s.toggle}>{s.label}</button>)}</div>
           </div>
         ) : null}
       </Fold>
 
       {kind === "time" || kind === "metric" || kind === "date" || kind === "selectable" || kind === "native" ? (
-        <Fold title="Advanced">
+        <Fold title={t("Advanced")}>
           {kind !== "native" ? (
             // Smooth (anti-aliased) edges are how COROS's own faces look; hard 0/255 edges are a pixel-art look that is
             // jagged on AMOLED, so it is tucked away here rather than offered beside the font.
-            <div className="st-row"><span>Hard pixel edges</span>
-              <Switch label="Hard pixel edges" checked={!!typo?.solidAlpha} onChange={(v) => edit((x) => setTypo(x, layer, { solidAlpha: v ? true : undefined }))} /></div>
+            <div className="st-row"><span>{t("Hard pixel edges")}</span>
+              <Switch label={t("Hard pixel edges")} checked={!!typo?.solidAlpha} onChange={(v) => edit((x) => setTypo(x, layer, { solidAlpha: v ? true : undefined }))} /></div>
           ) : null}
           {kind === "native" ? (
             <button type="button" className="chip st-chip-btn" onClick={() => edit((x) => {
               const n = nativeOf(x, layer);
               return n ? setNative(x, layer, { ...defaultNativeDataStyle(layer.nativeDataId!), enabled: n.enabled, x: n.x, y: n.y }) : x;
-            })}><Icon name="refresh" size={15} />Restore all appearance defaults</button>
+            })}><Icon name="refresh" size={15} />{t("Restore all appearance defaults")}</button>
           ) : kind === "date" || kind === "selectable" ? null : (
             <button type="button" className="chip st-chip-btn" onClick={() => edit((x) => setTypo(x, layer, { fontFamily: undefined, fontWeight: undefined, fontStyle: undefined, letterSpacing: undefined, rasterFont: undefined, fontSize: undefined, rotation: undefined, solidAlpha: undefined }))}>
-              <Icon name="refresh" size={15} />Back to the face's type</button>
+              <Icon name="refresh" size={15} />{t("Back to the face's type")}</button>
           )}
         </Fold>
       ) : null}
@@ -250,18 +252,18 @@ export function LayerInspector(p: LayerInspectorProps) {
 function ArrangeItems({ place, move, copy }: NonNullable<LayerInspectorProps["arrange"]>) {
   const top = place.index >= place.count - 1, bottom = place.index <= 0;
   return <>
-    <button type="button" role="menuitem" onClick={copy}><Icon name="plus" size={16} />Duplicate<kbd>⌘D</kbd></button>
-    <button type="button" role="menuitem" disabled={top} onClick={() => move("forward")}><Icon name="chevU" size={16} />Bring forward<kbd>⌥↑</kbd></button>
-    <button type="button" role="menuitem" disabled={bottom} onClick={() => move("backward")}><Icon name="chevD" size={16} />Send backward<kbd>⌥↓</kbd></button>
-    <button type="button" role="menuitem" disabled={top} onClick={() => move("front")}><Icon name="chevU" size={16} />Bring to front<kbd>⇧⌥↑</kbd></button>
-    <button type="button" role="menuitem" disabled={bottom} onClick={() => move("back")}><Icon name="chevD" size={16} />Send to back<kbd>⇧⌥↓</kbd></button>
+    <button type="button" role="menuitem" onClick={copy}><Icon name="plus" size={16} />{t("Duplicate")}<kbd>⌘D</kbd></button>
+    <button type="button" role="menuitem" disabled={top} onClick={() => move("forward")}><Icon name="chevU" size={16} />{t("Bring forward")}<kbd>⌥↑</kbd></button>
+    <button type="button" role="menuitem" disabled={bottom} onClick={() => move("backward")}><Icon name="chevD" size={16} />{t("Send backward")}<kbd>⌥↓</kbd></button>
+    <button type="button" role="menuitem" disabled={top} onClick={() => move("front")}><Icon name="chevU" size={16} />{t("Bring to front")}<kbd>⇧⌥↑</kbd></button>
+    <button type="button" role="menuitem" disabled={bottom} onClick={() => move("back")}><Icon name="chevD" size={16} />{t("Send to back")}<kbd>⇧⌥↓</kbd></button>
   </>;
 }
 
 /* ───────────── Type ───────────── */
 
 const WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900] as const;
-const WEIGHT_NAMES: Record<number, string> = { 100: "Thin", 200: "Extra light", 300: "Light", 400: "Regular", 500: "Medium", 600: "Semibold", 700: "Bold", 800: "Extra bold", 900: "Black" };
+const WEIGHT_NAMES: Record<number, string> = { 100: msg("Thin"), 200: msg("Extra light"), 300: msg("Light"), 400: msg("Regular"), 500: msg("Medium"), 600: msg("Semibold"), 700: msg("Bold"), 800: msg("Extra bold"), 900: msg("Black") };
 /** The weights to offer: every one for a font on this computer, the ones it has for a Google family (and the one in use). */
 const weightChoices = (family: string | undefined, current: number): number[] => {
   const has = googleWeights(family);
@@ -269,7 +271,7 @@ const weightChoices = (family: string | undefined, current: number): number[] =>
 };
 
 function TypeFields({ design, layer, edit, kind, fontSize, resolution, onSize }: { design: Design; layer: EditorLayer; edit: Edit; kind: PanelKind; fontSize: number | null; resolution: CorosWatchfaceResolutionDetails | null; onSize?: (v: number) => void }) {
-  const t = typoOf(design, layer);
+  const tm = typoOf(design, layer);
   const ty = typographyOf(design, layer);
   const sprite = !familyOf(design, layer) && !ty.rasterFont;
   const hasSpacing = kind !== "separator";
@@ -277,22 +279,22 @@ function TypeFields({ design, layer, edit, kind, fontSize, resolution, onSize }:
   const scale = scaleOf(design, layer);
   return <>
     <div className="st-nums">
-      {fontSize !== null ? <NumberField label="Size" unit="px" value={fontSize} min={4} max={400} onChange={(v) => (onSize ? onSize(v) : edit((x) => setFontSize(x, layer, v, resolution)))} /> : null}
-      {fontSize === null && scale !== null ? <NumberField label="Scale" unit="%" value={Math.round(scale * 100)} min={10} max={400} onChange={(v) => edit((x) => setScale(x, layer, v / 100))} /> : null}
-      {hasSpacing && !sprite ? <NumberField label="Spacing" unit="%" value={Math.round((ty.letterSpacing ?? 0) * 100)} min={-35} max={25} onChange={(v) => edit((x) => setTypo(x, layer, { letterSpacing: Math.max(-0.35, Math.min(0.25, v / 100)) }))} /> : null}
+      {fontSize !== null ? <NumberField label={t("Size")} unit="px" value={fontSize} min={4} max={400} onChange={(v) => (onSize ? onSize(v) : edit((x) => setFontSize(x, layer, v, resolution)))} /> : null}
+      {fontSize === null && scale !== null ? <NumberField label={t("Scale")} unit="%" value={Math.round(scale * 100)} min={10} max={400} onChange={(v) => edit((x) => setScale(x, layer, v / 100))} /> : null}
+      {hasSpacing && !sprite ? <NumberField label={t("Spacing")} unit="%" value={Math.round((ty.letterSpacing ?? 0) * 100)} min={-35} max={25} onChange={(v) => edit((x) => setTypo(x, layer, { letterSpacing: Math.max(-0.35, Math.min(0.25, v / 100)) }))} /> : null}
     </div>
     {!sprite ? (
       <div className="st-nums">
-        <label className="st-select"><span className="sr-only">Weight</span>
-          <Select aria-label="Weight" value={ty.fontWeight ?? 400} onChange={(e) => edit((x) => setTypo(x, layer, { fontWeight: Number(e.target.value) }))}>
-            {weightChoices(familyOf(design, layer), ty.fontWeight ?? 400).map((w) => <option key={w} value={w}>{w} {WEIGHT_NAMES[w] ?? ""}</option>)}
+        <label className="st-select"><span className="sr-only">{tx("font", "Weight")}</span>
+          <Select aria-label={tx("font", "Weight")} value={ty.fontWeight ?? 400} onChange={(e) => edit((x) => setTypo(x, layer, { fontWeight: Number(e.target.value) }))}>
+            {weightChoices(familyOf(design, layer), ty.fontWeight ?? 400).map((w) => <option key={w} value={w}>{w} {WEIGHT_NAMES[w] ? tx("font weight", WEIGHT_NAMES[w]) : ""}</option>)}
           </Select><Icon name="chevD" size={14} /></label>
-        <Segmented small label="Style" value={ty.fontStyle ?? "normal"} onChange={(v) => edit((x) => setTypo(x, layer, { fontStyle: v }))} options={[{ value: "normal", label: "Normal" }, { value: "italic", label: "Italic" }]} />
+        <Segmented small label={t("Style")} value={ty.fontStyle ?? "normal"} onChange={(v) => edit((x) => setTypo(x, layer, { fontStyle: v }))} options={[{ value: "normal", label: t("Normal") }, { value: "italic", label: t("Italic") }]} />
       </div>
     ) : null}
     {hasAlign ? (
-      <div className="st-row"><span>Align</span>
-        <Segmented small label="Align" value={t?.align ?? "center"} onChange={(v) => edit((x) => setTypo(x, layer, { align: v }))}
+      <div className="st-row"><span>{t("Align")}</span>
+        <Segmented small label={t("Align")} value={tm?.align ?? "center"} onChange={(v) => edit((x) => setTypo(x, layer, { align: v }))}
           options={[{ value: "left", label: <Icon name="alignL" size={15} /> }, { value: "center", label: <Icon name="alignH" size={15} /> }, { value: "right", label: <span className="st-flip"><Icon name="alignL" size={15} /></span> }]} /></div>
     ) : null}
   </>;
@@ -306,11 +308,11 @@ function DateTop({ layer, design, edit, resolution }: LayerInspectorProps) {
   const sample = layer.id === "weekday" ? ["SUN", "Sun", "Sunday"] : ["NOV", "Nov", "November"];
   return <>
     {layer.id === "dateMonth" ? (
-      <div className="st-row"><span>Show as</span>
-        <Segmented small label="Month format" value={style?.monthFormat ?? "digits"} onChange={(v) => edit((x) => setDate(x, layer, { monthFormat: v }, resolution))} options={[{ value: "digits", label: "Number" }, { value: "labels", label: "Words" }]} /></div>
+      <div className="st-row"><span>{t("Show as")}</span>
+        <Segmented small label={t("Month format")} value={style?.monthFormat ?? "digits"} onChange={(v) => edit((x) => setDate(x, layer, { monthFormat: v }, resolution))} options={[{ value: "digits", label: t("Number") }, { value: "labels", label: t("Words") }]} /></div>
     ) : null}
     {words ? (
-      <Segmented small label="Label style" value={style?.labelStyle ?? "upper"} onChange={(v) => edit((x) => setDate(x, layer, { labelStyle: v }, resolution))}
+      <Segmented small label={t("Label style")} value={style?.labelStyle ?? "upper"} onChange={(v) => edit((x) => setDate(x, layer, { labelStyle: v }, resolution))}
         options={[{ value: "upper", label: sample[0] }, { value: "title", label: sample[1] }, { value: "full", label: sample[2] }]} />
     ) : null}
   </>;
@@ -324,9 +326,9 @@ function LanguagesFold({ layer, design, edit, resolution }: LayerInspectorProps)
   const picked = new Set(style?.overwriteLanguages ?? []);
   const languages = Object.entries(WATCH_LANGUAGE_NAMES).filter(([code]) => code !== "en");
   return (
-    <Fold title="Languages" note={style?.translateLabels === false ? "Off" : all ? "All" : picked.size ? String(picked.size) : undefined}>
-      <div className="st-row"><span>Translate for watch languages</span><Switch label="Translate for watch languages" checked={style?.translateLabels !== false} onChange={(v) => edit((x) => setDate(x, layer, { translateLabels: v }, resolution))} /></div>
-      <div className="st-row"><span>Use this look in every language</span><Switch label="Use this look in every language" checked={all} onChange={(v) => edit((x) => setDate(x, layer, { overwriteAllLanguages: v }, resolution))} /></div>
+    <Fold title={t("Languages")} note={style?.translateLabels === false ? t("Off") : all ? t("All") : picked.size ? String(picked.size) : undefined}>
+      <div className="st-row"><span>{t("Translate for watch languages")}</span><Switch label={t("Translate for watch languages")} checked={style?.translateLabels !== false} onChange={(v) => edit((x) => setDate(x, layer, { translateLabels: v }, resolution))} /></div>
+      <div className="st-row"><span>{t("Use this look in every language")}</span><Switch label={t("Use this look in every language")} checked={all} onChange={(v) => edit((x) => setDate(x, layer, { overwriteAllLanguages: v }, resolution))} /></div>
       {!all ? (
         <div className="st-chips">
           {languages.map(([code, name]) => (
@@ -341,9 +343,9 @@ function LanguagesFold({ layer, design, edit, resolution }: LayerInspectorProps)
   );
 }
 
-const PART_LABEL: Partial<Record<CorosWatchfaceNativePart, string>> = { value: "Value", icon: "Icon", unit: "Unit", symbols: "Signs", states: "States", decimal: "Decimal", separator: "Separator", progress: "Progress" };
+const PART_LABEL: Partial<Record<CorosWatchfaceNativePart, string>> = { value: msg("Value"), icon: msg("Icon"), unit: msg("Unit"), symbols: msg("Signs"), states: msg("States"), decimal: msg("Decimal"), separator: msg("Separator"), progress: msg("Progress") };
 
-const WEATHER_SETS = [{ set: "day", label: "Day icons" }, { set: "night", label: "Night icons" }] as const;
+const WEATHER_SETS = [{ set: "day", label: msg("Day icons") }, { set: "night", label: msg("Night icons") }] as const;
 
 function WeatherTop({ design, edit, layer, watch, fail }: LayerInspectorProps & { fail: (e: unknown) => void }) {
   const w = design.weatherIndicator;
@@ -361,47 +363,47 @@ function WeatherTop({ design, edit, layer, watch, fail }: LayerInspectorProps & 
         const m = f.name.match(/^(\d{1,2})\.png$/i);
         if (m && Number(m[1]) < count) picked[String(Number(m[1]))] = (await readArtwork(f)).dataUrl;
       }
-      if (!Object.keys(picked).length) throw new Error(`Name the pictures 00.png to ${String(count - 1).padStart(2, "0")}.png.`);
+      if (!Object.keys(picked).length) throw new Error(t("Name the pictures 00.png to {last}.png.", { last: String(count - 1).padStart(2, "0") }));
       edit((x) => ({ ...x, weatherIndicator: { enabled: true, x: 0, y: 0, scale: 1, ...x.weatherIndicator, assets: { ...x.weatherIndicator?.assets, [which]: { ...x.weatherIndicator?.assets?.[which], ...picked } } } }));
     } catch (e) { fail(e); }
   };
   return <>
-    <ColourRow label="Tint" value={w.color ?? "#ffffff"} onPick={(c) => edit((x) => (x.weatherIndicator ? { ...x, weatherIndicator: { ...x.weatherIndicator, color: c } } : x))}
+    <ColourRow label={t("Tint")} value={w.color ?? "#ffffff"} onPick={(c) => edit((x) => (x.weatherIndicator ? { ...x, weatherIndicator: { ...x.weatherIndicator, color: c } } : x))}
       onReset={w.color ? () => edit((x) => (x.weatherIndicator ? { ...x, weatherIndicator: { ...x.weatherIndicator, color: undefined } } : x)) : null} />
-    <div className="st-nums"><NumberField label="Scale" unit="%" value={Math.round((scaleOf(design, layer) ?? 1) * 100)} min={10} max={400} onChange={(v) => edit((x) => setScale(x, layer, v / 100))} /></div>
+    <div className="st-nums"><NumberField label={t("Scale")} unit="%" value={Math.round((scaleOf(design, layer) ?? 1) * 100)} min={10} max={400} onChange={(v) => edit((x) => setScale(x, layer, v / 100))} /></div>
     {WEATHER_SETS.map(({ set, label }) => {
       const count = WEATHER_ASSET_COUNTS[set];
       const replaced = weatherSetCount(design, set);
       return (
         <div key={set} className="st-wx-card">
           <div className="st-wx-head">
-            <b>{label}</b>
-            <span className="st-wx-badge" data-custom={replaced ? "" : undefined}>{replaced ? "Custom" : "Built in"}</span>
+            <b>{t(label)}</b>
+            <span className="st-wx-badge" data-custom={replaced ? "" : undefined}>{replaced ? t("Custom") : t("Built in")}</span>
             <span className="st-grow" />
-            {replaced ? <button type="button" className="st-icon-btn" aria-label={`Restore the built-in ${label.toLowerCase()}`} title="Back to the built-in set" onClick={() => edit((x) => restoreWeatherSet(x, set))}><Icon name="refresh" size={15} /></button> : null}
+            {replaced ? <button type="button" className="st-icon-btn" aria-label={t("Restore the built-in {name}", { name: t(label).toLowerCase() })} title={t("Back to the built-in set")} onClick={() => edit((x) => restoreWeatherSet(x, set))}><Icon name="refresh" size={15} /></button> : null}
           </div>
-          <div className="st-wx-grid" role="list" aria-label={label}>
+          <div className="st-wx-grid" role="list" aria-label={t(label)}>
             {Array.from({ length: count }, (_, i) => (
               <span key={i} className="st-wx-cell" role="listitem" title={`${String(i).padStart(2, "0")}.png`}>
                 <img src={weatherAssetUrl(set, i, w)} alt="" draggable={false} /><small>{String(i).padStart(2, "0")}</small>
               </span>
             ))}
           </div>
-          <span className="st-note">{replaced === count ? `All ${count} replaced` : replaced ? `${replaced} of ${count} replaced` : "C-LINK's built-in set"} · PNGs named 00–{String(count - 1).padStart(2, "0")}</span>
+          <span className="st-note">{replaced === count ? t("All {n} replaced", { n: count }) : replaced ? t("{n} of {total} replaced", { n: replaced, total: count }) : t("C-LINK's built-in set")} · {t("PNGs named 00–{last}", { last: String(count - 1).padStart(2, "0") })}</span>
           <div className="st-nums">
-            <button type="button" className="chip st-chip-btn" onClick={() => { setImporting(set); input.current?.click(); }}><Icon name="folder" size={15} />Import folder</button>
-            <button type="button" className="chip st-chip-btn" aria-label={`Official library for ${label.toLowerCase()}`} onClick={() => setBrowse(set)}><Icon name="spark" size={15} />Official</button>
+            <button type="button" className="chip st-chip-btn" onClick={() => { setImporting(set); input.current?.click(); }}><Icon name="folder" size={15} />{t("Import folder")}</button>
+            <button type="button" className="chip st-chip-btn" aria-label={t("Official library for {name}", { name: t(label).toLowerCase() })} onClick={() => setBrowse(set)}><Icon name="spark" size={15} />{t("Official")}</button>
           </div>
         </div>
       );
     })}
     <input ref={input} type="file" hidden multiple accept="image/png" {...{ webkitdirectory: "" }} onChange={(e) => { if (importing) void load(importing, e.target.files); e.target.value = ""; }} />
-    <span className="st-note">Simulate shows each of the 41 day and night pictures on the face.</span>
+    <span className="st-note">{t("Simulate shows each of the 41 day and night pictures on the face.")}</span>
     {browse ? <OfficialPicker watch={watch} request={officialWeatherRequest(browse)} onClose={() => setBrowse(null)} onPick={(set) => edit((x) => setWeatherSet(x, browse, set))} /> : null}
   </>;
 }
 
-const BATTERY_STATES = ["Charging", "0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%"];
+const BATTERY_STATES = [msg("Charging"), "0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%"];
 
 /** The template's own battery pictures by state number, from the folder its config names (as the build finds it). */
 function templateBatteryFiles(details: CorosWatchfaceTemplateDetails, control: boolean) {
@@ -446,7 +448,7 @@ function BatteryTop({ design, edit, layer, fail, watch, details, loadAssets }: L
         const m = f.name.match(/^(\d{1,2})\.png$/i);
         if (m) picked[String(Number(m[1]))] = await readArtwork(f);
       }
-      if (!Object.keys(picked).length) throw new Error("Name battery pictures 00.png (charging), 01.png (empty) to 11.png (full).");
+      if (!Object.keys(picked).length) throw new Error(t("Name battery pictures 00.png (charging), 01.png (empty) to 11.png (full)."));
       edit((x) => setBatteryStates(x, layer, picked));
     } catch (e) { fail(e); }
   };
@@ -456,23 +458,23 @@ function BatteryTop({ design, edit, layer, fail, watch, details, loadAssets }: L
       {BATTERY_STATES.map((label, i) => {
         const url = pictureOf(i);
         return (
-          <span key={label} className="st-state" data-missing={url ? undefined : ""} title={url ? `${String(i).padStart(2, "0")}.png · ${label}` : `${label}: no picture. Add ${String(i).padStart(2, "0")}.png`}>
-            {url ? <img src={url} alt="" /> : <b aria-label="Missing">?</b>}<small>{label}</small>
+          <span key={label} className="st-state" data-missing={url ? undefined : ""} title={url ? `${String(i).padStart(2, "0")}.png · ${t(label)}` : t("{state}: no picture. Add {file}.png", { state: t(label), file: String(i).padStart(2, "0") })}>
+            {url ? <img src={url} alt="" /> : <b aria-label={t("Missing")}>?</b>}<small>{t(label)}</small>
           </span>
         );
       })}
     </div>
-    <span className="st-note">{missing ? `${missing} of 12 states have no picture yet. ` : ""}One picture per state: 00.png charging, 01.png empty, 02–11.png for 10–100%.</span>
+    <span className="st-note">{missing ? `${t("{n} of 12 states have no picture yet.", { n: missing })} ` : ""}{t("One picture per state: 00.png charging, 01.png empty, 02–11.png for 10–100%.")}</span>
     <div className="st-nums">
-      <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="upload" size={15} />Numbered PNGs</button>
-      <button type="button" className="chip st-chip-btn" onClick={() => setOfficial(true)}><Icon name="spark" size={15} />Official sprites</button>
-      {o?.stateReplacements ? <button type="button" className="chip st-chip-btn" onClick={() => edit((x) => restoreAsset(x, layer))}><Icon name="refresh" size={15} />Restore</button> : null}
+      <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="upload" size={15} />{t("Numbered PNGs")}</button>
+      <button type="button" className="chip st-chip-btn" onClick={() => setOfficial(true)}><Icon name="spark" size={15} />{t("Official sprites")}</button>
+      {o?.stateReplacements ? <button type="button" className="chip st-chip-btn" onClick={() => edit((x) => restoreAsset(x, layer))}><Icon name="refresh" size={15} />{t("Restore")}</button> : null}
     </div>
     <input ref={input} type="file" hidden multiple accept="image/png" onChange={(e) => { void load(e.target.files); e.target.value = ""; }} />
     {official ? <OfficialPicker watch={watch} request={officialBatteryRequest()} onClose={() => setOfficial(false)} onPick={(set) => edit((x) => setBatteryStates(x, layer, officialBatteryStates(set)))} /> : null}
-    <div className="st-nums"><NumberField label="Scale" unit="%" value={Math.round((o?.scale ?? 1) * 100)} min={10} max={400} onChange={(v) => edit((x) => setScale(x, layer, v / 100))} /></div>
-    <div className="st-row"><span>Turn</span>
-      <Segmented small label="Rotation" value={String(rotation)} onChange={(v) => edit((x) => setAsset(x, layer, { rotation: Number(v) }))}
+    <div className="st-nums"><NumberField label={t("Scale")} unit="%" value={Math.round((o?.scale ?? 1) * 100)} min={10} max={400} onChange={(v) => edit((x) => setScale(x, layer, v / 100))} /></div>
+    <div className="st-row"><span>{t("Turn")}</span>
+      <Segmented small label={t("Rotation")} value={String(rotation)} onChange={(v) => edit((x) => setAsset(x, layer, { rotation: Number(v) }))}
         options={[{ value: "0", label: "0°" }, { value: "90", label: "90°" }, { value: "180", label: "180°" }, { value: "270", label: "270°" }]} /></div>
   </>;
 }
@@ -482,14 +484,14 @@ function SpotTop(p: LayerInspectorProps & { fail: (e: unknown) => void }) {
   const spot = p.layer.spot!;
   const state = spotPicked(spot, p.choice);
   return <>
-    <Segmented small label={`${spot.label} state`} value={state.key} onChange={(key) => p.onState?.(spot.id, key)}
-      options={spot.states.map((s) => ({ value: s.key, label: s.label }))} />
+    <Segmented small label={t("{label} state", { label: t(spot.label) })} value={state.key} onChange={(key) => p.onState?.(spot.id, key)}
+      options={spot.states.map((s) => ({ value: s.key, label: t(s.label) }))} />
     {state.layer.present ? <>
       <ImageTop {...p} layer={state.layer} zoom={false} />
-      <div className="st-row"><span>Show on the watch</span>
-        <Switch label={`Show ${spot.label} ${state.label} on the watch`} checked={state.layer.visible} onChange={(v) => p.onStateVisible?.(state.layer, v)} /></div>
+      <div className="st-row"><span>{t("Show on the watch")}</span>
+        <Switch label={t("Show {spot} {state} on the watch", { spot: t(spot.label), state: t(state.label) })} checked={state.layer.visible} onChange={(v) => p.onStateVisible?.(state.layer, v)} /></div>
     </> : spot.canAdd ? (
-      <button type="button" className="chip st-chip-btn" onClick={() => p.onAddState?.(state.key)}><Icon name="plus" size={15} />Add image</button>
+      <button type="button" className="chip st-chip-btn" onClick={() => p.onAddState?.(state.key)}><Icon name="plus" size={15} />{t("Add image")}</button>
     ) : null}
   </>;
 }
@@ -502,16 +504,16 @@ function ImageTop({ design, edit, layer, fail, watch, details, loadAssets, zoom 
     <div className="st-img-row">
       <TemplatePicture details={details} configAssetId={layer.configAssetId} replacement={o?.replacement?.dataUrl} loadAssets={loadAssets} />
       <span className="st-img-actions">
-        <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="upload" size={15} />Replace image</button>
-        <button type="button" className="chip st-chip-btn" onClick={() => setOfficial(true)}><Icon name="spark" size={15} />Official library</button>
-        {o?.replacement ? <button type="button" className="chip st-chip-btn" onClick={() => edit((x) => restoreAsset(x, layer))}><Icon name="refresh" size={15} />Restore original</button> : null}
+        <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="upload" size={15} />{t("Replace image")}</button>
+        <button type="button" className="chip st-chip-btn" onClick={() => setOfficial(true)}><Icon name="spark" size={15} />{t("Official library")}</button>
+        {o?.replacement ? <button type="button" className="chip st-chip-btn" onClick={() => edit((x) => restoreAsset(x, layer))}><Icon name="refresh" size={15} />{t("Restore original")}</button> : null}
       </span>
     </div>
     <input ref={input} type="file" hidden accept="image/png" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void readArtwork(f).then((art) => edit((x) => replaceAsset(x, layer, art))).catch(fail); }} />
     {official ? <OfficialPicker watch={watch} request={officialImageRequest(layer)} onClose={() => setOfficial(false)} onPick={(set, frame) => edit((x) => replaceAsset(x, layer, officialArtwork(set, frame)))} /> : null}
     <TemplateImageFacts details={details} configAssetId={layer.configAssetId} label={layer.label} replacement={o?.replacement} loadAssets={loadAssets} />
-    {layer.capabilities.color ? <ColourRow label="Tint" {...layerColour(design, layer, edit)} /> : null}
-    {zoom && layer.capabilities.scale ? <Slider label="Zoom" value={Math.round((o?.scale ?? 1) * 100)} min={10} max={300} unit="%" onCommit={(v) => edit((x) => setScale(x, layer, v / 100))} /> : null}
+    {layer.capabilities.color ? <ColourRow label={t("Tint")} {...layerColour(design, layer, edit)} /> : null}
+    {zoom && layer.capabilities.scale ? <Slider label={t("Zoom")} value={Math.round((o?.scale ?? 1) * 100)} min={10} max={300} unit="%" onCommit={(v) => edit((x) => setScale(x, layer, v / 100))} /> : null}
   </>;
 }
 
@@ -520,27 +522,27 @@ function ImageTop({ design, edit, layer, fail, watch, details, loadAssets, zoom 
  * last digit, so its look is colour, size, the gap before it and the height it sits at, all baked into the picture.
  */
 function PercentLook({ design, edit, replaced }: { design: Design; edit: Edit; replaced: boolean }) {
-  if (replaced) return <p className="st-note">Your picture goes on the watch as it is.</p>;
+  if (replaced) return <p className="st-note">{t("Your picture goes on the watch as it is.")}</p>;
   const look = percentOf(design);
   const digits = design.metricStyles?.battery?.color ?? design.digitColor;
   const size = Math.round((look.size ?? 1) * 100);
   return <>
-    <div className="st-row"><span>Same color as the digits</span>
-      <Switch label="Same color as the digits" checked={!look.color} onChange={(v) => edit((x) => setPercent(x, { color: v ? undefined : digits }))} /></div>
-    {look.color ? <ColourRow label="Color" value={look.color} onPick={(c) => edit((x) => setPercent(x, { color: c }))} /> : null}
+    <div className="st-row"><span>{t("Same color as the digits")}</span>
+      <Switch label={t("Same color as the digits")} checked={!look.color} onChange={(v) => edit((x) => setPercent(x, { color: v ? undefined : digits }))} /></div>
+    {look.color ? <ColourRow label={t("Color")} value={look.color} onPick={(c) => edit((x) => setPercent(x, { color: c }))} /> : null}
     <div className="st-nums">
-      <Slider label="Size" value={size} min={30} max={150} unit="%" onCommit={(v) => edit((x) => setPercent(x, { size: v / 100 }))} />
-      <Slider label="Gap" value={Math.round(look.gap ?? 0)} min={0} max={40} unit="px" onCommit={(v) => edit((x) => setPercent(x, { gap: v }))} />
+      <Slider label={t("Size")} value={size} min={30} max={150} unit="%" onCommit={(v) => edit((x) => setPercent(x, { size: v / 100 }))} />
+      <Slider label={t("Gap")} value={Math.round(look.gap ?? 0)} min={0} max={40} unit="px" onCommit={(v) => edit((x) => setPercent(x, { gap: v }))} />
     </div>
-    {size < 100 ? <div className="st-row"><span>Sits at</span>
-      <Segmented small label="Sits at" value={look.align ?? "middle"} onChange={(v) => edit((x) => setPercent(x, { align: v }))}
-        options={[{ value: "top", label: "Top" }, { value: "middle", label: "Middle" }, { value: "bottom", label: "Bottom" }]} /></div> : null}
+    {size < 100 ? <div className="st-row"><span>{t("Sits at")}</span>
+      <Segmented small label={t("Sits at")} value={look.align ?? "middle"} onChange={(v) => edit((x) => setPercent(x, { align: v }))}
+        options={[{ value: "top", label: tx("position", "Top") }, { value: "middle", label: t("Middle") }, { value: "bottom", label: t("Bottom") }]} /></div> : null}
   </>;
 }
 
 /** A part's name in the switcher: the minus of a temperature reads as what it is. */
 const partName = (id: string, part: CorosWatchfaceNativePart) =>
-  part === "value" ? "Digits" : part === "symbols" && id.startsWith("weather_temp") ? "Minus" : PART_LABEL[part] ?? part;
+  part === "value" ? t("Digits") : part === "symbols" && id.startsWith("weather_temp") ? t("Minus") : PART_LABEL[part] ? t(PART_LABEL[part]!) : part;
 
 /**
  * A live-data field's parts (digits, minus, unit, icon…) behind one switcher. Each part shows the pictures the watch
@@ -581,28 +583,28 @@ function NativeParts({ design, edit, layer, fail, watch, resolution }: { design:
         const m = f.name.match(/^(\d{1,2})\.png$/i);
         if (m && allowed.has(Number(m[1]))) got[String(Number(m[1]))] = (await readArtwork(f)).dataUrl;
       }
-      if (!Object.keys(got).length) throw new Error(`Name the pictures ${indexes.map((i) => `${name(i)}.png`).join(", ")}.`);
+      if (!Object.keys(got).length) throw new Error(t("Name the pictures {files}.", { files: indexes.map((i) => `${name(i)}.png`).join(", ") }));
       edit((x) => { const cur = nativeOf(x, layer); return cur ? setNative(x, layer, { assets: { ...cur.assets, [role]: { ...cur.assets?.[role], ...got } } }) : x; });
     } catch (e) { fail(e); }
   };
   return <>
-    {parts.length > 1 ? <Segmented small label="Part" value={part} onChange={setPicked} options={parts.map((p) => ({ value: p, label: partName(id, p) }))} /> : null}
-    {part !== "value" ? <div className="st-row"><span>Show {partName(id, part).toLowerCase()}</span>
-      <Switch label={`Show ${partName(id, part)}`} checked={shownOn} onChange={(v) => edit((x) => setPart(x, layer, part, { enabled: v }))} /></div> : null}
+    {parts.length > 1 ? <Segmented small label={t("Part")} value={part} onChange={setPicked} options={parts.map((p) => ({ value: p, label: partName(id, p) }))} /> : null}
+    {part !== "value" ? <div className="st-row"><span>{t("Show {part}", { part: partName(id, part).toLowerCase() })}</span>
+      <Switch label={t("Show {part}", { part: partName(id, part) })} checked={shownOn} onChange={(v) => edit((x) => setPart(x, layer, part, { enabled: v }))} /></div> : null}
     {shownOn && role && indexes.length ? <>
       <NativePictures design={design} edit={edit} layer={layer} part={part} partName={partName(id, part)} role={role} indexes={indexes} urls={urls} watch={watch} fail={fail} onImportFolder={() => input.current?.click()} />
       <input ref={input} type="file" hidden multiple accept="image/png" {...{ webkitdirectory: "" }} onChange={(e) => { void load(e.target.files); e.target.value = ""; }} />
     </> : null}
     {shownOn ? <>
-      {part !== "value" ? <ColourRow label={`${partName(id, part)} color`} value={ps?.color ?? n.color} onPick={(c) => edit((x) => setPart(x, layer, part, { color: c }))} /> : null}
+      {part !== "value" ? <ColourRow label={t("{part} color", { part: partName(id, part) })} value={ps?.color ?? n.color} onPick={(c) => edit((x) => setPart(x, layer, part, { color: c }))} /> : null}
       <div className="st-nums">
-        <NumberField label="Shift X" value={ps?.x ?? 0} onChange={(v) => edit((x) => setPart(x, layer, part, { x: v }))} />
-        <NumberField label="Shift Y" value={ps?.y ?? 0} onChange={(v) => edit((x) => setPart(x, layer, part, { y: v }))} />
-        {part === "value" && ps?.digitWidth !== undefined ? <NumberField label="Digit width" unit="px" value={ps.digitWidth} min={1} max={400} onChange={(v) => edit((x) => setPart(x, layer, part, { digitWidth: v }))} /> : null}
+        <NumberField label={t("Shift X")} value={ps?.x ?? 0} onChange={(v) => edit((x) => setPart(x, layer, part, { x: v }))} />
+        <NumberField label={t("Shift Y")} value={ps?.y ?? 0} onChange={(v) => edit((x) => setPart(x, layer, part, { y: v }))} />
+        {part === "value" && ps?.digitWidth !== undefined ? <NumberField label={t("Digit width")} unit="px" value={ps.digitWidth} min={1} max={400} onChange={(v) => edit((x) => setPart(x, layer, part, { digitWidth: v }))} /> : null}
       </div>
       <NativePartLayout design={design} edit={edit} layer={layer} part={part} partName={partName(id, part)} role={role} resolution={resolution} />
     </> : null}
-    <TextField label="Canvas sample" value={n.previewValue ?? ""} placeholder="Live value" onCommit={(v) => edit((x) => setNative(x, layer, { previewValue: v || undefined }))} />
+    <TextField label={t("Canvas sample")} value={n.previewValue ?? ""} placeholder={t("Live value")} onCommit={(v) => edit((x) => setNative(x, layer, { previewValue: v || undefined }))} />
   </>;
 }
 
@@ -615,10 +617,10 @@ function AnimationFolds({ design, edit, fail, watchLabel, watch: model, resoluti
     if (!files?.length) return;
     try {
       const pngs = [...files].filter((f) => /\.png$/i.test(f.name)).sort((x, y) => x.name.localeCompare(y.name, "en", { numeric: true }));
-      if (!pngs.length) throw new Error("Choose a folder of numbered PNG frames.");
-      if (pngs.length > MAX_ANIMATION_FRAMES) throw new Error(`The watch plays up to ${MAX_ANIMATION_FRAMES} frames; that folder has ${pngs.length}.`);
+      if (!pngs.length) throw new Error(t("Choose a folder of numbered PNG frames."));
+      if (pngs.length > MAX_ANIMATION_FRAMES) throw new Error(t("The watch plays up to {max} frames; that folder has {n}.", { max: MAX_ANIMATION_FRAMES, n: pngs.length }));
       const frames = await Promise.all(pngs.map(readArtwork));
-      if (frames.some((f) => f.width !== frames[0].width || f.height !== frames[0].height)) throw new Error("Every frame needs the same size.");
+      if (frames.some((f) => f.width !== frames[0].width || f.height !== frames[0].height)) throw new Error(t("Every frame needs the same size."));
       edit((x) => (x.animation ? { ...x, animation: { ...x.animation, frames: frames.map((f) => f.dataUrl), delays: frames.map((_, i) => x.animation!.delays[i] ?? DEFAULT_ANIMATION_DELAY), width: frames[0].width, height: frames[0].height } } : x));
       onPlayback?.({ playing: playback.playing, still: 0 });
     } catch (e) { fail(e); }
@@ -634,29 +636,29 @@ function AnimationFolds({ design, edit, fail, watchLabel, watch: model, resoluti
     const still = playback.still > index ? playback.still - 1 : playback.still;
     onPlayback?.({ playing: playback.playing, still: Math.max(0, Math.min(still, a.frames.length - 2)) });
   };
-  const watch = watchLabel ?? "the watch";
+  const watch = watchLabel ?? t("the watch");
   const dropped = droppedFrames(outcome, a.frames.length);
   return <>
-    <Fold title="Playback" note={`${a.frames.length} ${a.frames.length === 1 ? "frame" : "frames"} · ${loop.toLocaleString(undefined, { maximumFractionDigits: 2 })} s loop`}>
+    <Fold title={t("Playback")} note={`${a.frames.length === 1 ? t("1 frame") : t("{n} frames", { n: a.frames.length })} · ${t("{s} s loop", { s: loop.toLocaleString(language() === "en" ? undefined : locale(), { maximumFractionDigits: 2 }) })}`}>
       <div className="st-nums">
         <button type="button" className="chip st-chip-btn" onClick={() => onPlayback?.({ ...playback, playing: !playback.playing })}>
-          <Icon name={playback.playing ? "pause" : "play"} size={15} />{playback.playing ? "Pause preview" : "Play preview"}
+          <Icon name={playback.playing ? "pause" : "play"} size={15} />{playback.playing ? t("Pause preview") : t("Play preview")}
         </button>
-        <NumberField key={uniform ? `d${delays[0]}` : "mixed"} label={uniform ? "Delay" : "Set all"} unit="ms" value={delays[0] ?? DEFAULT_ANIMATION_DELAY} min={MIN_ANIMATION_DELAY} max={MAX_ANIMATION_DELAY}
+        <NumberField key={uniform ? `d${delays[0]}` : "mixed"} label={uniform ? t("Delay") : t("Set all")} unit="ms" value={delays[0] ?? DEFAULT_ANIMATION_DELAY} min={MIN_ANIMATION_DELAY} max={MAX_ANIMATION_DELAY}
           onChange={(v) => edit((x) => setDelays(x, (x.animation?.frames ?? []).map(() => v)))} />
       </div>
-      <span className="st-note" data-warn={animationOutcomeNeedsNotice(outcome) || undefined}>{a.enabled ? animationOutcomeText(outcome, watch) : "Hidden: the face is built without the animation."}</span>
+      <span className="st-note" data-warn={animationOutcomeNeedsNotice(outcome) || undefined}>{a.enabled ? animationOutcomeText(outcome, watch) : t("Hidden: the face is built without the animation.")}</span>
     </Fold>
-    <Fold title="Frames" note={`${Math.round(a.width)} × ${Math.round(a.height)} px`}>
-      <ol className="st-anim-frames" aria-label="Animation frames">
+    <Fold title={t("Frames")} note={`${Math.round(a.width)} × ${Math.round(a.height)} px`}>
+      <ol className="st-anim-frames" aria-label={t("Animation frames")}>
         {a.frames.map((f, i) => (
-          <li key={i} data-shown={!playback.playing && playback.still === i ? "" : undefined} data-dropped={dropped.has(i) || undefined} title={dropped.has(i) ? `${watch} leaves this frame out` : undefined}>
-            <button type="button" className="st-anim-thumb" title={`Show frame ${i + 1}`} aria-label={`Show frame ${i + 1}`}
+          <li key={i} data-shown={!playback.playing && playback.still === i ? "" : undefined} data-dropped={dropped.has(i) || undefined} title={dropped.has(i) ? t("{watch} leaves this frame out", { watch }) : undefined}>
+            <button type="button" className="st-anim-thumb" title={t("Show frame {n}", { n: i + 1 })} aria-label={t("Show frame {n}", { n: i + 1 })}
               onClick={() => onPlayback?.({ playing: false, still: i })}>
               <img src={f} alt="" draggable={false} /><span>{i + 1}</span>
             </button>
             {a.frames.length > 1 ? (
-              <button type="button" className="st-anim-del" title={`Delete frame ${i + 1}`} aria-label={`Delete frame ${i + 1}`} onClick={() => removeFrame(i)}>
+              <button type="button" className="st-anim-del" title={t("Delete frame {n}", { n: i + 1 })} aria-label={t("Delete frame {n}", { n: i + 1 })} onClick={() => removeFrame(i)}>
                 <Icon name="close" size={11} width={2.6} />
               </button>
             ) : null}
@@ -664,8 +666,8 @@ function AnimationFolds({ design, edit, fail, watchLabel, watch: model, resoluti
           </li>
         ))}
       </ol>
-      <span className="st-note">Each frame's time in ms. Up to {MAX_ANIMATION_FRAMES} frames, all one size.</span>
-      <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="folder" size={15} />Replace frames…</button>
+      <span className="st-note">{t("Each frame's time in ms. Up to {max} frames, all one size.", { max: MAX_ANIMATION_FRAMES })}</span>
+      <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="folder" size={15} />{t("Replace frames…")}</button>
       <input ref={input} type="file" hidden multiple accept="image/png" {...{ webkitdirectory: "" }} onChange={(e) => { void load(e.target.files); e.target.value = ""; }} />
     </Fold>
   </>;
@@ -682,7 +684,7 @@ function FrameDelay({ index, value, onChange }: { index: number; value: number; 
     const clamped = Math.round(Math.max(MIN_ANIMATION_DELAY, Math.min(MAX_ANIMATION_DELAY, v)));
     if (clamped !== value) onChange(clamped);
   };
-  return <input className="st-anim-delay" type="text" inputMode="numeric" aria-label={`Frame ${index + 1} time (ms)`} title="Milliseconds on screen"
+  return <input className="st-anim-delay" type="text" inputMode="numeric" aria-label={t("Frame {n} time (ms)", { n: index + 1 })} title={t("Milliseconds on screen")}
     value={text ?? String(value)} onChange={(e) => setText(e.target.value)} onBlur={commit}
     onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />;
 }
@@ -695,27 +697,27 @@ function SpriteTop({ design, edit, layer, fail }: LayerInspectorProps & { fail: 
     <div className="st-img-row">
       <span className="st-img-prev"><img src={s.dataUrl} alt="" /></span>
       <span className="st-img-actions">
-        <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="refresh" size={15} />Replace</button>
-        <button type="button" className="chip st-chip-btn" onClick={() => edit((x) => setSprite(x, layer, (v) => ({ ...v, width: v.sourceWidth, height: v.sourceHeight, scale: 1 })))}>Use imported size</button>
+        <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="refresh" size={15} />{t("Replace")}</button>
+        <button type="button" className="chip st-chip-btn" onClick={() => edit((x) => setSprite(x, layer, (v) => ({ ...v, width: v.sourceWidth, height: v.sourceHeight, scale: 1 })))}>{t("Use imported size")}</button>
       </span>
     </div>
     <input ref={input} type="file" hidden accept="image/png" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void readArtwork(f).then((art) => edit((x) => setSprite(x, layer, (v) => ({ ...v, dataUrl: art.dataUrl, sourceWidth: art.width, sourceHeight: art.height, crop: undefined })))).catch(fail); }} />
-    <Slider label="Scale" value={Math.round(s.scale * 100)} min={20} max={300} unit="%" onCommit={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, scale: v / 100 })))} />
+    <Slider label={t("Scale")} value={Math.round(s.scale * 100)} min={20} max={300} unit="%" onCommit={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, scale: v / 100 })))} />
     <div className="st-nums">
-      <NumberField label="Rotation" unit="°" value={Math.round(s.rotation)} min={0} max={360} onChange={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, rotation: v })))} />
+      <NumberField label={t("Rotation")} unit="°" value={Math.round(s.rotation)} min={0} max={360} onChange={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, rotation: v })))} />
       <span className="st-iconrow">
-        <button type="button" className="st-icon-btn" aria-label="Flip across" title="Flip across" aria-pressed={!!s.flipX} onClick={() => edit((x) => setSprite(x, layer, (o) => ({ ...o, flipX: !o.flipX })))}><Icon name="alignH" size={17} /></button>
-        <button type="button" className="st-icon-btn" aria-label="Flip down" title="Flip down" aria-pressed={!!s.flipY} onClick={() => edit((x) => setSprite(x, layer, (o) => ({ ...o, flipY: !o.flipY })))}><Icon name="alignV" size={17} /></button>
-        {s.crop ? <button type="button" className="st-icon-btn" aria-label="Remove the crop" title="Remove the crop" onClick={() => edit((x) => setSprite(x, layer, (o) => ({ ...o, crop: undefined })))}><Icon name="full" size={17} /></button> : null}
+        <button type="button" className="st-icon-btn" aria-label={t("Flip across")} title={t("Flip across")} aria-pressed={!!s.flipX} onClick={() => edit((x) => setSprite(x, layer, (o) => ({ ...o, flipX: !o.flipX })))}><Icon name="alignH" size={17} /></button>
+        <button type="button" className="st-icon-btn" aria-label={t("Flip down")} title={t("Flip down")} aria-pressed={!!s.flipY} onClick={() => edit((x) => setSprite(x, layer, (o) => ({ ...o, flipY: !o.flipY })))}><Icon name="alignV" size={17} /></button>
+        {s.crop ? <button type="button" className="st-icon-btn" aria-label={t("Remove the crop")} title={t("Remove the crop")} onClick={() => edit((x) => setSprite(x, layer, (o) => ({ ...o, crop: undefined })))}><Icon name="full" size={17} /></button> : null}
       </span>
     </div>
     <div className="st-nums">
-      <NumberField label="Skew X" unit="°" value={Math.round(s.skewX ?? 0)} min={-80} max={80} onChange={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, skewX: v })))} />
-      <NumberField label="Skew Y" unit="°" value={Math.round(s.skewY ?? 0)} min={-80} max={80} onChange={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, skewY: v })))} />
+      <NumberField label={t("Skew X")} unit="°" value={Math.round(s.skewX ?? 0)} min={-80} max={80} onChange={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, skewX: v })))} />
+      <NumberField label={t("Skew Y")} unit="°" value={Math.round(s.skewY ?? 0)} min={-80} max={80} onChange={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, skewY: v })))} />
     </div>
-    <div className="st-row"><span>Tint image</span><Switch label="Tint image" checked={!!s.tintColor} onChange={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, tintColor: v ? "#53cba1" : null })))} /></div>
-    {s.tintColor ? <ColourRow label="Tint" value={s.tintColor} onPick={(c) => edit((x) => setSprite(x, layer, (o) => ({ ...o, tintColor: c })))} /> : null}
-    <Slider label="Opacity" value={Math.round((s.opacity ?? 1) * 100)} min={0} max={100} unit="%" onCommit={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, opacity: v / 100 })))} />
+    <div className="st-row"><span>{t("Tint image")}</span><Switch label={t("Tint image")} checked={!!s.tintColor} onChange={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, tintColor: v ? "#53cba1" : null })))} /></div>
+    {s.tintColor ? <ColourRow label={t("Tint")} value={s.tintColor} onPick={(c) => edit((x) => setSprite(x, layer, (o) => ({ ...o, tintColor: c })))} /> : null}
+    <Slider label={t("Opacity")} value={Math.round((s.opacity ?? 1) * 100)} min={0} max={100} unit="%" onCommit={(v) => edit((x) => setSprite(x, layer, (o) => ({ ...o, opacity: v / 100 })))} />
   </>;
 }
 
@@ -726,53 +728,53 @@ function ElementTop({ design, edit, layer, resolution }: LayerInspectorProps) {
   if (e.kind === "text") {
     const lines = e.text.split(/\r?\n/).length;
     return <>
-      <TextArea label="Text" value={e.text} onCommit={(v) => set({ text: v })} />
-      <FontPicker label="Font" family={e.fontFamily} weight={e.weight} style={e.fontStyle} sample="Aa" template={false} resolution={resolution} layerId={layer.id}
+      <TextArea label={t("Text")} value={e.text} onCommit={(v) => set({ text: v })} />
+      <FontPicker label={t("Font")} family={e.fontFamily} weight={e.weight} style={e.fontStyle} sample="Aa" template={false} resolution={resolution} layerId={layer.id}
         onFamily={(f, weight) => set({ fontFamily: f, ...(weight ? { weight } : {}) })} />
-      <ColourRow label="Color" value={e.color} onPick={(c) => set({ color: c })} />
-      <div className="st-nums"><NumberField label="Size" unit="px" value={e.fontSize} min={12} max={200} onChange={(v) => set({ fontSize: v })} />
-        <NumberField label="Rotation" unit="°" value={Math.round(e.rotation)} min={0} max={360} onChange={(v) => set({ rotation: v })} /></div>
+      <ColourRow label={t("Color")} value={e.color} onPick={(c) => set({ color: c })} />
+      <div className="st-nums"><NumberField label={t("Size")} unit="px" value={e.fontSize} min={12} max={200} onChange={(v) => set({ fontSize: v })} />
+        <NumberField label={t("Rotation")} unit="°" value={Math.round(e.rotation)} min={0} max={360} onChange={(v) => set({ rotation: v })} /></div>
       <div className="st-nums">
-        <label className="st-select"><Select aria-label="Weight" value={e.weight} onChange={(ev) => set({ weight: Number(ev.target.value) })}>{WEIGHTS.map((w) => <option key={w} value={w}>{w} {WEIGHT_NAMES[w]}</option>)}</Select><Icon name="chevD" size={14} /></label>
-        <Segmented small label="Style" value={e.fontStyle ?? "normal"} onChange={(v) => set({ fontStyle: v })} options={[{ value: "normal", label: "Normal" }, { value: "italic", label: "Italic" }]} />
+        <label className="st-select"><Select aria-label={tx("font", "Weight")} value={e.weight} onChange={(ev) => set({ weight: Number(ev.target.value) })}>{WEIGHTS.map((w) => <option key={w} value={w}>{w} {tx("font weight", WEIGHT_NAMES[w]!)}</option>)}</Select><Icon name="chevD" size={14} /></label>
+        <Segmented small label={t("Style")} value={e.fontStyle ?? "normal"} onChange={(v) => set({ fontStyle: v })} options={[{ value: "normal", label: t("Normal") }, { value: "italic", label: t("Italic") }]} />
       </div>
       <div className="st-nums">
-        <NumberField label="Spacing" unit="px" value={Math.round(e.letterSpacing ?? 0)} min={-40} max={200} onChange={(v) => set({ letterSpacing: v || undefined })} />
-        {lines > 1 ? <NumberField label="Line" unit="%" value={Math.round((e.lineHeight ?? 1.2) * 100)} min={50} max={400} onChange={(v) => set({ lineHeight: v / 100 })} /> : null}
+        <NumberField label={t("Spacing")} unit="px" value={Math.round(e.letterSpacing ?? 0)} min={-40} max={200} onChange={(v) => set({ letterSpacing: v || undefined })} />
+        {lines > 1 ? <NumberField label={t("Line")} unit="%" value={Math.round((e.lineHeight ?? 1.2) * 100)} min={50} max={400} onChange={(v) => set({ lineHeight: v / 100 })} /> : null}
       </div>
-      <div className="st-row"><span>Align</span><Segmented small label="Text align" value={e.align} onChange={(v) => set({ align: v })} options={[{ value: "left", label: "Left" }, { value: "center", label: "Center" }, { value: "right", label: "Right" }]} /></div>
-      <div className="st-row"><span>Case</span><Segmented small label="Letter case" value={e.textCase ?? "none"} onChange={(v) => set({ textCase: v === "none" ? undefined : v })}
-        options={[{ value: "none", label: "As typed" }, { value: "upper", label: "ABC" }, { value: "lower", label: "abc" }, { value: "title", label: "Abc" }]} /></div>
-      <Slider label="Opacity" value={Math.round((e.opacity ?? 1) * 100)} min={0} max={100} unit="%" onCommit={(v) => set({ opacity: v === 100 ? undefined : v / 100 })} />
+      <div className="st-row"><span>{t("Align")}</span><Segmented small label={t("Text align")} value={e.align} onChange={(v) => set({ align: v })} options={[{ value: "left", label: t("Left") }, { value: "center", label: t("Center") }, { value: "right", label: t("Right") }]} /></div>
+      <div className="st-row"><span>{t("Case")}</span><Segmented small label={t("Letter case")} value={e.textCase ?? "none"} onChange={(v) => set({ textCase: v === "none" ? undefined : v })}
+        options={[{ value: "none", label: t("As typed") }, { value: "upper", label: "ABC" }, { value: "lower", label: "abc" }, { value: "title", label: "Abc" }]} /></div>
+      <Slider label={t("Opacity")} value={Math.round((e.opacity ?? 1) * 100)} min={0} max={100} unit="%" onCommit={(v) => set({ opacity: v === 100 ? undefined : v / 100 })} />
     </>;
   }
   if (e.kind === "line") return <>
-    <ColourRow label="Color" value={e.color} onPick={(c) => set({ color: c })} />
+    <ColourRow label={t("Color")} value={e.color} onPick={(c) => set({ color: c })} />
     <div className="st-nums">
-      <NumberField label="Length" unit="px" value={Math.round(Math.hypot(e.dx, e.dy))} min={10} max={800} onChange={(v) => { const len = Math.max(1, Math.hypot(e.dx, e.dy)); set({ dx: Math.round((e.dx / len) * v), dy: Math.round((e.dy / len) * v) }); }} />
-      <NumberField label="Thick" unit="px" value={e.strokeWidth} min={1} max={60} onChange={(v) => set({ strokeWidth: v })} />
-      <NumberField label="Rotation" unit="°" value={Math.round(e.rotation)} min={0} max={360} onChange={(v) => set({ rotation: v })} />
+      <NumberField label={t("Length")} unit="px" value={Math.round(Math.hypot(e.dx, e.dy))} min={10} max={800} onChange={(v) => { const len = Math.max(1, Math.hypot(e.dx, e.dy)); set({ dx: Math.round((e.dx / len) * v), dy: Math.round((e.dy / len) * v) }); }} />
+      <NumberField label={t("Thick")} unit="px" value={e.strokeWidth} min={1} max={60} onChange={(v) => set({ strokeWidth: v })} />
+      <NumberField label={t("Rotation")} unit="°" value={Math.round(e.rotation)} min={0} max={360} onChange={(v) => set({ rotation: v })} />
     </div>
   </>;
   const gradient = e.gradient;
   return <>
-    <div className="st-row"><span>Fill</span>
-      <Segmented small label="Fill" value={gradient ? "gradient" : "solid"} onChange={(v) => set({ gradient: v === "gradient" ? { from: e.fill, to: "#6aa5ff", angle: 135 } : undefined })} options={[{ value: "solid", label: "Solid" }, { value: "gradient", label: "Gradient" }]} /></div>
+    <div className="st-row"><span>{t("Fill")}</span>
+      <Segmented small label={t("Fill")} value={gradient ? "gradient" : "solid"} onChange={(v) => set({ gradient: v === "gradient" ? { from: e.fill, to: "#6aa5ff", angle: 135 } : undefined })} options={[{ value: "solid", label: t("Solid") }, { value: "gradient", label: t("Gradient") }]} /></div>
     {gradient ? <>
       <div className="st-grad" style={{ background: `linear-gradient(${gradient.angle + 90}deg, ${gradient.from}, ${gradient.to})` }} aria-hidden="true" />
       <div className="st-nums">
-        <ColorField label="From" value={gradient.from} onPick={(c) => set({ gradient: { ...gradient, from: c } })} />
-        <ColorField label="To" value={gradient.to} onPick={(c) => set({ gradient: { ...gradient, to: c } })} />
-        <NumberField label="Angle" unit="°" value={gradient.angle} min={0} max={360} onChange={(v) => set({ gradient: { ...gradient, angle: v } })} />
+        <ColorField label={t("From")} value={gradient.from} onPick={(c) => set({ gradient: { ...gradient, from: c } })} />
+        <ColorField label={t("To")} value={gradient.to} onPick={(c) => set({ gradient: { ...gradient, to: c } })} />
+        <NumberField label={t("Angle")} unit="°" value={gradient.angle} min={0} max={360} onChange={(v) => set({ gradient: { ...gradient, angle: v } })} />
       </div>
-    </> : <ColourRow label="Color" value={e.fill} onPick={(c) => set({ fill: c })} />}
+    </> : <ColourRow label={t("Color")} value={e.fill} onPick={(c) => set({ fill: c })} />}
     <div className="st-nums">
       <NumberField label="W" value={Math.round(e.width)} min={1} max={800} onChange={(v) => set({ width: v })} />
       <NumberField label="H" value={Math.round(e.height)} min={1} max={800} onChange={(v) => set({ height: v })} />
-      <NumberField label="Rotation" unit="°" value={Math.round(e.rotation)} min={0} max={360} onChange={(v) => set({ rotation: v })} />
+      <NumberField label={t("Rotation")} unit="°" value={Math.round(e.rotation)} min={0} max={360} onChange={(v) => set({ rotation: v })} />
     </div>
-    {e.kind === "rect" ? <Slider label="Corners" value={e.cornerRadius} min={0} max={200} unit="px" onCommit={(v) => set({ cornerRadius: v })} /> : null}
-    <Slider label="Opacity" value={Math.round((e.opacity ?? 1) * 100)} min={0} max={100} unit="%" onCommit={(v) => set({ opacity: v === 100 ? undefined : v / 100 })} />
+    {e.kind === "rect" ? <Slider label={t("Corners")} value={e.cornerRadius} min={0} max={200} unit="px" onCommit={(v) => set({ cornerRadius: v })} /> : null}
+    <Slider label={t("Opacity")} value={Math.round((e.opacity ?? 1) * 100)} min={0} max={100} unit="%" onCommit={(v) => set({ opacity: v === 100 ? undefined : v / 100 })} />
   </>;
 }
 
@@ -803,7 +805,7 @@ function ReadoutLook(p: LayerInspectorProps) {
   return (
     <div className="st-ch-look">
       <LayerFontPicker design={design} layer={layer} edit={edit} resolution={resolution} loadAssets={p.loadAssets} fail={fail} watch={p.watch} />
-      <ColourRow label="Color" {...layerColour(design, layer, edit)} />
+      <ColourRow label={t("Color")} {...layerColour(design, layer, edit)} />
       <TypeFields design={design} layer={layer} edit={edit} kind="native" fontSize={size} resolution={resolution} onSize={resize} />
       <NativeParts design={design} edit={edit} layer={layer} fail={fail} watch={p.watch} resolution={resolution} />
     </div>
@@ -842,7 +844,7 @@ function ChartTop(p: LayerInspectorProps) {
   if (!n) return null;
   // Make fixed is offered on the Current face only, as in CorosLink.
   const pin = (source: string) => {
-    const block = aodNote ? "Switch to Current to show it on every page." : chartFixBlock(design, details, source);
+    const block = aodNote ? t("Switch to Current to show it on every page.") : chartFixBlock(design, details, source);
     if (block) { setWhy({ source, text: block }); return; }
     setWhy(null);
     void measureChartReadoutArt(design, source).then((art) => edit((x) => fixChartReadout(x, source, details, art)));
@@ -873,55 +875,56 @@ function ChartTop(p: LayerInspectorProps) {
 
   const pageRow = (r: ChartPageRow) => (
     <div key={r.id} className="st-ch-pg" data-on={r.on || undefined} data-cur={r.id === page.id || undefined}>
-      <button type="button" className="st-ch-pg-main" aria-current={r.id === page.id ? "true" : undefined} title={r.canShow ? "Show this page on the watch" : undefined} onClick={() => pick(r)}>
-        <span className="st-ch-num">{r.number ?? ""}</span><Icon name={CHART_GRAPH_ICON[r.graph]} size={16} /><span>{r.label}</span>
-        {r.shown ? <span className="st-ch-pg-tag">on the watch</span> : null}
+      <button type="button" className="st-ch-pg-main" aria-current={r.id === page.id ? "true" : undefined} title={r.canShow ? t("Show this page on the watch") : undefined} onClick={() => pick(r)}>
+        <span className="st-ch-num">{r.number ?? ""}</span><Icon name={CHART_GRAPH_ICON[r.graph]} size={16} /><span>{t(r.label)}</span>
+        {r.shown ? <span className="st-ch-pg-tag">{t("on the watch")}</span> : null}
       </button>
-      {bar(r.id) ? null : <Switch label={`${r.label} page`} checked={r.on} disabled={r.locked} onChange={(v) => toggle(r.id, v)} />}
+      {bar(r.id) ? null : <Switch label={t("{name} page", { name: t(r.label) })} checked={r.on} disabled={r.locked} onChange={(v) => toggle(r.id, v)} />}
     </div>
   );
 
   return <>
     <div className="st-row-col">
-      <div className="st-ch-label"><span className="st-label">Pages</span>
-        {next ? <button type="button" className="st-link st-ch-back" title="Next page, as the watch's Back button does" onClick={() => { setPicked(next); showPage(next); }}><Icon name="undo" size={13} width={2.2} />Back</button>
-          : <span className="st-ch-order" title="The watch sets the order"><Icon name="lock" size={12} width={2.2} />Back order</span>}</div>
+      <div className="st-ch-label"><span className="st-label">{t("Pages")}</span>
+        {next ? <button type="button" className="st-link st-ch-back" title={t("Next page, as the watch's Back button does")} onClick={() => { setPicked(next); showPage(next); }}><Icon name="undo" size={13} width={2.2} />{t("Back")}</button>
+          : <span className="st-ch-order" title={t("The watch sets the order")}><Icon name="lock" size={12} width={2.2} />{t("Back order")}</span>}</div>
       <div className="st-ch-pages">
         <div className="st-ch-pair">
           {rows.filter((r) => bar(r.id)).map(pageRow)}
-          <Switch label="Barometer and Tide pages" checked={rows[0]!.on} disabled={rows[0]!.locked} onChange={(v) => toggle("barometer", v)} />
+          <Switch label={t("Barometer and Tide pages")} checked={rows[0]!.on} disabled={rows[0]!.locked} onChange={(v) => toggle("barometer", v)} />
         </div>
         {rows.filter((r) => !bar(r.id)).map(pageRow)}
       </div>
-      {rows.some((r) => r.locked) ? <p className="st-ch-why"><Icon name="lock" size={14} /><span>The last page stays. <button type="button" className="st-link" onClick={onHide}>Hide the chart</button> to take it off the watch.</span></p> : null}
+      {rows.some((r) => r.locked) ? <p className="st-ch-why"><Icon name="lock" size={14} /><span>{tr("The last page stays. {hide} to take it off the watch.", { hide: <button type="button" className="st-link" onClick={onHide}>{t("Hide the chart")}</button> })}</span></p> : null}
     </div>
 
     <div className="st-ch-sec">
-      <h3><span>{page.label}</span><small>{CHART_GRAPH_LABEL[page.graph]}</small></h3>
+      <h3><span>{t(page.label)}</span><small>{t(CHART_GRAPH_LABEL[page.graph])}</small></h3>
       {page.on ? <>
         <div className="st-ch-ros">
           {page.readouts.map((r) => {
             const there = r.state === "shown" || r.state === "hidden";
-            const sub = r.state === "fixed" ? "On every page" : r.state === "template" ? "From the template" : r.state === "hidden" ? (r.required ? "Hidden, page stays" : "Hidden")
-              : r.state === "missing" ? (r.required ? "Kept invisibly" : "Optional") : "";
+            const sub = r.state === "fixed" ? t("On every page") : r.state === "template" ? t("From the template") : r.state === "hidden" ? (r.required ? t("Hidden, page stays") : t("Hidden"))
+              : r.state === "missing" ? (r.required ? t("Kept invisibly") : t("Optional")) : "";
+            const label = t(r.label);
             const look = page.shown && r.source === editing;
             return (
               <Fragment key={r.source}>
               <div className="st-ch-ro" data-state={r.state}>
                 <Icon name={READOUT_ICON[r.source] ?? "pulse"} size={16} />
                 {page.shown && r.source !== editing && (r.state === "shown" || r.state === "template") && loadAssets
-                  ? <button type="button" className="st-ch-ro-copy st-ch-ro-pick" title="Edit and move this readout on the watch" onClick={() => editReadout(r.source)}><b>{r.label}</b>{sub ? <small>{sub}</small> : null}</button>
-                  : look ? <button type="button" className="st-ch-ro-copy st-ch-ro-pick" data-editing aria-expanded={!lookShut} title={lookShut ? "Show its settings" : "Hide its settings"} onClick={() => setLookShut((v) => !v)}>
-                      <b>{r.label}<span className="st-ch-fold" data-shut={lookShut || undefined}><Icon name="chevD" size={13} /></span></b>{sub ? <small>{sub}</small> : null}</button>
-                  : <span className="st-ch-ro-copy"><b>{r.label}</b>{sub ? <small>{sub}</small> : null}</span>}
-                {r.required && r.state !== "template" && r.state !== "fixed" ? <span className="st-ch-need">Needed</span> : null}
-                {r.state === "fixed" ? <button type="button" className="st-icon-btn" aria-label={`Put ${r.label} back on its page`} title="Back to its page" aria-pressed="true" onClick={() => edit((x) => unfixChartReadout(x, r.source))}><Icon name="pin" size={16} /></button> : null}
-                {there ? <button type="button" className="st-icon-btn" aria-label={`Show ${r.label} on every page`} title="Show on every page" onClick={() => pin(r.source)}><Icon name="pin" size={16} /></button> : null}
-                {r.state === "missing" ? <button type="button" className="st-icon-btn" aria-label={`Add ${r.label}`} title="Add to this page" onClick={() => edit((x) => setChartReadout(x, r.source, true, face))}><Icon name="plus" size={16} /></button> : null}
-                {there ? <button type="button" className="st-icon-btn" aria-label={`${r.state === "shown" ? "Hide" : "Show"} ${r.label}`}
-                  title={r.state === "hidden" ? "Show" : visible <= 1 && page.graph === "none" ? "Hide. The page stays, with nothing on it." : "Hide"}
+                  ? <button type="button" className="st-ch-ro-copy st-ch-ro-pick" title={t("Edit and move this readout on the watch")} onClick={() => editReadout(r.source)}><b>{label}</b>{sub ? <small>{sub}</small> : null}</button>
+                  : look ? <button type="button" className="st-ch-ro-copy st-ch-ro-pick" data-editing aria-expanded={!lookShut} title={lookShut ? t("Show its settings") : t("Hide its settings")} onClick={() => setLookShut((v) => !v)}>
+                      <b>{label}<span className="st-ch-fold" data-shut={lookShut || undefined}><Icon name="chevD" size={13} /></span></b>{sub ? <small>{sub}</small> : null}</button>
+                  : <span className="st-ch-ro-copy"><b>{label}</b>{sub ? <small>{sub}</small> : null}</span>}
+                {r.required && r.state !== "template" && r.state !== "fixed" ? <span className="st-ch-need">{t("Needed")}</span> : null}
+                {r.state === "fixed" ? <button type="button" className="st-icon-btn" aria-label={t("Put {name} back on its page", { name: label })} title={t("Back to its page")} aria-pressed="true" onClick={() => edit((x) => unfixChartReadout(x, r.source))}><Icon name="pin" size={16} /></button> : null}
+                {there ? <button type="button" className="st-icon-btn" aria-label={t("Show {name} on every page", { name: label })} title={t("Show on every page")} onClick={() => pin(r.source)}><Icon name="pin" size={16} /></button> : null}
+                {r.state === "missing" ? <button type="button" className="st-icon-btn" aria-label={t("Add {name}", { name: label })} title={t("Add to this page")} onClick={() => edit((x) => setChartReadout(x, r.source, true, face))}><Icon name="plus" size={16} /></button> : null}
+                {there ? <button type="button" className="st-icon-btn" aria-label={r.state === "shown" ? t("Hide {name}", { name: label }) : t("Show {name}", { name: label })}
+                  title={r.state === "hidden" ? t("Show") : visible <= 1 && page.graph === "none" ? t("Hide. The page stays, with nothing on it.") : t("Hide")}
                   onClick={() => edit((x) => setChartReadout(x, r.source, r.state === "hidden", face))}><Icon name={r.state === "shown" ? "eye" : "eyeOff"} size={16} /></button> : null}
-                {there && !r.required ? <button type="button" className="st-icon-btn" aria-label={`Remove ${r.label}`} title="Remove from this page" onClick={() => edit((x) => removeChartReadout(x, r.source))}><Icon name="trash" size={16} /></button> : null}
+                {there && !r.required ? <button type="button" className="st-icon-btn" aria-label={t("Remove {name}", { name: label })} title={t("Remove from this page")} onClick={() => edit((x) => removeChartReadout(x, r.source))}><Icon name="trash" size={16} /></button> : null}
               </div>
               {look && !lookShut ? <ReadoutLook {...p} /> : null}
               </Fragment>
@@ -929,51 +932,51 @@ function ChartTop(p: LayerInspectorProps) {
           })}
         </div>
         {why && page.readouts.some((r) => r.source === why.source) ? <p className="st-ch-why"><Icon name="pin" size={14} /><span>{why.text}</span></p> : null}
-        {page.hides.length ? <div className="st-ch-wx"><span className="st-label">Hidden here</span>{page.hides.map((f) => <span key={f.id} className="st-ch-tag" data-kind="minus">{f.label}</span>)}</div> : null}
-        {!page.canShow && page.graph === "bars" ? <p className="st-ch-why"><Icon name="eye" size={14} /><span>The preview shows this page once it has its reading.</span></p> : null}
-        {page.graph === "bars" ? <p className="st-ch-why"><Icon name="phone" size={14} /><span>Blank on the watch until the phone has synced.</span></p> : null}
-        {page.graph === "none" && visible === 0 ? <p className="st-ch-why"><Icon name="eyeOff" size={14} /><span>Nothing visible. Back still stops here.</span></p> : null}
+        {page.hides.length ? <div className="st-ch-wx"><span className="st-label">{t("Hidden here")}</span>{page.hides.map((f) => <span key={f.id} className="st-ch-tag" data-kind="minus">{t(f.label)}</span>)}</div> : null}
+        {!page.canShow && page.graph === "bars" ? <p className="st-ch-why"><Icon name="eye" size={14} /><span>{t("The preview shows this page once it has its reading.")}</span></p> : null}
+        {page.graph === "bars" ? <p className="st-ch-why"><Icon name="phone" size={14} /><span>{t("Blank on the watch until the phone has synced.")}</span></p> : null}
+        {page.graph === "none" && visible === 0 ? <p className="st-ch-why"><Icon name="eyeOff" size={14} /><span>{t("Nothing visible. Back still stops here.")}</span></p> : null}
       </> : <>
-        <div className="st-ch-wx"><span className="st-label">Adds</span>
-          {bar(page.id) ? <><span className="st-ch-tag" data-kind="plus">Barometer page</span><span className="st-ch-tag" data-kind="plus">Tide page</span></>
-            : page.readouts.filter((r) => r.required).map((r) => <span key={r.source} className="st-ch-tag" data-kind="plus">{r.label}</span>)}</div>
-        {page.hides.length ? <div className="st-ch-wx"><span className="st-label">Hides</span>{page.hides.map((f) => <span key={f.id} className="st-ch-tag" data-kind="minus">{f.label}</span>)}</div> : null}
-        {page.graph === "bars" ? <p className="st-ch-why"><Icon name="phone" size={14} /><span>Blank on the watch until the phone has synced.</span></p> : null}
-        <button type="button" className="btn btn-primary st-ch-add" onClick={() => toggle(page.id, true)}><Icon name="plus" size={16} width={2.2} />{bar(page.id) ? "Add Barometer and Tide" : `Add ${page.label}`}</button>
+        <div className="st-ch-wx"><span className="st-label">{t("Adds")}</span>
+          {bar(page.id) ? <><span className="st-ch-tag" data-kind="plus">{t("Barometer page")}</span><span className="st-ch-tag" data-kind="plus">{t("Tide page")}</span></>
+            : page.readouts.filter((r) => r.required).map((r) => <span key={r.source} className="st-ch-tag" data-kind="plus">{t(r.label)}</span>)}</div>
+        {page.hides.length ? <div className="st-ch-wx"><span className="st-label">{t("Hides")}</span>{page.hides.map((f) => <span key={f.id} className="st-ch-tag" data-kind="minus">{t(f.label)}</span>)}</div> : null}
+        {page.graph === "bars" ? <p className="st-ch-why"><Icon name="phone" size={14} /><span>{t("Blank on the watch until the phone has synced.")}</span></p> : null}
+        <button type="button" className="btn btn-primary st-ch-add" onClick={() => toggle(page.id, true)}><Icon name="plus" size={16} width={2.2} />{bar(page.id) ? t("Add Barometer and Tide") : t("Add {name}", { name: t(page.label) })}</button>
       </>}
     </div>
 
     {fixedReadouts.length ? <div className="st-ch-sec">
-      <h3><span>On every page</span></h3>
+      <h3><span>{t("On every page")}</span></h3>
       <div className="st-ch-ros">
         {fixedReadouts.map((f) => (
           <div key={f.source} className="st-ch-ro">
             <Icon name={READOUT_ICON[f.source] ?? "pulse"} size={16} />
-            <span className="st-ch-ro-copy"><b>{f.label}</b></span>
-            <button type="button" className="btn btn-glass st-ch-putback" onClick={() => edit((x) => unfixChartReadout(x, f.source))}>Put back on {f.page}</button>
+            <span className="st-ch-ro-copy"><b>{t(f.label)}</b></span>
+            <button type="button" className="btn btn-glass st-ch-putback" onClick={() => edit((x) => unfixChartReadout(x, f.source))}>{t("Put back on {page}", { page: t(f.page) })}</button>
           </div>
         ))}
       </div>
     </div> : null}
 
     <div className="st-ch-sec">
-      <h3><span>Graph</span><small>Same on every page</small></h3>
-      {styles.line ? <div className="st-row-col"><span className="st-label st-ch-for">Line<em>Sun, Moon</em></span>
+      <h3><span>{t("Graph")}</span><small>{t("Same on every page")}</small></h3>
+      {styles.line ? <div className="st-row-col"><span className="st-label st-ch-for">{t("Line")}<em>{t("Sun, Moon")}</em></span>
         <div className="st-nums">
-          <NumberField label="Width" unit="px" value={cs.lineWidth ?? 2} min={1} max={20} onChange={(v) => setStyle({ lineWidth: v })} />
+          <NumberField label={t("Width")} unit="px" value={cs.lineWidth ?? 2} min={1} max={20} onChange={(v) => setStyle({ lineWidth: v })} />
           <span />
-          <ColorField label="Upper" value={cs.upperColor ?? "#53cba1"} onPick={(c) => setStyle({ upperColor: c })} />
-          <ColorField label="Lower" value={cs.lowerColor ?? "#6aa5ff"} onPick={(c) => setStyle({ lowerColor: c })} />
+          <ColorField label={t("Upper")} value={cs.upperColor ?? "#53cba1"} onPick={(c) => setStyle({ upperColor: c })} />
+          <ColorField label={t("Lower")} value={cs.lowerColor ?? "#6aa5ff"} onPick={(c) => setStyle({ lowerColor: c })} />
         </div></div>
-        : <div className="st-ch-na"><span><b>Line</b>Sun and Moon only</span></div>}
-      {styles.bars ? <div className="st-row-col"><span className="st-label st-ch-for">Bars<em>Barometer, Tide</em></span>
+        : <div className="st-ch-na"><span><b>{t("Line")}</b>{t("Sun and Moon only")}</span></div>}
+      {styles.bars ? <div className="st-row-col"><span className="st-label st-ch-for">{t("Bars")}<em>{t("Barometer, Tide")}</em></span>
         <div className="st-nums">
-          <NumberField label="Width" unit="px" value={cs.barWidth ?? 8} min={1} max={40} onChange={(v) => setStyle({ barWidth: v })} />
-          <NumberField label="Gap" unit="px" value={cs.barGap ?? 4} min={0} max={40} onChange={(v) => setStyle({ barGap: v })} />
-          <ColorField label="Selected" value={cs.selectedBarColor ?? "#53cba1"} onPick={(c) => setStyle({ selectedBarColor: c })} />
-          <ColorField label="Others" value={cs.unselectedBarColor ?? "#4b5753"} onPick={(c) => setStyle({ unselectedBarColor: c })} />
+          <NumberField label={t("Width")} unit="px" value={cs.barWidth ?? 8} min={1} max={40} onChange={(v) => setStyle({ barWidth: v })} />
+          <NumberField label={t("Gap")} unit="px" value={cs.barGap ?? 4} min={0} max={40} onChange={(v) => setStyle({ barGap: v })} />
+          <ColorField label={t("Selected")} value={cs.selectedBarColor ?? "#53cba1"} onPick={(c) => setStyle({ selectedBarColor: c })} />
+          <ColorField label={t("Others")} value={cs.unselectedBarColor ?? "#4b5753"} onPick={(c) => setStyle({ unselectedBarColor: c })} />
         </div></div>
-        : <div className="st-ch-na"><span><b>Bars</b>Barometer and Tide only</span></div>}
+        : <div className="st-ch-na"><span><b>{t("Bars")}</b>{t("Barometer and Tide only")}</span></div>}
     </div>
   </>;
 }
@@ -987,18 +990,18 @@ export function MultiInspector({ layers, design, edit, master, onClear }: { laye
     <div className="st-insp">
       <div className="st-insp-head">
         <span className="st-insp-icon"><Icon name="layers" size={19} /></span>
-        <span><b>{layers.length} layers</b><small>Selection</small></span>
-        <button type="button" className="st-icon-btn" aria-label="Clear the selection" title="Clear the selection" onClick={onClear}><Icon name="close" /></button>
+        <span><b>{t("{n} layers", { n: layers.length })}</b><small>{t("Selection")}</small></span>
+        <button type="button" className="st-icon-btn" aria-label={t("Clear the selection")} title={t("Clear the selection")} onClick={onClear}><Icon name="close" /></button>
       </div>
       <section className="st-insp-body">
-        <div className="st-row-col"><span className="st-label">Align</span><AlignRow onAlign={(e) => edit((x) => align(x, layers, e, master))} /></div>
-        <div className="st-row-col"><span className="st-label">Distribute</span>
+        <div className="st-row-col"><span className="st-label">{t("Align")}</span><AlignRow onAlign={(e) => edit((x) => align(x, layers, e, master))} /></div>
+        <div className="st-row-col"><span className="st-label">{t("Distribute")}</span>
           <div className="st-nums">
-            <button type="button" className="chip st-chip-btn" disabled={layers.length < 3} onClick={() => edit((x) => distribute(x, layers, "x"))}><Icon name="alignV" size={15} />Across</button>
-            <button type="button" className="chip st-chip-btn" disabled={layers.length < 3} onClick={() => edit((x) => distribute(x, layers, "y"))}><Icon name="alignH" size={15} />Down</button>
+            <button type="button" className="chip st-chip-btn" disabled={layers.length < 3} onClick={() => edit((x) => distribute(x, layers, "x"))}><Icon name="alignV" size={15} />{t("Across")}</button>
+            <button type="button" className="chip st-chip-btn" disabled={layers.length < 3} onClick={() => edit((x) => distribute(x, layers, "y"))}><Icon name="alignH" size={15} />{t("Down")}</button>
           </div></div>
-        {colourable.length ? <ColourRow label="Color" value={shared} onPick={(c) => edit((x) => colourable.reduce((d, l) => colour(d, l, c), x))} /> : null}
-        <span className="st-note">Shift-click layers to add or remove them.</span>
+        {colourable.length ? <ColourRow label={t("Color")} value={shared} onPick={(c) => edit((x) => colourable.reduce((d, l) => colour(d, l, c), x))} /> : null}
+        <span className="st-note">{t("Shift-click layers to add or remove them.")}</span>
       </section>
     </div>
   );
@@ -1011,35 +1014,35 @@ export function FaceInspector({ design, edit, details, watchRow, fail, resolutio
   const langs = design.watchLanguages ?? "all";
   return (
     <div className="st-insp">
-      <section className="st-insp-sec"><h3>Watch</h3>{watchRow}</section>
-      <Fold title="Colors">
-        <ColourRow label="Face color" value={design.digitColor} onPick={(c) => edit((x) => ({ ...x, digitColor: c }))} />
-        <ColourRow label="Accent" value={design.accentColor} onPick={(c) => edit((x) => ({ ...x, accentColor: c }))} />
-        <div className="st-row"><span>Tint labels</span><Switch label="Tint labels" checked={design.tintLabels} onChange={(v) => edit((x) => ({ ...x, tintLabels: v }))} /></div>
-        <div className="st-row"><span>Tint icons</span><Switch label="Tint icons" checked={design.tintIcons} onChange={(v) => edit((x) => ({ ...x, tintIcons: v }))} /></div>
+      <section className="st-insp-sec"><h3>{t("Watch")}</h3>{watchRow}</section>
+      <Fold title={t("Colors")}>
+        <ColourRow label={t("Face color")} value={design.digitColor} onPick={(c) => edit((x) => ({ ...x, digitColor: c }))} />
+        <ColourRow label={t("Accent")} value={design.accentColor} onPick={(c) => edit((x) => ({ ...x, accentColor: c }))} />
+        <div className="st-row"><span>{t("Tint labels")}</span><Switch label={t("Tint labels")} checked={design.tintLabels} onChange={(v) => edit((x) => ({ ...x, tintLabels: v }))} /></div>
+        <div className="st-row"><span>{t("Tint icons")}</span><Switch label={t("Tint icons")} checked={design.tintIcons} onChange={(v) => edit((x) => ({ ...x, tintIcons: v }))} /></div>
       </Fold>
-      <Fold title="Font" note={design.fontFamily || "Template"}>
-        <FontPicker label="Face font" family={design.fontFamily ?? ""} raster={design.rasterFont} weight={design.fontWeight} style={design.fontStyle} sample="10:08" template
+      <Fold title={t("Font")} note={design.fontFamily || t("Template")}>
+        <FontPicker label={t("Face font")} family={design.fontFamily ?? ""} raster={design.rasterFont} weight={design.fontWeight} style={design.fontStyle} sample="10:08" template
           resolution={resolution} layerId="autoTime" loadAssets={loadAssets} onFamily={(f, weight) => edit((x) => ({ ...x, fontFamily: f, rasterFont: undefined, ...(weight ? { fontWeight: weight } : {}) }))} />
         {design.fontFamily ? <div className="st-nums">
-          <label className="st-select"><Select aria-label="Weight" value={design.fontWeight ?? 400} onChange={(e) => edit((x) => ({ ...x, fontWeight: Number(e.target.value) }))}>{weightChoices(design.fontFamily, design.fontWeight ?? 400).map((w) => <option key={w} value={w}>{w} {WEIGHT_NAMES[w] ?? ""}</option>)}</Select><Icon name="chevD" size={14} /></label>
-          <Segmented small label="Style" value={design.fontStyle ?? "normal"} onChange={(v) => edit((x) => ({ ...x, fontStyle: v }))} options={[{ value: "normal", label: "Normal" }, { value: "italic", label: "Italic" }]} />
-          <NumberField label="Spacing" unit="%" value={Math.round((design.letterSpacing ?? 0) * 100)} min={-35} max={25} onChange={(v) => edit((x) => ({ ...x, letterSpacing: v / 100 }))} />
+          <label className="st-select"><Select aria-label={tx("font", "Weight")} value={design.fontWeight ?? 400} onChange={(e) => edit((x) => ({ ...x, fontWeight: Number(e.target.value) }))}>{weightChoices(design.fontFamily, design.fontWeight ?? 400).map((w) => <option key={w} value={w}>{w} {WEIGHT_NAMES[w] ? tx("font weight", WEIGHT_NAMES[w]) : ""}</option>)}</Select><Icon name="chevD" size={14} /></label>
+          <Segmented small label={t("Style")} value={design.fontStyle ?? "normal"} onChange={(v) => edit((x) => ({ ...x, fontStyle: v }))} options={[{ value: "normal", label: t("Normal") }, { value: "italic", label: t("Italic") }]} />
+          <NumberField label={t("Spacing")} unit="%" value={Math.round((design.letterSpacing ?? 0) * 100)} min={-35} max={25} onChange={(v) => edit((x) => ({ ...x, letterSpacing: v / 100 }))} />
         </div> : null}
       </Fold>
-      <Fold title="Background"><BackgroundFields design={design} edit={edit} fail={fail} /></Fold>
+      <Fold title={t("Background")}><BackgroundFields design={design} edit={edit} fail={fail} /></Fold>
       {theme ? (
-        <Fold title="Watch theme" note="Memory-in-pixel">
-          <div className="st-theme" role="group" aria-label="Watch theme color">
+        <Fold title={t("Watch theme")} note={t("Memory-in-pixel")}>
+          <div className="st-theme" role="group" aria-label={t("Watch theme color")}>
             {Array.from({ length: 14 }, (_, i) => (
-              <button key={i} type="button" className="st-theme-dot" style={{ background: watchThemeSwatch(i) }} aria-label={`Theme ${i}`} aria-pressed={(design.watchThemeColor ?? theme.templateDefault) === i} onClick={() => edit((x) => ({ ...x, watchThemeColor: i }))} />
+              <button key={i} type="button" className="st-theme-dot" style={{ background: watchThemeSwatch(i) }} aria-label={t("Theme {n}", { n: i })} aria-pressed={(design.watchThemeColor ?? theme.templateDefault) === i} onClick={() => edit((x) => ({ ...x, watchThemeColor: i }))} />
             ))}
           </div>
         </Fold>
       ) : null}
-      <Fold title="Languages" note={langs === "all" ? "All" : langs === "english" ? "English" : String(langs.length)}>
-        <Segmented small label="Watch languages" value={langs === "all" || langs === "english" ? langs : "pick"} onChange={(v) => edit((x) => ({ ...x, watchLanguages: v === "pick" ? ["en"] : v }))}
-          options={[{ value: "all", label: "All" }, { value: "english", label: "English" }, { value: "pick", label: "Pick" }]} />
+      <Fold title={t("Languages")} note={langs === "all" ? t("All") : langs === "english" ? t("English") : String(langs.length)}>
+        <Segmented small label={t("Watch languages")} value={langs === "all" || langs === "english" ? langs : "pick"} onChange={(v) => edit((x) => ({ ...x, watchLanguages: v === "pick" ? ["en"] : v }))}
+          options={[{ value: "all", label: t("All") }, { value: "english", label: t("English") }, { value: "pick", label: t("Pick") }]} />
         {Array.isArray(langs) ? (
           <div className="st-chips">
             {Object.entries(WATCH_LANGUAGE_NAMES).map(([code, name]) => (
@@ -1051,12 +1054,12 @@ export function FaceInspector({ design, edit, details, watchRow, fail, resolutio
           </div>
         ) : null}
       </Fold>
-      <Fold title="Advanced">
-        <label className="st-select st-select-wide"><span>Face version</span>
-          <Select aria-label="Watch-face version" value={design.archiveWatchFaceVersion ?? ""} onChange={(e) => edit((x) => ({ ...x, archiveWatchFaceVersion: e.target.value === "" ? undefined : Number(e.target.value) }))}>
-            <option value="">Auto</option>{[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v}</option>)}
+      <Fold title={t("Advanced")}>
+        <label className="st-select st-select-wide"><span>{t("Face version")}</span>
+          <Select aria-label={t("Watch-face version")} value={design.archiveWatchFaceVersion ?? ""} onChange={(e) => edit((x) => ({ ...x, archiveWatchFaceVersion: e.target.value === "" ? undefined : Number(e.target.value) }))}>
+            <option value="">{t("Auto")}</option>{[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v}</option>)}
           </Select><Icon name="chevD" size={14} /></label>
-        <div className="st-row"><span>Strip blank config keys</span><Switch label="Strip blank config keys" checked={!!design.stripBlankConfigKeys} onChange={(v) => edit((x) => ({ ...x, stripBlankConfigKeys: v || undefined }))} /></div>
+        <div className="st-row"><span>{t("Strip blank config keys")}</span><Switch label={t("Strip blank config keys")} checked={!!design.stripBlankConfigKeys} onChange={(v) => edit((x) => ({ ...x, stripBlankConfigKeys: v || undefined }))} /></div>
       </Fold>
     </div>
   );
@@ -1076,16 +1079,16 @@ export function Fold({ title, children, note, open = true }: { title: string; ch
 
 export function Dots({ value, onPick }: { value: string; onPick: (c: string) => void }) {
   return (
-    <div className="st-dots" role="group" aria-label="Colour">
-      {PALETTE.map((c) => <button key={c} type="button" className="st-dot" style={{ background: c }} aria-label={`Colour ${c}`} aria-pressed={value.toLowerCase() === c} onClick={() => onPick(c)} />)}
-      <label className="st-dot st-dot-custom" title="Any colour" aria-label="Any colour">
+    <div className="st-dots" role="group" aria-label={t("Colour")}>
+      {PALETTE.map((c) => <button key={c} type="button" className="st-dot" style={{ background: c }} aria-label={t("Colour {hex}", { hex: c })} aria-pressed={value.toLowerCase() === c} onClick={() => onPick(c)} />)}
+      <label className="st-dot st-dot-custom" title={t("Any colour")} aria-label={t("Any colour")}>
         <input type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#ffffff"} onChange={(e) => onPick(e.target.value)} />
       </label>
     </div>
   );
 }
 
-export const hex = (c: string) => (/^#[0-9a-f]{6}$/i.test(c) ? c.toUpperCase() : c === "mixed" ? "Mixed" : c);
+export const hex = (c: string) => (/^#[0-9a-f]{6}$/i.test(c) ? c.toUpperCase() : c === "mixed" ? t("Mixed") : c);
 
 /** A layer's colour row props: its colour, picking one, "Original" while the face changed it, and a note for PNGs. */
 function layerColour(design: Design, layer: EditorLayer, edit: Edit) {
@@ -1095,7 +1098,7 @@ function layerColour(design: Design, layer: EditorLayer, edit: Edit) {
     value: colourOf(design, layer),
     onPick: (c: string) => edit((x) => colour(x, layer, c)),
     onReset: colourChanged(design, layer) ? () => edit((x) => resetColour(x, layer)) : null,
-    note: pngs ? "Pictures you imported keep their own colours; this colours the parts drawn from the font." : null,
+    note: pngs ? t("Pictures you imported keep their own colours; this colours the parts drawn from the font.") : null,
   };
 }
 
@@ -1114,12 +1117,12 @@ function ColourRow({ label, value, onPick, onReset, note }: { label: string; val
       <div className="st-colour-top">
         <span className="st-label">{label}</span>
         <span className="st-grow" />
-        {onReset ? <button type="button" className="st-link st-colour-reset" title="Back to the original colour" onClick={onReset}><Icon name="refresh" size={13} />Original</button> : null}
+        {onReset ? <button type="button" className="st-link st-colour-reset" title={t("Back to the original colour")} onClick={onReset}><Icon name="refresh" size={13} />{t("Original")}</button> : null}
         <span className="st-colour-now">
-          <label className="st-colour-chip" style={{ background: valid ? value : "transparent" }} title="Pick a colour">
-            <input type="color" aria-label={`${label}: pick a colour`} value={valid ? value : "#ffffff"} onChange={(e) => onPick(e.target.value)} />
+          <label className="st-colour-chip" style={{ background: valid ? value : "transparent" }} title={t("Pick a colour")}>
+            <input type="color" aria-label={t("{label}: pick a colour", { label })} value={valid ? value : "#ffffff"} onChange={(e) => onPick(e.target.value)} />
           </label>
-          <input type="text" aria-label={`${label} hex`} spellCheck={false} maxLength={7} value={text ?? hex(value)}
+          <input type="text" aria-label={t("{label} hex", { label })} spellCheck={false} maxLength={7} value={text ?? hex(value)}
             onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
         </span>
       </div>
@@ -1144,12 +1147,12 @@ export function ColorField({ label, value, onPick }: { label: string; value: str
 export function BackgroundFields({ design, edit, fail }: { design: Design; edit: Edit; fail: (e: unknown) => void }) {
   const input = useRef<HTMLInputElement>(null);
   return <>
-    <ColourRow label="Color" value={design.backgroundColor ?? "#000000"} onPick={(c) => edit((x) => ({ ...x, backgroundColor: c }))} />
+    <ColourRow label={t("Color")} value={design.backgroundColor ?? "#000000"} onPick={(c) => edit((x) => ({ ...x, backgroundColor: c }))} />
     <div className="st-img-row">
       <span className="st-img-prev st-img-round">{design.artwork ? <img src={design.artwork.dataUrl} alt="" /> : <Icon name="image" size={22} />}</span>
       <span className="st-img-actions">
-        <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="upload" size={15} />{design.artwork ? "Replace picture" : "Add a picture"}</button>
-        {design.artwork ? <button type="button" className="chip st-chip-btn" onClick={() => edit((x) => ({ ...x, artwork: null }))}><Icon name="trash" size={15} />Remove</button> : null}
+        <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="upload" size={15} />{design.artwork ? t("Replace picture") : t("Add a picture")}</button>
+        {design.artwork ? <button type="button" className="chip st-chip-btn" onClick={() => edit((x) => ({ ...x, artwork: null }))}><Icon name="trash" size={15} />{t("Remove")}</button> : null}
       </span>
     </div>
     <input ref={input} type="file" hidden accept="image/png,image/jpeg" onChange={(e) => {
@@ -1157,15 +1160,15 @@ export function BackgroundFields({ design, edit, fail }: { design: Design; edit:
       if (f) void readPicture(f).then((art) => edit((x) => ({ ...x, artwork: art, artworkVisible: true, zoom: 1 }))).catch(fail);
     }} />
     {design.artwork ? <>
-      <div className="st-row"><span>Show picture</span><Switch label="Show picture" checked={design.artworkVisible !== false} onChange={(v) => edit((x) => ({ ...x, artworkVisible: v }))} /></div>
-      <Slider label="Zoom" value={Math.round((design.zoom ?? 1) * 100)} min={100} max={225} unit="%" onCommit={(v) => edit((x) => ({ ...x, zoom: v / 100 }))} />
+      <div className="st-row"><span>{t("Show picture")}</span><Switch label={t("Show picture")} checked={design.artworkVisible !== false} onChange={(v) => edit((x) => ({ ...x, artworkVisible: v }))} /></div>
+      <Slider label={t("Zoom")} value={Math.round((design.zoom ?? 1) * 100)} min={100} max={225} unit="%" onCommit={(v) => edit((x) => ({ ...x, zoom: v / 100 }))} />
     </> : null}
   </>;
 }
 
 /** A photo or PNG for the background, kept at most 1600 px on its long side. */
 async function readPicture(file: File): Promise<CorosWatchfaceArtwork> {
-  if (!/^image\/(png|jpeg)$/i.test(file.type)) throw new Error(`${file.name} isn't a PNG or JPEG.`);
+  if (!/^image\/(png|jpeg)$/i.test(file.type)) throw new Error(t("{name} isn't a PNG or JPEG.", { name: file.name }));
   const url = URL.createObjectURL(file);
   try {
     const img = await loadImage(url);
@@ -1178,9 +1181,9 @@ async function readPicture(file: File): Promise<CorosWatchfaceArtwork> {
 }
 
 function AlignRow({ onAlign }: { onAlign: (edge: "left" | "centerX" | "right" | "top" | "centerY" | "bottom") => void }) {
-  const items = [["left", "Align left", "alignL"], ["centerX", "Centre across", "alignH"], ["right", "Align right", "alignL"], ["top", "Align top", "alignL"], ["centerY", "Centre down", "alignV"], ["bottom", "Align bottom", "alignL"]] as const;
+  const items = [["left", t("Align left"), "alignL"], ["centerX", t("Centre across"), "alignH"], ["right", t("Align right"), "alignL"], ["top", t("Align top"), "alignL"], ["centerY", t("Centre down"), "alignV"], ["bottom", t("Align bottom"), "alignL"]] as const;
   return (
-    <div className="st-align" role="group" aria-label="Align">
+    <div className="st-align" role="group" aria-label={t("Align")}>
       {items.map(([edge, label, icon]) => (
         <button key={edge} type="button" className="st-icon-btn" aria-label={label} title={label} onClick={() => onAlign(edge)}>
           <span className={`st-al st-al-${edge}`}><Icon name={icon} size={17} /></span>
@@ -1266,7 +1269,7 @@ export function NumberField({ label, value, unit, min, max, onChange }: { label:
     addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up);
   };
   return (
-    <label className="st-num" data-scrub={scrubbing || undefined} onPointerDown={startScrub} title="Drag sideways to change (Shift: by 10)"
+    <label className="st-num" data-scrub={scrubbing || undefined} onPointerDown={startScrub} title={t("Drag sideways to change (Shift: by 10)")}
       // Focus comes from the pointer letting go without a drag, never from the label's own click.
       onClick={(e) => { if (e.target !== input.current) e.preventDefault(); }}>
       <span>{label}</span>

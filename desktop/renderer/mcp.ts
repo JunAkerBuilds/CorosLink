@@ -1,5 +1,7 @@
 // The athlete's MCP servers (desktop/main/ai/mcp.ts), as Coach settings reads and changes them. Tokens and env
 // values go in; nothing secret comes back out.
+import { t } from "@/lib/i18n";
+
 export type McpState = "off" | "idle" | "connecting" | "connected" | "error" | "signin";
 
 export interface McpToolView { name: string; description: string; on: boolean; as: string }
@@ -21,7 +23,7 @@ async function call<T>(path: string, body?: object): Promise<T> {
     ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), cache: "no-store" }
     : { cache: "no-store" });
   const answer = (await response.json().catch(() => null)) as (T & { message?: string }) | null;
-  if (!response.ok || !answer) throw new Error(answer?.message ?? "That didn't work.");
+  if (!response.ok || !answer) throw new Error(answer?.message ?? t("That didn't work."));
   return answer;
 }
 

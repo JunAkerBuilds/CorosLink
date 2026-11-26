@@ -1,5 +1,6 @@
 // What every Route Studio client shares: the fetch to call (tests pass their own), a clock and a sleep (tests pass
 // fake ones so pacing is checked without waiting), and the one error type the service turns into a MapsProblem.
+import { t } from "@/lib/i18n";
 
 export interface Net {
   fetch: typeof fetch;
@@ -31,8 +32,8 @@ export const isTimeout = (e: unknown) => e instanceof Error && (e.name === "Time
 /** Network failures (fetch rejects with a TypeError) and timeouts, said plainly. */
 export function asProblem(e: unknown, service: string): Error {
   if (e instanceof RoutingProblem) return e;
-  if (isTimeout(e)) return new RoutingProblem(`${service} took too long to answer. Try again.`, "timeout", 504);
-  if (e instanceof TypeError) return new RoutingProblem(`Couldn't reach ${service}. Check your internet connection.`, "offline", 502);
+  if (isTimeout(e)) return new RoutingProblem(t("{service} took too long to answer. Try again.", { service }), "timeout", 504);
+  if (e instanceof TypeError) return new RoutingProblem(t("Couldn't reach {service}. Check your internet connection.", { service }), "offline", 502);
   return e instanceof Error ? e : new Error(String(e));
 }
 

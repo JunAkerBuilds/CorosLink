@@ -3,6 +3,7 @@
 // Field names, paging and the sync steps follow the desktop app (CorosLink electron/hevyService.ts and
 // hevyModel.ts); the gym-log shape and the overlap rule follow the phone (CorosKit HevyAPI.swift, applyHevy).
 // Read only: nothing here, or anywhere on the web, writes to Hevy.
+import { language, locale, t } from "@/lib/i18n";
 import { msToRef, refToMs, type NativeGymSet, type NativeGymSetKind, type NativeGymWorkout } from "@/data/sync/native";
 
 type Json = Record<string, unknown>;
@@ -13,7 +14,7 @@ const records = (value: unknown): Json[] => (Array.isArray(value) ? value.map(re
 const text = (value: unknown): string | undefined => (typeof value === "string" && value.trim() ? value.trim() : undefined);
 const finite = (value: unknown): number | undefined => (typeof value === "number" && Number.isFinite(value) ? value : undefined);
 const atLeastZero = (value: unknown): number | undefined => { const n = finite(value); return n === undefined ? undefined : Math.max(0, n); };
-const isoMs = (value: unknown): number | undefined => { const t = text(value); const ms = t ? Date.parse(t) : NaN; return Number.isFinite(ms) ? ms : undefined; };
+const isoMs = (value: unknown): number | undefined => { const s = text(value); const ms = s ? Date.parse(s) : NaN; return Number.isFinite(ms) ? ms : undefined; };
 
 /* ───────────── What is kept of a Hevy workout ───────────── */
 
@@ -82,7 +83,7 @@ export function parseHevyEventsPage(answer: unknown, page: number): HevyEventsPa
 /** A page of `/v1/exercise_templates`: the ids whose weight is assistance, not load. */
 export function parseHevyTemplatesPage(answer: unknown, page: number): HevyTemplatesPage {
   const templates = records(record(answer)?.exercise_templates);
-  const assisted = templates.filter((t) => t.type === ASSISTED_TYPE).map((t) => text(t.id)).filter((id): id is string => !!id);
+  const assisted = templates.filter((x) => x.type === ASSISTED_TYPE).map((x) => text(x.id)).filter((id): id is string => !!id);
   return { assisted, seen: templates.length, pageCount: hevyPageCount(answer, page) };
 }
 
@@ -299,11 +300,15 @@ const two = (n: number): string => String(n).padStart(2, "0");
 
 /** "Today at 07:12", "Yesterday at 21:40", "17 Nov at 07:12", "17 Nov 2025 at 07:12"; "Never" before the first read. */
 export function lastSyncedText(at: number | null | undefined, now: Date): string {
-  if (at == null) return "Never";
+  if (at == null) return t("Never");
   const d = new Date(at);
   const time = `${two(d.getHours())}:${two(d.getMinutes())}`;
   const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000);
-  if (days === 0) return `Today at ${time}`;
-  if (days === 1) return `Yesterday at ${time}`;
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() === now.getFullYear() ? "" : ` ${d.getFullYear()}`} at ${time}`;
+  if (days === 0) return t("Today at {time}", { time });
+  if (days === 1) return t("Yesterday at {time}", { time });
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const date = language() === "en"
+    ? `${d.getDate()} ${MONTHS[d.getMonth()]}${sameYear ? "" : ` ${d.getFullYear()}`}`
+    : d.toLocaleDateString(locale(), { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
+  return t("{date} at {time}", { date, time });
 }

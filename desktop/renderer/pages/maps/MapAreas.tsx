@@ -4,6 +4,7 @@
 // downloading and what's already on it.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as maplibregl from "maplibre-gl";
+import { language, locale, t } from "@/lib/i18n";
 import { MAX_AREA_TILES, quadkey, tileAt, tileBounds, type AreaPreview, type AreasStatus, type MapsWatch, type Tile } from "../../../maps/types";
 import { areas, bytes, cancelAreas, placeAt, previewAreas, removeAreas, said, searchPlaces, shortDate, startAreas } from "../../maps";
 import { navigate } from "../../router";
@@ -14,7 +15,7 @@ import { watchLine } from "./watchLine";
 
 const key = (t: Tile) => `${t.x},${t.y}`;
 const centre = (t: Tile) => { const b = tileBounds(t); return [(b.north + b.south) / 2, (b.west + b.east) / 2] as [number, number]; };
-const extent = (t: Tile) => { const b = tileBounds(t); return `${b.south.toFixed(1)}° to ${b.north.toFixed(1)}°, ${b.west.toFixed(1)}° to ${b.east.toFixed(1)}°`; };
+const extent = (tile: Tile) => { const b = tileBounds(tile); return t("{south}° to {north}°, {west}° to {east}°", { south: b.south.toFixed(1), north: b.north.toFixed(1), west: b.west.toFixed(1), east: b.east.toFixed(1) }); };
 const poly = (t: Tile) => { const b = tileBounds(t); return [[[b.west, b.north], [b.east, b.north], [b.east, b.south], [b.west, b.south], [b.west, b.north]]]; };
 
 function useAreas() {
@@ -28,7 +29,7 @@ function useAreas() {
     const timer = setInterval(read, active ? 3000 : 15_000);
     return () => { live = false; clearInterval(timer); };
   }, [active, tick]);
-  return [status, setStatus, () => setTick((t) => t + 1)] as const;
+  return [status, setStatus, () => setTick((n) => n + 1)] as const;
 }
 
 export default function MapAreas({ watch }: { watch: MapsWatch | null | undefined; readWatch: () => void }) {
@@ -49,12 +50,12 @@ export default function MapAreas({ watch }: { watch: MapsWatch | null | undefine
   const pickedKeys = useMemo(() => new Set(picked.map(key)), [picked]);
   const supports = watch ? watch.areas : true;
 
-  const toggle = (t: Tile) => {
+  const toggle = (tile: Tile) => {
     setProblem(null); setDoneNote(null);
     setPicked((p) => {
-      if (p.some((q) => key(q) === key(t))) return p.filter((q) => key(q) !== key(t));
-      if (p.length >= MAX_AREA_TILES) { setProblem(`Up to ${MAX_AREA_TILES} areas at a time.`); return p; }
-      return [...p, t];
+      if (p.some((q) => key(q) === key(tile))) return p.filter((q) => key(q) !== key(tile));
+      if (p.length >= MAX_AREA_TILES) { setProblem(t("Up to {n} areas at a time.", { n: MAX_AREA_TILES })); return p; }
+      return [...p, tile];
     });
   };
 
@@ -64,13 +65,13 @@ export default function MapAreas({ watch }: { watch: MapsWatch | null | undefine
   // Names for the picked squares, from the place at their middle.
   const asked = useRef(new Set<string>());
   useEffect(() => {
-    for (const t of picked) {
-      const k = key(t);
+    for (const tile of picked) {
+      const k = key(tile);
       if (asked.current.has(k)) continue;
       asked.current.add(k);
-      const [lat, lon] = centre(t);
-      placeAt(lat, lon).then((p) => setNames((n) => ({ ...n, [k]: p.name.split(",").slice(0, 2).join(",").trim() || `Area ${quadkey(t)}` })),
-        () => setNames((n) => ({ ...n, [k]: `Area ${quadkey(t)}` })));
+      const [lat, lon] = centre(tile);
+      placeAt(lat, lon).then((p) => setNames((n) => ({ ...n, [k]: p.name.split(",").slice(0, 2).join(",").trim() || t("Area {code}", { code: quadkey(tile) }) })),
+        () => setNames((n) => ({ ...n, [k]: t("Area {code}", { code: quadkey(tile) }) })));
     }
   }, [picked]);
 
@@ -124,7 +125,7 @@ export default function MapAreas({ watch }: { watch: MapsWatch | null | undefine
     map.getSource<maplibregl.GeoJSONSource>("ma-grid")!.setData({ type: "FeatureCollection", features });
     map.getSource<maplibregl.GeoJSONSource>("ma-nums")!.setData({ type: "FeatureCollection", features: [
       ...picked.map((t, i) => ({ type: "Feature" as const, properties: { label: String(i + 1) }, geometry: { type: "Point" as const, coordinates: [centre(t)[1], centre(t)[0]] } })),
-      ...[...onWatch].filter((k) => !pickedKeys.has(k)).map((k) => { const [x, y] = k.split(",").map(Number); const c = centre({ x, y }); return { type: "Feature" as const, properties: { label: "On watch" }, geometry: { type: "Point" as const, coordinates: [c[1], c[0]] } }; }),
+      ...[...onWatch].filter((k) => !pickedKeys.has(k)).map((k) => { const [x, y] = k.split(",").map(Number); const c = centre({ x, y }); return { type: "Feature" as const, properties: { label: t("On watch") }, geometry: { type: "Point" as const, coordinates: [c[1], c[0]] } }; }),
     ] });
   }; drawGrid.current(); }, [map, ready, picked, onWatch, pickedKeys]);
   useEffect(() => {
@@ -140,17 +141,17 @@ export default function MapAreas({ watch }: { watch: MapsWatch | null | undefine
     setProblem(null);
     try {
       const [p] = await searchPlaces(query.trim());
-      if (!p) { setProblem("No place found by that name."); return; }
+      if (!p) { setProblem(t("No place found by that name.")); return; }
       map?.flyTo({ center: [p.lon, p.lat], zoom: 6.5 });
-      const t = tileAt(p.lat, p.lon);
-      if (!pickedKeys.has(key(t))) toggle(t);
-      setNames((n) => ({ ...n, [key(t)]: p.name.split(",").slice(0, 2).join(",").trim() }));
+      const tile = tileAt(p.lat, p.lon);
+      if (!pickedKeys.has(key(tile))) toggle(tile);
+      setNames((n) => ({ ...n, [key(tile)]: p.name.split(",").slice(0, 2).join(",").trim() }));
     } catch (e) { setProblem(said(e)); }
   };
 
-  const label = picked.length ? (picked.length === 1 ? names[key(picked[0])] : `${(names[key(picked[0])] ?? "").split(",")[0]} & ${picked.length - 1} more`) ?? "Map areas" : "";
+  const label = picked.length ? (picked.length === 1 ? names[key(picked[0])] : t("{name} & {n} more", { name: (names[key(picked[0])] ?? "").split(",")[0], n: picked.length - 1 })) ?? t("Map areas") : "";
   const copying = status?.copy?.state === "copying";
-  const task = status?.tasks.find((t) => t.state === "downloading" || t.state === "queued") ?? status?.tasks[0];
+  const task = status?.tasks.find((k) => k.state === "downloading" || k.state === "queued") ?? status?.tasks[0];
   const linkReady = via === "wifi" ? Boolean(watch?.linked) : Boolean(watch?.usb);
   const needed = via === "usb" && preview?.neededBytes != null ? preview.neededBytes : preview?.sizeBytes;
   const free = watch?.storage?.freeBytes;
@@ -162,9 +163,9 @@ export default function MapAreas({ watch }: { watch: MapsWatch | null | undefine
     if (!preview) return;
     setBusy(true); setProblem(null);
     try {
-      const next = await startAreas(preview.id, label || "Map areas", via);
+      const next = await startAreas(preview.id, label || t("Map areas"), via);
       setStatus(next);
-      if (via === "wifi") setDoneNote({ title: "Sent to your watch", line: "It downloads over its saved Wi-Fi network. Keep it charging; progress shows below." });
+      if (via === "wifi") setDoneNote({ title: t("Sent to your watch"), line: t("It downloads over its saved Wi-Fi network. Keep it charging; progress shows below.") });
       setPicked([]);
     } catch (e) { setProblem(said(e)); } finally { setBusy(false); }
   };
@@ -174,48 +175,48 @@ export default function MapAreas({ watch }: { watch: MapsWatch | null | undefine
   return (
     <div className="mp-areas">
       <div className="mp-areas-main">
-        <section className="card card-clip mp-areas-map" aria-label="Map areas">
+        <section className="card card-clip mp-areas-map" aria-label={t("Map areas")}>
           <div ref={box} className="mp-areas-canvas" />
           {mapProblem && <div className="mp-map-problem"><MapsIcon name="map" size={22} /><span>{mapProblem}</span></div>}
           <form role="search" className="mp-glass mp-find" onSubmit={(e) => { e.preventDefault(); void find(); }}>
             <MapsIcon name="search" size={16} />
-            <input type="search" aria-label="Find a city or place" placeholder="Find a city or place" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <button type="submit" className="btn btn-glass">Find</button>
+            <input type="search" aria-label={t("Find a city or place")} placeholder={t("Find a city or place")} value={query} onChange={(e) => setQuery(e.target.value)} />
+            <button type="submit" className="btn btn-glass">{t("Find")}</button>
           </form>
           <div className="mp-glass mp-ctl-col mp-areas-zoom">
-            <button type="button" className="mp-ib" aria-label="Zoom in" onClick={() => map?.zoomIn()}><MapsIcon name="plus" size={17} /></button>
+            <button type="button" className="mp-ib" aria-label={t("Zoom in")} onClick={() => map?.zoomIn()}><MapsIcon name="plus" size={17} /></button>
             <span aria-hidden="true" />
-            <button type="button" className="mp-ib" aria-label="Zoom out" onClick={() => map?.zoomOut()}><MapsIcon name="minus" size={17} /></button>
+            <button type="button" className="mp-ib" aria-label={t("Zoom out")} onClick={() => map?.zoomOut()}><MapsIcon name="minus" size={17} /></button>
           </div>
-          <div className="mp-glass mp-areas-hint"><MapsIcon name="info" size={15} /><span>{problem ?? (supports ? "Click squares to add or remove them. Each square is one COROS map tile." : `${watch?.name ?? "This watch"} doesn't take map areas. Use COROS Maps instead.`)}</span></div>
+          <div className="mp-glass mp-areas-hint"><MapsIcon name="info" size={15} /><span>{problem ?? (supports ? t("Click squares to add or remove them. Each square is one COROS map tile.") : watch?.name ? t("{watch} doesn't take map areas. Use COROS Maps instead.", { watch: watch.name }) : t("This watch doesn't take map areas. Use COROS Maps instead."))}</span></div>
           <div className="mp-glass mp-legend" aria-hidden="true">
-            <span><i className="mp-legend-on" />Chosen</span>
-            <span><i className="mp-legend-have" />On watch</span>
-            <span>1 square = 1 COROS map tile</span>
+            <span><i className="mp-legend-on" />{t("Chosen")}</span>
+            <span><i className="mp-legend-have" />{t("On watch")}</span>
+            <span>{t("1 square = 1 COROS map tile")}</span>
           </div>
         </section>
 
-        <section className="card card-pad mp-on-watch-card" aria-label="On your watch">
-          <div className="mp-card-head"><h2>On your watch</h2><span className="mp-grow" />{status && <small>Checked {new Date(status.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small>}</div>
+        <section className="card card-pad mp-on-watch-card" aria-label={t("On your watch")}>
+          <div className="mp-card-head"><h2>{t("On your watch")}</h2><span className="mp-grow" />{status && <small>{t("Checked {time}", { time: new Date(status.checkedAt).toLocaleTimeString(language() === "en" ? [] : locale(), { hour: "numeric", minute: "2-digit" }) })}</small>}</div>
           {task && task.state !== "complete" && (
             <div className="mp-task">
               <div className="mp-task-row">
                 <span className="mp-task-icon"><MapsIcon name="wifi" size={17} /></span>
-                <span><b>{task.label ?? "Map download"}</b><small>{bytes(task.downloadedBytes)} of {bytes(task.totalBytes)} · Watch Wi-Fi</small></span>
-                <span className="mp-tag" data-state={task.state}>{task.state === "queued" ? "Waiting for Wi-Fi" : task.state === "downloading" ? "Downloading" : task.state === "failed" ? `Failed (${task.errorCode})` : "Unknown"}</span>
-                <button type="button" className="btn btn-glass" onClick={() => void cancelAreas(task.id).then(setStatus, (e) => setProblem(said(e)))}>Cancel</button>
+                <span><b>{task.label ?? t("Map download")}</b><small>{t("{done} of {size}", { done: bytes(task.downloadedBytes), size: bytes(task.totalBytes) })} · {t("Watch Wi-Fi")}</small></span>
+                <span className="mp-tag" data-state={task.state}>{task.state === "queued" ? t("Waiting for Wi-Fi") : task.state === "downloading" ? t("Downloading") : task.state === "failed" ? t("Failed ({code})", { code: String(task.errorCode) }) : t("Unknown")}</span>
+                <button type="button" className="btn btn-glass" onClick={() => void cancelAreas(task.id).then(setStatus, (e) => setProblem(said(e)))}>{t("Cancel")}</button>
               </div>
-              <div className="mp-bar" role="progressbar" aria-label="Map download progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.totalBytes ? Math.round((task.downloadedBytes / task.totalBytes) * 100) : 0}>
+              <div className="mp-bar" role="progressbar" aria-label={t("Map download progress")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.totalBytes ? Math.round((task.downloadedBytes / task.totalBytes) * 100) : 0}>
                 <span style={{ width: `${task.totalBytes ? (task.downloadedBytes / task.totalBytes) * 100 : 0}%` }} />
               </div>
-              <small className="mp-note">The watch downloads on its own Wi-Fi, even with C-LINK closed. Keep it charging.</small>
+              <small className="mp-note">{t("The watch downloads on its own Wi-Fi, even with C-LINK closed. Keep it charging.")}</small>
             </div>
           )}
           {doneNote && !task && (
             <div className="mp-done">
               <span className="mp-done-icon"><MapsIcon name="check" size={17} /></span>
               <span><b>{doneNote.title}</b><small>{doneNote.line}</small></span>
-              <button type="button" className="btn btn-glass" onClick={() => setDoneNote(null)}>Plan more</button>
+              <button type="button" className="btn btn-glass" onClick={() => setDoneNote(null)}>{t("Plan more")}</button>
             </div>
           )}
           {status?.history.length ? (
@@ -223,91 +224,91 @@ export default function MapAreas({ watch }: { watch: MapsWatch | null | undefine
               {status.history.map((h) => (
                 <li key={h.id}>
                   <span className="mp-task-icon"><MapsIcon name={h.via === "wifi" ? "wifi" : "usb"} size={16} /></span>
-                  <span><b>{h.label} is on your watch</b><small>{h.fileCount} map files · {bytes(h.sizeBytes)} · {h.via === "wifi" ? "Watch Wi-Fi" : "USB cable"} · {shortDate(h.at)}</small></span>
-                  <button type="button" className="mp-ib" aria-label="Remove from watch" title={watch?.usb ? "Remove from watch" : "Plug the watch in to remove maps"} disabled={!watch?.usb}
-                    onClick={() => { if (confirm(`Remove ${h.label} from the watch?`)) void removeAreas(h.id).then(setStatus, (e) => setProblem(said(e))); }}><MapsIcon name="trash" size={16} /></button>
+                  <span><b>{t("{name} is on your watch", { name: h.label })}</b><small>{h.fileCount === 1 ? t("1 map file") : t("{n} map files", { n: h.fileCount })} · {bytes(h.sizeBytes)} · {h.via === "wifi" ? t("Watch Wi-Fi") : t("USB cable")} · {shortDate(h.at)}</small></span>
+                  <button type="button" className="mp-ib" aria-label={t("Remove from watch")} title={watch?.usb ? t("Remove from watch") : t("Plug the watch in to remove maps")} disabled={!watch?.usb}
+                    onClick={() => { if (confirm(t("Remove {name} from the watch?", { name: h.label }))) void removeAreas(h.id).then(setStatus, (e) => setProblem(said(e))); }}><MapsIcon name="trash" size={16} /></button>
                 </li>
               ))}
             </ul>
-          ) : !task && <p className="mp-note">Map areas you send from here show up here.</p>}
+          ) : !task && <p className="mp-note">{t("Map areas you send from here show up here.")}</p>}
         </section>
       </div>
 
-      <aside className="mp-areas-side" aria-label="Map plan">
-        <section className="card card-pad mp-watch-card" aria-label="Watch">
+      <aside className="mp-areas-side" aria-label={t("Map plan")}>
+        <section className="card card-pad mp-watch-card" aria-label={t("Watch")}>
           <div className="mp-watch-row">
             <span className="mp-watch-icon"><MapsIcon name="watch" size={22} /></span>
-            <span><b>{watch?.name ?? "No watch"}<i data-on={watch && (watch.linked || watch.usb) ? "" : undefined} aria-hidden="true" /></b><small>{!watch ? "Turn on Local mode or plug the watch in" : [watchLine(watch), watch.battery != null && `${watch.battery}%${watch.charging ? " · charging" : ""}`].filter(Boolean).join(" · ")}</small></span>
-            {watch && <span className="mp-tag">Maps v{watch.mapVersion}</span>}
+            <span><b>{watch?.name ?? t("No watch")}<i data-on={watch && (watch.linked || watch.usb) ? "" : undefined} aria-hidden="true" /></b><small>{!watch ? t("Turn on Local mode or plug the watch in") : [watchLine(watch), watch.battery != null && `${watch.battery}%${watch.charging ? ` · ${t("charging")}` : ""}`].filter(Boolean).join(" · ")}</small></span>
+            {watch && <span className="mp-tag">{t("Maps v{version}", { version: watch.mapVersion })}</span>}
           </div>
           {watch?.storage && <StorageBar storage={watch.storage} />}
         </section>
 
-        <section className="card card-pad mp-plan" aria-label="Plan">
+        <section className="card card-pad mp-plan" aria-label={t("Plan")}>
           <div className="mp-plan-block">
-            <span className="mp-label">How the maps get to the watch</span>
-            <div className="seg mp-seg" role="group" aria-label="How the maps get to the watch">
-              <button type="button" aria-pressed={via === "wifi"} onClick={() => setVia("wifi")}><MapsIcon name="wifi" size={15} />Watch Wi-Fi</button>
-              <button type="button" aria-pressed={via === "usb"} onClick={() => setVia("usb")}><MapsIcon name="usb" size={15} />USB cable</button>
+            <span className="mp-label">{t("How the maps get to the watch")}</span>
+            <div className="seg mp-seg" role="group" aria-label={t("How the maps get to the watch")}>
+              <button type="button" aria-pressed={via === "wifi"} onClick={() => setVia("wifi")}><MapsIcon name="wifi" size={15} />{t("Watch Wi-Fi")}</button>
+              <button type="button" aria-pressed={via === "usb"} onClick={() => setVia("usb")}><MapsIcon name="usb" size={15} />{t("USB cable")}</button>
             </div>
-            <small className="mp-note">{via === "wifi" ? "The watch downloads the maps itself from COROS on its saved Wi-Fi. Nothing big goes through this computer." : watch?.linked && !watch.usb ? "This computer downloads the maps, then copies them over the USB cable. Your Bluetooth link is too slow for maps, so plug the watch in." : "This computer downloads the maps, then copies them onto the plugged-in watch."}</small>
+            <small className="mp-note">{via === "wifi" ? t("The watch downloads the maps itself from COROS on its saved Wi-Fi. Nothing big goes through this computer.") : watch?.linked && !watch.usb ? t("This computer downloads the maps, then copies them over the USB cable. Your Bluetooth link is too slow for maps, so plug the watch in.") : t("This computer downloads the maps, then copies them onto the plugged-in watch.")}</small>
           </div>
           <div className="mp-plan-block">
-            <div className="mp-card-head"><h2>Selected areas</h2><small>{picked.length} / {MAX_AREA_TILES}</small><span className="mp-grow" />
-              {picked.length > 6 && <button type="button" className="mp-link" onClick={() => setShowAll((s) => !s)}>{showAll ? "Show fewer" : "Show all"}</button>}
-              <button type="button" className="mp-link" onClick={() => setPicked([])} disabled={!picked.length}>Clear</button></div>
+            <div className="mp-card-head"><h2>{t("Selected areas")}</h2><small>{picked.length} / {MAX_AREA_TILES}</small><span className="mp-grow" />
+              {picked.length > 6 && <button type="button" className="mp-link" onClick={() => setShowAll((s) => !s)}>{showAll ? t("Show fewer") : t("Show all")}</button>}
+              <button type="button" className="mp-link" onClick={() => setPicked([])} disabled={!picked.length}>{t("Clear")}</button></div>
             <div className="mp-cap" aria-hidden="true">{Array.from({ length: MAX_AREA_TILES }, (_, i) => <span key={i} data-on={i < picked.length ? "" : undefined} />)}</div>
             {picked.length ? (
               <ol className="mp-sel">
-                {shown.map((t, i) => (
-                  <li key={key(t)}>
+                {shown.map((tile, i) => (
+                  <li key={key(tile)}>
                     <span className="mp-sel-n" aria-hidden="true">{i + 1}</span>
-                    <span><b>{names[key(t)] ?? "…"}</b><small>{extent(t)}</small></span>
-                    <button type="button" className="mp-ib" aria-label="Remove area" onClick={() => toggle(t)}><MapsIcon name="close" size={15} /></button>
+                    <span><b>{names[key(tile)] ?? "…"}</b><small>{extent(tile)}</small></span>
+                    <button type="button" className="mp-ib" aria-label={t("Remove area")} onClick={() => toggle(tile)}><MapsIcon name="close" size={15} /></button>
                   </li>
                 ))}
               </ol>
             ) : (
-              <div className="mp-empty-sel"><MapsIcon name="map" size={22} /><b>No areas yet</b><small>Search for a place or click squares on the map. Each square is one COROS map tile.</small></div>
+              <div className="mp-empty-sel"><MapsIcon name="map" size={22} /><b>{t("No areas yet")}</b><small>{t("Search for a place or click squares on the map. Each square is one COROS map tile.")}</small></div>
             )}
           </div>
           <div className="mp-size">
-            <span><b>{via === "usb" && preview?.neededBytes != null ? "To copy" : "Download size"}</b><small>{checking ? "Asking COROS…" : preview ? `${preview.fileCount} map files${free != null ? ` · ${bytes(free)} free on the watch` : ""}` : picked.length ? " " : "Pick areas to see the size"}</small></span>
+            <span><b>{via === "usb" && preview?.neededBytes != null ? t("To copy") : t("Download size")}</b><small>{checking ? t("Asking COROS…") : preview ? `${preview.fileCount === 1 ? t("1 map file") : t("{n} map files", { n: preview.fileCount })}${free != null ? ` · ${t("{size} free on the watch", { size: bytes(free) })}` : ""}` : picked.length ? " " : t("Pick areas to see the size")}</small></span>
             <b className="mp-size-big">{preview ? bytes(needed) : "–"}</b>
           </div>
-          {tooBig && <p className="mp-problem">More than the watch's free space. Remove some areas or make room first.</p>}
+          {tooBig && <p className="mp-problem">{t("More than the watch's free space. Remove some areas or make room first.")}</p>}
           {via === "wifi" && (
             <div className="mp-checks">
-              <span className="mp-label">Before the watch downloads</span>
+              <span className="mp-label">{t("Before the watch downloads")}</span>
               <ul>
-                <Check ok={Boolean(watch?.linked)} label="Watch linked over Bluetooth" />
-                <Check ok={null} label="Saved Wi-Fi network on the watch" />
-                <Check ok={status?.readiness ? status.readiness.ready : null} label={status?.readiness && !status.readiness.ready ? status.readiness.reasons[0] : "No USB cable, no activity running"} />
-                <Check ok={watch?.charging ?? null} label="Charging" note="Recommended" />
+                <Check ok={Boolean(watch?.linked)} label={t("Watch linked over Bluetooth")} />
+                <Check ok={null} label={t("Saved Wi-Fi network on the watch")} />
+                <Check ok={status?.readiness ? status.readiness.ready : null} label={status?.readiness && !status.readiness.ready ? status.readiness.reasons[0] : t("No USB cable, no activity running")} />
+                <Check ok={watch?.charging ?? null} label={t("Charging")} note={t("Recommended")} />
               </ul>
             </div>
           )}
           {copying && status?.copy ? (
             <div className="mp-copy">
-              <div className="mp-copy-head"><span>Copying {status.copy.label}</span><b>{status.copy.totalBytes ? Math.round((status.copy.copiedBytes / status.copy.totalBytes) * 100) : 0}%</b></div>
-              <div className="mp-bar" role="progressbar" aria-label="Copy progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={status.copy.totalBytes ? Math.round((status.copy.copiedBytes / status.copy.totalBytes) * 100) : 0}>
+              <div className="mp-copy-head"><span>{t("Copying {name}", { name: status.copy.label })}</span><b>{status.copy.totalBytes ? Math.round((status.copy.copiedBytes / status.copy.totalBytes) * 100) : 0}%</b></div>
+              <div className="mp-bar" role="progressbar" aria-label={t("Copy progress")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={status.copy.totalBytes ? Math.round((status.copy.copiedBytes / status.copy.totalBytes) * 100) : 0}>
                 <span style={{ width: `${status.copy.totalBytes ? (status.copy.copiedBytes / status.copy.totalBytes) * 100 : 0}%` }} />
               </div>
-              <small>{status.copy.filesDone} of {status.copy.files} files · {bytes(status.copy.copiedBytes)} of {bytes(status.copy.totalBytes)}</small>
-              <div className="mp-copy-foot"><small>Keep the watch connected until the copy finishes.</small><button type="button" className="btn btn-glass" onClick={() => void cancelAreas().then(setStatus, (e) => setProblem(said(e)))}>Cancel</button></div>
+              <small>{t("{n} of {total} files · {copied} of {size}", { n: status.copy.filesDone, total: status.copy.files, copied: bytes(status.copy.copiedBytes), size: bytes(status.copy.totalBytes) })}</small>
+              <div className="mp-copy-foot"><small>{t("Keep the watch connected until the copy finishes.")}</small><button type="button" className="btn btn-glass" onClick={() => void cancelAreas().then(setStatus, (e) => setProblem(said(e)))}>{t("Cancel")}</button></div>
             </div>
           ) : !linkReady ? (
             <div className="mp-connect">
-              <div><MapsIcon name={via === "wifi" ? "watch" : "usb"} size={17} /><b>{via === "wifi" ? "Link the watch first" : "Plug the watch in"}</b></div>
-              <small>{via === "wifi" ? watch?.linkNote ?? "Map areas go to the watch over Bluetooth. Turn on Local mode on the Watch page to link it to this computer." : watch?.linked ? "Bluetooth is linked, but maps copy only over the USB cable. Plug the watch in and allow the computer on the watch." : "Connect the watch with its USB cable and allow the computer on the watch."}</small>
-              {via === "wifi" ? <button type="button" className="btn btn-glass" onClick={() => navigate("/watch")}>Open Watch</button> : <button type="button" className="btn btn-glass" onClick={reread}>Check again</button>}
+              <div><MapsIcon name={via === "wifi" ? "watch" : "usb"} size={17} /><b>{via === "wifi" ? t("Link the watch first") : t("Plug the watch in")}</b></div>
+              <small>{via === "wifi" ? watch?.linkNote ?? t("Map areas go to the watch over Bluetooth. Turn on Local mode on the Watch page to link it to this computer.") : watch?.linked ? t("Bluetooth is linked, but maps copy only over the USB cable. Plug the watch in and allow the computer on the watch.") : t("Connect the watch with its USB cable and allow the computer on the watch.")}</small>
+              {via === "wifi" ? <button type="button" className="btn btn-glass" onClick={() => navigate("/watch")}>{t("Open Watch")}</button> : <button type="button" className="btn btn-glass" onClick={reread}>{t("Check again")}</button>}
             </div>
           ) : (
             <>
               <button type="button" className="btn btn-primary mp-wide" onClick={() => void start()} disabled={ctaOff}>
-                <MapsIcon name={via === "wifi" ? "wifi" : "usb"} size={16} />{busy ? "Starting…" : via === "wifi" ? "Send to watch" : "Copy to watch"}
+                <MapsIcon name={via === "wifi" ? "wifi" : "usb"} size={16} />{busy ? t("Starting…") : via === "wifi" ? t("Send to watch") : t("Copy to watch")}
               </button>
-              <small className="mp-note mp-center">{via === "wifi" ? "The watch starts when it's on Wi-Fi and idle." : "Only files the watch doesn't have yet are copied."}</small>
+              <small className="mp-note mp-center">{via === "wifi" ? t("The watch starts when it's on Wi-Fi and idle.") : t("Only files the watch doesn't have yet are copied.")}</small>
             </>
           )}
           {problem && picked.length > 0 && <p className="mp-problem" role="alert">{problem}</p>}

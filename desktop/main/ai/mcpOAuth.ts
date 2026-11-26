@@ -8,6 +8,7 @@ import type { AddressInfo } from "node:net";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { McpStore } from "./mcpStore";
+import { t } from "@/lib/i18n";
 
 const SIGN_IN_MS = 5 * 60_000;
 
@@ -55,12 +56,12 @@ export class VaultOAuth implements OAuthClientProvider {
   async saveCodeVerifier(verifier: string): Promise<void> { await this.store.setOAuth(this.id, { verifier }); }
   async codeVerifier(): Promise<string> {
     const v = (await this.store.secrets(this.id)).oauth?.verifier;
-    if (!v) throw new Error("The sign-in was lost. Try again.");
+    if (!v) throw new Error(t("The sign-in was lost. Try again."));
     return v;
   }
   redirectToAuthorization(url: URL): void {
     if (!this.open) { this.needsSignIn = true; return; }
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))) throw new Error("The server's sign-in page isn't https.");
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))) throw new Error(t("The server's sign-in page isn't https."));
     this.open(url.href);
   }
   async invalidateCredentials(scope: "all" | "client" | "tokens" | "verifier" | "discovery"): Promise<void> {
@@ -81,7 +82,7 @@ export async function openCallback(): Promise<{ redirect: string; code: (state: 
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     if (url.pathname !== "/callback") { res.writeHead(404).end(); return; }
     const error = url.searchParams.get("error_description") ?? url.searchParams.get("error") ?? undefined;
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(PAGE(error ? "Sign-in didn't finish. Go back to C-LINK." : "Signed in. Go back to C-LINK."));
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(PAGE(error ? t("Sign-in didn't finish. Go back to C-LINK.") : t("Signed in. Go back to C-LINK.")));
     deliver({ code: url.searchParams.get("code") ?? undefined, state: url.searchParams.get("state") ?? undefined, error });
   });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", () => resolve()); });
@@ -90,10 +91,10 @@ export async function openCallback(): Promise<{ redirect: string; code: (state: 
   return {
     redirect: `http://127.0.0.1:${port}/callback`,
     code: async (state) => {
-      const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Sign-in timed out.")), SIGN_IN_MS); });
+      const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(t("Sign-in timed out."))), SIGN_IN_MS); });
       const got = await Promise.race([arrived, timeout]);
-      if (got.error) throw new Error(`Sign-in failed: ${got.error.slice(0, 200)}`);
-      if (!got.code || !got.state || got.state !== state()) throw new Error("Sign-in failed: the answer didn't match.");
+      if (got.error) throw new Error(t("Sign-in failed: {reason}", { reason: got.error.slice(0, 200) }));
+      if (!got.code || !got.state || got.state !== state()) throw new Error(t("Sign-in failed: the answer didn't match."));
       return got.code;
     },
     close: () => { clearTimeout(timer); server.closeAllConnections(); server.close(); },

@@ -1,6 +1,7 @@
 /** Pure maths for the Activities table and the activity page: filtering, sorting, CSV, laps, routes, sample streams. */
 import type { Activity, ActivityDetail, ChartScales, Lap, PlacedPoint, RoutePoint, Sport, Streams, ZoneTime } from "@/data/activities";
 import { clock, thousands } from "@/lib/format";
+import { language, locale, msg, t } from "@/lib/i18n";
 
 // ---------------------------------------------------------------- formatting
 
@@ -18,12 +19,14 @@ export function parseStart(start: string): Date {
 /** Thu 19 Nov */
 export function formatDay(start: string): string {
   const d = parseStart(start);
+  if (language() !== "en") return d.toLocaleDateString(locale(), { weekday: "short", day: "numeric", month: "short" });
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
 /** Thu 19 Nov 2026, 07:42 */
 export function formatDayTime(start: string): string {
   const d = parseStart(start);
+  if (language() !== "en") return `${d.toLocaleDateString(locale(), { weekday: "short", day: "numeric", month: "short", year: "numeric" })} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   return `${formatDay(start)} ${d.getFullYear()}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
@@ -89,17 +92,17 @@ export interface Filters {
 export const DEFAULT_FILTERS: Filters = { q: "", sport: "all", dates: "30d", distance: "any", sort: "date", dir: "desc", page: 1 };
 
 export const DATE_RANGES: readonly { value: DateRange; label: string; tail: string }[] = [
-  { value: "30d", label: "Last 30 days", tail: "in the last 30 days" },
-  { value: "90d", label: "Last 90 days", tail: "in the last 90 days" },
-  { value: "year", label: "This year", tail: "this year" },
-  { value: "all", label: "All time", tail: "" },
+  { value: "30d", label: msg("Last 30 days"), tail: msg("in the last 30 days") },
+  { value: "90d", label: msg("Last 90 days"), tail: msg("in the last 90 days") },
+  { value: "year", label: msg("This year"), tail: msg("this year") },
+  { value: "all", label: msg("All time"), tail: "" },
 ];
 
 export const DISTANCE_BANDS: readonly { value: DistanceBand; label: string }[] = [
-  { value: "any", label: "Any distance" },
-  { value: "under5", label: "Under 5 km" },
-  { value: "5to10", label: "5 to 10 km" },
-  { value: "over10", label: "Over 10 km" },
+  { value: "any", label: msg("Any distance") },
+  { value: "under5", label: msg("Under 5 km") },
+  { value: "5to10", label: msg("5 to 10 km") },
+  { value: "over10", label: msg("Over 10 km") },
 ];
 
 const SORT_KEYS: readonly SortKey[] = ["date", "name", "sport", "distance", "time", "pace", "hr", "elevation", "cadence", "load"];
@@ -179,14 +182,15 @@ export interface Totals { count: number; distanceM: number; durationS: number; l
 
 export function totals(list: readonly Activity[]): Totals {
   return list.reduce<Totals>(
-    (t, a) => ({ count: t.count + 1, distanceM: t.distanceM + (a.distanceM ?? 0), durationS: t.durationS + a.durationS, load: t.load + (a.load ?? 0) }),
+    (tm, a) => ({ count: tm.count + 1, distanceM: tm.distanceM + (a.distanceM ?? 0), durationS: tm.durationS + a.durationS, load: tm.load + (a.load ?? 0) }),
     { count: 0, distanceM: 0, durationS: 0, load: 0 },
   );
 }
 
 /** 15 activities · 140.9 km · 12:49:47 · Load 1,047 */
-export function formatTotals(t: Totals): string {
-  return `${t.count} ${t.count === 1 ? "activity" : "activities"} · ${(t.distanceM / 1000).toFixed(1)} km · ${formatTime(t.durationS)} · Load ${thousands(t.load)}`;
+export function formatTotals(tm: Totals): string {
+  const vars = { n: tm.count, km: (tm.distanceM / 1000).toFixed(1), time: formatTime(tm.durationS), load: thousands(tm.load) };
+  return tm.count === 1 ? t("1 activity · {km} km · {time} · Load {load}", vars) : t("{n} activities · {km} km · {time} · Load {load}", vars);
 }
 
 /** Reads filters from a URL query. Anything missing or unknown falls back to the default. */
@@ -234,7 +238,11 @@ export function weekTitle(key: string, today: Date): string {
   const [y, m, d] = key.split("-").map(Number);
   const from = new Date(y, m - 1, d), to = new Date(y, m - 1, d + 6);
   const day = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  if (day >= from && day <= to) return "This week";
+  if (day >= from && day <= to) return t("This week");
+  if (language() !== "en") {
+    const short = (x: Date) => x.toLocaleDateString(locale(), { day: "numeric", month: "short" });
+    return `${short(from)} – ${short(to)}`;
+  }
   return `${from.getDate()} ${MONTHS[from.getMonth()]} – ${to.getDate()} ${MONTHS[to.getMonth()]}`;
 }
 
@@ -384,8 +392,8 @@ export function routePositionAt(route: readonly RoutePoint[], d: number): { x: n
   for (let i = 1; i < route.length; i++) {
     const a = route[i - 1], b = route[i];
     if (d <= b.d) {
-      const t = b.d === a.d ? 0 : (d - a.d) / (b.d - a.d);
-      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      const tm = b.d === a.d ? 0 : (d - a.d) / (b.d - a.d);
+      return { x: a.x + (b.x - a.x) * tm, y: a.y + (b.y - a.y) * tm };
     }
   }
   const last = route[route.length - 1];
@@ -410,8 +418,8 @@ export function routeLngLatAt(route: readonly PlacedPoint[], d: number): [number
   for (let i = 1; i < route.length; i++) {
     const a = route[i - 1], b = route[i];
     if (d <= b.d) {
-      const t = b.d === a.d ? 0 : (d - a.d) / (b.d - a.d);
-      return [a.lon + (b.lon - a.lon) * t, a.lat + (b.lat - a.lat) * t];
+      const tm = b.d === a.d ? 0 : (d - a.d) / (b.d - a.d);
+      return [a.lon + (b.lon - a.lon) * tm, a.lat + (b.lat - a.lat) * tm];
     }
   }
   const last = route[route.length - 1];
@@ -462,9 +470,9 @@ export function routeFromCubics(start: [number, number], cubics: readonly Cubic[
   cubics.forEach(([x1, y1, x2, y2, x3, y3], curve) => {
     const [x0, y0] = [px, py];
     for (let s = 1; s <= perCurve; s++) {
-      const t = s / perCurve, u = 1 - t;
-      const x = u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3;
-      const y = u * u * u * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3;
+      const tm = s / perCurve, u = 1 - tm;
+      const x = u * u * u * x0 + 3 * u * u * tm * x1 + 3 * u * tm * tm * x2 + tm * tm * tm * x3;
+      const y = u * u * u * y0 + 3 * u * u * tm * y1 + 3 * u * tm * tm * y2 + tm * tm * tm * y3;
       len += Math.hypot(x - px, y - py);
       pts.push({ x, y, curve, len });
       [px, py] = [x, y];
@@ -480,8 +488,8 @@ export function routeFromCubics(start: [number, number], cubics: readonly Cubic[
     let k = 1;
     while (k < knots.length - 1 && p.len > knots[k].len) k++;
     const a = knots[k - 1], b = knots[Math.min(k, knots.length - 1)];
-    const t = b.len === a.len ? 0 : Math.min(1, (p.len - a.len) / (b.len - a.len));
-    return { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, d: a.d + (b.d - a.d) * t };
+    const tm = b.len === a.len ? 0 : Math.min(1, (p.len - a.len) / (b.len - a.len));
+    return { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, d: a.d + (b.d - a.d) * tm };
   });
 }
 
@@ -522,9 +530,9 @@ export function zonesFromBounds(bounds: readonly number[]): ZoneTime[] {
 }
 
 export function zoneLabel(z: ZoneTime): string {
-  if (z.fromBpm == null) return `Zone ${z.zone} · under ${(z.toBpm ?? 0) + 1}`;
-  if (z.toBpm == null) return `Zone ${z.zone} · ${z.fromBpm} and over`;
-  return `Zone ${z.zone} · ${z.fromBpm} to ${z.toBpm}`;
+  if (z.fromBpm == null) return t("Zone {zone} · under {bpm}", { zone: z.zone, bpm: (z.toBpm ?? 0) + 1 });
+  if (z.toBpm == null) return t("Zone {zone} · {bpm} and over", { zone: z.zone, bpm: z.fromBpm });
+  return t("Zone {zone} · {from} to {to}", { zone: z.zone, from: z.fromBpm, to: z.toBpm });
 }
 
 // ------------------------------------------------- seeded sample generation
@@ -536,10 +544,10 @@ export function seededRandom(seed: string): () => number {
   let a = h >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    let tm = a;
+    tm = Math.imul(tm ^ (tm >>> 15), tm | 1);
+    tm ^= tm + Math.imul(tm ^ (tm >>> 7), tm | 61);
+    return ((tm ^ (tm >>> 14)) >>> 0) / 4294967296;
   };
 }
 

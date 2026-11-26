@@ -5,6 +5,7 @@ import { samplePlans } from "@/data/sample/plans";
 import { syncView } from "@/data/sync";
 import { loadAddToCalendar, newStepId, removeWorkout, scheduleLibraryWorkout, standing, type LibraryRow } from "@/data/workouts";
 import type { CoachEvent } from "@/lib/coach/loop";
+import { t } from "@/lib/i18n";
 import {
   activeTrainingPlanCalendarInstall, createTrainingPlan, duplicateTrainingPlan, installTrainingPlan, planEnv, removeTrainingPlanFromCalendar, validateTrainingPlan,
   type InstallProgress, type PlanPacing, type TrainingPlanDocument,
@@ -61,12 +62,12 @@ export async function loadPlanEditor(query: PlanEditorQuery): Promise<Loaded<Pla
     library = loaded.data.library;
     libraryOrigin = loaded.origin;
   } catch (e) {
-    libraryProblem = e instanceof Error ? e.message : "The workout library couldn't be read.";
+    libraryProblem = e instanceof Error ? e.message : t("The workout library couldn't be read.");
   }
   const base = { differences: [], today: at.today, toCoros: at.toCoros, pacing: at.pacing, library, libraryOrigin, libraryProblem };
   if (query.draft) {
     const draft = planDraftStore.get();
-    if (!draft) throw new Error("The generated plan is not in this tab any more. Generate it again.");
+    if (!draft) throw new Error(t("The generated plan is not in this tab any more. Generate it again."));
     return fromBrowser({ ...base, plan: draft.plan, differences: draft.differences, neverSaved: true });
   }
   if (query.id) {
@@ -74,7 +75,7 @@ export async function loadPlanEditor(query: PlanEditorQuery): Promise<Loaded<Pla
     if (kept) return fromBrowser({ ...base, plan: kept, neverSaved: false });
     const sample = at.sample ? samplePlans.find((p) => p.id === query.id) : undefined;
     if (sample) return fromSample({ ...base, plan: sample, neverSaved: true });
-    throw new Error("This plan is not saved on this computer any more.");
+    throw new Error(t("This plan is not saved on this computer any more."));
   }
   return fromBrowser({ ...base, plan: query.blank ?? createTrainingPlan(), neverSaved: true });
 }
@@ -100,7 +101,7 @@ export async function saveTrainingPlan(plan: TrainingPlanDocument): Promise<Trai
 
 function own(planId: string): TrainingPlanDocument {
   const plan = savedPlans().find((p) => p.id === planId);
-  if (!plan) throw new NotWiredError("plans.sample", "This is a sample plan. Duplicate it, or open it and save, to get a copy of your own.");
+  if (!plan) throw new NotWiredError("plans.sample", t("This is a sample plan. Duplicate it, or open it and save, to get a copy of your own."));
   return plan;
 }
 
@@ -123,7 +124,7 @@ export interface CalendarRun {
 
 const stoppedWhy = (plan: TrainingPlanDocument, today: string): string | null => {
   const install = activeTrainingPlanCalendarInstall(plan, today);
-  return install?.state === "partial" ? install.failures[0]?.message ?? "It stopped before the end." : null;
+  return install?.state === "partial" ? install.failures[0]?.message ?? t("It stopped before the end.") : null;
 };
 
 /**
@@ -138,9 +139,9 @@ export async function addPlanToCalendar(planId: string, onProgress?: (progress: 
     save: putPlan, onProgress,
     schedule: async ({ entry, day, name }) => {
       const doc = entry.workout?.doc ? { ...entry.workout.doc, name } : null;
-      if (!doc && !(at.toCoros && entry.programId)) throw new Error(`“${name}” has no steps saved with this plan.`);
+      if (!doc && !(at.toCoros && entry.programId)) throw new Error(t("“{name}” has no steps saved with this plan.", { name }));
       const result = await scheduleLibraryWorkout({ id: entry.programId ?? "", doc }, day, at.toCoros, at.pacing);
-      if (!result.ref) throw new Error("The calendar didn't say where it put this workout, so the plan can't keep track of it.");
+      if (!result.ref) throw new Error(t("The calendar didn't say where it put this workout, so the plan can't keep track of it."));
       return { where: result.where, ref: result.ref };
     },
   });
@@ -164,7 +165,7 @@ export async function deletePlan(planId: string): Promise<void> {
   const at = await standing();
   if (activeTrainingPlanCalendarInstall(plan, at.today)) {
     const run = await removePlanFromCalendar(planId);
-    if (run.problem) throw new Error(`The plan was kept, because its calendar workouts couldn't all be removed: ${run.problem}`);
+    if (run.problem) throw new Error(t("The plan was kept, because its calendar workouts couldn't all be removed: {problem}", { problem: run.problem }));
   }
   dropPlan(planId);
 }
@@ -194,8 +195,8 @@ export interface GenerateOptions {
 
 /** Sends Coach one question that it answers with plan cards, and reads its stream to the end. */
 async function askCoachForPlan(text: string, options: GenerateOptions): Promise<Extract<CoachEvent, { t: "done" }>> {
-  if (!(await syncView())) throw new NotWiredError("plans.generate", "C-LINK is still starting. Try again in a moment.");
-  options.onStage?.("Asking Coach");
+  if (!(await syncView())) throw new NotWiredError("plans.generate", t("C-LINK is still starting. Try again in a moment."));
+  options.onStage?.(t("Asking Coach"));
   let response: Response;
   try {
     response = await fetch("/api/coach", {
@@ -204,11 +205,11 @@ async function askCoachForPlan(text: string, options: GenerateOptions): Promise<
       body: JSON.stringify({ text, history: [], offsetMin: new Date().getTimezoneOffset(), hubDays: null, browserWorkouts: [] }),
     });
   } catch {
-    throw new CoachError(options.signal?.aborted ? "stopped" : "unreachable", options.signal?.aborted ? "Stopped before Coach answered." : "Coach couldn't be reached. Check your connection and try again.");
+    throw new CoachError(options.signal?.aborted ? "stopped" : "unreachable", options.signal?.aborted ? t("Stopped before Coach answered.") : t("Coach couldn't be reached. Check your connection and try again."));
   }
   if (!response.ok || !response.body) {
     const payload = (await response.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
-    throw new CoachError(payload?.error?.code ?? `http_${response.status}`, payload?.error?.message ?? "Coach couldn't answer.");
+    throw new CoachError(payload?.error?.code ?? `http_${response.status}`, payload?.error?.message ?? t("Coach couldn't answer."));
   }
   const reader = response.body.getReader(), decoder = new TextDecoder();
   let buffer = "", done: Extract<CoachEvent, { t: "done" }> | null = null, problem: string | null = null;
@@ -217,7 +218,7 @@ async function askCoachForPlan(text: string, options: GenerateOptions): Promise<
     let event: CoachEvent;
     try { event = JSON.parse(line) as CoachEvent; } catch { return; }
     if (event.t === "working") { const step = event.card.steps[event.card.steps.length - 1]; if (step) options.onStage?.(step.text); }
-    else if (event.t === "block" && event.block.kind === "plan") options.onStage?.("Checking workouts and dates");
+    else if (event.t === "block" && event.block.kind === "plan") options.onStage?.(t("Checking workouts and dates"));
     else if (event.t === "done") done = event;
     else if (event.t === "error") problem = event.message;
   };
@@ -232,11 +233,11 @@ async function askCoachForPlan(text: string, options: GenerateOptions): Promise<
     }
     take(buffer);
   } catch {
-    if (options.signal?.aborted) throw new CoachError("stopped", "Stopped before Coach finished.");
-    problem ??= "The connection dropped before Coach finished.";
+    if (options.signal?.aborted) throw new CoachError("stopped", t("Stopped before Coach finished."));
+    problem ??= t("The connection dropped before Coach finished.");
   }
   const finished = done as Extract<CoachEvent, { t: "done" }> | null;
-  if (!finished) throw new CoachError("unfinished", problem ?? "Coach stopped before finishing the plan.");
+  if (!finished) throw new CoachError("unfinished", problem ?? t("Coach stopped before finishing the plan."));
   return finished;
 }
 
@@ -246,13 +247,13 @@ async function askCoachForPlan(text: string, options: GenerateOptions): Promise<
  * proposed that a plan can't hold. Nothing is saved: the editor takes it as one undoable edit.
  */
 export async function reviseTrainingPlan(plan: TrainingPlanDocument, ask: string, options: GenerateOptions = {}): Promise<{ plan: TrainingPlanDocument; note: string; left: string[] }> {
-  if (!ask.trim()) throw new Error("Say what Coach should change.");
+  if (!ask.trim()) throw new Error(t("Say what Coach should change."));
   const finished = await askCoachForPlan(revisionPrompt(plan, ask), options);
   const made = generatedPlanFromBlocks(finished.blocks, newStepId);
   if (!made || !made.workouts.length) {
     const failed = finished.blocks.find((b) => b.kind === "failed");
     const text = finished.blocks.map((b) => (b.kind === "text" ? b.text : "")).join(" ").trim();
-    throw new Error(failed && failed.kind === "failed" ? `Coach couldn't change the plan: ${failed.text}` : text || "Coach answered without a changed plan. Try asking another way.");
+    throw new Error(failed && failed.kind === "failed" ? t("Coach couldn't change the plan: {problem}", { problem: failed.text }) : text || t("Coach answered without a changed plan. Try asking another way."));
   }
   const { plan: laid } = trainingPlanFromGenerated(made, requestFromPlan(plan));
   return {
@@ -276,7 +277,7 @@ export async function generateTrainingPlan(request: PlanGenerationRequest, optio
   const made = generatedPlanFromBlocks(finished.blocks, newStepId);
   if (!made) {
     const failed = finished.blocks.find((b) => b.kind === "failed");
-    throw new Error(failed && failed.kind === "failed" ? `Coach didn't lay out a plan: ${failed.text}` : "Coach answered without a plan, so there is nothing to open. Try again, or ask in Coach.");
+    throw new Error(failed && failed.kind === "failed" ? t("Coach didn't lay out a plan: {problem}", { problem: failed.text }) : t("Coach answered without a plan, so there is nothing to open. Try again, or ask in Coach."));
   }
   const result = trainingPlanFromGenerated(made, request);
   planDraftStore.set(result);

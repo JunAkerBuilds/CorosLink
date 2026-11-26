@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import { clockSecs, SourceProblem, type MusicSource, type Playlist, type Song, type SourceStatus } from "./sources";
 import type { WebHost } from "./webHost";
+import { t } from "@/lib/i18n";
 
 const PARTITION = "persist:clink-ytmusic";
 const ORIGIN = "https://music.youtube.com";
@@ -116,7 +117,7 @@ export class YouTubeMusic implements MusicSource {
   async connect(): Promise<SourceStatus> {
     await this.web.signIn({
       url: `https://accounts.google.com/ServiceLogin?service=youtube&passive=true&continue=${encodeURIComponent(`${ORIGIN}/library`)}`,
-      partition: PARTITION, title: "Sign in to YouTube Music",
+      partition: PARTITION, title: t("Sign in to YouTube Music"),
       done: (u) => u.startsWith(`${ORIGIN}/`),
     });
     return this.status();
@@ -129,7 +130,7 @@ export class YouTubeMusic implements MusicSource {
 
   private async browse(body: Json, next?: Next): Promise<unknown> {
     const sapisid = await this.sapisid();
-    if (!sapisid) throw new SourceProblem("Sign in to YouTube Music first.", "signedOut");
+    if (!sapisid) throw new SourceProblem(t("Sign in to YouTube Music first."), "signedOut");
     const params = next?.style === "params" ? `&ctoken=${encodeURIComponent(next.token)}&continuation=${encodeURIComponent(next.token)}&type=next` : "";
     if (next?.style === "body") body = { ...body, continuation: next.token };
     const answer = await this.web.fetch(PARTITION, `${ORIGIN}/youtubei/v1/browse?prettyPrint=false${params}`, {
@@ -138,11 +139,11 @@ export class YouTubeMusic implements MusicSource {
       headers: { "Content-Type": "application/json", Authorization: sapisidHash(sapisid), "X-Origin": ORIGIN, Origin: ORIGIN, "X-Goog-AuthUser": "0" },
       body: JSON.stringify({ context: { client: CLIENT }, ...body }),
     }).catch((error: unknown) => {
-      if (error instanceof Error && error.name === "TimeoutError") throw new SourceProblem("YouTube Music took too long to answer.", "timeout");
-      throw new SourceProblem("YouTube Music couldn't be reached.", "offline");
+      if (error instanceof Error && error.name === "TimeoutError") throw new SourceProblem(t("YouTube Music took too long to answer."), "timeout");
+      throw new SourceProblem(t("YouTube Music couldn't be reached."), "offline");
     });
-    if (answer.status === 401 || answer.status === 403) throw new SourceProblem("YouTube Music signed you out. Sign in again.", "signedOut");
-    if (!answer.ok) throw new SourceProblem(`YouTube Music didn't answer (${answer.status}).`, "ytmusic");
+    if (answer.status === 401 || answer.status === 403) throw new SourceProblem(t("YouTube Music signed you out. Sign in again."), "signedOut");
+    if (!answer.ok) throw new SourceProblem(t("YouTube Music didn't answer ({status}).", { status: answer.status }), "ytmusic");
     return answer.json();
   }
 
@@ -164,7 +165,7 @@ export class YouTubeMusic implements MusicSource {
   }
 
   async songs(playlistId: string): Promise<Song[]> {
-    if (!/^[\w-]{2,64}$/.test(playlistId)) throw new SourceProblem("Not a YouTube Music playlist.", "playlist");
+    if (!/^[\w-]{2,64}$/.test(playlistId)) throw new SourceProblem(t("Not a YouTube Music playlist."), "playlist");
     const all: Song[] = [];
     const seen = new Set<string>();
     const until = Date.now() + PLAYLIST_TIMEOUT;
@@ -173,7 +174,7 @@ export class YouTubeMusic implements MusicSource {
       const before = all.length;
       for (const s of page.songs) if (!seen.has(s.origin) && all.length < MAX_SONGS) { seen.add(s.origin); all.push(s); }
       if (!page.next || all.length >= MAX_SONGS || (i > 0 && all.length === before)) break;
-      if (Date.now() > until) throw new SourceProblem("That playlist took too long to read.", "timeout");
+      if (Date.now() > until) throw new SourceProblem(t("That playlist took too long to read."), "timeout");
       page = readSongs(await this.browse({}, { token: page.next, style: page.style }));
     }
     return all;

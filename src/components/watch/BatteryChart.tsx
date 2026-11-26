@@ -2,6 +2,7 @@
 import { useState, type KeyboardEvent, type PointerEvent } from "react";
 import { indexAt } from "@/lib/chart";
 import { parseDay } from "@/lib/format";
+import { language, locale, t } from "@/lib/i18n";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const W = 700, H = 150;
@@ -9,7 +10,7 @@ const W = 700, H = 150;
 function dayLabel(firstDay: string, index: number): string {
   const d = parseDay(firstDay);
   d.setDate(d.getDate() + index);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return language() === "en" ? `${d.getDate()} ${MONTHS[d.getMonth()]}` : d.toLocaleDateString(locale(), { day: "numeric", month: "short" });
 }
 
 /** Battery level, one reading a day. Hover, or focus and use the arrow keys, to read a day. */
@@ -32,7 +33,7 @@ export function BatteryChart({ levels, firstDay, alt }: { levels: number[]; firs
 
   return (
     <>
-      <div className="wa-batt" tabIndex={0} role="group" aria-label="Battery level by day. Arrow keys read each day." onPointerMove={onMove} onPointerLeave={() => setAt(null)} onKeyDown={onKeyDown} onBlur={() => setAt(null)}>
+      <div className="wa-batt" tabIndex={0} role="group" aria-label={t("Battery level by day. Arrow keys read each day.")} onPointerMove={onMove} onPointerLeave={() => setAt(null)} onKeyDown={onKeyDown} onBlur={() => setAt(null)}>
         <svg role="img" aria-label={alt} width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
           <path d="M0 37.5H700M0 75H700M0 112.5H700" fill="none" style={{ stroke: "rgba(var(--fg-rgb), 0.07)", vectorEffect: "non-scaling-stroke" }} />
           <path d={`${line} L${W} ${H} L0 ${H} Z`} style={{ fill: "rgba(83, 203, 161, 0.12)" }} />

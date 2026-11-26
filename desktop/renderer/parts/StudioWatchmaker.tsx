@@ -3,6 +3,7 @@
 // reference or a screenshot. The AI, its model and power are the ones Coach uses, picked right here (CoachAI.tsx).
 // Chats are saved with the face. Loaded on demand.
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
+import { language, locale, t, tx } from "@/lib/i18n";
 import { CoachAI } from "./CoachAI";
 import { Icon } from "./StudioIcon";
 import "./coachAI.css";
@@ -28,25 +29,25 @@ const assetUrl = (id: string) => `/api/desktop/studio/automation/asset/${id}`;
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const r = await fetch(`${BASE}${path}`, body === undefined ? { cache: "no-store" } : { method: "POST", headers: { "Content-Type": "application/json", "x-clink-hub": "1" }, body: JSON.stringify(body) });
   const json = (await r.json().catch(() => null)) as (T & { message?: string }) | null;
-  if (!r.ok || !json) throw new Error(json?.message ?? "That didn't work.");
+  if (!r.ok || !json) throw new Error(json?.message ?? t("That didn't work."));
   return json;
 }
 
 const readFile = (file: File) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(String(reader.result));
-  reader.onerror = () => reject(new Error("That picture can't be read."));
+  reader.onerror = () => reject(new Error(t("That picture can't be read.")));
   reader.readAsDataURL(file);
 });
 
 /** "3 min ago", "Yesterday"… for the chat list. */
 function ago(iso: string): string {
   const minutes = Math.round((Date.now() - Date.parse(iso)) / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return t("Just now");
+  if (minutes < 60) return t("{mins} min ago", { mins: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (hours < 24) return t("{hours} h ago", { hours });
+  return new Date(iso).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
 }
 
 const paragraphs = (text: string) => text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p, i) => <p key={i}>{p}</p>);
@@ -68,16 +69,16 @@ function Answer({ m, working }: { m: ChatMessage; working: boolean }) {
     <div className="st-wm-msg" data-role="assistant">
       <span className="st-wm-who"><Icon name="spark" size={13} />Watchmaker{m.by ? <small>{m.by}</small> : null}</span>
       {m.plan?.length ? (
-        <Section title="Plan" note={`${m.plan.filter((p) => p.status === "done").length}/${m.plan.length}`}>
+        <Section title={t("Plan")} note={`${m.plan.filter((p) => p.status === "done").length}/${m.plan.length}`}>
           <ul className="st-wm-plan">{m.plan.map((p, i) => <li key={i} data-status={p.status}><Icon name={p.status === "done" ? "check" : p.status === "doing" ? "refresh" : "minus"} size={12} />{p.text}</li>)}</ul>
         </Section>
       ) : null}
-      {m.text ? <div className="st-wm-text">{paragraphs(m.text)}</div> : working ? <p className="st-wm-thinking">{steps.at(-1)?.label ?? "Thinking"}…</p> : null}
+      {m.text ? <div className="st-wm-text">{paragraphs(m.text)}</div> : working ? <p className="st-wm-thinking">{steps.at(-1)?.label ? `${steps.at(-1)!.label}…` : t("Thinking…")}</p> : null}
       {m.pictures?.length ? (
-        <div className="st-wm-pics">{m.pictures.slice(-6).map((p, i) => <a key={`${p.assetId}${i}`} href={assetUrl(p.assetId)} target="_blank" rel="noreferrer" title={p.why}><img src={assetUrl(p.assetId)} alt={p.why ?? "Picture"} /></a>)}</div>
+        <div className="st-wm-pics">{m.pictures.slice(-6).map((p, i) => <a key={`${p.assetId}${i}`} href={assetUrl(p.assetId)} target="_blank" rel="noreferrer" title={p.why}><img src={assetUrl(p.assetId)} alt={p.why ?? t("Picture")} /></a>)}</div>
       ) : null}
       {steps.length ? (
-        <Section title="Steps" note={failed ? `${steps.length} · ${failed} failed` : String(steps.length)}>
+        <Section title={tx("process", "Steps")} note={failed ? `${steps.length} · ${t("{n} failed", { n: failed })}` : String(steps.length)}>
           <ol className="st-wm-steps">
             {steps.map((s, i) => (
               <li key={i} data-ok={s.ok} title={s.message}>
@@ -87,8 +88,8 @@ function Answer({ m, working }: { m: ChatMessage; working: boolean }) {
           </ol>
         </Section>
       ) : null}
-      {m.edits ? <p className="st-wm-note"><Icon name="undo" size={12} />{m.edits === 1 ? "1 step on the face." : `${m.edits} steps on the face.`} Undo with ⌘Z.</p> : null}
-      {m.stopped ? <p className="st-wm-note">Stopped.</p> : null}
+      {m.edits ? <p className="st-wm-note"><Icon name="undo" size={12} />{m.edits === 1 ? t("1 step on the face.") : t("{n} steps on the face.", { n: m.edits })} {t("Undo with ⌘Z.")}</p> : null}
+      {m.stopped ? <p className="st-wm-note">{t("Stopped.")}</p> : null}
       {m.error ? <p className="st-wm-error" role="alert">{m.error}</p> : null}
     </div>
   );
@@ -111,7 +112,7 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
   const open = useCallback(async (id: string | null) => {
     setProblem(null); setListOpen(false);
     if (!id) { setChatId(null); setMessages([]); return; }
-    try { const { chat } = await call<{ chat: { id: string; messages: ChatMessage[] } }>(`/chats/${id}?project=${projectId}`); setChatId(chat.id); setMessages(chat.messages); } catch (e) { setProblem(e instanceof Error ? e.message : "That chat couldn't be opened."); }
+    try { const { chat } = await call<{ chat: { id: string; messages: ChatMessage[] } }>(`/chats/${id}?project=${projectId}`); setChatId(chat.id); setMessages(chat.messages); } catch (e) { setProblem(e instanceof Error ? e.message : t("That chat couldn't be opened.")); }
   }, [projectId]);
   // The face's latest chat opens with it; a run still going (after a reload) shows as working.
   useEffect(() => {
@@ -125,10 +126,10 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
   const attach = async (files: File[]) => {
     setProblem(null);
     const images = files.filter((f) => IMAGE_TYPES.includes(f.type));
-    if (!images.length) { if (files.length) setProblem("Pictures go in as PNG, JPEG or WebP."); return; }
-    if (images.some((f) => f.size > MAX_BYTES)) { setProblem("Pictures go in up to 8 MB each."); return; }
+    if (!images.length) { if (files.length) setProblem(t("Pictures go in as PNG, JPEG or WebP.")); return; }
+    if (images.some((f) => f.size > MAX_BYTES)) { setProblem(t("Pictures go in up to 8 MB each.")); return; }
     const read = await Promise.all(images.slice(0, MAX_ATTACHMENTS - attachments.length).map(readFile)).catch(() => null);
-    if (!read) { setProblem("That picture can't be read."); return; }
+    if (!read) { setProblem(t("That picture can't be read.")); return; }
     // The first picture of a chat is the design reference; later ones are taken as screenshots.
     const use = messages.some((m) => m.attachments?.some((a) => a.use === "reference")) ? "screenshot" : "reference";
     setAttachments((a) => [...a, ...read.map((dataUrl) => ({ dataUrl, use }) as Attachment)].slice(0, MAX_ATTACHMENTS));
@@ -149,7 +150,7 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
       const response = await fetch(`${BASE}/send`, { method: "POST", headers: { "Content-Type": "application/json", "x-clink-hub": "1" }, body: JSON.stringify({ project: projectId, chatId, text, attachments: sentAttachments }) });
       if (!response.ok || !response.body) {
         const json = (await response.json().catch(() => null)) as { message?: string } | null;
-        throw new Error(json?.message ?? "Watchmaker couldn't start.");
+        throw new Error(json?.message ?? t("Watchmaker couldn't start."));
       }
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
       let buffer = "", answerId = "";
@@ -179,7 +180,7 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
       }
       void refresh();
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : "Watchmaker couldn't finish.");
+      setProblem(e instanceof Error ? e.message : t("Watchmaker couldn't finish."));
       setDraft((d) => d || text); setAttachments((a) => (a.length ? a : sentAttachments));
     } finally {
       setRunning(false);
@@ -192,7 +193,7 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
     if (id === chatId) void open(null);
   };
 
-  const title = chats.find((c) => c.id === chatId)?.title ?? "New chat";
+  const title = chats.find((c) => c.id === chatId)?.title ?? t("New chat");
   const workingId = running ? messages.at(-1)?.id : undefined;
 
   return (
@@ -202,15 +203,15 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
         <button type="button" className="st-wm-title" aria-haspopup="menu" aria-expanded={listOpen} onClick={() => setListOpen((o) => !o)} disabled={running}>
           <span>{title}</span><Icon name="chevD" size={13} />
         </button>
-        <button type="button" className="st-icon-btn" aria-label="New chat" title="New chat" disabled={running || !chatId} onClick={() => void open(null)}><Icon name="plus" size={16} /></button>
+        <button type="button" className="st-icon-btn" aria-label={t("New chat")} title={t("New chat")} disabled={running || !chatId} onClick={() => void open(null)}><Icon name="plus" size={16} /></button>
         {listOpen ? (
-          <div className="st-wm-list" role="menu" aria-label="Chats for this face">
+          <div className="st-wm-list" role="menu" aria-label={t("Chats for this face")}>
             {chats.length ? chats.map((c) => (
               <div key={c.id} className="st-wm-list-row" data-on={c.id === chatId || undefined}>
                 <button type="button" role="menuitem" onClick={() => void open(c.id)}><b>{c.title}</b><small>{ago(c.updatedAt)}</small></button>
-                <button type="button" className="st-icon-btn" aria-label={`Delete ${c.title}`} onClick={() => void remove(c.id)}><Icon name="trash" size={14} /></button>
+                <button type="button" className="st-icon-btn" aria-label={t("Delete {name}", { name: c.title })} onClick={() => void remove(c.id)}><Icon name="trash" size={14} /></button>
               </div>
-            )) : <p className="st-wm-empty-list">No chats yet.</p>}
+            )) : <p className="st-wm-empty-list">{t("No chats yet.")}</p>}
           </div>
         ) : null}
       </div>
@@ -218,14 +219,14 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
       <div className="st-wm-scroll" ref={scroller}>
         {messages.length ? messages.map((m) => (m.role === "user" ? (
           <div key={m.id} className="st-wm-msg" data-role="user">
-            {m.attachments?.length ? <div className="st-wm-pics">{m.attachments.map((a, i) => <span key={i} className="st-wm-att"><img src={assetUrl(a.assetId)} alt={a.use === "reference" ? "Design reference" : "Screenshot"} /><small>{a.use === "reference" ? "Reference" : "Screenshot"}</small></span>)}</div> : null}
+            {m.attachments?.length ? <div className="st-wm-pics">{m.attachments.map((a, i) => <span key={i} className="st-wm-att"><img src={assetUrl(a.assetId)} alt={a.use === "reference" ? t("Design reference") : t("Screenshot")} /><small>{a.use === "reference" ? t("Reference") : t("Screenshot")}</small></span>)}</div> : null}
             {m.text ? <div className="st-wm-text">{paragraphs(m.text)}</div> : null}
           </div>
         ) : <Answer key={m.id} m={m} working={m.id === workingId} />)) : (
           <div className="st-wm-empty">
             <Icon name="spark" size={22} />
-            <b>What should change?</b>
-            <p>It edits this face as you watch. Each step can be undone.</p>
+            <b>{t("What should change?")}</b>
+            <p>{t("It edits this face as you watch. Each step can be undone.")}</p>
           </div>
         )}
       </div>
@@ -237,24 +238,24 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
             {attachments.map((a, i) => (
               <span key={i} className="st-wm-chip">
                 <img src={a.dataUrl} alt="" />
-                <button type="button" className="st-wm-use" title="Use as" onClick={() => setAttachments((all) => all.map((x, j) => (j === i ? { ...x, use: x.use === "reference" ? "screenshot" : "reference" } : x)))}>
-                  {a.use === "reference" ? "Reference" : "Screenshot"}
+                <button type="button" className="st-wm-use" title={t("Use as")} onClick={() => setAttachments((all) => all.map((x, j) => (j === i ? { ...x, use: x.use === "reference" ? "screenshot" : "reference" } : x)))}>
+                  {a.use === "reference" ? t("Reference") : t("Screenshot")}
                 </button>
-                <button type="button" className="st-wm-x" aria-label={`Remove picture ${i + 1}`} onClick={() => setAttachments((all) => all.filter((_, j) => j !== i))}><Icon name="close" size={11} /></button>
+                <button type="button" className="st-wm-x" aria-label={t("Remove picture {n}", { n: i + 1 })} onClick={() => setAttachments((all) => all.filter((_, j) => j !== i))}><Icon name="close" size={11} /></button>
               </span>
             ))}
           </div>
         ) : null}
-        <textarea aria-label="Message Watchmaker" placeholder={running ? "Watchmaker is working…" : "Describe a change, or paste a picture"} value={draft} rows={3}
+        <textarea aria-label={t("Message Watchmaker")} placeholder={running ? t("Watchmaker is working…") : t("Describe a change, or paste a picture")} value={draft} rows={3}
           onChange={(e) => setDraft(e.target.value)} onPaste={onPaste}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} />
         <div className="st-wm-bar">
-          <button type="button" className="st-icon-btn" aria-label="Attach pictures" title="Attach pictures" disabled={attachments.length >= MAX_ATTACHMENTS} onClick={() => fileInput.current?.click()}><Icon name="attach" size={16} /></button>
+          <button type="button" className="st-icon-btn" aria-label={t("Attach pictures")} title={t("Attach pictures")} disabled={attachments.length >= MAX_ATTACHMENTS} onClick={() => fileInput.current?.click()}><Icon name="attach" size={16} /></button>
           <input ref={fileInput} type="file" accept={IMAGE_TYPES.join(",")} multiple hidden onChange={(e) => { void attach([...(e.target.files ?? [])]); e.target.value = ""; }} />
           <div className="st-wm-ai"><CoachAI /></div>
           {running
-            ? <button type="button" className="st-wm-send" data-stop aria-label="Stop" title="Stop" onClick={stop}><Icon name="pause" size={15} /></button>
-            : <button type="button" className="st-wm-send" aria-label="Send" title="Send" disabled={!draft.trim() && !attachments.length} onClick={() => void send()}><Icon name="send" size={15} /></button>}
+            ? <button type="button" className="st-wm-send" data-stop aria-label={t("Stop")} title={t("Stop")} onClick={stop}><Icon name="pause" size={15} /></button>
+            : <button type="button" className="st-wm-send" aria-label={t("Send")} title={t("Send")} disabled={!draft.trim() && !attachments.length} onClick={() => void send()}><Icon name="send" size={15} /></button>}
         </div>
       </div>
     </div>

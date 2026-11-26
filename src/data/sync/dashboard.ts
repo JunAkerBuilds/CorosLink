@@ -4,6 +4,7 @@ import type { Dashboard, FitnessSeries, HueName, Scale, TimeShare } from "@/data
 import { addDays, mondayOf, shortDay } from "@/lib/calendar";
 import { loadHue, readinessHue, sleepHue } from "@/lib/feel";
 import { clock, dayKey, km, pace, signed, thousands } from "@/lib/format";
+import { language, locale, msg, t, tx } from "@/lib/i18n";
 import { SPORT_FAMILY } from "./activities";
 import { projectRoute, SPORT_TITLE } from "./geo";
 import {
@@ -70,10 +71,10 @@ export function distanceText(a: NativeActivity): string | null {
 export function paceStat(a: NativeActivity): { label: string; value: string } | null {
   const m = a.distanceMeters, s = a.durationSeconds;
   if (!m || !s || m <= 0 || s <= 0) return null;
-  if (ON_FOOT.includes(a.sport)) return { label: "Pace", value: pace(s / (m / 1000)) };
-  if (RIDING.includes(a.sport) || a.sport === "ski") return { label: "Speed", value: `${(m / 1000 / (s / 3600)).toFixed(1)} km/h` };
-  if (SWIMMING.includes(a.sport)) return { label: "Pace", value: `${clock(s / (m / 100))} /100 m` };
-  if (a.sport === "row") return { label: "Pace", value: `${clock(s / (m / 500))} /500 m` };
+  if (ON_FOOT.includes(a.sport)) return { label: msg("Pace"), value: pace(s / (m / 1000)) };
+  if (RIDING.includes(a.sport) || a.sport === "ski") return { label: msg("Speed"), value: `${(m / 1000 / (s / 3600)).toFixed(1)} km/h` };
+  if (SWIMMING.includes(a.sport)) return { label: msg("Pace"), value: `${clock(s / (m / 100))} /100 m` };
+  if (a.sport === "row") return { label: msg("Pace"), value: `${clock(s / (m / 500))} /500 m` };
   return null;
 }
 
@@ -86,24 +87,24 @@ export function activityDetail(a: NativeActivity): string {
   return parts.join(" · ");
 }
 
-/** The stats under the latest activity, only those the activity holds. */
+/** The stats under the latest activity, only those the activity holds. Labels in English (the page picks them by name); translate where shown. */
 export function latestStats(a: NativeActivity): { label: string; value: string }[] {
   const out: { label: string; value: string }[] = [];
   const d = distanceText(a);
-  if (d) out.push({ label: "Distance", value: d });
-  if (a.durationSeconds && a.durationSeconds > 0) out.push({ label: "Time", value: timeText(a.durationSeconds) });
+  if (d) out.push({ label: msg("Distance"), value: d });
+  if (a.durationSeconds && a.durationSeconds > 0) out.push({ label: msg("Time"), value: timeText(a.durationSeconds) });
   const p = paceStat(a);
   if (p) out.push(p);
-  if (a.averageHR != null) out.push({ label: "Heart rate", value: `${Math.round(a.averageHR)} bpm` });
-  if (a.trainingLoad != null) out.push({ label: "Load", value: String(Math.round(a.trainingLoad)) });
-  if (a.calories != null && a.calories > 0) out.push({ label: "Calories", value: `${thousands(Math.round(a.calories))} kcal` });
+  if (a.averageHR != null) out.push({ label: msg("Heart rate"), value: `${Math.round(a.averageHR)} bpm` });
+  if (a.trainingLoad != null) out.push({ label: msg("Load"), value: String(Math.round(a.trainingLoad)) });
+  if (a.calories != null && a.calories > 0) out.push({ label: msg("Calories"), value: `${thousands(Math.round(a.calories))} kcal` });
   return out;
 }
 
 /** Today's numbers, at most four: distance, time, pace and load; heart rate stands in when there is room. */
 export function todayStats(a: NativeActivity): { label: string; value: string }[] {
   const all = latestStats(a).filter((s) => s.label !== "Calories");
-  return (all.length > 4 ? all.filter((s) => s.label !== "Heart rate") : all).slice(0, 4);
+  return (all.length > 4 ? all.filter((s) => s.label !== "Heart rate") : all).slice(0, 4).map((s) => ({ ...s, label: t(s.label) }));
 }
 
 /** Heart rate over an activity as a line and its fill in a `width` × `height` box. Null without at least two readings. */
@@ -133,13 +134,16 @@ export function routeInBox(route: ActivityDetailBody["route"], width = 280, heig
 export function whenText(at: Date, now: Date): string {
   const day = dayKey(at), today = dayKey(now);
   const time = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
-  const word = day === today ? "Today" : day === addDays(today, -1) ? "Yesterday" : shortDay(day, at.getFullYear() !== now.getFullYear());
+  const word = day === today ? t("Today") : day === addDays(today, -1) ? t("Yesterday") : shortDay(day, at.getFullYear() !== now.getFullYear());
   return `${word}, ${time}`;
 }
 
 function heartOf(h: ReturnType<typeof heartInBox>): NonNullable<Dashboard["latest"]>["heart"] {
-  return h ? { line: h.line, area: h.area, label: `Heart rate over the activity, ${h.low} to ${h.high} bpm` } : null;
+  return h ? { line: h.line, area: h.area, label: t("Heart rate over the activity, {low} to {high} bpm", { low: h.low, high: h.high }) } : null;
 }
+
+/** The sport's name in the app's language, "Workout" when the sport has none. */
+const sportTitle = (sport: NativeSport): string => (SPORT_TITLE[sport] ? t(SPORT_TITLE[sport]) : t("Workout"));
 
 /* ───────────── Days ───────────── */
 
@@ -154,12 +158,12 @@ export function dayTotals(placed: readonly Placed[], days: readonly NativeDayVit
   const own = new Set<string>();
   // Oldest first, so names read in the order the day went.
   for (const p of [...placed].reverse()) {
-    const t = out.get(p.day) ?? { minutes: 0, load: 0, names: [], sports: [] };
-    t.minutes += p.minutes;
-    if (p.a.trainingLoad != null) { t.load += p.a.trainingLoad; own.add(p.day); }
-    t.names.push(p.a.name || SPORT_TITLE[p.a.sport] || "Workout");
-    t.sports.push(p.a.sport);
-    out.set(p.day, t);
+    const total = out.get(p.day) ?? { minutes: 0, load: 0, names: [], sports: [] };
+    total.minutes += p.minutes;
+    if (p.a.trainingLoad != null) { total.load += p.a.trainingLoad; own.add(p.day); }
+    total.names.push(p.a.name || sportTitle(p.a.sport));
+    total.sports.push(p.a.sport);
+    out.set(p.day, total);
   }
   for (const v of days) {
     const k = calendarDayKey(v.day), t = out.get(k);
@@ -271,11 +275,11 @@ export function yearToDate(placed: readonly Placed[], now: Date): { thisYear: nu
 }
 
 const FAMILIES: { label: string; hue: HueName; sports: readonly NativeSport[] }[] = [
-  { label: "Run", hue: "mint", sports: RUNNING },
-  { label: "Ride", hue: "blue", sports: RIDING },
-  { label: "Strength", hue: "orange", sports: ["strength"] },
-  { label: "Swim", hue: "cyan", sports: SWIMMING },
-  { label: "Walk & hike", hue: "gold", sports: ["walk", "hike"] },
+  { label: msg("Run"), hue: "mint", sports: RUNNING },
+  { label: msg("Ride"), hue: "blue", sports: RIDING },
+  { label: msg("Strength"), hue: "orange", sports: ["strength"] },
+  { label: msg("Swim"), hue: "cyan", sports: SWIMMING },
+  { label: msg("Walk & hike"), hue: "gold", sports: ["walk", "hike"] },
 ];
 
 /** Share of time per sport family over the 28 days ending today, largest first. Percentages add up to 100. */
@@ -284,7 +288,7 @@ export function sportMix(placed: readonly Placed[], today: string): TimeShare[] 
   const minutes = new Map<string, number>();
   for (const p of placed) {
     if (p.day < from || p.day > today || p.minutes <= 0) continue;
-    const label = FAMILIES.find((f) => f.sports.includes(p.a.sport))?.label ?? "Other";
+    const label = FAMILIES.find((f) => f.sports.includes(p.a.sport))?.label ?? msg("Other");
     minutes.set(label, (minutes.get(label) ?? 0) + p.minutes);
   }
   const total = [...minutes.values()].reduce((t, v) => t + v, 0);
@@ -296,7 +300,7 @@ export function sportMix(placed: readonly Placed[], today: string): TimeShare[] 
   let left = 100 - floors.reduce((t, v) => t + v, 0);
   const order = parts.map((p, k) => [p.exact - floors[k], k] as const).sort((a, b) => b[0] - a[0]);
   for (const [, k] of order) { if (left <= 0) break; floors[k]++; left--; }
-  return parts.map((p, k) => ({ label: p.label, hue: p.hue, percent: floors[k], minutes: p.minutes }));
+  return parts.map((p, k) => ({ label: tx("sport", p.label), hue: p.hue, percent: floors[k], minutes: p.minutes }));
 }
 
 /* ───────────── Health ───────────── */
@@ -340,7 +344,7 @@ export function hrvOf(days: readonly NativeDayVitals[], today: string): Dashboar
   const m = mean(base), sd = Math.sqrt(mean(base.map((v) => (v - m) ** 2)));
   const usual: [number, number] = [Math.round(m - sd), Math.round(m + sd)];
   const latest = shown[shown.length - 1];
-  return { status: latest < usual[0] ? "Below range" : latest > usual[1] ? "Above range" : "In range", days: shown, usual };
+  return { status: latest < usual[0] ? t("Below range") : latest > usual[1] ? t("Above range") : t("In range"), days: shown, usual };
 }
 
 /* ───────────── Scales ───────────── */
@@ -357,7 +361,7 @@ export function formScale(fitness: number, fatigue: number): Scale {
   return {
     segments: [{ weight: 10, hue: "cyan" }, { weight: 15, hue: "mint" }, { weight: 15, hue: "blue" }, { weight: 10, hue: "gold" }, { weight: 10, hue: "rose" }],
     marker: Math.round(clamp01((10 - percent) / 60) * 100) / 100,
-    labels: ["Fresh", `Form ${signed(Math.round(form))}`, "Strained"],
+    labels: [t("Fresh"), t("Form {value}", { value: signed(Math.round(form)) }), t("Strained")],
   };
 }
 
@@ -368,35 +372,39 @@ const VO2_SEGMENTS: Scale["segments"] = [{ weight: 10, hue: "rose" }, { weight: 
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 
+/** Day `k` of the week (0 is Monday) as one letter, in the app's language. */
+export const dayLetter = (k: number): string =>
+  language() === "en" ? DAY_LETTERS[k] : new Intl.DateTimeFormat(locale(), { weekday: "narrow" }).format(new Date(2026, 10, 16 + k));
+
 export function buildDashboard(items: DashboardItems, now: Date): Dashboard {
   const today = dayKey(now);
   const placed = placeActivities(items.activities, now);
   const totals = dayTotals(placed, items.days);
-  const t = items.training;
+  const tb = items.training;
   const routineName = new Map(items.routines.map((r) => [r.id, r]));
   const plannedOn = new Map<string, NativeGymPlanned>();
   for (const p of items.planned) if (p.day) plannedOn.set(calendarDayKey(p.day), p);
 
   /* This morning. */
-  const ratio = t?.load?.ratio ?? (t?.load?.acute != null && t.load.chronic ? t.load.acute / t.load.chronic : undefined);
+  const ratio = tb?.load?.ratio ?? (tb?.load?.acute != null && tb.load.chronic ? tb.load.acute / tb.load.chronic : undefined);
   const sleepScore = [
     ...recent(items.days, vitalDay, (v) => v.sleepScore, today, 14),
     ...recent(items.nights, (n) => calendarDayKey(n.day), (n) => n.score, today, 14),
   ].sort((a, b) => (a.day < b.day ? -1 : 1)).pop()?.value;
   const ring = (label: string, hue: HueName, value: string | null, fraction: number) => ({ label, hue, value: value ?? "—", fraction: value == null ? 0 : clamp01(fraction) });
-  const readiness = t?.readiness?.score;
+  const readiness = tb?.readiness?.score;
   const slept = sleepMinutes(items.days, items.nights, today, 14);
   const tiles = [
     tile("HRV", "cyan", recent(items.days, vitalDay, (v) => v.hrv, today, 14), (v) => String(Math.round(v)), "ms", (d) => `${signed(Math.round(d))} ms`),
-    tile("Resting HR", "rose", recent(items.days, vitalDay, (v) => v.restingHR, today, 14), (v) => String(Math.round(v)), "bpm", (d) => `${signed(Math.round(d))} bpm`),
-    tile("Time asleep", "violet", slept.map((x) => ({ value: x.value / 60 })), (h) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; }, undefined, (d) => `${signed(Math.round(d * 60))} min`),
+    tile(t("Resting HR"), "rose", recent(items.days, vitalDay, (v) => v.restingHR, today, 14), (v) => String(Math.round(v)), "bpm", (d) => `${signed(Math.round(d))} bpm`),
+    tile(t("Time asleep"), "violet", slept.map((x) => ({ value: x.value / 60 })), (h) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; }, undefined, (d) => `${signed(Math.round(d * 60))} min`),
   ].filter((x) => x != null);
   const morning: Dashboard["morning"] = readiness == null && sleepScore == null && ratio == null && tiles.length === 0 ? null : {
-    status: t?.readiness?.status,
+    status: tb?.readiness?.status,
     rings: [
-      ring("Readiness", readiness != null ? readinessHue(readiness) : "mint", readiness != null ? String(Math.round(readiness)) : null, (readiness ?? 0) / 100),
-      ring("Sleep", sleepScore != null ? sleepHue(sleepScore) : "violet", sleepScore != null ? String(Math.round(sleepScore)) : null, (sleepScore ?? 0) / 100),
-      ring("Load", loadHue(t?.load?.status), ratio != null ? ratio.toFixed(2) : null, (ratio ?? 0) / 2),
+      ring(t("Readiness"), readiness != null ? readinessHue(readiness) : "mint", readiness != null ? String(Math.round(readiness)) : null, (readiness ?? 0) / 100),
+      ring(t("Sleep"), sleepScore != null ? sleepHue(sleepScore) : "violet", sleepScore != null ? String(Math.round(sleepScore)) : null, (sleepScore ?? 0) / 100),
+      ring(t("Load"), loadHue(tb?.load?.status), ratio != null ? ratio.toFixed(2) : null, (ratio ?? 0) / 2),
     ],
     tiles,
     feel: items.feel && items.feel.feel >= 1 && items.feel.feel <= 5 ? { level: items.feel.feel, tags: Array.isArray(items.feel.tags) ? items.feel.tags : [] } : null,
@@ -404,19 +412,19 @@ export function buildDashboard(items: DashboardItems, now: Date): Dashboard {
 
   /* Today and the week strip. */
   const monday = mondayOf(today);
-  const week: Dashboard["todayWorkout"]["week"] = DAY_LETTERS.map((letter, k) => {
+  const week: Dashboard["todayWorkout"]["week"] = DAY_LETTERS.map((_, k) => {
     const day = addDays(monday, k), done = totals.get(day), plan = day >= today ? plannedOn.get(day) : undefined;
     const current = day === today ? { current: true } : {};
-    if (done) return { day: letter, what: SPORT_TITLE[done.sports[done.sports.length - 1]] ?? "Workout", state: day === today ? "today" : "done", ...current };
-    if (plan) return { day: letter, what: routineName.get(plan.routineID)?.name || "Gym", state: "planned", ...current };
-    return { day: letter, what: "", state: "none", ...current };
+    if (done) return { day: dayLetter(k), what: sportTitle(done.sports[done.sports.length - 1]), state: day === today ? "today" : "done", ...current };
+    if (plan) return { day: dayLetter(k), what: routineName.get(plan.routineID)?.name || t("Gym"), state: "planned", ...current };
+    return { day: dayLetter(k), what: "", state: "none", ...current };
   });
   const doneToday = placed.find((p) => p.day === today)?.a;
   const planToday = plannedOn.get(today);
   const doneTodayAt = placed.find((p) => p.day === today)?.at;
   let todayWorkout: Dashboard["todayWorkout"] = { status: "", name: null, detail: "", stats: [], next: null, week };
   if (doneToday) {
-    todayWorkout = { status: "Done", name: doneToday.name || SPORT_TITLE[doneToday.sport], detail: doneTodayAt ? whenText(doneTodayAt, now) : "", stats: todayStats(doneToday), next: null, week };
+    todayWorkout = { status: msg("Done"), name: doneToday.name || sportTitle(doneToday.sport), detail: doneTodayAt ? whenText(doneTodayAt, now) : "", stats: todayStats(doneToday), next: null, week };
   } else if (planToday) {
     const routine = routineName.get(planToday.routineID);
     const entries = routine?.entries ?? [];
@@ -424,16 +432,16 @@ export function buildDashboard(items: DashboardItems, now: Date): Dashboard {
     const last = (items.gym ?? []).filter((w) => w.routineID === planToday.routineID && w.start != null && dayKey(refToDate(w.start)) < today)
       .sort((x, y) => (y.start ?? 0) - (x.start ?? 0))[0];
     const stats = [
-      ...(entries.length ? [{ label: "Exercises", value: String(entries.length) }] : []),
-      ...(sets ? [{ label: "Sets", value: String(sets) }] : []),
-      ...(last?.start != null ? [{ label: "Last done", value: shortDay(dayKey(refToDate(last.start))) }] : []),
+      ...(entries.length ? [{ label: t("Exercises"), value: String(entries.length) }] : []),
+      ...(sets ? [{ label: t("Sets"), value: String(sets) }] : []),
+      ...(last?.start != null ? [{ label: t("Last done"), value: shortDay(dayKey(refToDate(last.start))) }] : []),
     ];
-    todayWorkout = { status: "Planned", name: routine?.name || "Gym workout", detail: routine?.folder ?? "", stats, next: null, week };
+    todayWorkout = { status: msg("Planned"), name: routine?.name || t("Gym workout"), detail: routine?.folder ?? "", stats, next: null, week };
   } else {
     const ahead = [...plannedOn.keys()].filter((k) => k > today && k <= addDays(today, 14)).sort()[0];
     if (ahead) {
       const routine = routineName.get(plannedOn.get(ahead)!.routineID);
-      todayWorkout = { ...todayWorkout, next: { name: routine?.name || "Gym workout", when: ahead === addDays(today, 1) ? "Tomorrow" : shortDay(ahead) } };
+      todayWorkout = { ...todayWorkout, next: { name: routine?.name || t("Gym workout"), when: ahead === addDays(today, 1) ? t("Tomorrow") : shortDay(ahead) } };
     }
   }
 
@@ -443,27 +451,27 @@ export function buildDashboard(items: DashboardItems, now: Date): Dashboard {
   const route = newest ? routeInBox(items.latestDetail?.route, 300, 170, 26) : null;
   const latest: Dashboard["latest"] = newest ? {
     activityId: newest.a.id,
-    name: newest.a.name || SPORT_TITLE[newest.a.sport],
+    name: newest.a.name || sportTitle(newest.a.sport),
     when: whenText(newest.at, now),
-    sport: SPORT_TITLE[newest.a.sport] ?? SPORT_TITLE.other,
+    sport: t(SPORT_TITLE[newest.a.sport] ?? SPORT_TITLE.other),
     family: SPORT_FAMILY[newest.a.sport] ?? "Other",
     routePath: route?.path ?? null,
     routeStart: route?.start ?? [0, 0],
     routeEnd: route?.end ?? [0, 0],
-    routeLabel: `Route of ${newest.a.name || SPORT_TITLE[newest.a.sport]}`,
+    routeLabel: t("Route of {name}", { name: newest.a.name || sportTitle(newest.a.sport) }),
     heart: heartOf(heartInBox(items.latestDetail?.streams, 300, 56, 4)),
     stats: latestStats(newest.a),
   } : null;
 
   /* Fitness and load. */
-  const series = fitnessSeries(t?.fitness, totals);
+  const series = fitnessSeries(tb?.fitness, totals);
   const fitNow = series ? series.fitness[series.fitness.length - 1] : 0, fatNow = series ? series.fatigue[series.fatigue.length - 1] : 0;
   const fitness: Dashboard["fitness"] = series ? { series, value: Math.round(fitNow), scale: formScale(fitNow, fatNow) } : null;
   const round = (v: number | undefined) => (v != null && Number.isFinite(v) ? Math.round(v) : null);
   const load: Dashboard["load"] = ratio == null ? null : {
-    status: t?.load?.status, ratio: ratio.toFixed(2),
+    status: tb?.load?.status, ratio: ratio.toFixed(2),
     scale: { segments: LOAD_SEGMENTS, marker: clamp01(ratio / 2), labels: ["0", "0.8", "1.3", "2.0"] },
-    last7: round(t?.load?.acute ?? t?.load?.weekTotal), usual: round(t?.load?.chronic),
+    last7: round(tb?.load?.acute ?? tb?.load?.weekTotal), usual: round(tb?.load?.chronic),
   };
 
   /* Volume, year, mix. */
@@ -474,17 +482,17 @@ export function buildDashboard(items: DashboardItems, now: Date): Dashboard {
   const dayWords = shortDay(today).split(" ").slice(1).join(" ");
 
   /* Thresholds and bests. */
-  const races = (t?.predictions ?? []).filter((p) => p.meters > 0 && p.seconds > 0)
+  const races = (tb?.predictions ?? []).filter((p) => p.meters > 0 && p.seconds > 0)
     .map((p) => ({ name: p.name, seconds: p.seconds, paceSecPerKm: p.seconds / (p.meters / 1000) }));
-  const thresholds: Dashboard["thresholds"] = t?.vo2max == null && t?.thresholdPaceSecPerKm == null && t?.thresholdHr == null && races.length === 0 ? null : {
-    vo2max: t?.vo2max ?? null,
-    scale: t?.vo2max != null ? { segments: VO2_SEGMENTS, marker: clamp01((t.vo2max - 30) / 40), labels: ["30", "40", "50", "60", "70"] } : null,
-    paceSecPerKm: t?.thresholdPaceSecPerKm ?? null,
-    heartRate: t?.thresholdHr ?? null,
+  const thresholds: Dashboard["thresholds"] = tb?.vo2max == null && tb?.thresholdPaceSecPerKm == null && tb?.thresholdHr == null && races.length === 0 ? null : {
+    vo2max: tb?.vo2max ?? null,
+    scale: tb?.vo2max != null ? { segments: VO2_SEGMENTS, marker: clamp01((tb.vo2max - 30) / 40), labels: ["30", "40", "50", "60", "70"] } : null,
+    paceSecPerKm: tb?.thresholdPaceSecPerKm ?? null,
+    heartRate: tb?.thresholdHr ?? null,
     races,
   };
   const newSince = addDays(today, -14);
-  const bests: Dashboard["bests"] = (t?.bests ?? []).filter((b) => b.seconds > 0).map((b) => {
+  const bests: Dashboard["bests"] = (tb?.bests ?? []).filter((b) => b.seconds > 0).map((b) => {
     const date = b.at != null ? dayKey(refToDate(b.at)) : null;
     return { name: b.name, seconds: b.seconds, date, isNew: date != null && date >= newSince && date <= today };
   });
@@ -496,7 +504,7 @@ export function buildDashboard(items: DashboardItems, now: Date): Dashboard {
     .filter((d) => !doneDays.includes(d)).sort((a, b) => a - b);
 
   const nights = slept.map((x) => x.value / 60);
-  const goalMinutes = t?.weeklyGoalMinutes;
+  const goalMinutes = tb?.weeklyGoalMinutes;
 
   return {
     today,
@@ -514,7 +522,9 @@ export function buildDashboard(items: DashboardItems, now: Date): Dashboard {
     year: {
       status: ahead != null ? `${signed(ahead)} km` : undefined,
       km: year.km, thisYear: year.thisYear, lastYear: year.lastYear, lastYearByNowKm: year.lastYearByNowKm,
-      label: `Running distance this year${ahead != null ? " against last year" : ""}: ${thousands(year.km)} km by ${dayWords}${ahead != null ? `, ${thousands(Math.abs(ahead))} km ${ahead < 0 ? "behind" : "ahead"}` : ""}`,
+      label: ahead == null ? t("Running distance this year: {km} km by {day}", { km: thousands(year.km), day: dayWords })
+        : ahead < 0 ? t("Running distance this year against last year: {km} km by {day}, {by} km behind", { km: thousands(year.km), day: dayWords, by: thousands(Math.abs(ahead)) })
+        : t("Running distance this year against last year: {km} km by {day}, {by} km ahead", { km: thousands(year.km), day: dayWords, by: thousands(Math.abs(ahead)) }),
     },
     intensity: { parts: [] },
     sleep: nights.length ? { nights, averageHours: mean(nights) } : null,

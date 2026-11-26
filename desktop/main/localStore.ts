@@ -131,17 +131,29 @@ export class LocalStore {
    * writing over a change made meanwhile), in batches the push takes. For the app's own services, which write as
    * a phone would: the watch in Local mode.
    */
-  write(changes: readonly Change[]): { written: number; conflicts: number } {
-    let written = 0, conflicts = 0;
+  write(changes: readonly Change[]): { written: number; conflicts: number; skipped: number } {
+    let written = 0, conflicts = 0, skipped = 0;
+    // Batches of at most 100 changes and under the 1 MB a push takes (activity details run to tens of KB each). An
+    // item over the 256 KB a push takes is left out alone, rather than refusing everything sent with it.
     if (this.rules) changes = this.rules.prepare(changes);
-    for (let at = 0; at < changes.length; at += 100) {
-      const answer = this.push(JSON.stringify({ changes: changes.slice(at, at + 100) }));
+    const batches: string[][] = [];
+    let batch: string[] = [], size = 0;
+    for (const change of changes) {
+      if (change.body && JSON.stringify(change.body).length > MAX_ITEM) { skipped++; continue; }
+      const text = JSON.stringify(change);
+      if (batch.length && (batch.length >= 100 || size + text.length + 1 > MAX_REQUEST - 64)) { batches.push(batch); batch = []; size = 0; }
+      batch.push(text);
+      size += text.length + 1;
+    }
+    if (batch.length) batches.push(batch);
+    for (const texts of batches) {
+      const answer = this.push(`{"changes":[${texts.join(",")}]}`);
       if (answer.status !== 200) throw new Error(`The store refused a write (${answer.status}).`);
       const rows = (this.lastPush ?? []) as { changed: boolean; conflict?: boolean }[];
       written += rows.filter((r) => r.changed).length;
       conflicts += rows.filter((r) => r.conflict).length;
     }
-    return { written, conflicts };
+    return { written, conflicts, skipped };
   }
 
   /** The rows of the last push, for `write` (a Response's body can only be read asynchronously). */

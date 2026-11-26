@@ -3,6 +3,7 @@
 import type { CoachFile } from "@/lib/coach/files";
 import { CoachModelError } from "@/server/coach/anthropic";
 import { answerOnce, hostAI } from "./host";
+import { t } from "@/lib/i18n";
 
 export class AIError extends Error {
   constructor(public readonly code: "bad_key" | "rate_limited" | "unreachable" | "empty", message: string) {
@@ -26,7 +27,7 @@ const asAIError = (error: unknown): AIError => {
     const code = error.code === "bad_key" ? "bad_key" : error.code === "rate_limited" ? "rate_limited" : "unreachable";
     return new AIError(code, error.message);
   }
-  return new AIError("unreachable", "The AI couldn't be reached.");
+  return new AIError("unreachable", t("The AI couldn't be reached."));
 };
 
 export async function aiWriter(): Promise<Writer | null> {

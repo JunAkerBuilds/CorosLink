@@ -3,6 +3,7 @@
 // session, desktop/main/media/youtube.ts) over a slot this page keeps for it, and the page says where that slot is.
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, Field } from "@/components/ui";
+import { t } from "@/lib/i18n";
 import {
   combineYouTube, downloadYouTube, MediaProblem, openYouTubeBrowser, placeYouTubeBrowser, readDownloads,
   addressFor, readYouTube, resetYouTubeBrowser, steerYouTubeBrowser, takeFromYouTubeBrowser, youTubeListing,
@@ -11,7 +12,7 @@ import {
 import { clock } from "../mediaRows";
 import { Combined, DownloadsCard, JobState, NeedsYtDlp, useDownloads, useTools } from "./MediaSources";
 
-const said = (e: unknown) => (e instanceof MediaProblem || e instanceof Error ? e.message : "That didn't work.");
+const said = (e: unknown) => (e instanceof MediaProblem || e instanceof Error ? e.message : t("That didn't work."));
 const ROW = 44, VIEW = 12;
 /** Something drawn over the page (⌘K, a dialog): YouTube sits on top of the page, so it steps aside for these. */
 const OVERLAY = 'dialog[open], [role="dialog"], [aria-modal="true"]';
@@ -141,30 +142,31 @@ export default function MediaYouTube() {
   const video = browser?.kind === "video" ? videoOf(browser.url) : null;
   const shown = video && listing?.kind === "video" && listing.items[0]?.id === video ? listing.items[0] : null;
   const job = video ? [...jobs].reverse().find((j) => j.origin === `yt:${video}`) : undefined;
-  const videoState = shown?.inLibrary || job?.state === "done" ? "In library"
-    : job?.state === "working" ? (job.progress != null ? `Downloading ${Math.round(job.progress * 100)}%` : "Downloading…")
-    : job?.state === "waiting" ? "Waiting" : null;
+  const inLibrary = !!shown?.inLibrary || job?.state === "done";
+  const videoState = inLibrary ? t("In library")
+    : job?.state === "working" ? (job.progress != null ? t("Downloading {pct}%", { pct: Math.round(job.progress * 100) }) : t("Downloading…"))
+    : job?.state === "waiting" ? t("Waiting") : null;
 
   return (<>
     <Card pad className="yt-browser" aria-label="YouTube">
       <span className="yt-nav">
-        <button type="button" className="yt-icon" aria-label="Back" disabled={!browser?.canBack} onClick={() => steer(() => steerYouTubeBrowser("back"))}>‹</button>
-        <button type="button" className="yt-icon" aria-label="Forward" disabled={!browser?.canForward} onClick={() => steer(() => steerYouTubeBrowser("forward"))}>›</button>
-        <button type="button" className="yt-icon" aria-label="Reload" disabled={!browser} onClick={() => steer(() => steerYouTubeBrowser("reload"))}>↻</button>
+        <button type="button" className="yt-icon" aria-label={t("Back")} disabled={!browser?.canBack} onClick={() => steer(() => steerYouTubeBrowser("back"))}>‹</button>
+        <button type="button" className="yt-icon" aria-label={t("Forward")} disabled={!browser?.canForward} onClick={() => steer(() => steerYouTubeBrowser("forward"))}>›</button>
+        <button type="button" className="yt-icon" aria-label={t("Reload")} disabled={!browser} onClick={() => steer(() => steerYouTubeBrowser("reload"))}>↻</button>
       </span>
       <form className="yt-search" onSubmit={(e) => { e.preventDefault(); go(query); }}>
-        <Field type="search" aria-label="Search YouTube or paste a link" placeholder="Search YouTube or paste a link" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <Field type="search" aria-label={t("Search YouTube or paste a link")} placeholder={t("Search YouTube or paste a link")} value={query} onChange={(e) => setQuery(e.target.value)} />
       </form>
       <span className="actions">
         {browser?.kind === "video" ? (
-          videoState ? <span className="md-state" data-on={videoState === "In library" || undefined}>{videoState === "In library" ? <i data-on="true" /> : null}{videoState}</span>
-            : <Button variant="primary" disabled={!!busy || !canDownload} onClick={take}>{busy === "take" ? "Reading…" : "Download MP3"}</Button>
+          videoState ? <span className="md-state" data-on={inLibrary || undefined}>{inLibrary ? <i data-on="true" /> : null}{videoState}</span>
+            : <Button variant="primary" disabled={!!busy || !canDownload} onClick={take}>{busy === "take" ? t("Reading…") : t("Download MP3")}</Button>
         ) : browser?.kind === "playlist" ? (
-          <Button variant="primary" disabled={!!busy || !canDownload} onClick={take}>{busy === "take" ? "Reading…" : "Download playlist"}</Button>
+          <Button variant="primary" disabled={!!busy || !canDownload} onClick={take}>{busy === "take" ? t("Reading…") : t("Download playlist")}</Button>
         ) : null}
-        <Button variant="plain" disabled={!browser} onClick={() => steer(resetYouTubeBrowser)} title="Signs out of YouTube here and clears its cookies">Reset session</Button>
+        <Button variant="plain" disabled={!browser} onClick={() => steer(resetYouTubeBrowser)} title={t("Signs out of YouTube here and clears its cookies")}>{t("Reset session")}</Button>
       </span>
-      {browser ? <div ref={slot} className="yt-view" aria-label="YouTube page" /> : <div className="yt-view" aria-busy="true" />}
+      {browser ? <div ref={slot} className="yt-view" aria-label={t("YouTube page")} /> : <div className="yt-view" aria-busy="true" />}
     </Card>
 
     {problem ? <p className="notice" role="alert">{problem}</p> : null}
@@ -175,7 +177,7 @@ export default function MediaYouTube() {
 
     <DownloadsCard jobs={jobs} setJobs={setJobs} />
 
-    <p className="md-foot muted">Saved as MP3s in your Library. Only download what you have the right to use.</p>
+    <p className="md-foot muted">{t("Saved as MP3s in your Library. Only download what you have the right to use.")}</p>
   </>);
 }
 
@@ -188,13 +190,13 @@ function ListingCard({ listing, canDownload, onBack, onDownload, onCombine }: {
     <Card pad className="ms-main yt-listing" aria-label={listing.title}>
       <div className="ms-main-head">
         <div>
-          <button type="button" className="md-link" onClick={onBack}>Back</button>
-          <h3>{listing.kind === "search" ? `“${listing.title}”` : listing.title}</h3>
-          <span className="muted">{listing.items.length} {listing.items.length === 1 ? "video" : "videos"}{here ? ` · ${here} in your library` : ""}</span>
+          <button type="button" className="md-link" onClick={onBack}>{t("Back")}</button>
+          <h3>{listing.kind === "search" ? t("“{query}”", { query: listing.title }) : listing.title}</h3>
+          <span className="muted">{listing.items.length === 1 ? t("1 video") : t("{n} videos", { n: listing.items.length })}{here ? ` · ${t("{n} in your library", { n: here })}` : ""}</span>
         </div>
         <span className="actions">
           {listing.combined ? <Combined state={listing.combined} canDownload={canDownload && listing.items.length > 0} onCombine={onCombine} /> : null}
-          {listing.kind === "playlist" && missing.length ? <Button variant="primary" disabled={!canDownload} onClick={() => onDownload()}>Download {missing.length === listing.items.length ? "all" : missing.length}</Button> : null}
+          {listing.kind === "playlist" && missing.length ? <Button variant="primary" disabled={!canDownload} onClick={() => onDownload()}>{missing.length === listing.items.length ? t("Download all") : t("Download {n}", { n: missing.length })}</Button> : null}
         </span>
       </div>
       <ItemList items={listing.items} canDownload={canDownload} onDownload={(id) => onDownload([id])} />
@@ -205,7 +207,7 @@ function ListingCard({ listing, canDownload, onBack, onDownload, onCombine }: {
 
 function ItemList({ items, canDownload, onDownload }: { items: YouTubeItem[]; canDownload: boolean; onDownload: (id: string) => void }) {
   const [top, setTop] = useState(0);
-  if (!items.length) return <p className="muted">Nothing found</p>;
+  if (!items.length) return <p className="muted">{t("Nothing found")}</p>;
   const first = Math.max(0, Math.floor(top / ROW) - 4), last = Math.min(items.length, first + VIEW + 8);
   return (
     <div className="md-scroll yt-scroll" style={{ height: Math.min(items.length, VIEW) * ROW }} onScroll={(e) => setTop(e.currentTarget.scrollTop)}>

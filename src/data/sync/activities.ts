@@ -6,6 +6,7 @@ import { formatDistance, paceUnit, scalesFor } from "@/lib/activities";
 import { maxHrFor, muscleWork, relativeEffort, weekShare } from "@/lib/activityDetail";
 import { bestEfforts, timesFromDistance } from "@/lib/bestEfforts";
 import { clock } from "@/lib/format";
+import { msg, t } from "@/lib/i18n";
 import { projectRoute, SPORT_TITLE } from "./geo";
 import gymMuscles from "./gymMuscles.json";
 import {
@@ -45,7 +46,7 @@ export function activityFromNative(id: string, n: NativeActivity): Activity | nu
   const row: Activity = {
     id,
     start: localStart(n.start),
-    name: typeof n.name === "string" && n.name.trim() ? n.name : title,
+    name: typeof n.name === "string" && n.name.trim() ? n.name : t(title),
     sport,
     distanceM: positive(n.distanceMeters),
     durationS: positive(n.durationSeconds) ?? 0,
@@ -173,20 +174,20 @@ export interface DetailContext {
 }
 
 export function thresholdsFrom(view: ViewTrainingBody | undefined): Thresholds {
-  const t: Thresholds = {};
-  if (!view) return t;
-  if (positive(view.thresholdHr) != null) t.hr = view.thresholdHr;
-  if (positive(view.maxHr) != null) t.maxHr = view.maxHr;
-  if (positive(view.thresholdPaceSecPerKm) != null) t.paceSPerKm = view.thresholdPaceSecPerKm;
-  if (positive(view.ftp) != null) t.ftp = view.ftp;
-  return t;
+  const th: Thresholds = {};
+  if (!view) return th;
+  if (positive(view.thresholdHr) != null) th.hr = view.thresholdHr;
+  if (positive(view.maxHr) != null) th.maxHr = view.maxHr;
+  if (positive(view.thresholdPaceSecPerKm) != null) th.paceSPerKm = view.thresholdPaceSecPerKm;
+  if (positive(view.ftp) != null) th.ftp = view.ftp;
+  return th;
 }
 
 /** The phone's personal bests that were set in this activity. */
 export function recordsFor(id: string, view: ViewTrainingBody | undefined): RecordRow[] {
   return (view?.bests ?? [])
     .filter((b) => b != null && b.activityId === id && finite(b.seconds) && finite(b.meters) && b.meters > 0)
-    .map((b) => ({ what: b.name, rank: "Personal best", value: clock(b.seconds, 2), pace: `${clock(Math.round((b.seconds / b.meters) * 1000))} /km`, best: true }));
+    .map((b) => ({ what: b.name, rank: t("Personal best"), value: clock(b.seconds, 2), pace: `${clock(Math.round((b.seconds / b.meters) * 1000))} /km`, best: true }));
 }
 
 /**
@@ -196,17 +197,17 @@ export function recordsFor(id: string, view: ViewTrainingBody | undefined): Reco
 export function effortsFor(activity: Activity, body: ActivityDetailBody | undefined, streams: Streams | null, view: ViewTrainingBody | undefined): RecordRow[] {
   const raw = body?.streams;
   if (activity.sport !== "Run" || !raw || !Array.isArray(raw.x) || raw.x.length < 2) return [];
-  let t: number[] | null, d: number[] | null;
-  if (raw.axis === "time") { t = raw.x; d = streams?.distance ?? null; }
-  else { d = raw.x; t = Array.isArray(raw.speedMps) ? timesFromDistance(raw.x, raw.speedMps) : null; }
-  if (!t || !d) return [];
+  let tm: number[] | null, d: number[] | null;
+  if (raw.axis === "time") { tm = raw.x; d = streams?.distance ?? null; }
+  else { d = raw.x; tm = Array.isArray(raw.speedMps) ? timesFromDistance(raw.x, raw.speedMps) : null; }
+  if (!tm || !d) return [];
   const bests = (view?.bests ?? []).filter((b) => b != null && finite(b.seconds) && finite(b.meters) && b.meters > 0);
-  return bestEfforts(t, d).map((e) => {
+  return bestEfforts(tm, d).map((e) => {
     const pb = bests.find((b) => Math.abs(b.meters - e.metres) <= e.metres * 0.01);
     const mine = pb?.activityId === activity.id;
     const seconds = mine && pb ? pb.seconds : e.seconds;
-    const rank = mine ? "Personal best" : pb ? (seconds <= pb.seconds ? "Faster than your best" : `${clock(seconds - pb.seconds, 2)} off your best`) : "";
-    return { what: e.name, rank, value: clock(seconds, 2), pace: `${clock(Math.round((seconds / e.metres) * 1000))} /km`, ...(mine ? { best: true } : {}) };
+    const rank = mine ? t("Personal best") : pb ? (seconds <= pb.seconds ? t("Faster than your best") : t("{time} off your best", { time: clock(seconds - pb.seconds, 2) })) : "";
+    return { what: t(e.name), rank, value: clock(seconds, 2), pace: `${clock(Math.round((seconds / e.metres) * 1000))} /km`, ...(mine ? { best: true } : {}) };
   });
 }
 
@@ -226,8 +227,12 @@ export function matchGymWorkout(activity: NativeActivity, workouts: readonly Nat
   return best;
 }
 
-const MUSCLE_TITLE: Record<string, string> = { upperBack: "Upper back", lowerBack: "Lower back" };
-const muscleTitle = (key: string) => MUSCLE_TITLE[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
+const MUSCLE_TITLE: Record<string, string> = {
+  abs: msg("Abs"), abductors: msg("Abductors"), adductors: msg("Adductors"), biceps: msg("Biceps"), calves: msg("Calves"), chest: msg("Chest"),
+  forearms: msg("Forearms"), glutes: msg("Glutes"), hamstrings: msg("Hamstrings"), lats: msg("Lats"), lowerBack: msg("Lower back"),
+  obliques: msg("Obliques"), quads: msg("Quads"), shoulders: msg("Shoulders"), traps: msg("Traps"), triceps: msg("Triceps"), upperBack: msg("Upper back"),
+};
+const muscleTitle = (key: string) => (MUSCLE_TITLE[key] ? t(MUSCLE_TITLE[key]) : key.charAt(0).toUpperCase() + key.slice(1));
 type MuscleEntry = { m: [string, number][]; k?: string };
 const EXERCISE_MUSCLES = gymMuscles.exercises as unknown as Record<string, MuscleEntry | undefined>;
 
@@ -302,6 +307,6 @@ function recordingFromBody(activity: Activity, body: ActivityDetailBody | undefi
     route,
     zones: zonesFrom(body.zones),
   };
-  if (route && activity.distanceM != null) detail.labels = { route: `Route, ${formatDistance(activity)}` };
+  if (route && activity.distanceM != null) detail.labels = { route: t("Route, {distance}", { distance: formatDistance(activity) }) };
   return detail;
 }

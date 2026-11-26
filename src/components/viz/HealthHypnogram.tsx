@@ -3,8 +3,9 @@ import { useMemo, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 import type { SleepNight, SleepStage } from "@/data/health";
 import { clockOfDay, durationShort, stageAt, stageSpans } from "@/lib/health";
+import { msg, t } from "@/lib/i18n";
 
-export const STAGE_NAME: Record<SleepStage, string> = { awake: "Awake", rem: "REM", light: "Light", deep: "Deep" };
+export const STAGE_NAME: Record<SleepStage, string> = { awake: msg("Awake"), rem: "REM", light: msg("Light"), deep: msg("Deep") };
 /** Stage colours on the night sky (the panel is dark in both themes). */
 export const STAGE_COLOR: Record<SleepStage, string> = {
   awake: "var(--h-orange)", rem: "var(--h-cyan)", light: "var(--stage-light)", deep: "var(--stage-deep)",
@@ -15,8 +16,12 @@ const H = 136;
 
 function describe(night: SleepNight): string {
   const count = (stage: SleepStage) => night.segments.filter((s) => s.stage === stage).length;
-  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-  return `Sleep stages through the night: ${plural(count("deep"), "deep sleep block", "deep sleep blocks")}, ${plural(count("rem"), "REM period", "REM periods")}, ${plural(count("awake"), "wake-up", "wake-ups")}`;
+  const deep = count("deep"), rem = count("rem"), wake = count("awake");
+  return t("Sleep stages through the night: {deep}, {rem}, {wake}", {
+    deep: deep === 1 ? t("1 deep sleep block") : t("{n} deep sleep blocks", { n: deep }),
+    rem: rem === 1 ? t("1 REM period") : t("{n} REM periods", { n: rem }),
+    wake: wake === 1 ? t("1 wake-up") : t("{n} wake-ups", { n: wake }),
+  });
 }
 
 /** The night as four rows (awake, REM, light, deep) with a block for every stretch; hover or arrow keys read one out. */
@@ -43,7 +48,7 @@ export function HealthHypnogram({ night }: { night: SleepNight }) {
 
   const hit = picked != null ? spans[picked] : null;
   const readout = hit
-    ? `${STAGE_NAME[hit.stage]} · ${clockOfDay(startMinute + hit.from)} – ${clockOfDay(startMinute + hit.to)} · ${durationShort(hit.to - hit.from)}`
+    ? `${t(STAGE_NAME[hit.stage])} · ${clockOfDay(startMinute + hit.from)} – ${clockOfDay(startMinute + hit.to)} · ${durationShort(hit.to - hit.from)}`
     : null;
 
   const point = (e: PointerEvent<HTMLDivElement>) => {
@@ -70,7 +75,7 @@ export function HealthHypnogram({ night }: { night: SleepNight }) {
     <>
       <div style={{ display: "flex", gap: 12 }}>
         <div aria-hidden="true" style={{ flex: "none", width: 44, display: "flex", flexDirection: "column", justifyContent: "space-around", fontSize: 12, color: "var(--sky-text)" }}>
-          {ROWS.map((s) => <span key={s}>{STAGE_NAME[s]}</span>)}
+          {ROWS.map((s) => <span key={s}>{t(STAGE_NAME[s])}</span>)}
         </div>
         <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
           <svg role="img" aria-label={describe(night)} width="100%" height={H} viewBox={`0 0 ${w} ${H}`} preserveAspectRatio="none" style={{ display: "block" }}>
@@ -88,16 +93,16 @@ export function HealthHypnogram({ night }: { night: SleepNight }) {
             </div>
           ) : null}
           <div
-            className="chart-hit" role="slider" tabIndex={0} aria-label="Sleep stage" aria-orientation="horizontal"
+            className="chart-hit" role="slider" tabIndex={0} aria-label={t("Sleep stage")} aria-orientation="horizontal"
             aria-valuemin={0} aria-valuemax={Math.max(0, spans.length - 1)} aria-valuenow={picked ?? 0}
-            aria-valuetext={readout ?? "Use the arrow keys to step through the night"}
+            aria-valuetext={readout ?? t("Use the arrow keys to step through the night")}
             onPointerMove={point} onPointerDown={point} onPointerLeave={() => setPicked(null)} onBlur={() => setPicked(null)} onKeyDown={key}
           />
         </div>
       </div>
       <div aria-hidden="true" style={{ position: "relative", height: 16, marginLeft: 56, fontSize: 12, color: "var(--sky-text)" }}>
-        {ticks.map((t) => (
-          <span key={t.text} style={{ position: "absolute", left: `${(t.at * 100).toFixed(2)}%`, transform: t.at < 0.04 ? undefined : "translateX(-50%)" }}>{t.text}</span>
+        {ticks.map((tick) => (
+          <span key={tick.text} style={{ position: "absolute", left: `${(tick.at * 100).toFixed(2)}%`, transform: tick.at < 0.04 ? undefined : "translateX(-50%)" }}>{tick.text}</span>
         ))}
         <span style={{ position: "absolute", right: 0 }}>{clockOfDay(startMinute + total)}</span>
       </div>

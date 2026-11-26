@@ -11,6 +11,7 @@ import { agentModel, type AgentAsk, type AgentDone } from "./agent";
 import { BRIDGE_NAME } from "./bridge";
 import { findProgram, programEnv, runProgram } from "./cli";
 import type { AccountProvider, EffortLevels } from "./service";
+import { t } from "@/lib/i18n";
 
 /** Anything that would point Claude Code away from the athlete's subscription. */
 const NOT_SUBSCRIPTION = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_USE_ANTHROPIC_AWS"];
@@ -44,9 +45,9 @@ export function claudeInput(ask: Pick<AgentAsk, "prompt" | "files">): string {
 }
 
 function failure(text: string): CoachModelError {
-  if (/rate limit|usage limit|limit reached|out of (extra )?usage/i.test(text)) return new CoachModelError("rate_limited", "Your Claude plan has reached its usage limit for now.");
-  if (/log ?in|auth|credential|401/i.test(text)) return new CoachModelError("bad_key", "Claude Code isn't signed in. Sign in on the AI page.");
-  return new CoachModelError("overloaded", `Claude Code couldn't answer${text ? `: ${text.slice(0, 200)}` : "."}`);
+  if (/rate limit|usage limit|limit reached|out of (extra )?usage/i.test(text)) return new CoachModelError("rate_limited", t("Your Claude plan has reached its usage limit for now."));
+  if (/log ?in|auth|credential|401/i.test(text)) return new CoachModelError("bad_key", t("Claude Code isn't signed in. Sign in on the AI page."));
+  return new CoachModelError("overloaded", text ? t("Claude Code couldn't answer: {reason}", { reason: text.slice(0, 200) }) : t("Claude Code couldn't answer."));
 }
 
 function run(program: string, workspace: string, model: string, ask: AgentAsk, effort?: string): Promise<AgentDone> {
@@ -62,8 +63,8 @@ function run(program: string, workspace: string, model: string, ask: AgentAsk, e
       if (child.exitCode === null) child.kill();
       if (error) reject(error); else resolve(done!);
     };
-    const stop = () => finish(new CoachModelError("unreachable", "Stopped."));
-    const awake = () => { clearTimeout(idle); idle = setTimeout(() => finish(new CoachModelError("unreachable", "Claude Code stopped answering.")), IDLE_MS); };
+    const stop = () => finish(new CoachModelError("unreachable", t("Stopped.")));
+    const awake = () => { clearTimeout(idle); idle = setTimeout(() => finish(new CoachModelError("unreachable", t("Claude Code stopped answering."))), IDLE_MS); };
     awake();
     ask.signal.addEventListener("abort", stop, { once: true });
     const line = (raw: string) => {
@@ -90,7 +91,7 @@ function run(program: string, workspace: string, model: string, ask: AgentAsk, e
       lines.forEach(line);
     });
     child.stderr.on("data", (d: Buffer) => { stderr = (stderr + d.toString("utf8")).slice(-4000); });
-    child.on("error", () => finish(new CoachModelError("unreachable", "Claude Code couldn't be started.")));
+    child.on("error", () => finish(new CoachModelError("unreachable", t("Claude Code couldn't be started."))));
     child.on("close", () => { line(buffer); finish(failure(stderr.trim())); });
     child.stdin.end(claudeInput(ask));
   });
@@ -102,25 +103,25 @@ export class ClaudeCodeAccount implements AccountProvider {
 
   private program(): string {
     const found = findProgram("claude");
-    if (!found) throw new CoachModelError("unreachable", "Install Claude Code first: claude.com/code");
+    if (!found) throw new CoachModelError("unreachable", t("Install Claude Code first: claude.com/code"));
     return found;
   }
 
   async status() {
     const program = findProgram("claude");
-    if (!program) return { ready: false, problem: "Install Claude Code first: claude.com/code" };
+    if (!program) return { ready: false, problem: t("Install Claude Code first: claude.com/code") };
     const out = await runProgram(program, ["auth", "status"], { env: env() });
     let s: { loggedIn?: boolean; email?: string; authMethod?: string; subscriptionType?: string } = {};
     try { s = JSON.parse(out?.stdout ?? "{}"); } catch { /* not signed in */ }
     // Only a Claude account counts: an API key would be billed separately, and that is the Anthropic row's job.
     const ready = !!s.loggedIn && (s.authMethod === "claude.ai" || !!s.subscriptionType);
-    return ready ? { ready, program, ...(s.email ? { account: s.email } : {}) } : { ready: false, program, problem: "Not signed in to Claude Code." };
+    return ready ? { ready, program, ...(s.email ? { account: s.email } : {}) } : { ready: false, program, problem: t("Not signed in to Claude Code.") };
   }
 
   /** Claude Code's own sign-in, in the browser. Resolves when it is done. */
   async signIn(): Promise<void> {
     const out = await runProgram(this.program(), ["auth", "login"], { env: env(), timeoutMs: 10 * 60_000 });
-    if (!(await this.status()).ready) throw new CoachModelError("bad_key", out ? "Claude Code didn't sign in." : "Sign-in took too long.");
+    if (!(await this.status()).ready) throw new CoachModelError("bad_key", out ? t("Claude Code didn't sign in.") : t("Sign-in took too long."));
   }
 
   /** Signing out of Claude Code would sign every app out; C-LINK just stops using it. */

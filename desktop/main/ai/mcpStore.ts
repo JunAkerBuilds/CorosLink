@@ -8,6 +8,7 @@ import path from "node:path";
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { uniqueSlug } from "./mcpNames";
 import type { AIVault } from "./vault";
+import { t } from "@/lib/i18n";
 
 export type McpTransport = "stdio" | "http";
 export type McpAuth = "none" | "bearer" | "oauth";
@@ -69,11 +70,11 @@ const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is
 
 function pairs(raw: unknown, valid: RegExp, what: string): Record<string, string> {
   if (raw === undefined || raw === null) return {};
-  if (typeof raw !== "object" || Array.isArray(raw)) throw new McpInputError(`${what} must be name and value pairs.`);
+  if (typeof raw !== "object" || Array.isArray(raw)) throw new McpInputError(what === "Env" ? t("Env must be name and value pairs.") : t("Header must be name and value pairs."));
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (!valid.test(k)) throw new McpInputError(`“${k.slice(0, 40)}” isn't a valid ${what.toLowerCase()} name.`);
-    if (typeof v !== "string" || v.length > 8000) throw new McpInputError(`${k}'s value is too long.`);
+    if (!valid.test(k)) throw new McpInputError(what === "Env" ? t("“{name}” isn't a valid env name.", { name: k.slice(0, 40) }) : t("“{name}” isn't a valid header name.", { name: k.slice(0, 40) }));
+    if (typeof v !== "string" || v.length > 8000) throw new McpInputError(t("{name}'s value is too long.", { name: k }));
     out[k] = v;
   }
   return out;
@@ -83,26 +84,26 @@ function pairs(raw: unknown, valid: RegExp, what: string): Record<string, string
 export function checkInput(raw: unknown): McpServerInput {
   const b = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
   const name = typeof b.name === "string" ? b.name.trim().slice(0, 60) : "";
-  if (!name) throw new McpInputError("Give it a name.");
+  if (!name) throw new McpInputError(t("Give it a name."));
   const transport = b.transport === "http" ? "http" : b.transport === "stdio" ? "stdio" : null;
-  if (!transport) throw new McpInputError("Pick a command or a URL.");
+  if (!transport) throw new McpInputError(t("Pick a command or a URL."));
   if (transport === "stdio") {
     const command = typeof b.command === "string" ? b.command.trim() : "";
-    if (!command || command.length > 1000) throw new McpInputError("Type the command that starts the server.");
+    if (!command || command.length > 1000) throw new McpInputError(t("Type the command that starts the server."));
     const args = strings(b.args).slice(0, 64);
-    if (args.some((a) => a.length > 2000)) throw new McpInputError("An argument is too long.");
+    if (args.some((a) => a.length > 2000)) throw new McpInputError(t("An argument is too long."));
     return { name, transport, command, args, env: pairs(b.env, NAME, "Env") };
   }
   let url: URL;
-  try { url = new URL(String(b.url ?? "").trim()); } catch { throw new McpInputError("That isn't a URL."); }
-  if (url.protocol !== "https:" && url.protocol !== "http:") throw new McpInputError("Use an http or https URL.");
-  if (url.username || url.password) throw new McpInputError("Put the password in a header or token, not the URL.");
+  try { url = new URL(String(b.url ?? "").trim()); } catch { throw new McpInputError(t("That isn't a URL.")); }
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new McpInputError(t("Use an http or https URL."));
+  if (url.username || url.password) throw new McpInputError(t("Put the password in a header or token, not the URL."));
   const auth: McpAuth = b.auth === "oauth" ? "oauth" : b.auth === "bearer" ? "bearer" : "none";
   const bearer = typeof b.bearer === "string" ? b.bearer.trim() : "";
-  if (auth === "bearer" && !/^[\x21-\x7e]{1,4000}$/.test(bearer)) throw new McpInputError("Paste the token.");
+  if (auth === "bearer" && !/^[\x21-\x7e]{1,4000}$/.test(bearer)) throw new McpInputError(t("Paste the token."));
   const scope = typeof b.scope === "string" && b.scope.trim() ? b.scope.trim().slice(0, 400) : undefined;
   const headers = pairs(b.headers, HEADER, "Header");
-  if (Object.keys(headers).some((h) => h.toLowerCase() === "authorization") && auth !== "none") throw new McpInputError("Use either a token or an Authorization header.");
+  if (Object.keys(headers).some((h) => h.toLowerCase() === "authorization") && auth !== "none") throw new McpInputError(t("Use either a token or an Authorization header."));
   return { name, transport, url: url.href, auth, scope, headers, ...(auth === "bearer" ? { bearer } : {}) };
 }
 
@@ -130,7 +131,7 @@ export class McpStore {
   }
 
   async add(input: McpServerInput): Promise<McpServerConfig> {
-    if (this.servers.length >= 20) throw new McpInputError("That's 20 servers already. Remove one first.");
+    if (this.servers.length >= 20) throw new McpInputError(t("That's 20 servers already. Remove one first."));
     const id = randomBytes(8).toString("hex");
     const server: McpServerConfig = {
       id, slug: uniqueSlug(input.name, this.servers.map((s) => s.slug)), name: input.name, enabled: true, transport: input.transport,

@@ -1,7 +1,8 @@
+import { msg, t } from "@/lib/i18n";
 import { fromSample, fromSynced, NotWiredError, type Loaded } from "./core";
 import { hevyForStrength } from "./hevy";
 import { mergeGymLogs } from "@/lib/hevy";
-import { SAMPLE_STRENGTH } from "./sample/strength";
+import { sampleStrength } from "./sample/strength";
 import { syncView } from "./sync";
 import { strengthFromItems } from "./sync/strength";
 
@@ -69,7 +70,7 @@ export interface Strength {
 
 export async function loadStrength(): Promise<Loaded<Strength>> {
   const view = await syncView();
-  if (!view) return fromSample(SAMPLE_STRENGTH);
+  if (!view) return fromSample(sampleStrength());
   const phone = view.all("gym.workout").map((i) => i.body);
   const strengthView = view.get("view.strength", "me");
   // Hevy workouts this browser has read join the phone's gym log, minus the ones the phone already holds.
@@ -82,14 +83,14 @@ export async function loadStrength(): Promise<Loaded<Strength>> {
 export type StrengthAction = "calendar" | "edit" | "hevy" | "routines" | "log";
 
 const NOT_WIRED: Record<StrengthAction, string> = {
-  calendar: "Adding the suggested workout to the calendar isn't connected on the web yet.",
-  edit: "Editing the suggested workout isn't connected on the web yet.",
-  hevy: "Sending a workout to Hevy isn't connected on the web: Hevy is read only here. Nothing was sent.",
-  routines: "Routines aren't connected on the web yet.",
-  log: "Logging a past gym workout isn't connected on the web yet.",
+  calendar: msg("Adding the suggested workout to the calendar isn't connected on the web yet."),
+  edit: msg("Editing the suggested workout isn't connected on the web yet."),
+  hevy: msg("Sending a workout to Hevy isn't connected on the web: Hevy is read only here. Nothing was sent."),
+  routines: msg("Routines aren't connected on the web yet."),
+  log: msg("Logging a past gym workout isn't connected on the web yet."),
 };
 
 /** The gym logger, routines and Hevy live in the phone app for now: nothing on this page can save them. */
 export async function strengthAction(action: StrengthAction): Promise<never> {
-  throw new NotWiredError(`strength.${action}`, NOT_WIRED[action]);
+  throw new NotWiredError(`strength.${action}`, t(NOT_WIRED[action]));
 }

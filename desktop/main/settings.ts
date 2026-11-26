@@ -9,13 +9,14 @@ import { BackupProblem, isSealed, packBackup, unpackBackup } from "./backup";
 import { guardFetch, savedMode, type Blocked, type DataMode } from "./dataMode";
 import type { ErrorLog } from "./errorLog";
 import type { LocalStore } from "./localStore";
+import { isLang, msg, t, type Lang } from "@/lib/i18n";
 
 /**
  * `intro`: the first-run intro (desktop/renderer/pages/Intro.tsx). "pending" on the very first launch (no settings
  * file yet, as when CorosLink's users first open C-LINK) until the athlete leaves it for the app; a settings file
  * from before the intro existed counts as "seen".
  */
-interface Saved { dataMode: DataMode; blocked: Blocked[]; intro: "pending" | "seen" }
+interface Saved { dataMode: DataMode; blocked: Blocked[]; intro: "pending" | "seen"; language: Lang }
 
 /** What the main process lends the settings: dialogs and the file manager come from Electron. */
 export interface SettingsHost {
@@ -33,6 +34,8 @@ export interface SettingsHost {
   lastPhoneSync: () => string | null;
   /** Local mode turned on or off: the watch links or lets go (watch/service.ts). */
   modeChanged: (mode: DataMode) => void;
+  /** The page's language changed (or was first told): the menu and the main process's own lines follow it. */
+  languageChanged: (lang: Lang) => void;
 }
 
 /** What the guard stops, for the Electron sessions too (main.ts). */
@@ -42,15 +45,29 @@ const MAX_BLOCKED = 100;
 const PLATFORM: Record<string, string> = { darwin: "macOS", win32: "Windows", linux: "Linux" };
 const ARCH: Record<string, string> = { arm64: "Apple silicon", x64: "Intel" };
 
+/**
+ * The system as people know it: "macOS · Apple silicon", "Windows 11 (build 26300)", "Linux 6.8.0". Windows 11 still
+ * reports itself as 10.0 (`os.release()` "10.0.26300"); build 22000 and up is Windows 11.
+ */
+export function platformLabel(platform: string, arch: string, osRelease: string): string {
+  if (platform === "darwin") return `macOS · ${ARCH[arch] ?? arch}`;
+  if (platform === "win32") {
+    const build = Number(osRelease.split(".")[2]);
+    if (osRelease.startsWith("10.0.") && Number.isFinite(build)) return `Windows ${build >= 22_000 ? 11 : 10} (build ${build})`;
+    return `Windows ${osRelease}`;
+  }
+  return `${PLATFORM[platform] ?? platform} ${osRelease}`;
+}
+
 /** Every place the app keeps something, as Settings → Storage lists them. Paths are inside the data folder. */
 const PLACES = [
-  { id: "data", label: "Your data", paths: ["clink.db", "clink.db-wal", "clink.db-shm"] },
-  { id: "phones", label: "Phone pairing", paths: ["phones.db", "phones.db-wal", "phones.db-shm"] },
-  { id: "sample", label: "Sample data", paths: ["sample.db", "sample.db-wal", "sample.db-shm", "sample.json"] },
-  { id: "media", label: "Music library", paths: ["media"] },
-  { id: "ai", label: "AI helpers", paths: ["antigravity", "claude-coach", "gemini-coach", "opencode-coach", "ai.json", "ai-secrets.bin"] },
-  { id: "logs", label: "Error logs", paths: ["logs"] },
-  { id: "cache", label: "Window cache", paths: ["Cache", "Code Cache", "GPUCache", "GPUPersistentCache", "DawnGraphiteCache", "DawnWebGPUCache", "GraphiteDawnCache", "Shared Dictionary"] },
+  { id: "data", label: msg("Your data"), paths: ["clink.db", "clink.db-wal", "clink.db-shm"] },
+  { id: "phones", label: msg("Phone pairing"), paths: ["phones.db", "phones.db-wal", "phones.db-shm"] },
+  { id: "sample", label: msg("Sample data"), paths: ["sample.db", "sample.db-wal", "sample.db-shm", "sample.json"] },
+  { id: "media", label: msg("Music library"), paths: ["media"] },
+  { id: "ai", label: msg("AI helpers"), paths: ["antigravity", "claude-coach", "gemini-coach", "opencode-coach", "ai.json", "ai-secrets.bin"] },
+  { id: "logs", label: msg("Error logs"), paths: ["logs"] },
+  { id: "cache", label: msg("Window cache"), paths: ["Cache", "Code Cache", "GPUCache", "GPUPersistentCache", "DawnGraphiteCache", "DawnWebGPUCache", "GraphiteDawnCache", "Shared Dictionary"] },
 ] as const;
 
 async function sizeOf(target: string): Promise<number> {
@@ -69,7 +86,7 @@ const problem = (message: string, code = "problem", status = 400) => json({ erro
 
 export class DesktopSettings {
   private readonly file: string;
-  private saved: Saved = { dataMode: "connected", blocked: [], intro: "seen" };
+  private saved: Saved = { dataMode: "connected", blocked: [], intro: "seen", language: "en" };
 
   readonly guard: ModeGuard = {
     localOnly: () => this.saved.dataMode === "localOnly",
@@ -92,11 +109,15 @@ export class DesktopSettings {
       const parsed = JSON.parse(raw) as Partial<Saved>;
       if (Array.isArray(parsed.blocked)) this.saved.blocked = parsed.blocked.slice(-MAX_BLOCKED);
       if (parsed.intro === "pending") this.saved.intro = "pending";
+      if (isLang(parsed.language)) this.saved.language = parsed.language;
     }
     if (options.replayIntro) this.saved.intro = "pending";
     else if (options.skipIntro) this.saved.intro = "seen";
     guardFetch(this.guard.localOnly, this.guard.blocked);
   }
+
+  /** The language the page last said it speaks, so the menu starts in it before the page loads. */
+  get language(): Lang { return this.saved.language; }
 
   /** Whether the first-run intro still shows before the app. */
   get introPending(): boolean { return this.saved.intro === "pending"; }
@@ -110,7 +131,7 @@ export class DesktopSettings {
   get about() {
     return {
       version: this.host.version,
-      platform: `${PLATFORM[process.platform] ?? process.platform}${process.platform === "darwin" ? ` · ${ARCH[process.arch] ?? process.arch}` : ` ${release()}`}`,
+      platform: platformLabel(process.platform, process.arch, release()),
       electron: process.versions.electron, chromium: process.versions.chrome, node: process.versions.node,
     };
   }
@@ -136,9 +157,9 @@ export class DesktopSettings {
     // Leaving asks in a native dialog, so the page alone can't turn the guard off. No restart: the guard reads the
     // mode on every request (dataMode.ts).
     if (mode === "connected" && !(await this.host.confirm(
-      "Leave Local mode?",
-      "C-LINK stops syncing with the watch, and workouts and plans can be saved to your COROS account again. Pair the watch with the COROS app or C-LINK on your phone to use it there. What's on this computer stays here.",
-      "Leave Local Mode",
+      t("Leave Local mode?"),
+      t("C-LINK stops syncing with the watch, and workouts and plans can be saved to your COROS account again. Pair the watch with the COROS app or C-LINK on your phone to use it there. What's on this computer stays here."),
+      t("Leave Local Mode"),
     ))) return;
     this.saved.dataMode = mode;
     this.save();
@@ -162,6 +183,14 @@ export class DesktopSettings {
           if (body.intro === "seen" || body.intro === "pending") { this.saved.intro = body.intro; this.save(); }
           return json({ intro: this.saved.intro });
         }
+        // The page says which language it speaks on every load (desktop/renderer/main.tsx).
+        case "POST /language": {
+          if (isLang(body.language)) {
+            if (body.language !== this.saved.language) { this.saved.language = body.language; this.save(); }
+            this.host.languageChanged(body.language);
+          }
+          return json({ language: this.saved.language });
+        }
         case "POST /blocked/clear": this.saved.blocked = []; this.save(); return json(this.state());
         case "GET /storage": return json({ folder: tilde(this.folder), places: await this.places() });
         case "POST /storage/open": return this.open(String(body.id ?? ""));
@@ -173,12 +202,12 @@ export class DesktopSettings {
         case "POST /logs/clear": this.log.clear(); return json({ count: 0 });
         case "POST /backup/export": return await this.exportBackup(typeof body.passphrase === "string" ? body.passphrase : "");
         case "POST /backup/restore": return await this.restoreBackup(typeof body.passphrase === "string" ? body.passphrase : "");
-        default: return problem("Not a setting.", "notFound", 404);
+        default: return problem(t("Not a setting."), "notFound", 404);
       }
     } catch (error) {
       if (error instanceof BackupProblem) return problem(error.message, error.code);
       this.log.add("app", `Settings ${route} failed: ${String(error)}`);
-      return problem("That didn't work.", "internal", 500);
+      return problem(t("That didn't work."), "internal", 500);
     }
   }
 
@@ -186,26 +215,26 @@ export class DesktopSettings {
     const places = await Promise.all(PLACES.map(async (p) => {
       const found = p.paths.map((name) => path.join(this.folder, name)).filter((f) => existsSync(f));
       const bytes = (await Promise.all(found.map(sizeOf))).reduce((a, b) => a + b, 0);
-      return { id: p.id, label: p.label, path: tilde(found[0] ?? path.join(this.folder, p.paths[0])), bytes: found.length ? bytes : null };
+      return { id: p.id, label: t(p.label), path: tilde(found[0] ?? path.join(this.folder, p.paths[0])), bytes: found.length ? bytes : null };
     }));
-    return [...places, { id: "folder", label: "App data folder", path: tilde(this.folder) + "/", bytes: await sizeOf(this.folder) }];
+    return [...places, { id: "folder", label: t("App data folder"), path: tilde(this.folder) + "/", bytes: await sizeOf(this.folder) }];
   }
 
   private open(id: string): Response {
     if (id === "folder") { this.host.reveal(this.folder); return json({ opened: true }); }
     const place = PLACES.find((p) => p.id === id);
     const found = place?.paths.map((name) => path.join(this.folder, name)).find((f) => existsSync(f));
-    if (!found) return problem("Nothing is kept there yet.", "missing", 404);
+    if (!found) return problem(t("Nothing is kept there yet."), "missing", 404);
     this.host.reveal(found);
     return json({ opened: true });
   }
 
   private async exportBackup(passphrase: string): Promise<Response> {
     const store = this.host.store();
-    if (!store) return problem("There is no data on this computer to back up.", "noStore");
+    if (!store) return problem(t("There is no data on this computer to back up."), "noStore");
     const file = await packBackup(store.items(), passphrase);
     const day = new Date().toISOString().slice(0, 10);
-    const target = await this.host.saveDialog(`C-LINK backup ${day}.clinkbackup`);
+    const target = await this.host.saveDialog(t("C-LINK backup {day}", { day }) + ".clinkbackup");
     if (!target) return json({ cancelled: true });
     await writeFile(target, file, { mode: 0o600 });
     return json({ saved: path.basename(target), items: store.size, sealed: !!passphrase });
@@ -213,11 +242,11 @@ export class DesktopSettings {
 
   private async restoreBackup(passphrase: string): Promise<Response> {
     const store = this.host.store();
-    if (!store) return problem("There is no store on this computer to restore into.", "noStore");
+    if (!store) return problem(t("There is no store on this computer to restore into."), "noStore");
     const source = await this.host.openDialog();
     if (!source) return json({ cancelled: true });
     const file = await readFile(source);
-    if (isSealed(file) && !passphrase) return problem("This backup has a passphrase. Type it in, then restore again.", "passphrase");
+    if (isSealed(file) && !passphrase) return problem(t("This backup has a passphrase. Type it in, then restore again."), "passphrase");
     const { items } = await unpackBackup(file, passphrase);
     store.replaceWith(items);
     this.host.restored();

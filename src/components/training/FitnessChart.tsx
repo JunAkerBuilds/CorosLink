@@ -4,6 +4,7 @@ import type { FitnessSeries } from "@/data/training";
 import { addDays, dayMonth, shortDay } from "@/lib/calendar";
 import { areaPath, barsPath, indexAt, linePath } from "@/lib/chart";
 import { signed } from "@/lib/format";
+import { t } from "@/lib/i18n";
 
 const W = 840;
 
@@ -11,7 +12,7 @@ const W = 840;
  * Fitness (42-day) and fatigue (7-day) lines over weekly load bars, with one crosshair across both.
  * The readout in the header follows the pointer, or the arrow keys when the chart has focus.
  */
-export function FitnessChart({ series, rangeLabel, title = "Fitness and freshness", height: H = 300, barHeight: BAR_H = 80, children }: {
+export function FitnessChart({ series, rangeLabel, title, height: H = 300, barHeight: BAR_H = 80, children }: {
   series: FitnessSeries; rangeLabel: string; title?: string;
   /** Height of the lines and of the weekly load bars, in px. */
   height?: number; barHeight?: number;
@@ -19,6 +20,7 @@ export function FitnessChart({ series, rangeLabel, title = "Fitness and freshnes
   children?: React.ReactNode;
 }) {
   const n = series.fitness.length;
+  const heading = title ?? t("Fitness and freshness");
   const weeks = series.weeklyLoad;
   const [picked, setPicked] = useState<number | null>(null);
   const readoutId = useId();
@@ -59,29 +61,31 @@ export function FitnessChart({ series, rangeLabel, title = "Fitness and freshnes
   return (
     <>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "10px 20px" }}>
-        <h2 className="h2">{title}</h2>
+        <h2 className="h2">{heading}</h2>
         <div id={readoutId} aria-live="polite" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 18px", fontSize: 13 }}>
           <span style={{ fontWeight: 600 }}>{shortDay(day, crossesYears)}</span>
           <span className="muted" style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span aria-hidden="true" style={{ width: 12, height: 3, borderRadius: 2, background: "var(--h-blue)" }} />
-            Fitness <strong style={{ color: "var(--fg)" }}>{fit}</strong>
+            {t("Fitness")} <strong style={{ color: "var(--fg)" }}>{fit}</strong>
           </span>
           <span className="muted" style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span aria-hidden="true" style={{ width: 12, height: 2, borderRadius: 2, background: "var(--h-pink)" }} />
-            Fatigue <strong style={{ color: "var(--fg)" }}>{fat}</strong>
+            {t("Fatigue")} <strong style={{ color: "var(--fg)" }}>{fat}</strong>
           </span>
-          <span className="muted">Form <strong style={{ color: "var(--fg)" }}>{signed(fit - fat)}</strong></span>
+          <span className="muted">{t("Form")} <strong style={{ color: "var(--fg)" }}>{signed(fit - fat)}</strong></span>
         </div>
       </div>
       {children}
       <div
-        role="group" tabIndex={0} aria-label="Fitness and weekly load chart. Left and right arrow keys move the day shown." aria-describedby={readoutId}
+        role="group" tabIndex={0} aria-label={t("Fitness and weekly load chart. Left and right arrow keys move the day shown.")} aria-describedby={readoutId}
         onMouseMove={(e) => setPicked(indexAt(e.clientX, e.currentTarget.getBoundingClientRect(), n))}
         onMouseLeave={() => setPicked(null)}
         onKeyDown={onKey}
         style={{ display: "flex", flexDirection: "column", gap: 10, cursor: "crosshair", borderRadius: 8 }}
       >
-        <svg role="img" aria-label={`Fitness ${trend} from ${first} to ${last} over ${rangeLabel}, with fatigue moving above and below it`}
+        <svg role="img" aria-label={trend === "rising" ? t("Fitness rising from {first} to {last} over {range}, with fatigue moving above and below it", { first, last, range: rangeLabel })
+          : trend === "falling" ? t("Fitness falling from {first} to {last} over {range}, with fatigue moving above and below it", { first, last, range: rangeLabel })
+          : t("Fitness level from {first} to {last} over {range}, with fatigue moving above and below it", { first, last, range: rangeLabel })}
           width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
           <path d={`M0 ${H / 4}H${W}M0 ${H / 2}H${W}M0 ${(3 * H) / 4}H${W}`} fill="none" style={{ stroke: "rgba(var(--fg-rgb), 0.07)", vectorEffect: "non-scaling-stroke" }} />
           <path d={areaPath(series.fitness, W, H, lo, hi)} style={{ fill: "var(--fit-area)" }} />
@@ -90,9 +94,9 @@ export function FitnessChart({ series, rangeLabel, title = "Fitness and freshnes
           <line x1={cx} x2={cx} y1="0" y2={H} style={cross} />
         </svg>
         <div className="muted" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12 }}>
-          <span>Weekly load</span><span>{weeks[weeks.length - 1]} so far this week</span>
+          <span>{t("Weekly load")}</span><span>{t("{load} so far this week", { load: weeks[weeks.length - 1] })}</span>
         </div>
-        <svg role="img" aria-label={`Weekly load for ${rangeLabel}, building from ${weeks[0]} to ${Math.max(...weeks)}`}
+        <svg role="img" aria-label={t("Weekly load for {range}, building from {from} to {to}", { range: rangeLabel, from: weeks[0], to: Math.max(...weeks) })}
           width="100%" height={BAR_H} viewBox={`0 0 ${W} ${BAR_H}`} preserveAspectRatio="none">
           <path d={barsPath(weeks, BAR_H, barMax, slot, bar)} style={{ fill: "var(--fit-bars)" }} />
           <line x1={cx} x2={cx} y1="0" y2={BAR_H} style={cross} />

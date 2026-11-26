@@ -1,5 +1,7 @@
 // The main process's AI settings (desktop/main/ai/service.ts), as the AI page reads and changes them. Keys go in;
 // nothing secret comes back out.
+import { t } from "@/lib/i18n";
+
 export type ProviderGroup = "account" | "key" | "computer";
 
 export interface ProviderView {
@@ -19,7 +21,7 @@ async function call<T>(path: string, body?: Record<string, unknown>): Promise<T>
     ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), cache: "no-store" }
     : { cache: "no-store" });
   const answer = (await response.json().catch(() => null)) as (T & { message?: string }) | null;
-  if (!response.ok || !answer) throw new AIProblem(answer?.message ?? "That didn't work.");
+  if (!response.ok || !answer) throw new AIProblem(answer?.message ?? t("That didn't work."));
   return answer;
 }
 

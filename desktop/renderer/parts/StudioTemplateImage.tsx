@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import type { CorosWatchfaceTemplateDetails, CorosWatchfaceTemplateAsset } from "../../watchface/types";
 import { largestWatchfaceConfigAssetSource, listWatchfaceConfigAssets, type WatchfaceConfigAssetReference } from "../../watchface/engine/watchfaceStudio";
+import { t } from "@/lib/i18n";
 import { Icon } from "./StudioIcon";
 
 /** The template's reference for a config asset id (`config:colon_icon`, `aod:…`), or null. */
@@ -18,17 +19,17 @@ export function templateImageOf(details: CorosWatchfaceTemplateDetails, configAs
 /** What the watch does with a template image, where that isn't obvious (CorosLink's words, shortened). */
 export function templateImageRole(configKey: string): string | null {
   switch (configKey) {
-    case "time_hour_icon": return "Turns as the hour hand. Its centre is the pivot: draw it pointing up.";
-    case "time_minute_icon": return "Turns as the minute hand. Its centre is the pivot: draw it pointing up.";
-    case "time_second_icon": return "Turns as the second hand. Its centre is the pivot: draw it pointing up.";
-    case "time_center_polygon_icon1": return "Sits on top of the hour and minute hands.";
-    case "time_center_polygon_icon2": return "Sits on top of every hand.";
-    case "colon_icon": return "Placed between the hour and minute digits.";
-    case "control_colon_icon": return "Placed between two-part values in the selectable slot.";
-    case "watchface_thmb_icon": return "The face's thumbnail in lists. Not drawn on the watch.";
-    case "negative_sign_icon": return "Drawn as -- when sleep score or stress has no reading.";
-    case "control_negative_sign_icon": return "Drawn before a value below zero.";
-    default: return configKey.startsWith("control_") ? "Shows while this type is picked in the selectable slot." : null;
+    case "time_hour_icon": return t("Turns as the hour hand. Its centre is the pivot: draw it pointing up.");
+    case "time_minute_icon": return t("Turns as the minute hand. Its centre is the pivot: draw it pointing up.");
+    case "time_second_icon": return t("Turns as the second hand. Its centre is the pivot: draw it pointing up.");
+    case "time_center_polygon_icon1": return t("Sits on top of the hour and minute hands.");
+    case "time_center_polygon_icon2": return t("Sits on top of every hand.");
+    case "colon_icon": return t("Placed between the hour and minute digits.");
+    case "control_colon_icon": return t("Placed between two-part values in the selectable slot.");
+    case "watchface_thmb_icon": return t("The face's thumbnail in lists. Not drawn on the watch.");
+    case "negative_sign_icon": return t("Drawn as -- when sleep score or stress has no reading.");
+    case "control_negative_sign_icon": return t("Drawn before a value below zero.");
+    default: return configKey.startsWith("control_") ? t("Shows while this type is picked in the selectable slot.") : null;
   }
 }
 
@@ -78,15 +79,15 @@ export function TemplateImageFacts({ details, configAssetId, label, replacement,
     <div className="st-tpl-facts">
       {shown ? (
         <button type="button" className="chip st-chip-btn" onClick={() => save(shown.dataUrl, `${label} ${shown.width}x${shown.height}`)}>
-          <Icon name="download" size={15} />Download</button>
+          <Icon name="download" size={15} />{t("Download")}</button>
       ) : null}
       <dl>
-        {shown ? <><dt>Size</dt><dd>{shown.width} × {shown.height} px</dd></> : null}
-        <dt>File</dt><dd><code>{reference.relativePath || "—"}</code></dd>
-        <dt>Key</dt><dd><code>[{reference.configKey}]</code></dd>
+        {shown ? <><dt>{t("Size")}</dt><dd>{shown.width} × {shown.height} px</dd></> : null}
+        <dt>{t("File")}</dt><dd><code>{reference.relativePath || "—"}</code></dd>
+        <dt>{t("Key")}</dt><dd><code>[{reference.configKey}]</code></dd>
       </dl>
       {role ? <span className="st-note">{role}</span> : null}
-      {!reference.source ? <span className="st-note">Not in the template. Adding an image adds [{reference.configKey}] to {reference.scope === "aod" ? "AODconfig.txt" : "config.txt"}.</span> : null}
+      {!reference.source ? <span className="st-note">{t("Not in the template. Adding an image adds [{key}] to {file}.", { key: reference.configKey, file: reference.scope === "aod" ? "AODconfig.txt" : "config.txt" })}</span> : null}
     </div>
   );
 }

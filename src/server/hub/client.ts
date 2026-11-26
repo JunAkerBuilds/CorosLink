@@ -3,6 +3,7 @@
 import { bcryptHash, bcryptSalt } from "./bcrypt";
 import { HubExpired, HubInvalid, HubProblem, HubRefused } from "./errors";
 import { at, text, type Json, type JsonObject } from "./json";
+import { msg, t } from "@/lib/i18n";
 
 /** A Training Hub sign-in. The token is a bearer credential: it lives only in the sealed session cookie. */
 export interface HubSession {
@@ -45,10 +46,10 @@ export function regionBaseURL(region: string): string | null {
 /** The region a session's server is in, in words. */
 export function regionName(baseURL: string): string {
   switch (baseURL) {
-    case "https://teameuapi.coros.com": return "Europe";
-    case "https://teamcnapi.coros.com": return "Mainland China";
-    case "https://teamsgapi.coros.com": return "Singapore";
-    default: return "Global";
+    case "https://teameuapi.coros.com": return msg("Europe");
+    case "https://teamcnapi.coros.com": return msg("Mainland China");
+    case "https://teamsgapi.coros.com": return msg("Singapore");
+    default: return msg("Global");
   }
 }
 
@@ -60,7 +61,7 @@ const MAX_BYTES = 16 << 20;
 /** Throws unless `url` is https on one of COROS's Training Hub hosts, default port, no credentials. */
 export function assertHubURL(url: URL): void {
   if (url.protocol !== "https:" || !HUB_HOSTS.has(url.host) || url.port !== "" || url.username !== "" || url.password !== "") {
-    throw new HubProblem("C-LINK only talks to COROS's own servers for your training.", "blocked");
+    throw new HubProblem(t("C-LINK only talks to COROS's own servers for your training."), "blocked");
   }
 }
 
@@ -74,7 +75,7 @@ export function dataOf(payload: Json, signedIn: boolean): Json | undefined {
   }
   if (result !== "0000") {
     const code = result === "" ? "unknown" : result;
-    throw new HubRefused(code, message ?? `COROS refused the request (${code}).`);
+    throw new HubRefused(code, message ?? t("COROS refused the request ({code}).", { code }));
   }
   const data = at(payload, "data");
   return data === null ? undefined : data;
@@ -99,11 +100,11 @@ export class TrainingHub {
     for (const base of HUB_REGIONS) {
       const salt = bcryptSalt(10);
       const secret = bcryptHash(passwordHash, salt);
-      if (!secret) throw new HubProblem("C-LINK couldn't prepare the sign-in.");
+      if (!secret) throw new HubProblem(t("C-LINK couldn't prepare the sign-in."));
       const body = { account, accountType: 2, p1: secret, p2: salt, rmbm: 1 };
       try {
         const data = await this.exchange(new URL(base + "/account/login"), "POST", body, null, null, false);
-        if (data === undefined) throw new HubProblem("COROS's sign-in answer was incomplete.");
+        if (data === undefined) throw new HubProblem(t("COROS's sign-in answer was incomplete."));
         return await this.finish(account, data, base);
       } catch (error) {
         if (error instanceof HubRefused) {
@@ -115,7 +116,7 @@ export class TrainingHub {
       }
     }
     if (refusal) throw refusal;
-    throw lastError ?? new HubProblem("COROS sign-in failed. Check your email and password, then try again.");
+    throw lastError ?? new HubProblem(t("COROS sign-in failed. Check your email and password, then try again."));
   }
 
   private async finish(account: string, data: Json, base: string): Promise<HubSignIn> {
@@ -124,7 +125,7 @@ export class TrainingHub {
     const token = text(at(data, "accessToken"));
     if (token) return { kind: "signedIn", session: await this.session(token, text(at(data, "userId")), region, accountBase) };
     const ticket = text(at(data, "loginTicket")), appKey = text(at(data, "appKey"));
-    if (!ticket || !appKey) throw new HubProblem("COROS's sign-in answer was incomplete.");
+    if (!ticket || !appKey) throw new HubProblem(t("COROS's sign-in answer was incomplete."));
     const userId = text(at(data, "userId"));
     const challenge: HubChallenge = {
       account: text(at(data, "account")) || account, baseURL: accountBase, loginTicket: ticket, appKey,
@@ -142,11 +143,11 @@ export class TrainingHub {
 
   async verify(code: string, challenge: HubChallenge): Promise<HubSession> {
     const trimmed = code.trim();
-    if (!/^[0-9]{6}$/.test(trimmed)) throw new HubInvalid("Enter the 6-digit code COROS emailed you.");
+    if (!/^[0-9]{6}$/.test(trimmed)) throw new HubInvalid(t("Enter the 6-digit code COROS emailed you."));
     const body = { loginTicket: challenge.loginTicket, appKey: challenge.appKey, code: trimmed };
     const data = await this.exchange(new URL(challenge.baseURL + "/account/2fa/login/verify"), "POST", body, null, null, true);
     const token = text(at(data, "accessToken"));
-    if (!token) throw new HubProblem("COROS didn't send a session for that code.");
+    if (!token) throw new HubProblem(t("COROS didn't send a session for that code."));
     return this.session(token, text(at(data, "userId")) ?? challenge.userId, text(at(data, "regionId")) ?? challenge.regionId, challenge.baseURL);
   }
 
@@ -163,7 +164,7 @@ export class TrainingHub {
       }
     }
     const id = text(at(account, "userId")) ?? userId ?? "";
-    if (id === "") throw new HubProblem("COROS's sign-in answer didn't name your account.");
+    if (id === "") throw new HubProblem(t("COROS's sign-in answer didn't name your account."));
     return { accessToken: token, userId: id, regionId: region, baseURL: resolved };
   }
 
@@ -206,25 +207,25 @@ export class TrainingHub {
         method, headers, body: body === null ? undefined : JSON.stringify(body),
         redirect: "manual", cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-      if (Number(response.headers.get("content-length") ?? 0) > MAX_BYTES) throw new HubProblem("COROS sent an unexpected response.");
+      if (Number(response.headers.get("content-length") ?? 0) > MAX_BYTES) throw new HubProblem(t("COROS sent an unexpected response."));
       bytes = await response.arrayBuffer();
     } catch (error) {
       if (error instanceof HubProblem) throw error;
       if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
-        throw new HubProblem("COROS didn't answer within 30 seconds. Check your connection and try again.", "unreachable");
+        throw new HubProblem(t("COROS didn't answer within 30 seconds. Check your connection and try again."), "unreachable");
       }
-      throw new HubProblem("COROS couldn't be reached. Check your connection and try again.", "unreachable");
+      throw new HubProblem(t("COROS couldn't be reached. Check your connection and try again."), "unreachable");
     }
-    if (bytes.byteLength > MAX_BYTES) throw new HubProblem("COROS sent an unexpected response.");
+    if (bytes.byteLength > MAX_BYTES) throw new HubProblem(t("COROS sent an unexpected response."));
     // A redirect is never followed: with `redirect: "manual"` it arrives as its own 3xx answer and stops here.
     if (response.status < 200 || response.status >= 300) {
-      throw new HubProblem(`COROS couldn't answer right now (HTTP ${response.status}). Try again later.`);
+      throw new HubProblem(t("COROS couldn't answer right now (HTTP {status}). Try again later.", { status: response.status }));
     }
     let payload: Json;
     try {
       payload = JSON.parse(new TextDecoder().decode(bytes)) as Json;
     } catch {
-      throw new HubProblem("COROS sent an unexpected answer.");
+      throw new HubProblem(t("COROS sent an unexpected answer."));
     }
     return dataOf(payload, token !== null);
   }

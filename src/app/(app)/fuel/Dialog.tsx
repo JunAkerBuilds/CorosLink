@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useId, useState, type ReactNode } from "react";
+import { t } from "@/lib/i18n";
 import "./dialog.css";
 
 /**
@@ -29,7 +30,7 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
     >
       <div className="dlg-head">
         <h2 id={titleId}>{title}</h2>
-        <button type="button" className="dlg-x" aria-label="Close" onClick={close}>×</button>
+        <button type="button" className="dlg-x" aria-label={t("Close")} onClick={close}>×</button>
       </div>
       <div className="dlg-body">{children(close)}</div>
     </dialog>

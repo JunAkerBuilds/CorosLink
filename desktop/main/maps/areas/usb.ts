@@ -10,6 +10,7 @@ import path from "node:path";
 import type { WatchDrive } from "../../media/watchDrive";
 import type { CopyProgress } from "../../../maps/types";
 import { AreasProblem, MapPackageClient, type AreaFile } from "./client";
+import { t } from "@/lib/i18n";
 
 /** The watch as a USB drive, as Map areas needs it. */
 export interface AreasDrive {
@@ -117,15 +118,15 @@ async function download(file: AreaFile, target: string, job: CopyJob): Promise<v
   await mkdir(path.dirname(target), { recursive: true });
   const answer = await (job.fetch ?? fetch)(MapPackageClient.fileUrl(file), { signal: job.signal, redirect: "error" })
     .catch((error: unknown) => { if (job.signal.aborted) throw new CopyCancelled(); throw error; });
-  if (!answer.ok || !answer.body) throw new AreasProblem(`A map file couldn't be downloaded from COROS (${answer.status}).`, "coros", 502);
+  if (!answer.ok || !answer.body) throw new AreasProblem(t("A map file couldn't be downloaded from COROS ({status}).", { status: answer.status }), "coros", 502);
   const part = `${target}.part`;
   await rm(part, { force: true });
   const received = await writeStream(answer.body as unknown as AsyncIterable<Uint8Array>, part, job.signal, (bytes) => {
-    if (bytes > file.sizeBytes) throw new AreasProblem("A map file from COROS was bigger than COROS said. Try again.", "coros", 502);
+    if (bytes > file.sizeBytes) throw new AreasProblem(t("A map file from COROS was bigger than COROS said. Try again."), "coros", 502);
   });
   if (received !== file.sizeBytes) {
     await rm(part, { force: true });
-    throw new AreasProblem("A map file downloaded incompletely. Try again.", "coros", 502);
+    throw new AreasProblem(t("A map file downloaded incompletely. Try again."), "coros", 502);
   }
   await rename(part, target);
 }
@@ -142,7 +143,7 @@ export async function copyAreas(job: CopyJob): Promise<CopyProgress> {
   }
   const totalBytes = pending.reduce((sum, p) => sum + p.file.sizeBytes, 0);
   const needed = await bytesStillNeeded(job.files, job.mapFolder);
-  if (job.freeBytes !== undefined && needed > job.freeBytes) throw new AreasProblem("These map areas need more space than the watch has free.", "space");
+  if (job.freeBytes !== undefined && needed > job.freeBytes) throw new AreasProblem(t("These map areas need more space than the watch has free."), "space");
   const progress: CopyProgress = { state: "copying", label: job.label, copiedBytes: 0, totalBytes, files: pending.length, filesDone: 0 };
   const tell = (message?: string) => job.onProgress({ ...progress, ...(message ? { message } : {}) });
   tell();

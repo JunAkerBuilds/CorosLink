@@ -4,18 +4,19 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { listAIModels, pickAI, readAI, readAIEfforts, setAIEffort, setAIModel, type AIStatus, type ProviderView } from "../ai";
+import { msg, t } from "@/lib/i18n";
 import "./coachAI.css";
 
 const EFFORT_NAMES: Record<string, string> = {
-  none: "None", minimal: "Minimal", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max", ultra: "Ultra",
+  none: msg("None"), minimal: msg("Minimal"), low: msg("Low"), medium: msg("Medium"), high: msg("High"), xhigh: msg("Extra high"), max: msg("Max"), ultra: msg("Ultra"),
 };
 /** "xhigh" → "Extra high"; a level this build doesn't know keeps its own name. */
-export const effortName = (level: string) => EFFORT_NAMES[level] ?? `${level.charAt(0).toUpperCase()}${level.slice(1)}`;
+export const effortName = (level: string) => (EFFORT_NAMES[level] ? t(EFFORT_NAMES[level]) : null) ?? `${level.charAt(0).toUpperCase()}${level.slice(1)}`;
 /** "" → "Default", "gpt-5.5" → "GPT-5.5", "opus" → "Opus". */
 const cap = (w: string) => `${w.charAt(0).toUpperCase()}${w.slice(1)}`;
 /** "" → "Default", "gpt-6.1-sol" → "GPT-6.1 Sol", "gpt-5.4-mini" → "GPT-5.4 Mini", "opus" → "Opus"; anything else as it is. */
 export const modelName = (model: string) => {
-  if (!model) return "Default";
+  if (!model) return t("Default");
   const gpt = /^gpt-([\d.]+)(?:-(.+))?$/i.exec(model);
   if (gpt) return `GPT-${gpt[1]}${gpt[2] ? ` ${gpt[2].split("-").map(cap).join(" ")}` : ""}`;
   return /^[a-z]+$/.test(model) ? cap(model) : model;
@@ -60,20 +61,20 @@ function ModelMenu({ ready, picked, models, onChoose, close }: {
   return (
     <div className="cai-menu">
       {ready.length > 1 ? (
-        <div className="cai-side" role="group" aria-label="AI">
+        <div className="cai-side" role="group" aria-label={t("AI")}>
           {ready.map((p) => (
             <button key={p.id} type="button" className="cai-ai" aria-current={p.id === browse ? true : undefined}
               onPointerEnter={() => look(p)} onFocus={() => look(p)} onClick={() => look(p)}>
               <Tile p={p} />
-              <span><span>{p.name}</span>{p.id === picked.id ? <small>In use</small> : null}</span>
+              <span><span>{p.name}</span>{p.id === picked.id ? <small>{t("In use")}</small> : null}</span>
             </button>
           ))}
         </div>
       ) : null}
-      <div className="cai-main" role="group" aria-label={`${shown.name} models`}>
+      <div className="cai-main" role="group" aria-label={t("{name} models", { name: shown.name })}>
         <span className="cai-head">{shown.name}{shown.account ? <small>{shown.account}</small> : null}</span>
         <div className="cai-list">
-          {!list ? <span className="cai-wait">Loading models…</span> : list.map((m) => {
+          {!list ? <span className="cai-wait">{t("Loading models…")}</span> : list.map((m) => {
             const on = shown.id === picked.id && m === picked.model;
             return (
               <button key={m || "default"} type="button" className="cai-row" aria-pressed={on} onClick={() => { if (!on) onChoose(shown, m); close(); }}>
@@ -83,7 +84,7 @@ function ModelMenu({ ready, picked, models, onChoose, close }: {
             );
           })}
         </div>
-        <Link href="/coach/settings" className="cai-more" onClick={close}>Set up another AI</Link>
+        <Link href="/coach/settings" className="cai-more" onClick={close}>{t("Set up another AI")}</Link>
       </div>
     </div>
   );
@@ -138,28 +139,28 @@ export function CoachAI() {
 
   useEffect(() => {
     let on = true;
-    readAI().then(load).then((v) => { if (on) show(v); }, () => { if (on) setProblem("Couldn't read the AI settings."); });
+    readAI().then(load).then((v) => { if (on) show(v); }, () => { if (on) setProblem(t("Couldn't read the AI settings.")); });
     return () => { on = false; };
   }, []);
 
   const run = (work: Promise<AIStatus>) => {
     setProblem(null);
-    work.then(load).then(show).catch((e: unknown) => setProblem(e instanceof Error ? e.message : "That didn't work."));
+    work.then(load).then(show).catch((e: unknown) => setProblem(e instanceof Error ? e.message : t("That didn't work.")));
   };
 
   if (!status) return null;
   if (!picked) {
-    return <Link href="/coach/settings" className="co-model" title="Set up Coach's AI">{SPARK}<span>Set up AI</span></Link>;
+    return <Link href="/coach/settings" className="co-model" title={t("Set up Coach's AI")}>{SPARK}<span>{t("Set up AI")}</span></Link>;
   }
 
   const saved = efforts.levels.includes(picked.effort) ? picked.effort : "";
-  const shownEffort = saved ? effortName(saved) : "Default";
+  const shownEffort = saved ? effortName(saved) : t("Default");
   // On Default the track shows the model's own level, when it says.
   const at = saved ? efforts.levels.indexOf(saved) : efforts.default ? efforts.levels.indexOf(efforts.default) : -1;
 
   return (
     <>
-      <Pop wide label="Coach's AI" title={`${picked.name} · ${modelName(picked.model)}`}
+      <Pop wide label={t("Coach's AI")} title={`${picked.name} · ${modelName(picked.model)}`}
         pill={<>{SPARK}<span>{picked.name}<span className="cai-dim"> · {modelName(picked.model)}</span></span>{CHEVRON}</>}>
         {(close) => (
           <ModelMenu ready={ready} picked={picked} models={models} close={close}
@@ -167,7 +168,7 @@ export function CoachAI() {
         )}
       </Pop>
       {efforts.levels.length ? (
-        <Pop label="Power" title={`Power: ${shownEffort}`} pill={<>{GAUGE}<span>{shownEffort}</span>{CHEVRON}</>}>
+        <Pop label={t("Power")} title={t("Power: {level}", { level: shownEffort })} pill={<>{GAUGE}<span>{shownEffort}</span>{CHEVRON}</>}>
           {() => (
             <div className="cai-power">
               <div className="cai-power-head">
@@ -175,16 +176,16 @@ export function CoachAI() {
                   <strong>{shownEffort}</strong>
                   <small>{!saved && efforts.default ? `${effortName(efforts.default)} · ` : ""}{picked.name} · {modelName(picked.model)}</small>
                 </span>
-                <button type="button" className="cai-reset" disabled={!saved} onClick={() => run(setAIEffort(picked.id, ""))}>Default</button>
+                <button type="button" className="cai-reset" disabled={!saved} onClick={() => run(setAIEffort(picked.id, ""))}>{t("Default")}</button>
               </div>
-              <div className="cai-steps" role="radiogroup" aria-label="Power" data-default={saved ? undefined : true}>
+              <div className="cai-steps" role="radiogroup" aria-label={t("Power")} data-default={saved ? undefined : true}>
                 {efforts.levels.map((level, i) => (
                   <button key={level} type="button" role="radio" aria-checked={level === saved} aria-label={effortName(level)} title={effortName(level)}
                     className="cai-step" data-on={i <= at ? true : undefined} onClick={() => run(setAIEffort(picked.id, level))} />
                 ))}
               </div>
               <div className="cai-ends" aria-hidden="true"><span>{effortName(efforts.levels[0])}</span><span>{effortName(efforts.levels[efforts.levels.length - 1])}</span></div>
-              <p>Higher thinks longer before answering: slower, and uses more of your plan.</p>
+              <p>{t("Higher thinks longer before answering: slower, and uses more of your plan.")}</p>
             </div>
           )}
         </Pop>

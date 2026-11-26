@@ -1,3 +1,5 @@
+import { locale, msg, t, tx } from "@/lib/i18n";
+import { dayLetter } from "@/data/sync/dashboard";
 import type { CalendarData, CalendarEntry, Dashboard, FitnessSeries, Sport, WeekTotals } from "@/data/training";
 
 /* ───────────── Dashboard ───────────── */
@@ -104,7 +106,7 @@ export const sampleDashboard: Dashboard = {
     nextLabel: "Tomorrow: Easy run, 6.0 km",
   },
   morning: {
-    status: "Ready",
+    status: msg("Ready"),
     rings: [
       { label: "Readiness", value: "78", fraction: 0.78, hue: "yellow" },
       { label: "Sleep", value: "86", fraction: 0.86, hue: "violet" },
@@ -164,7 +166,7 @@ export const sampleDashboard: Dashboard = {
   fitness: {
     series: yearSeries(),
     value: 54,
-    status: "Productive",
+    status: msg("Productive"),
     scale: {
       segments: [{ weight: 10, hue: "cyan" }, { weight: 15, hue: "mint" }, { weight: 15, hue: "blue" }, { weight: 10, hue: "gold" }, { weight: 10, hue: "rose" }],
       marker: 0.38,
@@ -308,3 +310,41 @@ const WEEKS: WeekTotals[] = [
 ];
 
 export const sampleCalendar: CalendarData = { today: "2026-11-19", entries: ENTRIES, weeks: WEEKS, now: { baseFitness: 52, loadRatio: 1.08 } };
+
+/** The sample board in the app's language: the words above, translated now (the athlete's own names stay). */
+export function sampleDashboardNow(): Dashboard {
+  const d = sampleDashboard;
+  const today = (time: string) => `${t("Today")}, ${time}`;
+  const what: Record<string, string> = { Ride: tx("sport", "Ride"), Gym: t("Gym"), Easy: t("Easy"), Tempo: t("Tempo"), Long: t("Long") };
+  const intensity: Record<string, string> = { Easy: t("Easy"), Moderate: t("Moderate"), Hard: t("Hard") };
+  const yearDay = new Intl.DateTimeFormat(locale("en-GB"), { day: "numeric", month: "long" }).format(new Date(2026, 10, 19));
+  return {
+    ...d,
+    coach: d.coach && {
+      text: t("Legs are fresh and HRV is up. A good day for the tempo you finished this morning; keep tomorrow easy."),
+      nextLabel: t("Tomorrow: {workout}, {distance}", { workout: t("Easy run"), distance: "6.0 km" }),
+    },
+    morning: d.morning && {
+      ...d.morning,
+      rings: d.morning.rings.map((r) => ({ ...r, label: t(r.label) })),
+      tiles: d.morning.tiles.map((x) => ({ ...x, label: t(x.label) })),
+    },
+    todayWorkout: {
+      ...d.todayWorkout, detail: today("06:42"),
+      stats: d.todayWorkout.stats.map((s) => ({ ...s, label: t(s.label) })),
+      week: d.todayWorkout.week.map((w, k) => ({ ...w, day: dayLetter(k), what: what[w.what] ?? w.what })),
+    },
+    latest: d.latest && {
+      ...d.latest, when: today("06:42"), sport: tx("sport", d.latest.sport),
+      routeLabel: t("Route of this morning's tempo run, an out-and-back along the river"),
+      heart: d.latest.heart && { ...d.latest.heart, label: t("Heart rate over the activity, {low} to {high} bpm", { low: 117, high: 169 }) },
+    },
+    fitness: d.fitness && { ...d.fitness, scale: { ...d.fitness.scale, labels: [t("Fresh"), t("Form {value}", { value: "−7" }), t("Strained")] } },
+    goal: d.goal && { ...d.goal, status: t("On track") },
+    volume: { ...d.volume, status: d.volume.status && t("Building") },
+    year: { ...d.year, label: t("Running distance this year against last year: {km} km by {day}, {by} km ahead", { km: "1,842", day: yearDay, by: 212 }) },
+    intensity: { ...d.intensity, status: d.intensity.status && t("Well balanced"), parts: d.intensity.parts.map((p) => ({ ...p, label: intensity[p.label] ?? p.label })) },
+    hrv: d.hrv && { ...d.hrv, status: t("In range") },
+    mix: { ...d.mix, parts: d.mix.parts.map((p) => ({ ...p, label: tx("sport", p.label) })) },
+  };
+}

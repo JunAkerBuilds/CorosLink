@@ -15,6 +15,7 @@ import { describeTemplate, templateAssets } from "../../watchface/archive/templa
 import type { CorosWatchfaceTemplateDetails } from "../../watchface/types";
 import type { WatchfaceTarget } from "../../watchface/watchfaceTargets";
 import { readZip, unsafeZipPath } from "../../watchface/zipRead";
+import { t } from "@/lib/i18n";
 
 /** Prepared archives stay this long, at most this many (CorosLink: 4 most recent, 15 min). */
 export const PREPARED_TTL_MS = 15 * 60_000;
@@ -36,7 +37,7 @@ export class SendProblem extends Error {
   constructor(message: string, readonly code = "send", readonly status = 400) { super(message); }
 }
 
-export function safeFileName(name: string, fallback = "Watch face"): string {
+export function safeFileName(name: string, fallback = t("Watch face")): string {
   // eslint-disable-next-line no-control-regex
   const clean = name.replace(/[\u0000-\u001f<>:"|?*\\/]+/g, "").replace(/^\.+/, "").trim().slice(0, 80);
   return clean || fallback;
@@ -57,7 +58,7 @@ export class PreparedFaces {
   get(id: string): Prepared {
     this.prune();
     const item = this.items.get(id);
-    if (!item) throw new SendProblem("Build the face again: the prepared copy is gone.", "expired", 410);
+    if (!item) throw new SendProblem(t("Build the face again: the prepared copy is gone."), "expired", 410);
     return item;
   }
 
@@ -88,7 +89,7 @@ export class PickedFolders {
 
   path(id: unknown): string {
     const folder = typeof id === "string" ? this.folders.get(id) : undefined;
-    if (!folder) throw new SendProblem("Choose the folder again.", "folder");
+    if (!folder) throw new SendProblem(t("Choose the folder again."), "folder");
     return folder;
   }
 }
@@ -99,7 +100,7 @@ export async function freeName(folder: string, name: string, ext: string): Promi
     const candidate = path.join(folder, `${name}${n > 1 ? ` ${n}` : ""}${ext}`);
     try { await fs.promises.access(candidate); } catch { return candidate; }
   }
-  throw new SendProblem("That folder already has too many faces with this name.", "folder");
+  throw new SendProblem(t("That folder already has too many faces with this name."), "folder");
 }
 
 /** Writes a final ZIP into the folder. Returns the file name used. */
@@ -116,11 +117,11 @@ export async function saveZipTo(folder: string, name: string, archive: Buffer): 
 export async function saveUnpackedTo(folder: string, name: string, archive: Buffer): Promise<string> {
   const target = await freeName(folder, safeFileName(name), "");
   const entries = readZip(archive).filter((e) => !e.directory && !e.path.startsWith("__MACOSX/"));
-  for (const entry of entries) if (unsafeZipPath(entry.path)) throw new SendProblem("The face has an unsafe file path.", "unsafe");
+  for (const entry of entries) if (unsafeZipPath(entry.path)) throw new SendProblem(t("The face has an unsafe file path."), "unsafe");
   await fs.promises.mkdir(target);
   for (const entry of entries) {
     const out = path.join(target, ...entry.path.split("/"));
-    if (!out.startsWith(target + path.sep)) throw new SendProblem("The face has an unsafe file path.", "unsafe");
+    if (!out.startsWith(target + path.sep)) throw new SendProblem(t("The face has an unsafe file path."), "unsafe");
     await fs.promises.mkdir(path.dirname(out), { recursive: true });
     await fs.promises.writeFile(out, entry.read());
   }
@@ -129,4 +130,4 @@ export async function saveUnpackedTo(folder: string, name: string, archive: Buff
 
 /** The watch connection, as far as this app has one. */
 export interface WatchConnection { connected: boolean; reason?: string; model?: string }
-export const NO_WATCH: WatchConnection = { connected: false, reason: "Studio can't send faces to the watch over Bluetooth yet." };
+export const NO_WATCH: WatchConnection = { connected: false, reason: t("Studio can't send faces to the watch over Bluetooth yet.") };

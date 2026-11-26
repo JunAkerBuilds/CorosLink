@@ -14,6 +14,7 @@ import { compileWatchface, WatchfaceCompileError, type ArchiveFiles } from "../.
 import type { WorkerRequest, WorkerResponse } from "../../watchface/compiler/worker";
 import { WATCHFACE_TARGETS, watchfaceBinTarget, type WatchfaceBinTarget, type WatchfaceTarget } from "../../watchface/watchfaceTargets";
 import type { WatchModelId } from "../../watchface/watchModels";
+import { t } from "@/lib/i18n";
 
 const MAX_ARCHIVE = 64 * 1024 * 1024;
 
@@ -38,7 +39,7 @@ export const COMPILER_WORKER = path.join(__dirname, "watchfaceCompiler.cjs");
 
 function compileBuiltIn(files: ArchiveFiles, faceId: number, target: WatchfaceBinTarget, options: WatchfaceImageOptions, script: string): Promise<{ bin: Buffer; warnings: string[] }> {
   const { fullColor = false, smoothEdges = false } = options;
-  const internal = (message: string) => new Error(`The compiler hit an internal error: ${message}`);
+  const internal = (message: string) => new Error(t("The compiler hit an internal error: {reason}", { reason: message }));
   const inProcess = () => {
     try { return Promise.resolve(compileWatchface(files, { faceId, target, fullColor, smoothEdges })); }
     catch (error) { return Promise.reject(error instanceof WatchfaceCompileError ? error : internal(error instanceof Error ? error.message : String(error))); }
@@ -53,13 +54,13 @@ function compileBuiltIn(files: ArchiveFiles, faceId: number, target: WatchfaceBi
       settled = true; clearTimeout(timer); action();
       void worker.terminate();
     };
-    const timer = setTimeout(() => finish(() => reject(new Error("The watch face took too long to compile."))), 120_000);
+    const timer = setTimeout(() => finish(() => reject(new Error(t("The watch face took too long to compile.")))), 120_000);
     worker.once("message", (response: WorkerResponse) => finish(() => {
       if ("error" in response) reject(response.face ? new WatchfaceCompileError(response.error) : internal(response.error));
       else resolve({ bin: Buffer.from(response.bin.buffer, response.bin.byteOffset, response.bin.byteLength), warnings: response.warnings });
     }));
     worker.once("error", (error: NodeJS.ErrnoException) => finish(() => {
-      if (error.code === "ERR_WORKER_OUT_OF_MEMORY") reject(new WatchfaceCompileError("The watch face is too large to compile. Use smaller images."));
+      if (error.code === "ERR_WORKER_OUT_OF_MEMORY") reject(new WatchfaceCompileError(t("The watch face is too large to compile. Use smaller images.")));
       else inProcess().then(resolve, reject);
     }));
     worker.once("exit", () => finish(() => reject(internal("the compiler stopped unexpectedly."))));
@@ -74,29 +75,29 @@ function compileBuiltIn(files: ArchiveFiles, faceId: number, target: WatchfaceBi
  */
 export function prepareWatchfaceArchive(archive: Buffer, preferred?: WatchfaceTarget):
   { zip: Buffer; files: Map<string, Buffer>; faceId: number; target: WatchfaceTarget } {
-  if (archive.length > MAX_ARCHIVE) throw new Error("Choose a final watch face DAT/ZIP smaller than 64 MB.");
+  if (archive.length > MAX_ARCHIVE) throw new Error(t("Choose a final watch face DAT/ZIP smaller than 64 MB."));
   const all = readZip(archive);
-  if (all.length > 15_000) throw new Error("The watch face archive has too many files.");
+  if (all.length > 15_000) throw new Error(t("The watch face archive has too many files."));
   let expanded = 0;
   for (const entry of all) {
-    if (unsafeZipPath(entry.path)) throw new Error("The watch face archive contains an unsafe path.");
+    if (unsafeZipPath(entry.path)) throw new Error(t("The watch face archive contains an unsafe path."));
     expanded += entry.size;
-    if (!Number.isSafeInteger(expanded) || expanded > 128 * 1024 * 1024) throw new Error("The expanded watch face archive is too large.");
+    if (!Number.isSafeInteger(expanded) || expanded > 128 * 1024 * 1024) throw new Error(t("The expanded watch face archive is too large."));
   }
   const files = all.filter((entry) => !entry.directory && !entry.path.startsWith("__MACOSX/"));
   const manifests = files.filter((entry) => /(^|\/)info\.json$/.test(entry.path));
   if (manifests.length !== 1 || manifests[0].size > 65536) {
-    throw new Error("Choose a final watch face DAT/ZIP with info.json. Editable project ZIPs must be exported as a final face first.");
+    throw new Error(t("Choose a final watch face DAT/ZIP with info.json. Editable project ZIPs must be exported as a final face first."));
   }
   const manifest = manifests[0];
   const prefix = manifest.path.slice(0, -"info.json".length);
   const entries = new Map(files.filter((entry) => entry.path.startsWith(prefix)).map((entry) => [entry.path.slice(prefix.length), entry]));
   const target = preferred ?? WATCHFACE_TARGETS.find((candidate) => entries.has(`${watchfaceBinTarget(candidate).layout}/config.txt`));
-  if (!target) throw new Error("This archive has no layout for a supported watch (416 × 416 for PACE Pro, 260 × 260 for APEX 4, …). Convert or export it for your watch first.");
+  if (!target) throw new Error(t("This archive has no layout for a supported watch (416 × 416 for PACE Pro, 260 × 260 for APEX 4, …). Convert or export it for your watch first."));
   const { layout, screen, label } = watchfaceBinTarget(target);
-  if (!entries.has(`${layout}/config.txt`)) throw new Error(`This archive needs a ${screen} × ${screen} ${label} layout. Convert or export it for ${label} first.`);
+  if (!entries.has(`${layout}/config.txt`)) throw new Error(t("This archive needs a {size} {watch} layout. Convert or export it for {watch} first.", { size: `${screen} × ${screen}`, watch: label }));
   const info: unknown = JSON.parse(manifest.read().toString("utf8"));
-  if (!info || typeof info !== "object" || Array.isArray(info)) throw new Error("Invalid watch face manifest.");
+  if (!info || typeof info !== "object" || Array.isArray(info)) throw new Error(t("Invalid watch face manifest."));
   const fields = info as Record<string, unknown>;
   fields.m_app = layout;
   // COROS's LoadInfo calls strlen on m_preview unchecked; faces recovered from compiled BINs have none.
@@ -106,7 +107,7 @@ export function prepareWatchfaceArchive(archive: Buffer, preferred?: WatchfaceTa
     if (name.startsWith(`${layout}/`) || name === "watchface_customize.png") source.push({ name, data: entry.read() });
   }
   const zip = createStoreZip(source);
-  if (zip.length > MAX_ARCHIVE) throw new Error("The normalized watch face is too large.");
+  if (zip.length > MAX_ARCHIVE) throw new Error(t("The normalized watch face is too large."));
   // A stable local identifier, independent of COROS account and catalog IDs.
   const faceId = (createHash("sha256").update(zip).digest().readUInt32LE(0) & 0x3fffffff) | 0x40000000;
   return { zip, files: new Map(source.map((entry) => [entry.name, entry.data])), faceId, target };
@@ -115,7 +116,7 @@ export function prepareWatchfaceArchive(archive: Buffer, preferred?: WatchfaceTa
 /** `prepareWatchfaceArchive` for a file on disk, as CorosLink's callers and tests use it. */
 export async function prepareLocalWatchfaceZip(filename: string, preferred?: WatchfaceTarget): Promise<ReturnType<typeof prepareWatchfaceArchive>> {
   const stat = await fs.promises.stat(filename);
-  if (!stat.isFile() || stat.size > MAX_ARCHIVE) throw new Error("Choose a final watch face DAT/ZIP smaller than 64 MB.");
+  if (!stat.isFile() || stat.size > MAX_ARCHIVE) throw new Error(t("Choose a final watch face DAT/ZIP smaller than 64 MB."));
   return prepareWatchfaceArchive(await fs.promises.readFile(filename), preferred);
 }
 
@@ -127,7 +128,7 @@ export class CorosWatchfaceCompiler {
   constructor(private readonly directory: string, private readonly worker = COMPILER_WORKER) {}
 
   status(): CorosWatchfaceCompilerStatus {
-    return { available: true, busy: this.busy, phase: this.phase, detail: this.detail || "Compiler ready." };
+    return { available: true, busy: this.busy, phase: this.phase, detail: this.detail || t("Compiler ready.") };
   }
 
   /**
@@ -136,33 +137,33 @@ export class CorosWatchfaceCompiler {
    * warning. `smoothEdges` encodes memory-in-pixel soft edges (experimental).
    */
   async compile(filename: string, name: string, target?: WatchfaceTarget, options: WatchfaceImageOptions = {}): Promise<CompiledWatchfaceFile> {
-    if (this.busy) throw new Error("Wait for the current watch face compilation to finish.");
+    if (this.busy) throw new Error(t("Wait for the current watch face compilation to finish."));
     const job = randomUUID(), started = Date.now();
-    this.busy = true; this.phase = "starting"; this.detail = "Preparing watch face…";
+    this.busy = true; this.phase = "starting"; this.detail = t("Preparing watch face…");
     try {
       await this.pruneResults();
       const { files, faceId, target: built } = await prepareLocalWatchfaceZip(filename, target);
-      this.phase = "compiling"; this.detail = "Compiling watch face…";
+      this.phase = "compiling"; this.detail = t("Compiling watch face…");
       let { bin, warnings } = await compileBuiltIn(files, faceId, watchfaceBinTarget(built), options, this.worker);
       if (options.fullColor && bin.length > WATCHFACE_MAX_BYTES - 16) {
         const full = bin.length;
         ({ bin, warnings } = await compileBuiltIn(files, faceId, watchfaceBinTarget(built), { smoothEdges: options.smoothEdges }, this.worker));
-        warnings.push(`Full color made this face ${(full / 1048576).toFixed(1)} MB, over the ${(WATCHFACE_MAX_BYTES / 1048576).toFixed(1)} MB a watch accepts, so its images use 256-color palettes.`);
+        warnings.push(t("Full color made this face {mb} MB, over the {max} MB a watch accepts, so its images use 256-color palettes.", { mb: (full / 1048576).toFixed(1), max: (WATCHFACE_MAX_BYTES / 1048576).toFixed(1) }));
       }
-      this.phase = "validating"; this.detail = "Checking compiled BIN…";
-      if (bin.toString("latin1", 0, 4) !== watchfaceBinTarget(built).magic) throw new Error(`The compiler did not return a ${built.label} BIN.`);
-      if (bin.length < 0x340 || bin.length > WATCHFACE_MAX_BYTES - 16) throw new Error("The compiler returned an unsupported BIN.");
-      if (encodeWatchfaceFile(bin).faceId !== faceId) throw new Error("The compiled BIN did not match the requested face.");
+      this.phase = "validating"; this.detail = t("Checking compiled BIN…");
+      if (bin.toString("latin1", 0, 4) !== watchfaceBinTarget(built).magic) throw new Error(t("The compiler did not return a {watch} BIN.", { watch: built.label }));
+      if (bin.length < 0x340 || bin.length > WATCHFACE_MAX_BYTES - 16) throw new Error(t("The compiler returned an unsupported BIN."));
+      if (encodeWatchfaceFile(bin).faceId !== faceId) throw new Error(t("The compiled BIN did not match the requested face."));
       const outputDirectory = path.join(this.directory, "results", job);
       await fs.promises.mkdir(outputDirectory, { recursive: true });
       // eslint-disable-next-line no-control-regex
       const safeName = path.basename(name).replace(/[\u0000-\u001f<>:"|?*\\/]/g, "").replace(/\.(zip|dat|bin)$/i, "").slice(0, 80) || "Custom-watch-face";
       const filePath = path.join(outputDirectory, `${safeName}.bin`);
       await fs.promises.writeFile(filePath, bin, { mode: 0o600 });
-      this.phase = "ready"; this.detail = "BIN compiled and validated.";
+      this.phase = "ready"; this.detail = t("BIN compiled and validated.");
       return { filePath, bytes: bin.length, faceId, durationMs: Date.now() - started, warnings, model: built.model };
     } catch (error) {
-      this.phase = "failed"; this.detail = error instanceof Error ? error.message : "Could not compile the watch face.";
+      this.phase = "failed"; this.detail = error instanceof Error ? error.message : t("Could not compile the watch face.");
       throw error;
     } finally {
       this.busy = false;
@@ -191,7 +192,7 @@ export class CorosWatchfaceCompiler {
 
   fileForPreview(previewId: string): string {
     const saved = this.saved.get(previewId);
-    if (!saved || saved.expires < Date.now()) throw new Error("Compile the watch face again before saving its BIN.");
+    if (!saved || saved.expires < Date.now()) throw new Error(t("Compile the watch face again before saving its BIN."));
     return saved.filename;
   }
 }

@@ -2,6 +2,7 @@
 // use. Only the "unlocked" sign-in (Spotify's desktop client identity, spotify.ts) is used here, and only for
 // playlists the person's own app is refused: that identity is rate-limited on the public Web API.
 const SPCLIENT = "https://spclient.wg.spotify.com";
+import { t } from "@/lib/i18n";
 /** Rows per playlist page. */
 export const PAGE_LENGTH = 500;
 /** Track details fetched at once. */
@@ -20,7 +21,7 @@ export function base62ToHex(id: string): string {
   let value = 0n;
   for (const c of id) {
     const digit = BASE62.indexOf(c);
-    if (digit < 0) throw new Error("Not a Spotify id.");
+    if (digit < 0) throw new Error(t("Not a Spotify id."));
     value = value * 62n + BigInt(digit);
   }
   return value.toString(16).padStart(32, "0");
@@ -32,7 +33,7 @@ export function* protoFields(buffer: Uint8Array): Generator<[number, bigint | Ui
   const varint = (): bigint => {
     let result = 0n, shift = 0n;
     for (;;) {
-      if (at >= buffer.length) throw new Error("Truncated Spotify playlist response.");
+      if (at >= buffer.length) throw new Error(t("Truncated Spotify playlist response."));
       const byte = buffer[at++];
       result |= BigInt(byte & 0x7f) << shift;
       if (!(byte & 0x80)) return result;
@@ -47,7 +48,7 @@ export function* protoFields(buffer: Uint8Array): Generator<[number, bigint | Ui
       case 1: at += 8; break;
       case 2: { const length = Number(varint()); yield [field, buffer.subarray(at, at + length)]; at += length; break; }
       case 5: at += 4; break;
-      default: throw new Error("Unreadable Spotify playlist response.");
+      default: throw new Error(t("Unreadable Spotify playlist response."));
     }
   }
 }

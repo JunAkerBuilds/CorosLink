@@ -24,6 +24,7 @@ import {
 import { officialFaceSets, officialStrip } from "../../watchface/officialFaceSets";
 import { getWatchfaceTarget } from "../../watchface/watchfaceTargets";
 import { readZip } from "../../watchface/zipRead";
+import { t } from "@/lib/i18n";
 
 export const OFFICIAL_LIBRARY_URL = "https://coroslink-assets.akerrules.ca/official-faces";
 export const OFFICIAL_REFRESH_MS = 24 * 60 * 60 * 1000;
@@ -267,10 +268,10 @@ export class OfficialAssetLibrary {
 
   /** Builds the library from COROS's official catalog: each face downloaded once, unpacked, its sets merged by content. */
   private async buildLocal(firmwareType: string, state: State): Promise<void> {
-    if (!this.catalog) throw new OfficialProblem("The official library couldn't be reached. Check the connection and try again.", "offline");
+    if (!this.catalog) throw new OfficialProblem(t("The official library couldn't be reached. Check the connection and try again."), "offline");
     const root = this.root(firmwareType);
     const faces = (await this.catalog.faces(firmwareType)).filter((f) => f.id && f.packageUrl);
-    if (!faces.length) throw new OfficialProblem("COROS lists no official faces for this watch.", "empty", 404);
+    if (!faces.length) throw new OfficialProblem(t("COROS lists no official faces for this watch."), "empty", 404);
     state.status = { ...state.status, state: "loading", source: "local", done: 0, total: faces.length, unit: "faces", message: undefined };
     const assets = new Map<string, StoredAsset & { names: Set<string> }>();
     let unpacked = 0;
@@ -309,7 +310,7 @@ export class OfficialAssetLibrary {
       // Lets the page's status polls through between faces.
       await new Promise((go) => setImmediate(go));
     })));
-    if (!unpacked) throw new OfficialProblem("None of COROS's official faces for this watch could be downloaded.", "offline");
+    if (!unpacked) throw new OfficialProblem(t("None of COROS's official faces for this watch could be downloaded."), "offline");
     // Named in COROS's order, whichever face finished unpacking first.
     const listed = [...new Set(faces.map((f) => f.name))];
     const library: StoredLibrary = {
@@ -327,7 +328,7 @@ export class OfficialAssetLibrary {
 
   private firmware(watch: unknown): string {
     const target = typeof watch === "string" ? getWatchfaceTarget(watch) : undefined;
-    if (!target) throw new OfficialProblem("Choose a watch to browse official artwork for.", "badWatch", 400);
+    if (!target) throw new OfficialProblem(t("Choose a watch to browse official artwork for."), "badWatch", 400);
     return target.firmwareType;
   }
 
@@ -364,7 +365,7 @@ export class OfficialAssetLibrary {
       try {
         if (!(await this.fetchHosted(firmwareType, state))) await this.buildLocal(firmwareType, state);
       } catch (e) {
-        const message = e instanceof Error ? e.message : "The official library couldn't be loaded.";
+        const message = e instanceof Error ? e.message : t("The official library couldn't be loaded.");
         if (state.library) this.ready(firmwareType, state, state.library);
         state.status = { ...state.status, state: state.library ? "ready" : "error", message };
       } finally { state.loading = null; }
@@ -382,7 +383,7 @@ export class OfficialAssetLibrary {
 
   private asset(firmwareType: string, id: unknown): StoredAsset {
     const asset = typeof id === "string" && ID.test(id) ? this.state(firmwareType).library?.assets.find((a) => a.id === id) : undefined;
-    if (!asset) throw new OfficialProblem("That artwork isn't in the library.", "missing", 404);
+    if (!asset) throw new OfficialProblem(t("That artwork isn't in the library."), "missing", 404);
     return asset;
   }
 
@@ -416,7 +417,7 @@ export class OfficialAssetLibrary {
     for (const a of framed) for (const t of officialTags(a.configKeys)) tags.set(t.id, { label: t.label, count: (tags.get(t.id)?.count ?? 0) + 1 });
     return {
       status: state.status,
-      categories: (Object.keys(OFFICIAL_CATEGORIES) as OfficialCategory[]).filter((id) => categories.has(id)).map((id) => ({ id, label: OFFICIAL_CATEGORIES[id], count: categories.get(id)! })),
+      categories: (Object.keys(OFFICIAL_CATEGORIES) as OfficialCategory[]).filter((id) => categories.has(id)).map((id) => ({ id, label: t(OFFICIAL_CATEGORIES[id]), count: categories.get(id)! })),
       roles: (Object.keys(OFFICIAL_FONT_ROLES) as OfficialFontRole[]).filter((id) => roles.has(id)).map((id) => ({ id, label: OFFICIAL_FONT_ROLES[id], count: roles.get(id)! })),
       tags: [...tags].map(([id, t]) => ({ id, ...t })).sort((a, b) => b.count - a.count),
       // The frame counts worth a filter: the most common ones among multi-frame sets.
@@ -437,7 +438,7 @@ export class OfficialAssetLibrary {
     const cached = await fs.promises.readFile(file).catch(() => null);
     if (cached && isPng(cached)) return cached;
     const bytes = await this.hosted(`v1/assets/${asset.id}/strip.png`, MAX_STRIP);
-    if (!bytes || !isPng(bytes)) throw new OfficialProblem("That preview couldn't be downloaded.", "offline");
+    if (!bytes || !isPng(bytes)) throw new OfficialProblem(t("That preview couldn't be downloaded."), "offline");
     await this.write(file, bytes);
     return bytes;
   }
@@ -454,7 +455,7 @@ export class OfficialAssetLibrary {
     let frames = await read();
     if (!frames) {
       const zip = await this.hosted(`v1/assets/${asset.id}/${asset.id}.zip`, MAX_OFFICIAL_ARCHIVE);
-      if (!zip) throw new OfficialProblem("That artwork couldn't be downloaded. Check the connection and try again.", "offline");
+      if (!zip) throw new OfficialProblem(t("That artwork couldn't be downloaded. Check the connection and try again."), "offline");
       let unpacked = 0, total = 0;
       try {
         for (const entry of readZip(zip)) {
@@ -468,13 +469,13 @@ export class OfficialAssetLibrary {
           await this.write(path.join(dir, frameName(Number(index[1]))), png);
           unpacked += 1;
         }
-      } catch { throw new OfficialProblem("The library sent artwork that can't be opened.", "damaged"); }
+      } catch { throw new OfficialProblem(t("The library sent artwork that can't be opened."), "damaged"); }
       frames = unpacked ? await read() : null;
-      if (!frames) throw new OfficialProblem("The library sent artwork with frames missing.", "damaged");
+      if (!frames) throw new OfficialProblem(t("The library sent artwork with frames missing."), "damaged");
     }
     return {
       id: asset.id, category: asset.category, width: asset.width, height: asset.height,
-      label: `${OFFICIAL_CATEGORIES[asset.category]} from ${asset.faces[0] ?? "an official face"}`,
+      label: asset.faces[0] ? t("{category} from {face}", { category: t(OFFICIAL_CATEGORIES[asset.category]), face: asset.faces[0] }) : t("{category} from an official face", { category: t(OFFICIAL_CATEGORIES[asset.category]) }),
       frames: frames.map((f) => `data:image/png;base64,${f.toString("base64")}`),
     };
   }
@@ -502,6 +503,6 @@ export class OfficialAssetLibrary {
     if (get && m) return new Response(new Uint8Array(await this.strip(watch, m[1])), { headers: { "Content-Type": "image/png", "Cache-Control": "max-age=31536000, immutable" } });
     m = /^\/official\/sets\/([0-9a-f]{16})$/.exec(route);
     if (get && m) return json({ set: await this.frames(watch, m[1]) });
-    return Response.json({ error: { code: "notFound", message: "Not a Studio action." } }, { status: 404 });
+    return Response.json({ error: { code: "notFound", message: t("Not a Studio action.") } }, { status: 404 });
   }
 }

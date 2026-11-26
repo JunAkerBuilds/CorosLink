@@ -2,6 +2,7 @@
 // show. Each reads or writes the design field CorosLink's editor uses for that layer (its setTimeStyle, setMetricStyle,
 // setDateStyle, updateAmPmIndicator, updateConfigAsset, the stroke and shadow stacks, the progress arcs and bars), so a
 // face edited here and one edited in CorosLink are the same file. Pure functions over the design; no screen state.
+import { t } from "@/lib/i18n";
 import type {
   CorosWatchfaceArtwork, CorosWatchfaceBackgroundElement, CorosWatchfaceDesignSprite, CorosWatchfaceExerciseProgressStyle,
   CorosWatchfaceKcalProgressStyle, CorosWatchfaceNativeDataStyle, CorosWatchfaceNativePart, CorosWatchfaceNativePartStyle,
@@ -541,18 +542,18 @@ export function setDelays(design: Design, delays: number[]): Design {
 
 /** A PNG chosen on this computer, as the engine keeps artwork. */
 export async function readArtwork(file: File): Promise<CorosWatchfaceArtwork> {
-  if (!/^image\/png$/i.test(file.type) && !/\.png$/i.test(file.name)) throw new Error(`${file.name} isn't a PNG.`);
-  if (file.size > 5 * 1024 * 1024) throw new Error(`${file.name} is over 5 MB.`);
+  if (!/^image\/png$/i.test(file.type) && !/\.png$/i.test(file.name)) throw new Error(t("{name} isn't a PNG.", { name: file.name }));
+  if (file.size > 5 * 1024 * 1024) throw new Error(t("{name} is over 5 MB.", { name: file.name }));
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error(`Couldn't read ${file.name}.`));
+    reader.onerror = () => reject(new Error(t("Couldn't read {name}.", { name: file.name })));
     reader.readAsDataURL(file);
   });
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`${file.name} isn't a picture this app can open.`));
+    img.onerror = () => reject(new Error(t("{name} isn't a picture this app can open.", { name: file.name })));
     img.src = dataUrl;
   });
   return { dataUrl, width: image.naturalWidth, height: image.naturalHeight };
@@ -561,7 +562,7 @@ export async function readArtwork(file: File): Promise<CorosWatchfaceArtwork> {
 const readDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(String(reader.result));
-  reader.onerror = () => reject(new Error(`Couldn't read ${file.name}.`));
+  reader.onerror = () => reject(new Error(t("Couldn't read {name}.", { name: file.name })));
   reader.readAsDataURL(file);
 });
 
@@ -573,13 +574,13 @@ const PICTURE_MAX = 1600;
  * kept byte for byte; JPEG and WebP are redrawn as PNG, and anything over 1600 px on a side is scaled down to it.
  */
 export async function readPicture(file: File): Promise<CorosWatchfaceArtwork> {
-  if (!/^image\/(png|jpeg|webp)$/i.test(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)) throw new Error(`${file.name} isn't a PNG, JPEG or WebP picture.`);
-  if (file.size > 25 * 1024 * 1024) throw new Error(`${file.name} is over 25 MB.`);
+  if (!/^image\/(png|jpeg|webp)$/i.test(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)) throw new Error(t("{name} isn't a PNG, JPEG or WebP picture.", { name: file.name }));
+  if (file.size > 25 * 1024 * 1024) throw new Error(t("{name} is over 25 MB.", { name: file.name }));
   const dataUrl = await readDataUrl(file);
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`${file.name} isn't a picture this app can open.`));
+    img.onerror = () => reject(new Error(t("{name} isn't a picture this app can open.", { name: file.name })));
     img.src = dataUrl;
   });
   const k = Math.min(1, PICTURE_MAX / Math.max(image.naturalWidth, image.naturalHeight));
@@ -588,7 +589,7 @@ export async function readPicture(file: File): Promise<CorosWatchfaceArtwork> {
   canvas.width = Math.max(1, Math.round(image.naturalWidth * k));
   canvas.height = Math.max(1, Math.round(image.naturalHeight * k));
   const context = canvas.getContext("2d");
-  if (!context) throw new Error(`Couldn't read ${file.name}.`);
+  if (!context) throw new Error(t("Couldn't read {name}.", { name: file.name }));
   context.imageSmoothingQuality = "high";
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
   return { dataUrl: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height };
@@ -601,7 +602,7 @@ export async function readPicture(file: File): Promise<CorosWatchfaceArtwork> {
 export async function readFrames(files: FileList): Promise<{ name: string; relativePath: string; dataUrl: string }[]> {
   const inFolder = (f: File) => (f.webkitRelativePath || f.name).split("/").slice(1).join("/") || f.name;
   const pngs = [...files].filter((f) => /\.png$/i.test(f.name) && !inFolder(f).includes("/"));
-  if (pngs.length > 60) throw new Error(`The folder has ${pngs.length} PNGs; the watch plays up to 44 frames.`);
-  if (pngs.some((f) => f.size > 5 * 1024 * 1024)) throw new Error("A frame is over 5 MB.");
+  if (pngs.length > 60) throw new Error(t("The folder has {n} PNGs; the watch plays up to 44 frames.", { n: pngs.length }));
+  if (pngs.some((f) => f.size > 5 * 1024 * 1024)) throw new Error(t("A frame is over 5 MB."));
   return Promise.all(pngs.map(async (f) => ({ name: f.name, relativePath: inFolder(f), dataUrl: await readDataUrl(f) })));
 }

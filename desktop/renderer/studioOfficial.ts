@@ -3,6 +3,7 @@
 // Each is the edit CorosLink's editor makes for the same pick (its chooseSprite, chooseConfigAsset,
 // chooseRasterSpriteFolder, chooseBatterySpriteFolder and chooseWeatherSpriteFolder with an official preset), so a face
 // set up here and one set up there are the same file. Pure functions over the design.
+import { t } from "@/lib/i18n";
 import type { CorosWatchfaceArtwork, CorosWatchfaceDesignSprite, CorosWatchfaceRasterFontFolder } from "../watchface/types";
 import { resolveWatchfaceArtworkLayerOrder, watchfaceSpriteLayerId } from "../watchface/engine/watchfaceArtworkLayers";
 import { MAX_DESIGN_SPRITES } from "../watchface/engine/watchfaceBackground";
@@ -60,7 +61,7 @@ export function officialFolder(set: OfficialFrames): CorosWatchfaceRasterFontFol
  * `watchScale` is master pixels per watch pixel, so the image goes out 1:1 on the watch it was drawn for.
  */
 export function addOfficialImage(design: Design, art: CorosWatchfaceArtwork, face: { width: number; height: number }, watchScale: number, id: string): Design {
-  if ((design.designSprites ?? []).length >= MAX_DESIGN_SPRITES) throw new Error(`A face can hold up to ${MAX_DESIGN_SPRITES} images.`);
+  if ((design.designSprites ?? []).length >= MAX_DESIGN_SPRITES) throw new Error(t("A face can hold up to {max} images.", { max: MAX_DESIGN_SPRITES }));
   const sprite: CorosWatchfaceDesignSprite = {
     id, dataUrl: art.dataUrl, sourceWidth: art.width, sourceHeight: art.height,
     width: Math.round(art.width * watchScale), height: Math.round(art.height * watchScale),
@@ -73,13 +74,18 @@ export function addOfficialImage(design: Design, art: CorosWatchfaceArtwork, fac
 
 /** The battery icon's states from a set: frame 0 charging, 1 empty, then the tens (the order COROS's own faces use). */
 export function officialBatteryStates(set: OfficialFrames): Record<string, CorosWatchfaceArtwork> {
-  if (set.frames.length < 2) throw new Error("Choose a set with a picture for each battery level.");
+  if (set.frames.length < 2) throw new Error(t("Choose a set with a picture for each battery level."));
   return Object.fromEntries(set.frames.map((_, i) => [String(i), officialArtwork(set, i)]));
 }
 
 /** The weather icon's day or night pictures, or its temperature digits, from a set; states it lacks keep the built-in ones. */
 export function setWeatherSet(design: Design, which: WeatherAssetSet, set: OfficialFrames): Design {
-  if (set.frames.length > WEATHER_ASSET_COUNTS[which]) throw new Error(`That set has ${set.frames.length} pictures; ${which} takes ${WEATHER_ASSET_COUNTS[which]}.`);
+  if (set.frames.length > WEATHER_ASSET_COUNTS[which]) {
+    const vars = { n: set.frames.length, max: WEATHER_ASSET_COUNTS[which] };
+    throw new Error(which === "day" ? t("That set has {n} pictures; day takes {max}.", vars)
+      : which === "night" ? t("That set has {n} pictures; night takes {max}.", vars)
+        : which === "digits" ? t("That set has {n} pictures; digits takes {max}.", vars) : t("That set has {n} pictures; this one takes {max}.", vars));
+  }
   const states = Object.fromEntries(set.frames.map((dataUrl, i) => [String(i), dataUrl]));
   return { ...design, weatherIndicator: { enabled: true, x: 0, y: 0, scale: 1, ...design.weatherIndicator, assets: { ...design.weatherIndicator?.assets, [which]: states } } };
 }
@@ -100,26 +106,26 @@ export const weatherSetCount = (design: Design, which: WeatherAssetSet) => Objec
 /** The official digit (or weekday, month) sets for a layer's PNG font, opened on what the layer shows. */
 export function officialFontRequest(layer: EditorLayer, kind: PanelKind, scope: "layer" | "face"): OfficialRequest {
   const labels = scope === "layer" && layer.id === "weekday" ? "weekday" : scope === "layer" && layer.id === "dateMonth" ? "month" : null;
-  if (labels) return { mode: "font", title: `Official ${labels} labels`, role: "date", frameCount: labels === "weekday" ? 7 : 12 };
+  if (labels) return { mode: "font", title: labels === "weekday" ? t("Official weekday labels") : t("Official month labels"), role: "date", frameCount: labels === "weekday" ? 7 : 12 };
   const role = scope === "face" || kind === "time" ? "time" : kind === "date" ? "date"
     : /battery/i.test(`${layer.id} ${layer.metricId ?? ""}`) ? "battery" : /temp|weather/i.test(`${layer.id} ${layer.metricId ?? ""}`) ? "weather" : undefined;
-  return { mode: "font", title: scope === "face" ? "Official COROS fonts" : `Official font for ${layer.label}`, ...(role ? { role } : {}), frameCount: 10 };
+  return { mode: "font", title: scope === "face" ? t("Official COROS fonts") : t("Official font for {name}", { name: t(layer.label) }), ...(role ? { role } : {}), frameCount: 10 };
 }
 
 /** Official library for a template image: any single picture, opened on the category of the image being replaced. */
 export function officialImageRequest(layer: EditorLayer): OfficialRequest {
   const key = (layer.configAssetId ?? layer.id).replace(/^(?:aod:)?config:/, "");
   const category = officialCategoryForConfigKey(key);
-  return { mode: "image", title: `Official image for ${layer.label}`, ...(category ? { category } : {}) };
+  return { mode: "image", title: t("Official image for {name}", { name: t(layer.label) }), ...(category ? { category } : {}) };
 }
 
 export function officialBatteryRequest(): OfficialRequest {
-  return { mode: "sprites", title: "Official battery sprites", category: "battery" };
+  return { mode: "sprites", title: t("Official battery sprites"), category: "battery" };
 }
 
 /** Day and night icons are 41-state sets; the temperature digits are a 10-frame weather font. */
 export function officialWeatherRequest(which: "day" | "night" | "digits"): OfficialRequest {
   return which === "digits"
-    ? { mode: "sprites", title: "Official temperature digits", category: "fonts", role: "weather", frameCount: WEATHER_ASSET_COUNTS.digits, configKey: "weather_temp_font" }
-    : { mode: "sprites", title: `Official ${which} weather icons`, category: "weather", frameCount: WEATHER_ASSET_COUNTS[which], configKey: which === "day" ? "weather_icon_dir" : "weather_dark_icon_dir" };
+    ? { mode: "sprites", title: t("Official temperature digits"), category: "fonts", role: "weather", frameCount: WEATHER_ASSET_COUNTS.digits, configKey: "weather_temp_font" }
+    : { mode: "sprites", title: which === "day" ? t("Official day weather icons") : t("Official night weather icons"), category: "weather", frameCount: WEATHER_ASSET_COUNTS[which], configKey: which === "day" ? "weather_icon_dir" : "weather_dark_icon_dir" };
 }

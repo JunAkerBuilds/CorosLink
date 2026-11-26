@@ -10,6 +10,7 @@ import { gunzipSync } from "node:zlib";
 import { assertHubURL, dataOf, type HubSession } from "./client";
 import { HubExpired, HubInvalid, HubNotWired, HubProblem } from "./errors";
 import { at, text, type Json } from "./json";
+import { msg, t } from "@/lib/i18n";
 
 export type Bytes = Uint8Array<ArrayBuffer>;
 type Fetch = typeof fetch;
@@ -150,14 +151,14 @@ export function decodeStsCredentials(raw: string): StsCredentials {
   try {
     parsed = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
   } catch {
-    throw new HubProblem("COROS's upload answer couldn't be read.");
+    throw new HubProblem(t("COROS's upload answer couldn't be read."));
   }
   const bag = (typeof parsed === "object" && parsed !== null ? parsed : {}) as Record<string, unknown>;
   const { Region, Bucket, AccessKeyId, SecretAccessKey, SessionToken } = bag;
   const filled = (value: unknown): value is string => typeof value === "string" && value !== "" && value.length <= 4096 && !/[\s\u0000-\u001f]/.test(value);
-  if (!filled(Region) || !filled(Bucket) || !filled(AccessKeyId) || !filled(SecretAccessKey) || !filled(SessionToken)) throw new HubProblem("COROS's upload answer was incomplete.");
+  if (!filled(Region) || !filled(Bucket) || !filled(AccessKeyId) || !filled(SecretAccessKey) || !filled(SessionToken)) throw new HubProblem(t("COROS's upload answer was incomplete."));
   // The bucket and region become a host name: only what a bucket and a region can be.
-  if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(Bucket) || !/^[a-z]{2}(-[a-z]+)+-\d{1,2}$/.test(Region)) throw new HubProblem("COROS's upload answer named a place this app doesn't know.");
+  if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(Bucket) || !/^[a-z]{2}(-[a-z]+)+-\d{1,2}$/.test(Region)) throw new HubProblem(t("COROS's upload answer named a place this app doesn't know."));
   return { Region, Bucket, AccessKeyId, SecretAccessKey, SessionToken };
 }
 
@@ -176,12 +177,17 @@ export interface UploadOptions {
   now?: Date;
 }
 
-async function send(fetchImpl: Fetch, url: URL, init: RequestInit, who: string): Promise<Response> {
+async function send(fetchImpl: Fetch, url: URL, init: RequestInit, who: "COROS" | "storage"): Promise<Response> {
   try {
     return await fetchImpl(url, { ...init, redirect: "manual", cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch (error) {
-    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) throw new HubProblem(`${who} didn't answer in time. Check your connection and try again.`, "unreachable");
-    throw new HubProblem(`${who} couldn't be reached. Check your connection and try again.`, "unreachable");
+    const late = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    if (who === "storage") {
+      throw new HubProblem(late ? t("COROS's storage didn't answer in time. Check your connection and try again.")
+        : t("COROS's storage couldn't be reached. Check your connection and try again."), "unreachable");
+    }
+    throw new HubProblem(late ? t("COROS didn't answer in time. Check your connection and try again.")
+      : t("COROS couldn't be reached. Check your connection and try again."), "unreachable");
   }
 }
 
@@ -205,17 +211,17 @@ export function activityFileOf(raw: Uint8Array<ArrayBuffer>): { ext: "fit" | "tc
       const unzipped = gunzipSync(bytes, { maxOutputLength: MAX_ACTIVITY_FILE + 1 });
       bytes = new Uint8Array(unzipped.buffer.slice(unzipped.byteOffset, unzipped.byteOffset + unzipped.byteLength)) as Uint8Array<ArrayBuffer>;
     } catch {
-      throw new HubInvalid("That file couldn't be unpacked, or is too large to send to COROS.");
+      throw new HubInvalid(t("That file couldn't be unpacked, or is too large to send to COROS."));
     }
   }
   if (bytes.length >= 12 && bytes[8] === 0x2e && bytes[9] === 0x46 && bytes[10] === 0x49 && bytes[11] === 0x54) return { ext: "fit", bytes };
   const head = new TextDecoder().decode(bytes.subarray(0, 2048)).replace(/^\uFEFF/, "").trimStart();
   if (head.startsWith("<") && head.includes("TrainingCenterDatabase")) return { ext: "tcx", bytes };
-  throw new HubInvalid("This activity's file isn't FIT or TCX, so COROS can't take it.");
+  throw new HubInvalid(t("This activity's file isn't FIT or TCX, so COROS can't take it."));
 }
 
 /** When COROS may have the activity already: sending it again could add it twice. */
-export const MAYBE_SENT = "COROS didn't confirm the upload, but it may have the activity already. Check your COROS activities in a few minutes before sending it again.";
+export const MAYBE_SENT = msg("COROS didn't confirm the upload, but it may have the activity already. Check your COROS activities in a few minutes before sending it again.");
 
 /**
  * Sends one activity file to the session's COROS account. Resolves to COROS's import ID ("" when it names
@@ -223,22 +229,22 @@ export const MAYBE_SENT = "COROS didn't confirm the upload, but it may have the 
  */
 export async function uploadActivityFile(session: HubSession, file: ActivityFile, options: UploadOptions): Promise<{ importId: string }> {
   const fetchImpl: Fetch = options.fetchImpl ?? ((...args) => fetch(...args));
-  if (!/^[A-Za-z0-9_-]{1,80}\.(fit|tcx)$/.test(file.name)) throw new HubInvalid("Only .fit and .tcx files can be sent to COROS.");
-  if (file.bytes.length === 0) throw new HubInvalid("That file is empty.");
-  if (file.bytes.length > MAX_ACTIVITY_FILE) throw new HubInvalid("That file is too large to send to COROS.");
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(session.userId)) throw new HubProblem("COROS's sign-in didn't name your account in a way this app can use.");
+  if (!/^[A-Za-z0-9_-]{1,80}\.(fit|tcx)$/.test(file.name)) throw new HubInvalid(t("Only .fit and .tcx files can be sent to COROS."));
+  if (file.bytes.length === 0) throw new HubInvalid(t("That file is empty."));
+  if (file.bytes.length > MAX_ACTIVITY_FILE) throw new HubInvalid(t("That file is too large to send to COROS."));
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(session.userId)) throw new HubProblem(t("COROS's sign-in didn't name your account in a way this app can use."));
   const importURL = new URL(session.baseURL + "/activity/fit/import");
   assertHubURL(importURL);
   const stsURL = stsRequestURL(session.baseURL);
-  if (!stsURL) throw new HubNotWired("Sending activities to COROS is connected for the Global and Europe regions only. Your COROS account is in another region.");
+  if (!stsURL) throw new HubNotWired(t("Sending activities to COROS is connected for the Global and Europe regions only. Your COROS account is in another region."));
 
   // 1. Temporary credentials for COROS's bucket, from its web app's own proxy (it takes the session as a cookie).
   const stsResponse = await send(fetchImpl, stsURL, { headers: { Cookie: `CPL-coros-token=${session.accessToken}`, Accept: "application/json, text/plain, */*" } }, "COROS");
   const stsBody = await jsonOf(stsResponse);
   if (stsResponse.status === 401 || at(stsBody, "code") === 401) throw new HubExpired();
-  if (!stsResponse.ok) throw new HubProblem(`COROS couldn't start the upload (HTTP ${stsResponse.status}). Try again later.`);
+  if (!stsResponse.ok) throw new HubProblem(t("COROS couldn't start the upload (HTTP {status}). Try again later.", { status: stsResponse.status }));
   const sealed = at(at(stsBody, "data"), "credentials");
-  if (typeof sealed !== "string" || sealed === "") throw new HubProblem("COROS's upload answer was incomplete.");
+  if (typeof sealed !== "string" || sealed === "") throw new HubProblem(t("COROS's upload answer was incomplete."));
   const sts = decodeStsCredentials(sealed);
 
   // 2. The file, zipped as <md5>/<name>, into the bucket.
@@ -256,8 +262,8 @@ export async function uploadActivityFile(session: HubSession, file: ActivityFile
   const put = await send(fetchImpl, putURL, {
     method: "PUT", body: zip,
     headers: { "x-amz-content-sha256": payloadHash, "x-amz-date": amzDate, "x-amz-security-token": sts.SessionToken, Authorization: authorization, "Content-Type": "application/zip" },
-  }, "COROS's storage");
-  if (!put.ok) throw new HubProblem(`COROS's storage didn't take the file (HTTP ${put.status}). Try again later.`);
+  }, "storage");
+  if (!put.ok) throw new HubProblem(t("COROS's storage didn't take the file (HTTP {status}). Try again later.", { status: put.status }));
 
   // 3. Tell COROS the file is there.
   const form = new FormData();
@@ -273,12 +279,12 @@ export async function uploadActivityFile(session: HubSession, file: ActivityFile
       headers: { accesstoken: session.accessToken, yfheader: JSON.stringify({ userId: session.userId }), Accept: "application/json, text/plain, */*" },
     }, "COROS");
   } catch (error) {
-    if (error instanceof HubProblem && error.kind === "unreachable") throw new HubProblem(MAYBE_SENT, "unreachable");
+    if (error instanceof HubProblem && error.kind === "unreachable") throw new HubProblem(t(MAYBE_SENT), "unreachable");
     throw error;
   }
-  if (!imported.ok) throw new HubProblem(`COROS couldn't take the activity (HTTP ${imported.status}). Try again later.`);
+  if (!imported.ok) throw new HubProblem(t("COROS couldn't take the activity (HTTP {status}). Try again later.", { status: imported.status }));
   const body = await jsonOf(imported);
-  if (body === null) throw new HubProblem(MAYBE_SENT);
+  if (body === null) throw new HubProblem(t(MAYBE_SENT));
   // Like the desktop app: an answer without a result code counts as taken; only a code other than 0000 is a refusal.
   const data = text(at(body, "result")) === undefined && text(at(body, "apiCode")) === undefined ? at(body, "data") : dataOf(body, true);
   return { importId: text(at(data ?? null, "importId")) ?? "" };
@@ -286,6 +292,6 @@ export async function uploadActivityFile(session: HubSession, file: ActivityFile
 
 /** The quarter-hour offset the browser sends with an upload: a whole number from UTC−12 to UTC+14. */
 export function timezoneQuarters(value: unknown): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < -48 || value > 56) throw new HubInvalid("The time zone isn't valid.");
+  if (typeof value !== "number" || !Number.isInteger(value) || value < -48 || value > 56) throw new HubInvalid(t("The time zone isn't valid."));
   return value;
 }

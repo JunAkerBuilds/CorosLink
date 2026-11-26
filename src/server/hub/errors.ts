@@ -1,10 +1,11 @@
 // Typed Training Hub failures, and how each one is told to the browser.
 import type { HubErrorCode, HubMoveProgress } from "@/data/hub";
+import { t } from "@/lib/i18n";
 
 /** COROS no longer takes the session's token (TrainingHub.Expired). The session is dropped; nothing signs in again. */
 export class HubExpired extends Error {
   constructor() {
-    super("COROS signed you out. Sign in again.");
+    super(t("COROS signed you out. Sign in again."));
     this.name = "HubExpired";
   }
 }
@@ -36,7 +37,7 @@ export class HubInvalid extends Error {
 /** No session cookie: the person hasn't signed in to COROS here. */
 export class HubSignedOut extends Error {
   constructor() {
-    super("Sign in to COROS Training Hub first.");
+    super(t("Sign in to COROS Training Hub first."));
     this.name = "HubSignedOut";
   }
 }
@@ -44,7 +45,7 @@ export class HubSignedOut extends Error {
 /** A state-changing request that didn't come from this site's own pages. */
 export class HubForbidden extends Error {
   constructor() {
-    super("This request didn't come from C-LINK.");
+    super(t("This request didn't come from C-LINK."));
     this.name = "HubForbidden";
   }
 }
@@ -60,7 +61,7 @@ export class HubNotWired extends Error {
 /** A calendar move that stopped part-way, with how far it got, so a retry picks up there. */
 export class HubMoveFailed extends Error {
   constructor(public readonly cause: unknown, public readonly move: HubMoveProgress) {
-    super(cause instanceof Error ? cause.message : "The move didn't finish.");
+    super(cause instanceof Error ? cause.message : t("The move didn't finish."));
     this.name = "HubMoveFailed";
   }
 }
@@ -74,9 +75,9 @@ export function signInMessage(error: HubRefused): { code: HubErrorCode; message:
   switch (error.code) {
     case "1030":
     case "1006":
-      return { code: "wrong_password", message: "COROS didn't accept that email and password." };
+      return { code: "wrong_password", message: t("COROS didn't accept that email and password.") };
     case "1031":
-      return { code: "unknown_account", message: "COROS doesn't know that email." };
+      return { code: "unknown_account", message: t("COROS doesn't know that email.") };
     default:
       return { code: "refused", message: error.message };
   }
@@ -102,5 +103,5 @@ export function errorResponse(error: unknown, signingIn = false): { status: numb
     if (error.kind === "unreachable") return { status: 504, body: { error: { code: "unreachable", message: error.message } } };
     return { status: 502, body: { error: { code: "coros", message: error.message } } };
   }
-  return { status: 500, body: { error: { code: "server", message: "C-LINK couldn't finish that. Try again." } } };
+  return { status: 500, body: { error: { code: "server", message: t("C-LINK couldn't finish that. Try again.") } } };
 }

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Bars, BarsLegend, DISCLAIMER, HeroText, Icon, NotYourSport, SampleBlock, Section, Split, SportHead, Stats, Tiles, TrendLine } from "@/components/sports/parts";
 import { useLoaded, type Origin } from "@/data/core";
 import { isMissing, loadSports, type RidePage } from "@/data/sports";
+import { t } from "@/lib/i18n";
 import type { Family } from "@/lib/sports";
 import "../sports.css";
 
@@ -10,7 +11,7 @@ export default function RidingPage() {
   const loaded = useLoaded(loadSports);
   if (loaded.status === "loading") return <main className="page sp-page"><div className="skeleton" style={{ minHeight: 520 }} /></main>;
   if (loaded.status === "error") return <main className="page sp-page"><p className="notice" role="alert">{loaded.error.message}</p></main>;
-  if (!loaded.data.ride) return <NotYourSport name="Riding" current="ride" families={loaded.data.families} origin={loaded.origin} />;
+  if (!loaded.data.ride) return <NotYourSport name={t("Riding")} current="ride" families={loaded.data.families} origin={loaded.origin} />;
   return <RideScreen ride={loaded.data.ride} families={loaded.data.families} origin={loaded.origin} />;
 }
 
@@ -18,17 +19,17 @@ function RideScreen({ ride, families, origin }: { ride: RidePage; families: read
   const { hero, much, climb, zones, ftp, vo2, balance, perBeat, records } = ride;
   return (
     <main className="page sp-page">
-      <SportHead title="Riding" current="ride" families={families} origin={origin} />
+      <SportHead title={t("Riding")} current="ride" families={families} origin={origin} />
 
-      <section aria-label="Riding now" className="sp-hero" data-hue="ride">
+      <section aria-label={t("Riding now")} className="sp-hero" data-hue="ride">
         <HeroText chip={hero.chip} headline={hero.headline} text={hero.text} figures={hero.figures} />
         <div className="sp-hero-side" style={{ flex: "1.35 1 520px", gap: 10 }}>
           <div className="sp-side-head">
-            <b>Power curve</b>
+            <b>{t("Power curve")}</b>
             {isMissing(hero.curve) ? null : (
               <span className="sp-legend">
-                <span data-hue="strength"><i aria-hidden="true" className="sp-swatch-line" />Last 90 days</span>
-                <span><i aria-hidden="true" className="sp-swatch-dash" style={{ background: "none", borderRadius: 0, height: 0 }} />Your best ever</span>
+                <span data-hue="strength"><i aria-hidden="true" className="sp-swatch-line" />{t("Last 90 days")}</span>
+                <span><i aria-hidden="true" className="sp-swatch-dash" style={{ background: "none", borderRadius: 0, height: 0 }} />{t("Your best ever")}</span>
               </span>
             )}
           </div>
@@ -36,10 +37,10 @@ function RideScreen({ ride, families, origin }: { ride: RidePage; families: read
             <>
               <PowerCurve curve={hero.curve} />
               <div className="sp-boxes center" style={{ gridTemplateColumns: `repeat(${hero.curve.tiles.length}, minmax(0, 1fr))`, marginRight: 54 }}>
-                {hero.curve.tiles.map((t) => (
-                  <div key={t.name} data-on={t.best ? "" : undefined}>
-                    <span>{t.name}</span><b className="num" style={{ fontSize: 17 }}>{t.watts}</b>
-                    {t.perKg ? <span style={{ fontSize: 11 }}>{t.perKg}</span> : null}<em>{t.note}</em>
+                {hero.curve.tiles.map((tile) => (
+                  <div key={tile.name} data-on={tile.best ? "" : undefined}>
+                    <span>{tile.name}</span><b className="num" style={{ fontSize: 17 }}>{tile.watts}</b>
+                    {tile.perKg ? <span style={{ fontSize: 11 }}>{tile.perKg}</span> : null}<em>{tile.note}</em>
                   </div>
                 ))}
               </div>
@@ -51,17 +52,17 @@ function RideScreen({ ride, families, origin }: { ride: RidePage; families: read
       <Tiles tiles={ride.tiles} />
 
       <div className="sp-row">
-        <Section id="much" title="How much" icon="bars" hue="ride" how="Hours first: wind and hills make distance unfair" flex="1.25 1 540px" reading={much}>
-          <div className="sp-side-head"><b>Hours a week</b><BarsLegend chart={much.weeks} /></div>
+        <Section id="much" title={t("How much")} icon="bars" hue="ride" how={t("Hours first: wind and hills make distance unfair")} flex="1.25 1 540px" reading={much}>
+          <div className="sp-side-head"><b>{t("Hours a week")}</b><BarsLegend chart={much.weeks} /></div>
           <Bars chart={much.weeks} hue="ride" width={640} height={206} />
           <Stats items={much.figures} />
         </Section>
-        <Section id="climb" title="Climbing" icon="climb" hue="violet" how="From your watch's barometer" flex="1 1 440px" reading={climb}>
+        <Section id="climb" title={t("Climbing")} icon="climb" hue="violet" how={t("From your watch's barometer")} flex="1 1 440px" reading={climb}>
           {isMissing(climb) ? null : (
             <>
               <Bars chart={climb.weeks} hue="violet" width={520} height={180} />
               {climb.sampleBiggest ? (
-                <SampleBlock title="Biggest climb, last 4 weeks">
+                <SampleBlock title={t("Biggest climb, last 4 weeks")}>
                   <b className="num">{climb.sampleBiggest.title} · {climb.sampleBiggest.detail} · {climb.sampleBiggest.tag}</b>
                   <p>{climb.sampleBiggest.rate}</p>
                 </SampleBlock>
@@ -72,10 +73,10 @@ function RideScreen({ ride, families, origin }: { ride: RidePage; families: read
       </div>
 
       <div className="sp-row">
-        <Section id="zones" title="Power zones" icon="bars" hue="gold" how="Coggan's seven zones, from your FTP" flex="1.3 1 400px" reading={zones}>
+        <Section id="zones" title={t("Power zones")} icon="bars" hue="gold" how={t("Coggan's seven zones, from your FTP")} flex="1.3 1 400px" reading={zones}>
           {isMissing(zones) ? null : (
             <>
-              <div role="img" aria-label="Share of riding time by power zone" className="sp-split" style={{ height: 16 }}>
+              <div role="img" aria-label={t("Share of riding time by power zone")} className="sp-split" style={{ height: 16 }}>
                 {zones.rows.map((z) => <span key={z.zone} data-hue={z.hue} style={{ flex: `${Math.max(z.percent, 0.5)} 1 0` }} />)}
               </div>
               <div className="sp-zones">
@@ -90,26 +91,26 @@ function RideScreen({ ride, families, origin }: { ride: RidePage; families: read
             </>
           )}
         </Section>
-        <Section id="ftp" title="FTP and W/kg" icon="trend" hue="gold" how="95% of your best 20 minutes in each 4 weeks" flex="1 1 290px" reading={ftp}>
+        <Section id="ftp" title={t("FTP and W/kg")} icon="trend" hue="gold" how={t("95% of your best 20 minutes in each 4 weeks")} flex="1 1 290px" reading={ftp}>
           {isMissing(ftp) ? null : (<>{ftp.trend ? <TrendLine chart={ftp.trend} hue="gold" width={440} height={160} /> : null}<Stats items={ftp.figures} /></>)}
         </Section>
-        <Section title="Cycling VO₂ max" icon="lungs" hue="violet" how="C-LINK's estimate from your best 5 minutes" flex="0.8 1 240px" reading={vo2}>
+        <Section title={t("Cycling VO₂ max")} icon="lungs" hue="violet" how={t("C-LINK's estimate from your best 5 minutes")} flex="0.8 1 240px" reading={vo2}>
           {isMissing(vo2) ? null : <Stats items={vo2.figures} />}
         </Section>
       </div>
 
       <div className="sp-row">
-        <Section id="balance" title="Easy vs hard" icon="pulse" hue="rose" how="Seiler's three intensity zones" flex="1.3 1 400px" reading={balance}>
+        <Section id="balance" title={t("Easy vs hard")} icon="pulse" hue="rose" how={t("Seiler's three intensity zones")} flex="1.3 1 400px" reading={balance}>
           {isMissing(balance) ? null : (<><Split shares={balance.split} label={balance.split.map((s) => `${s.name} ${s.percent}%`).join(", ")} /><p className="sp-note">{balance.note}</p></>)}
         </Section>
-        <Section title="Watts per beat" icon="heart" hue="rose" how="Rides of 30 minutes or more" flex="1 1 290px" reading={perBeat}>
+        <Section title={t("Watts per beat")} icon="heart" hue="rose" how={t("Rides of 30 minutes or more")} flex="1 1 290px" reading={perBeat}>
           {isMissing(perBeat) || !perBeat.chart ? null : <TrendLine chart={perBeat.chart} hue="rose" width={440} height={160} />}
         </Section>
         {records.length ? (
-          <section aria-label="Records" className="sp-card" style={{ flex: "0.8 1 240px", gap: 10, paddingBottom: 14 }}>
+          <section aria-label={t("Records")} className="sp-card" style={{ flex: "0.8 1 240px", gap: 10, paddingBottom: 14 }}>
             <div className="sp-card-head">
               <span aria-hidden="true" className="sp-icon sp-tint" data-hue="gold"><Icon name="medal" /></span>
-              <h2>Records</h2><Link href="/activities" className="sp-end">All activities</Link>
+              <h2>{t("Records")}</h2><Link href="/activities" className="sp-end">{t("All activities")}</Link>
             </div>
             <div className="sp-list">
               {records.map((r) => (
@@ -122,7 +123,7 @@ function RideScreen({ ride, families, origin }: { ride: RidePage; families: read
         ) : null}
       </div>
 
-      <p className="sp-disclaimer">{DISCLAIMER}</p>
+      <p className="sp-disclaimer">{t(DISCLAIMER)}</p>
     </main>
   );
 }

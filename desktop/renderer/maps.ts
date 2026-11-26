@@ -4,6 +4,7 @@ import type {
   RouteGeometry, RouteList, RouteSave, RouteSync, RoutingConfig, SavedRoute, SavedRouteSummary, SketchAnswer, SketchRequest,
   Tile, TrailRoute, WatchRoute,
 } from "../maps/types";
+import { language, locale, t } from "@/lib/i18n";
 
 const BASE = "/api/desktop/maps";
 
@@ -20,14 +21,14 @@ async function call<T>(path: string, init?: RequestInit & { json?: unknown }): P
   const body = answer.headers.get("Content-Type")?.includes("json") ? await answer.json().catch(() => null) : null;
   if (!answer.ok) {
     const e = (body as { error?: { code?: string; message?: string } } | null)?.error;
-    throw new MapsProblem(e?.message ?? `Maps couldn't do that (${answer.status}).`, e?.code ?? "problem");
+    throw new MapsProblem(e?.message ?? t("Maps couldn't do that ({status}).", { status: answer.status }), e?.code ?? "problem");
   }
   return body as T;
 }
 const get = <T>(path: string) => call<T>(path);
 const send = <T>(method: string, path: string, json?: unknown) => call<T>(path, { method, json });
 
-export const said = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong.");
+export const said = (e: unknown) => (e instanceof Error ? e.message : t("Something went wrong."));
 
 // Route Studio
 export const routingConfig = () => get<RoutingConfig>("/routing");
@@ -91,6 +92,6 @@ export const km = (m: number) => (m / 1000).toFixed(2);
 export const shortDate = (iso: string) => {
   const d = new Date(iso);
   const today = new Date();
-  if (d.toDateString() === today.toDateString()) return "Today";
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (d.toDateString() === today.toDateString()) return t("Today");
+  return d.toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
 };

@@ -1,6 +1,7 @@
 // Every AI the desktop app can answer with, and how each is reached. Pure: the main process and its tests read it.
 // The key providers and their preferred models are the phones' (OwnAI.swift / OwnAI.kt); ChatGPT, the CLIs and
 // the OpenAI-compatible presets are CorosLink's.
+import { msg } from "@/lib/i18n";
 
 export type ProviderId =
   | "chatgpt" | "claude-code" | "gemini-cli" | "antigravity" | "opencode"
@@ -47,7 +48,7 @@ export const PROVIDERS: readonly Provider[] = [
   { id: "qwen", name: "Qwen", group: "key", base: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", keyHint: "sk-…", preferred: ["qwen-plus"], usage: STREAM_USAGE },
   { id: "qwen-cn", name: "Qwen (China)", group: "key", base: "https://dashscope.aliyuncs.com/compatible-mode/v1", keyHint: "sk-…", preferred: ["qwen-plus"], usage: STREAM_USAGE },
   { id: "mimo", name: "Xiaomi MiMo", group: "key", base: "https://api.xiaomimimo.com/v1", keyHint: "sk-…", preferred: ["mimo-v2.5-pro"], usage: STREAM_USAGE },
-  { id: "local", name: "On this computer", group: "computer", preferred: [], usage: STREAM_USAGE },
+  { id: "local", name: msg("On this computer"), group: "computer", preferred: [], usage: STREAM_USAGE },
 ];
 
 export const provider = (id: unknown): Provider | null => PROVIDERS.find((p) => p.id === id) ?? null;

@@ -4,6 +4,7 @@
 import type { CoachModel, ModelMessage, ModelRequest, ModelTurn, ToolCall } from "@/lib/coach/loop";
 import { textFileBlock, type UserPart } from "@/lib/coach/files";
 import { CoachModelError } from "@/server/coach/anthropic";
+import { t } from "@/lib/i18n";
 
 export const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const TIMEOUT_MS = 150_000;
@@ -55,10 +56,10 @@ export function toGemini(messages: readonly ModelMessage[]): Content[] {
 }
 
 export function statusError(status: number, detail: string): CoachModelError {
-  if (status === 401 || status === 403 || (status === 400 && /api key/i.test(detail))) return new CoachModelError("bad_key", "Google didn't accept the key.");
-  if (status === 429) return new CoachModelError("rate_limited", "The Gemini key has hit its limit. Try again in a minute.");
-  if (status === 400 || status === 404) return new CoachModelError("refused_request", `Gemini refused the request${detail ? `: ${detail}` : ""}.`);
-  return new CoachModelError("overloaded", "Gemini is having trouble right now. Try again shortly.");
+  if (status === 401 || status === 403 || (status === 400 && /api key/i.test(detail))) return new CoachModelError("bad_key", t("Google didn't accept the key."));
+  if (status === 429) return new CoachModelError("rate_limited", t("The Gemini key has hit its limit. Try again in a minute."));
+  if (status === 400 || status === 404) return new CoachModelError("refused_request", detail ? t("Gemini refused the request: {reason}.", { reason: detail }) : t("Gemini refused the request."));
+  return new CoachModelError("overloaded", t("Gemini is having trouble right now. Try again shortly."));
 }
 
 type Fetch = typeof fetch;
@@ -85,7 +86,7 @@ export function geminiModel(key: string, model: string, fetchImpl: Fetch = (...a
         });
       } catch (error) {
         if (request.signal?.aborted) throw error;
-        throw new CoachModelError("unreachable", "Gemini couldn't be reached.");
+        throw new CoachModelError("unreachable", t("Gemini couldn't be reached."));
       }
       if (!response.ok || !response.body) {
         let detail = "";
@@ -124,7 +125,7 @@ export function geminiModel(key: string, model: string, fetchImpl: Fetch = (...a
         take(buffer.trim());
       } catch (error) {
         if (request.signal?.aborted) throw error;
-        throw new CoachModelError("unreachable", "Gemini's answer was cut off. Try again.");
+        throw new CoachModelError("unreachable", t("Gemini's answer was cut off. Try again."));
       }
 
       // Each call gets an id of its own when Gemini sends none, so its result can be matched to it.

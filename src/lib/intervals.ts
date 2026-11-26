@@ -1,6 +1,7 @@
 // Import from intervals.icu, the pure parts: reading its activity list, deciding what is already on COROS, the
 // range of days to ask for, and how a row is written. Ported from the desktop app (CorosLink
 // electron/intervalsService.ts and intervalsMatch.ts).
+import { locale, msg, t } from "@/lib/i18n";
 
 export interface MatchableActivity {
   startEpochMs: number;
@@ -84,10 +85,10 @@ export function filterRecentIds(map: Readonly<Record<string, number>>, now: numb
 }
 
 export const IMPORT_RANGES = [
-  { days: 7, label: "7 days" },
-  { days: 30, label: "30 days" },
-  { days: 90, label: "90 days" },
-  { days: 365, label: "1 year" },
+  { days: 7, label: msg("7 days") },
+  { days: 30, label: msg("30 days") },
+  { days: 90, label: msg("90 days") },
+  { days: 365, label: msg("1 year") },
 ] as const;
 export type ImportDays = (typeof IMPORT_RANGES)[number]["days"];
 export const DEFAULT_IMPORT_DAYS: ImportDays = 30;
@@ -111,13 +112,13 @@ export function importWindow(daysBack: number, now: number = Date.now()): { olde
 /** A row's distance: metres for a swim, kilometres to the hundredth otherwise, a dash when there is none. */
 export function importDistance(row: Pick<IntervalsActivity, "distanceM" | "type">): string {
   if (!(row.distanceM > 0)) return "—";
-  if (row.type.toLowerCase().includes("swim")) return `${Math.round(row.distanceM).toLocaleString("en-US")} m`;
+  if (row.type.toLowerCase().includes("swim")) return `${Math.round(row.distanceM).toLocaleString(locale("en-US"))} m`;
   return `${(row.distanceM / 1000).toFixed(2)} km`;
 }
 
 /** "8 activities loaded · 4 missing from COROS". */
 export function importSummary(rows: readonly IntervalsRow[]): string {
   const missing = rows.filter((r) => !r.onCoros).length;
-  const loaded = `${rows.length} ${rows.length === 1 ? "activity" : "activities"} loaded`;
-  return missing > 0 ? `${loaded} · ${missing} missing from COROS` : `${loaded} · everything is on COROS`;
+  const loaded = rows.length === 1 ? t("1 activity loaded") : t("{n} activities loaded", { n: rows.length });
+  return missing > 0 ? `${loaded} · ${t("{n} missing from COROS", { n: missing })}` : `${loaded} · ${t("everything is on COROS")}`;
 }

@@ -1,4 +1,5 @@
 /** Body Alert's words and numbers on the web, ported from the phone's BodyAlertViews.swift / BodyAlertArt.swift. Pure. */
+import { language, locale, msg, t } from "@/lib/i18n";
 
 export type BodyAlertState = "learning" | "normal" | "watch" | "strain" | "strainHigh" | "recovering";
 export type NightClass = "noData" | "statusOnly" | "normal" | "deviating" | "strong";
@@ -39,27 +40,27 @@ export const LOOK_HUE: Record<Look, "cyan" | "mint" | "gold" | "rose" | "violet"
 };
 
 export const LOOK_TITLE: Record<Look, string> = {
-  learning: "Learning your usual",
-  clear: "All in your usual range",
-  watch: "Last night was a little off",
-  alert: "Your body may be fighting something",
-  settling: "Settling back",
+  learning: msg("Learning your usual"),
+  clear: msg("All in your usual range"),
+  watch: msg("Last night was a little off"),
+  alert: msg("Your body may be fighting something"),
+  settling: msg("Settling back"),
 };
 
-export const LOOK_PILL: Record<Look, string> = { learning: "Learning", clear: "Usual", watch: "A little off", alert: "Body Alert", settling: "Settling" };
+export const LOOK_PILL: Record<Look, string> = { learning: msg("Learning"), clear: msg("Usual"), watch: msg("A little off"), alert: msg("Body Alert"), settling: msg("Settling") };
 
 /** What to do, in a few words, and in a line. */
 export const LOOK_ADVICE: Record<Look, { title: string; line: string }> = {
-  learning: { title: "Keep wearing your watch to bed", line: "Body Alert starts after about two weeks of nights." },
-  clear: { title: "Nothing to change", line: "Train as planned." },
-  watch: { title: "Train as planned, keep an eye on it", line: "Nothing changes yet. A second night like this would raise a Body Alert." },
-  alert: { title: "An easy day or rest may help", line: "Keep today to rest and easy movement until your nights settle." },
-  settling: { title: "Ease back in", line: "Start with easy sessions while your nights come back to your usual." },
+  learning: { title: msg("Keep wearing your watch to bed"), line: msg("Body Alert starts after about two weeks of nights.") },
+  clear: { title: msg("Nothing to change"), line: msg("Train as planned.") },
+  watch: { title: msg("Train as planned, keep an eye on it"), line: msg("Nothing changes yet. A second night like this would raise a Body Alert.") },
+  alert: { title: msg("An easy day or rest may help"), line: msg("Keep today to rest and easy movement until your nights settle.") },
+  settling: { title: msg("Ease back in"), line: msg("Start with easy sessions while your nights come back to your usual.") },
 };
 
 export function signalTitle(r: Pick<SignalReading, "signal" | "channel">): string {
-  if (r.signal === "heart") return r.channel === "restingHR" ? "Resting heart rate" : "Sleeping heart rate";
-  return r.signal === "hrv" ? "HRV" : "Breathing rate";
+  if (r.signal === "heart") return r.channel === "restingHR" ? t("Resting heart rate") : t("Sleeping heart rate");
+  return r.signal === "hrv" ? "HRV" : t("Breathing rate");
 }
 
 /** HRV channels are ln ms. */
@@ -98,13 +99,15 @@ export function lastNight(d: BodyAlertData): AlertNight | null {
 /** The line under the title, naming what was off ("Your nights have been above your usual: resting heart rate +3 bpm."). */
 export function lookLine(look: Look, night: AlertNight | null): string {
   const off = (night?.signals ?? []).filter(isOff).map((r) => `${signalTitle(r).toLowerCase()} ${signalChange(r)}`);
-  const list = off.length > 1 ? `${off.slice(0, -1).join(", ")} and ${off.at(-1)}` : off[0];
+  const list = off.length > 1
+    ? language() === "en" ? `${off.slice(0, -1).join(", ")} and ${off.at(-1)}` : new Intl.ListFormat(locale(), { type: "conjunction" }).format(off)
+    : off[0];
   switch (look) {
-    case "learning": return "Sleep with your watch on. Body Alert starts after about two weeks of nights.";
-    case "clear": return "Last night's heart rate, HRV and breathing looked like you.";
-    case "watch": return list ? `Off your usual: ${list}. One night is often nothing. If it happens again tonight, Body Alert will tell you.` : "One night is often nothing. If it happens again tonight, Body Alert will tell you.";
-    case "alert": return list ? `Your nights have been above your usual: ${list}. An easy day or rest may help.` : "Your nights have been above your usual. An easy day or rest may help.";
-    case "settling": return "Your nights are heading back to your usual. Ease back into training.";
+    case "learning": return t("Sleep with your watch on. Body Alert starts after about two weeks of nights.");
+    case "clear": return t("Last night's heart rate, HRV and breathing looked like you.");
+    case "watch": return list ? t("Off your usual: {list}. One night is often nothing. If it happens again tonight, Body Alert will tell you.", { list }) : t("One night is often nothing. If it happens again tonight, Body Alert will tell you.");
+    case "alert": return list ? t("Your nights have been above your usual: {list}. An easy day or rest may help.", { list }) : t("Your nights have been above your usual. An easy day or rest may help.");
+    case "settling": return t("Your nights are heading back to your usual. Ease back into training.");
   }
 }
 
@@ -128,11 +131,11 @@ export function nightHue(n: AlertNight): "rose" | "gold" | "violet" | "mint" | n
 }
 
 export function nightWords(n: AlertNight): string {
-  if (n.nightClass === "noData" || n.signals.length === 0) return "no reading";
-  if (n.nightClass === "statusOnly") return "too few signals to count";
-  if (n.nightClass === "strong") return "well off your usual, counts towards an alert";
-  if (n.nightClass === "deviating") return "off your usual, counts towards an alert";
-  return "in your usual range";
+  if (n.nightClass === "noData" || n.signals.length === 0) return t("no reading");
+  if (n.nightClass === "statusOnly") return t("too few signals to count");
+  if (n.nightClass === "strong") return t("well off your usual, counts towards an alert");
+  if (n.nightClass === "deviating") return t("off your usual, counts towards an alert");
+  return t("in your usual range");
 }
 
 /** One signal's line over the nights, the usual band around it, scaled into `w`×`h`. Gaps where a night had no reading. */

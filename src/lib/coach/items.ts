@@ -6,6 +6,7 @@ import type {
   ViewBodyBody, ViewStrengthBody, ViewTrainingBody, WatchStateBody,
 } from "@/data/sync/native";
 import { calendarDayKey, REF_EPOCH_UNIX } from "@/data/sync/native";
+import { msg, t, tx } from "@/lib/i18n";
 
 export interface Row { collection: string; id: string; body: unknown }
 
@@ -94,8 +95,8 @@ export const dayOfRef = (ref: number, clock: Clock): string => localParts(refMs(
 /** `day` moved by `n` days. Works on the key alone, so no time zone is involved. */
 export function shiftDay(day: string, n: number): string {
   const [y, m, d] = day.split("-").map(Number);
-  const t = new Date(Date.UTC(y, m - 1, d + n));
-  return `${t.getUTCFullYear()}-${two(t.getUTCMonth() + 1)}-${two(t.getUTCDate())}`;
+  const at = new Date(Date.UTC(y, m - 1, d + n));
+  return `${at.getUTCFullYear()}-${two(at.getUTCMonth() + 1)}-${two(at.getUTCDate())}`;
 }
 
 export const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && shiftDay(v, 0) === v;
@@ -107,12 +108,31 @@ export function mondayOfDay(day: string): string {
   return shiftDay(day, -((dow + 6) % 7));
 }
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAYS = [msg("Sun"), msg("Mon"), msg("Tue"), msg("Wed"), msg("Thu"), msg("Fri"), msg("Sat")];
+const MONTHS = [msg("Jan"), msg("Feb"), msg("Mar"), msg("Apr"), msg("May"), msg("Jun"), msg("Jul"), msg("Aug"), msg("Sep"), msg("Oct"), msg("Nov"), msg("Dec")];
 
 /** "Thu 19 Nov". */
 export function dayLabel(day: string): string {
   const [y, m, d] = day.split("-").map(Number);
   return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${MONTHS[m - 1]}`;
+}
+
+/** The short weekday of `day` in the app's language, for the screen ("Thu"). */
+export function shownWeekday(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return tx("weekday", WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]);
+}
+
+/** `day` as the screen shows it, in the app's language ("19 Nov"). */
+export function shownDayMonth(day: string): string {
+  const [, m, d] = day.split("-").map(Number);
+  return t("{day} {month}", { day: d, month: tx("month", MONTHS[m - 1]) });
+}
+
+/** `dayLabel` for the screen, in the app's language ("Thu 19 Nov"). `dayLabel` itself stays English for the model. */
+export function shownDay(day: string): string {
+  const [, m, d] = day.split("-").map(Number);
+  return t("{weekday} {day} {month}", { weekday: shownWeekday(day), day: d, month: tx("month", MONTHS[m - 1]) });
 }
 
 export const timeLabel = (ms: number, clock: Clock): string => { const p = localParts(ms, clock); return `${two(p.hour)}:${two(p.minute)}`; };
@@ -125,9 +145,13 @@ const FAMILY: Partial<Record<NativeSport, Family>> = {
 export const familyOf = (sport: NativeSport | undefined): Family => (sport && FAMILY[sport]) || "other";
 
 export const SPORT_WORDS: Record<NativeSport, string> = {
-  run: "Run", indoorRun: "Treadmill run", trailRun: "Trail run", track: "Track run", walk: "Walk", hike: "Hike", bike: "Ride", indoorBike: "Indoor ride",
-  poolSwim: "Pool swim", openWater: "Open water swim", strength: "Strength", cardio: "Cardio", ski: "Ski", row: "Row", multisport: "Multisport", other: "Workout",
+  run: msg("Run"), indoorRun: msg("Treadmill run"), trailRun: msg("Trail run"), track: msg("Track run"), walk: msg("Walk"), hike: msg("Hike"), bike: msg("Ride"),
+  indoorBike: msg("Indoor ride"), poolSwim: msg("Pool swim"), openWater: msg("Open water swim"), strength: msg("Strength"), cardio: msg("Cardio"), ski: msg("Ski"),
+  row: msg("Row"), multisport: msg("Multisport"), other: msg("Workout"),
 };
+
+/** A sport's name for the screen, in the app's language. `SPORT_WORDS` stays English for the model. */
+export const shownSport = (sport: NativeSport | undefined): string => tx("sport", (sport && SPORT_WORDS[sport]) || "Workout");
 
 /**
  * Text that came from the athlete's own data (names, notes), made safe to hand to the model as data: control

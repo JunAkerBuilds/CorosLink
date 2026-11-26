@@ -7,6 +7,7 @@
 // throw `HubSessionEndedError`, `useHubSession()` turns to "ended", and the person signs in again by hand.
 import { useSyncExternalStore } from "react";
 import { fromCoros, NotWiredError, type Loaded } from "@/data/core";
+import { t } from "@/lib/i18n";
 import { md5Hex } from "@/lib/md5";
 
 // The same rules the server checks a workout with, for the builder: what a step of a sport may end on and
@@ -255,7 +256,7 @@ async function call<T>(path: string, init?: { method: "POST" | "PUT" | "DELETE";
       body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
   } catch {
-    throw new HubError("unreachable", "C-LINK couldn't be reached. Try again.");
+    throw new HubError("unreachable", t("C-LINK couldn't be reached. Try again."));
   }
   let payload: unknown = null;
   try {
@@ -266,7 +267,7 @@ async function call<T>(path: string, init?: { method: "POST" | "PUT" | "DELETE";
   if (response.ok && payload !== null) return payload as T;
   const error = (payload as { error?: { code?: HubErrorCode; message?: string; corosCode?: string; move?: HubMoveProgress } } | null)?.error;
   const code = error?.code ?? "server";
-  const message = error?.message ?? "C-LINK couldn't finish that. Try again.";
+  const message = error?.message ?? t("C-LINK couldn't finish that. Try again.");
   if (code === "expired" || code === "signed_out") {
     setSession({ state: code === "expired" ? "ended" : "signedOut", email: current?.email });
     throw new HubSessionEndedError(code, message);
@@ -297,7 +298,7 @@ export async function hubSession(verify = false): Promise<HubSessionInfo> {
  * Throws `HubError` with `wrong_password` or `unknown_account` when COROS says so.
  */
 export async function hubSignIn(email: string, password: string): Promise<HubSessionInfo> {
-  if (email.trim() === "" || password === "") throw new HubError("invalid", "Enter your COROS email and password.");
+  if (email.trim() === "" || password === "") throw new HubError("invalid", t("Enter your COROS email and password."));
   return setSession(await call<HubSessionInfo>("session", { method: "POST", body: { email: email.trim(), passwordHash: md5Hex(password) } }));
 }
 

@@ -1,4 +1,5 @@
 /** Pure helpers for the dashboard board: time words, the heat map grid, the month grid. */
+import { msg, t } from "@/lib/i18n";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -7,15 +8,16 @@ const pad = (n: number) => String(n).padStart(2, "0");
  * otherwise null and the page leads with the date. Never invents a mood from a word it does not know.
  */
 export function openingLine(status: string | undefined): string | null {
-  return OPENING[status?.trim().toLowerCase() ?? ""] ?? null;
+  const line = OPENING[status?.trim().toLowerCase() ?? ""];
+  return line ? t(line) : null;
 }
 
 /** Readiness's four bands (CorosKit `Readiness.Band`), in the phone's own words for the day. */
 const OPENING: Record<string, string> = {
-  primed: "Go hard today.", // 80 and up
-  ready: "Ready for today.", // 65–79
-  steady: "Keep it easy today.", // 50–64
-  low: "Rest or go easy today.", // under 50
+  primed: msg("Go hard today."), // 80 and up
+  ready: msg("Ready for today."), // 65–79
+  steady: msg("Keep it easy today."), // 50–64
+  low: msg("Rest or go easy today."), // under 50
 };
 
 /** Minutes as the board writes time: 2 h 58, 0 h 57. */

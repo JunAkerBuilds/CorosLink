@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { angleOfFrame, frameFromDrag, frameFromHover, stripPosition, wrapFrame } from "@/lib/turntable";
+import { t } from "@/lib/i18n";
 import "./TurntableFigure.css";
 
 /**
@@ -54,8 +55,8 @@ export function TurntableFigure({ light, dark, label, frames = 12, width = 176, 
     <div
       className="tt"
       role="img"
-      aria-roledescription="turntable figure"
-      aria-label={`${label} Turned ${angleOfFrame(frame, frames)}°. Left and right arrow keys turn it.`}
+      aria-roledescription={t("turntable figure")}
+      aria-label={`${label} ${t("Turned {deg}°. Left and right arrow keys turn it.", { deg: angleOfFrame(frame, frames) })}`}
       tabIndex={0}
       style={box}
       onPointerDown={onPointerDown}

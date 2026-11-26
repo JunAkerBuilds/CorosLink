@@ -16,6 +16,7 @@ import { findProgram, searchPath } from "./cli";
 import { toolName } from "./mcpNames";
 import { openCallback, VaultOAuth } from "./mcpOAuth";
 import { checkInput, McpInputError, type McpServerConfig, type McpStore } from "./mcpStore";
+import { t } from "@/lib/i18n";
 
 export const CONNECT_MS = 20_000;
 export const CALL_MS = 60_000;
@@ -87,9 +88,9 @@ export function resultText(result: { content?: unknown; structuredContent?: unkn
 /** Why connecting failed, in words for the settings page. */
 function why(error: unknown, server: McpServerConfig, stderr: string): string {
   const code = (error as { code?: unknown })?.code;
-  if (code === "ENOENT" || code === "ENOTDIR" || /\b(ENOENT|ENOTDIR)\b/.test(String((error as Error)?.message))) return `Couldn't find ${server.command ?? "the command"}.`;
+  if (code === "ENOENT" || code === "ENOTDIR" || /\b(ENOENT|ENOTDIR)\b/.test(String((error as Error)?.message))) return server.command ? t("Couldn't find {command}.", { command: server.command }) : t("Couldn't find the command.");
   let message = error instanceof Error ? error.message : String(error);
-  if (/fetch failed|ECONNREFUSED|ENOTFOUND/i.test(message)) message = "Couldn't reach the server.";
+  if (/fetch failed|ECONNREFUSED|ENOTFOUND/i.test(message)) message = t("Couldn't reach the server.");
   const last = stderr.trim().split("\n").filter(Boolean).at(-1);
   return `${message.slice(0, 240)}${last && !message.includes(last) ? ` · ${last.slice(0, 200)}` : ""}`;
 }
@@ -115,7 +116,7 @@ export class McpHub {
       const env: Record<string, string> = { ...getDefaultEnvironment(), PATH: searchPath().join(path.delimiter), ...secrets.env };
       if (this.hooks.stdio) return { transport: this.hooks.stdio(server, env), stderr: () => "" };
       const command = server.command!.includes("/") ? server.command! : findProgram(server.command!);
-      if (!command) throw Object.assign(new Error(`Couldn't find ${server.command}.`), { code: "ENOENT" });
+      if (!command) throw Object.assign(new Error(t("Couldn't find {command}.", { command: server.command ?? "" })), { code: "ENOENT" });
       const transport = new StdioClientTransport({ command, args: server.args ?? [], env, cwd: os.homedir(), stderr: "pipe" });
       let tail = "";
       transport.stderr?.on("data", (d: Buffer) => { tail = (tail + d.toString()).slice(-STDERR_TAIL); });
@@ -134,15 +135,15 @@ export class McpHub {
     if (c.live) return Promise.resolve(c.live);
     if (c.pending) return c.pending;
     const server = this.store.get(id);
-    if (!server) return Promise.reject(new Error("There's no such server."));
-    if (!server.enabled) return Promise.reject(new Error(`${server.name} is off.`));
+    if (!server) return Promise.reject(new Error(t("There's no such server.")));
+    if (!server.enabled) return Promise.reject(new Error(t("{name} is off.", { name: server.name })));
     c.state = "connecting";
     c.error = undefined;
     const attempt = (async (): Promise<Live> => {
       const { transport, stderr, oauth } = await this.transportFor(server).catch((error: unknown) => { throw new Error(why(error, server, "")); });
       const client = new Client({ name: "C-LINK Coach", version: "1" });
       try {
-        await withTimeout(client.connect(transport, { timeout: CONNECT_MS }), CONNECT_MS, `No answer in ${CONNECT_MS / 1000} s.`);
+        await withTimeout(client.connect(transport, { timeout: CONNECT_MS }), CONNECT_MS, t("No answer in {seconds} s.", { seconds: CONNECT_MS / 1000 }));
         const live: Live = { client, transport, tools: await this.listTools(client), stderr };
         client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
           live.tools = await this.listTools(client).catch(() => live.tools);
@@ -157,7 +158,7 @@ export class McpHub {
       } catch (error) {
         await client.close().catch(() => {});
         const signin = oauth?.needsSignIn || error instanceof UnauthorizedError || (server.auth === "oauth" && /401|unauthori[sz]ed/i.test(String((error as Error)?.message)));
-        throw Object.assign(new Error(signin ? "Sign in to use it." : why(error, server, stderr())), { signin });
+        throw Object.assign(new Error(signin ? t("Sign in to use it.") : why(error, server, stderr())), { signin });
       }
     })();
     c.pending = attempt;
@@ -241,14 +242,14 @@ export class McpHub {
     await Promise.all(wanted.map(async (server) => {
       const live = await withTimeout(this.connect(server.id), OFFER_WAIT_MS, "slow").catch(() => null);
       if (!live) return;
-      for (const t of live.tools) {
-        if (!server.on.includes(t.name)) continue;
-        const name = toolName(server.slug, t.name);
+      for (const tool of live.tools) {
+        if (!server.on.includes(tool.name)) continue;
+        const name = toolName(server.slug, tool.name);
         if (routes.has(name)) continue;
-        routes.set(name, { id: server.id, tool: t.name });
-        const about = (t.description ?? t.title ?? "").slice(0, MAX_DESCRIPTION);
-        defs.push({ name, description: `From ${server.name}, an MCP server the athlete added.${about ? ` ${about}` : ""}`, input_schema: schemaOf(t) });
-        words[name] = `Asking ${server.name}`;
+        routes.set(name, { id: server.id, tool: tool.name });
+        const about = (tool.description ?? tool.title ?? "").slice(0, MAX_DESCRIPTION);
+        defs.push({ name, description: `From ${server.name}, an MCP server the athlete added.${about ? ` ${about}` : ""}`, input_schema: schemaOf(tool) });
+        words[name] = t("Asking {server}", { server: server.name });
       }
     }));
     if (!defs.length) return null;
@@ -283,7 +284,7 @@ export class McpHub {
   /** OAuth sign-in in the athlete's browser, then a fresh connection. */
   async signIn(id: string): Promise<void> {
     const server = this.store.get(id);
-    if (!server || server.transport !== "http" || server.auth !== "oauth") throw new McpInputError("This server doesn't use sign-in.");
+    if (!server || server.transport !== "http" || server.auth !== "oauth") throw new McpInputError(t("This server doesn't use sign-in."));
     await this.disconnect(id);
     const callback = await openCallback();
     try {
@@ -321,7 +322,7 @@ export class McpHub {
         if (added.auth !== "oauth") await this.connect(added.id).catch(() => {});
         return reply({ ...(await this.status()), added: added.id });
       }
-      if (!server) return reply({ error: "invalid", message: "There's no such server." }, 404);
+      if (!server) return reply({ error: "invalid", message: t("There's no such server.") }, 404);
 
       if (action === "remove") { await this.disconnect(id); await this.store.remove(id); return reply(await this.status()); }
       if (action === "enable") {
@@ -336,7 +337,7 @@ export class McpHub {
         const on = typeof body.all === "boolean" ? (body.all ? names : [])
           : typeof body.tool === "string" && names.includes(body.tool) ? (body.on === true ? [...new Set([...server.on, body.tool])] : server.on.filter((n) => n !== body.tool))
           : null;
-        if (!on) return reply({ error: "invalid", message: "There's no such tool." }, 400);
+        if (!on) return reply({ error: "invalid", message: t("There's no such tool.") }, 400);
         this.store.update(id, { on });
         return reply(await this.status());
       }
@@ -348,7 +349,7 @@ export class McpHub {
       if (action === "signin") { await this.signIn(id); return reply(await this.status()); }
       if (action === "signout") { await this.signOut(id); return reply(await this.status()); }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "That didn't work.";
+      const message = error instanceof Error ? error.message : t("That didn't work.");
       return reply({ error: error instanceof McpInputError ? "invalid" : "failed", message }, error instanceof McpInputError ? 400 : 502);
     }
     return reply({ error: "notFound" }, 404);

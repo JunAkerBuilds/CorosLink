@@ -1,3 +1,4 @@
+import { msg } from "@/lib/i18n";
 import { t } from "./text";
 import type {
   CorosWatchfaceBackgroundElement,
@@ -25,13 +26,13 @@ export function backgroundElementLabel(
 ): string {
   switch (element.kind) {
     case "rect":
-      return "Rectangle";
+      return msg("Rectangle");
     case "ellipse":
-      return "Ellipse";
+      return msg("Ellipse");
     case "line":
-      return "Line";
+      return msg("Line");
     case "text":
-      return element.text.trim() ? t("Text “{{text}}”", { text: element.text.slice(0, 14) }) : "Text";
+      return element.text.trim() ? t("Text “{{text}}”", { text: element.text.slice(0, 14) }) : msg("Text");
   }
 }
 

@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { msg, t } from "@/lib/i18n";
 import { platformSlots } from "@/lib/platform";
 import type { ComponentProps, ReactNode } from "react";
 import type { Origin } from "@/data/core";
@@ -51,16 +52,16 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
 }
 
 const ORIGIN_TEXT: Record<Origin, string> = {
-  sample: "Sample data",
-  browser: "On this computer",
-  coros: "From COROS",
-  synced: "From your phone",
+  sample: msg("Sample data"),
+  browser: msg("On this computer"),
+  coros: msg("From COROS"),
+  synced: msg("From your phone"),
 };
 
 /** Says where a screen's numbers come from. Every screen on sample data must show this. */
 export function OriginBadge({ origin, className }: { origin: Origin; className?: string }) {
   if (origin !== "sample" && platformSlots.originShown && !platformSlots.originShown(origin)) return null;
-  return <span className={cx("origin", className)} data-origin={origin}>{ORIGIN_TEXT[origin]}</span>;
+  return <span className={cx("origin", className)} data-origin={origin}>{t(ORIGIN_TEXT[origin])}</span>;
 }
 
 /** Page title row: h1 on the left, compact controls on the right. */

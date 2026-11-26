@@ -16,6 +16,7 @@ import { open, seal } from "./seal";
 import { fromThisSite } from "./validate";
 import { readAccount, upstream } from "@/server/local/http";
 import { SHARED_COLLECTION, SHARED_ID, sharedBody } from "./shared";
+import { t } from "@/lib/i18n";
 
 const SESSION_COOKIE = "clink_hub";
 const PENDING_COOKIE = "clink_hub_code";
@@ -102,7 +103,7 @@ export async function shareSession(stored: StoredSession | null): Promise<void> 
 
 /** What the browser may know about the sign-in: never the token. */
 export function sessionInfo(stored: StoredSession): HubSessionInfo {
-  return { state: "signedIn", email: stored.email, region: regionName(stored.session.baseURL), regionId: stored.session.regionId };
+  return { state: "signedIn", email: stored.email, region: t(regionName(stored.session.baseURL)), regionId: stored.session.regionId };
 }
 
 /** Runs `work` with the signed-in session; `HubSignedOut` without one. */
@@ -118,16 +119,16 @@ function reply(body: unknown, status = 200): Response {
 
 /** The request's JSON object, at most 256 KB. */
 export async function readBody(request: NextRequest): Promise<Record<string, unknown>> {
-  if (!(request.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) throw new HubInvalid("Send JSON.");
+  if (!(request.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) throw new HubInvalid(t("Send JSON."));
   const raw = await request.text();
-  if (raw.length > MAX_BODY) throw new HubInvalid("That's too much to send at once.");
+  if (raw.length > MAX_BODY) throw new HubInvalid(t("That's too much to send at once."));
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new HubInvalid("Send JSON.");
+    throw new HubInvalid(t("Send JSON."));
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new HubInvalid("Send a JSON object.");
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new HubInvalid(t("Send a JSON object."));
   return parsed as Record<string, unknown>;
 }
 
@@ -143,7 +144,7 @@ export function hubRoute(options: { write?: boolean; signingIn?: boolean }, work
   return async (request: NextRequest): Promise<Response> => {
     try {
       // Training Hub needs the app's own session, like every screen.
-      if (!(await readAccount())) return reply({ error: { code: "signedOut", message: "C-LINK is still starting. Try again in a moment." } }, 401);
+      if (!(await readAccount())) return reply({ error: { code: "signedOut", message: t("C-LINK is still starting. Try again in a moment.") } }, 401);
       if (options.write) {
         const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
         if (!fromThisSite(request.headers, host)) throw new HubForbidden();

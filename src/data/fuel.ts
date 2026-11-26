@@ -1,6 +1,7 @@
 import { fromSample, fromSynced, type Loaded } from "@/data/core";
 import { FUEL_SAMPLE } from "@/data/sample/fuel";
 import { FOODS } from "@/data/sample/foods";
+import { language, t } from "@/lib/i18n";
 import { newUuid, put, remove, syncView } from "@/data/sync";
 import { copyEntries, entryDay, fuelFromItems, nativeListFood, newEntry, withAmount, type FoodOrigin } from "@/data/sync/fuel";
 
@@ -106,7 +107,7 @@ export type AddedFrom = { from: "list"; foodId: string } | { from: "own" };
 
 async function signedIn() {
   const view = await syncView();
-  if (!view) throw new Error("C-LINK is still starting. Try again in a moment.");
+  if (!view) throw new Error(t("C-LINK is still starting. Try again in a moment."));
   return view;
 }
 
@@ -158,12 +159,12 @@ export async function estimateMeal(input: { text?: string; photo?: { mime: strin
     response = await fetch("/api/ai/meal", {
       method: "POST", credentials: "same-origin", cache: "no-store",
       headers: { "Content-Type": "application/json", "X-Clink-Hub": "1" },
-      body: JSON.stringify({ ...input, language: typeof navigator === "undefined" ? "en-GB" : navigator.language }),
+      body: JSON.stringify({ ...input, language: language() }),
     });
   } catch {
-    throw new MealEstimateError("unreachable", "The estimate couldn't be asked for. Check the connection.");
+    throw new MealEstimateError("unreachable", t("The estimate couldn't be asked for. Check the connection."));
   }
   const body = (await response.json().catch(() => null)) as { foods?: LoggedFood[]; note?: string | null; error?: { code?: string; message?: string } } | null;
   if (response.ok && Array.isArray(body?.foods)) return { foods: body.foods, note: body.note ?? null };
-  throw new MealEstimateError(body?.error?.code ?? `http_${response.status}`, body?.error?.message ?? "The meal couldn't be estimated.");
+  throw new MealEstimateError(body?.error?.code ?? `http_${response.status}`, body?.error?.message ?? t("The meal couldn't be estimated."));
 }

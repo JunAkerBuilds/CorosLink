@@ -11,6 +11,7 @@ import { ChatStore, titleOf, type Chat, type ChatMessage } from "./chats";
 import { runWatchmaker, type WatchmakerEvent } from "./loop";
 import { WATCHMAKER_RULES } from "./rules";
 import { compactDocument, watchmakerTools, type ImageMaker } from "./tools";
+import { t } from "@/lib/i18n";
 
 export interface PickedModel { model: CoachModel; label: string; provider: string | null }
 
@@ -79,22 +80,22 @@ export class Watchmaker {
     const projectId = typeof body.project === "string" ? body.project : "";
     const text = typeof body.text === "string" ? body.text.trim().slice(0, 20_000) : "";
     const raw = Array.isArray(body.attachments) ? body.attachments.slice(0, MAX_ATTACHMENTS) : [];
-    if (!text && !raw.length) return reply({ error: "invalid", message: "Say what to change." }, 400);
-    if (this.running.has(projectId)) return reply({ error: "busy", message: "Watchmaker is still working on this face." }, 409);
+    if (!text && !raw.length) return reply({ error: "invalid", message: t("Say what to change.") }, 400);
+    if (this.running.has(projectId)) return reply({ error: "busy", message: t("Watchmaker is still working on this face.") }, 409);
     const picked = await this.deps.model();
-    if (!picked) return reply({ error: "not_ready", message: "Set up an AI first." }, 400);
+    if (!picked) return reply({ error: "not_ready", message: t("Set up an AI first.") }, 400);
 
     let chat: Chat;
     try {
       chat = typeof body.chatId === "string" && body.chatId ? await this.chats.load(projectId, body.chatId) : this.chats.fresh(projectId);
     } catch (error) {
-      return reply({ error: "invalid", message: error instanceof Error ? error.message : "That chat couldn't be opened." }, 400);
+      return reply({ error: "invalid", message: error instanceof Error ? error.message : t("That chat couldn't be opened.") }, 400);
     }
     const attachments: NonNullable<ChatMessage["attachments"]> = [];
     for (const a of raw as { dataUrl?: unknown; use?: unknown }[]) {
-      if (typeof a?.dataUrl !== "string" || a.dataUrl.length > MAX_ATTACHMENT_URL) return reply({ error: "invalid", message: "Pictures go in as PNG, JPEG or WebP, up to 8 MB." }, 400);
+      if (typeof a?.dataUrl !== "string" || a.dataUrl.length > MAX_ATTACHMENT_URL) return reply({ error: "invalid", message: t("Pictures go in as PNG, JPEG or WebP, up to 8 MB.") }, 400);
       try { attachments.push({ assetId: await this.deps.assets.putDataUrl(a.dataUrl), use: a.use === "screenshot" ? "screenshot" : "reference" }); } catch (error) {
-        return reply({ error: "invalid", message: error instanceof Error ? error.message : "That picture can't be read." }, 400);
+        return reply({ error: "invalid", message: error instanceof Error ? error.message : t("That picture can't be read.") }, 400);
       }
     }
     const earlier = [...chat.messages];
@@ -147,13 +148,13 @@ export class Watchmaker {
             model: picked.model, rules: WATCHMAKER_RULES, context: `The open face:\n${JSON.stringify(compactDocument(doc))}`,
             messages, tools: tools.defs, runTool: tools.run, picture: (id) => this.picture(id), seesPictures, emit, signal: abort.signal,
           });
-          answer.text = outcome.text || (outcome.stopped ? "" : "Done.");
+          answer.text = outcome.text || (outcome.stopped ? "" : t("Done."));
           answer.edits = outcome.edits;
           if (outcome.stopped) answer.stopped = true;
-          if (outcome.outOfRounds) answer.error = "Watchmaker ran out of steps for this message. Send another to carry on.";
+          if (outcome.outOfRounds) answer.error = t("Watchmaker ran out of steps for this message. Send another to carry on.");
         } catch (error) {
           if (abort.signal.aborted) answer.stopped = true;
-          else answer.error = error instanceof Error ? error.message : "Watchmaker couldn't finish.";
+          else answer.error = error instanceof Error ? error.message : t("Watchmaker couldn't finish.");
         } finally {
           this.running.delete(projectId);
           chat.messages.push(answer);
@@ -178,7 +179,7 @@ export class Watchmaker {
     if (!url.pathname.startsWith("/api/desktop/studio/watchmaker")) return null;
     const route = url.pathname.slice("/api/desktop/studio/watchmaker".length) || "/";
     const get = request.method === "GET";
-    if (!get && request.headers.get("x-clink-hub") !== "1") return reply({ error: "forbidden", message: "Not from this app." }, 403);
+    if (!get && request.headers.get("x-clink-hub") !== "1") return reply({ error: "forbidden", message: t("Not from this app.") }, 403);
     const body = get ? {} : ((await request.json().catch(() => ({}))) as Record<string, unknown>);
     const project = get ? url.searchParams.get("project") ?? "" : typeof body.project === "string" ? body.project : "";
     try {
@@ -190,7 +191,7 @@ export class Watchmaker {
       if (!get && route === "/send") return await this.send(body);
       if (!get && route === "/stop") return reply({ stopped: this.stop(project) });
     } catch (error) {
-      return reply({ error: "failed", message: error instanceof Error ? error.message : "That didn't work." }, 400);
+      return reply({ error: "failed", message: error instanceof Error ? error.message : t("That didn't work.") }, 400);
     }
     return reply({ error: "notFound" }, 404);
   }

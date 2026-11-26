@@ -34,7 +34,7 @@ item by item from `CorosLink/docs/replacement-checklist.md` without its bloat.
 | `npm run build` then `npm start` | The built app. The build first puts the pinned yt-dlp and ffmpeg in `bin/<platform>-<arch>` (see `bin/README.md`). |
 | `npm run binaries:prepare` / `binaries:pin` | Fetch the SHA-256-checked yt-dlp and ffmpeg for Media's downloads / re-pin them from GitHub's release digests. |
 | `npm run check` | Type check, lint and all tests. |
-| `CLINK_SMOKE=<folder> CLINK_USER_DATA=<empty folder> npm start` | Opens every screen, saves a screenshot of each, any console errors and a test write to `<folder>`, then quits. Add `CLINK_SAMPLE=1` for the sample athlete, `CLINK_SMOKE_SCREENS=/studio,…` for just those screens (`/studio/blank` makes a blank face and builds it up), `CLINK_SMOKE_THEME=light` or `dark` for one look. `CLINK_SMOKE_MCP=1` adds the fixture MCP server (`scripts/mcp-fixture.mjs`) with one tool on, and `CLINK_SMOKE_COACH="…"` asks Coach that and logs the tools it used. The intro is `/welcome?scene=1`…`5`; `/welcome/move/run` shows the move from CorosLink picking, copying and done. `/updates` opens Updates from the account menu, then previews the update prompt (found, downloading, ready); it turns developer mode on. |
+| `CLINK_SMOKE=<folder> CLINK_USER_DATA=<empty folder> npm start` | Opens every screen, saves a screenshot of each, any console errors and a test write to `<folder>`, then quits. Add `CLINK_SAMPLE=1` for the sample athlete, `CLINK_SMOKE_SCREENS=/studio,…` for just those screens (`/studio/blank` makes a blank face and builds it up), `CLINK_SMOKE_THEME=light` or `dark` for one look, `CLINK_SMOKE_LANG=es`, `de`, `pt-BR` or `zh-Hans` for one language. `CLINK_SMOKE_MCP=1` adds the fixture MCP server (`scripts/mcp-fixture.mjs`) with one tool on, and `CLINK_SMOKE_COACH="…"` asks Coach that and logs the tools it used. The intro is `/welcome?scene=1`…`5`; `/welcome/move/run` shows the move from CorosLink picking, copying and done. `/updates` opens Updates from the account menu, then previews the update prompt (found, downloading, ready); it turns developer mode on. |
 | `CLINK_INTRO=1 npm run dev` | Shows the first-run intro again (also Developer → First-run intro). `CLINK_COROSLINK_DIR=<folder>` reads that CorosLink folder instead of finding one, `CLINK_MOVE_PACE_MS=<ms>` slows the copy down to watch it. |
 
 Settings come from the environment: `MAPBOX_TOKEN`. For development only: `COACH_MODEL=mock` lets a scripted
@@ -57,6 +57,28 @@ titles. The main process (`desktop/main/ai/service.ts`) is `hostAI` (`src/server
   whose runtime is downloaded from Google on first sign-in (`ai/antigravity.ts`). These run their own tool loop;
   they reach only Coach's tools through a bearer-token MCP bridge on 127.0.0.1 (`ai/bridge.ts`), and each call is
   held open so Coach's loop runs it and draws its cards (`ai/agent.ts`).
+
+## COROS account import
+
+For a watch that stays paired to the COROS app: Connections → COROS account (one card with both ways in, COROS's MCP
+and Training Hub), or "My COROS account" in first-run setup. Connect signs in to COROS's MCP (`https://mcp.coros.com/mcp`) in the browser, as one of Coach's MCP servers
+(`desktop/main/account/corosMcp.ts`). Then, on a timer, `desktop/main/account/service.ts` refreshes the token and
+runs the helper as `clink-watch --account` (`native/watch/Sources/clink-watch/Account.swift`). With the iPhone app's
+CorosKit, the helper reads activities, daily health and sleep (`CorosTraining.load`) and each activity's FIT file,
+and hands back the phone's own `activity`, `activity.detail`, `health.day` and `health.night` items for the store.
+When the athlete is signed in to COROS Training Hub (Connections), recordings come from Training Hub's own download
+first, which has no daily allowance (`desktop/main/account/hubFit.ts`, up to 150 a run). The MCP fills in the rest,
+at most 40 a day, because COROS allows 50 FIT files a day.
+Mac only, like the watch helper.
+
+## One athlete, many sources
+
+The phone's C-LINK, the COROS account import and Local mode's watch all write `activity`, `activity.detail`,
+`health.day` and `health.night` into the store. For those four the store combines rather than replaces
+(`desktop/main/combine.ts`): a field one source has and another lacks is kept, where both have one the fuller wins
+(a longer stream, a route, a night with stages), else the newest. One workout under two ids (COROS's number, the
+watch's own) is matched by start within 90 s and sport, kept once, and the second id remembered (`aliases`), so its
+detail lands there too. Everything an athlete types keeps the plain sync rules.
 
 ## Studio
 

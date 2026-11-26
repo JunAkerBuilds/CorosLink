@@ -6,6 +6,7 @@ import {
   calendarDayKey, dateToRef, refToDate,
   type BodyGoalsBody, type BodyMeasurementBody, type NativeDayVitals, type NativeFuelProfile, type RefDate, type ViewBodyBody, type ViewTrainingBody,
 } from "./native";
+import { msg, t } from "@/lib/i18n";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const localDay = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -142,7 +143,7 @@ const signedWhole = (v: number) => `${v < 0 ? "−" : "+"}${Math.abs(Math.round(
 const plain = (v: number) => String(Math.round(v * 100) / 100);
 
 const NIGHTLY = [
-  { name: "Resting heart rate", short: "Resting HR", unit: "bpm", hue: "rose", pick: (v: NativeDayVitals) => v.restingHR },
+  { name: msg("Resting heart rate"), short: msg("Resting HR"), unit: "bpm", hue: "rose", pick: (v: NativeDayVitals) => v.restingHR },
   { name: "HRV", short: "HRV", unit: "ms", hue: "cyan", pick: (v: NativeDayVitals) => v.hrv },
 ] as const;
 
@@ -154,14 +155,14 @@ export function signalsAndStats(days: readonly NativeDayVitals[], training: View
     if (!a) continue;
     const diff = a.usual == null ? null : Math.round(a.latest - a.usual);
     signals.push({
-      name: n.name, hue: n.hue, values: a.values,
-      detail: `${plain(a.latest)} ${n.unit}${a.usual == null ? "" : ` · Usual ${whole(a.usual)}`}`,
-      pill: diff == null ? "" : diff === 0 ? "Usual" : `${signedWhole(diff)} ${n.unit}`,
+      name: t(n.name), hue: n.hue, values: a.values,
+      detail: a.usual == null ? `${plain(a.latest)} ${n.unit}` : t("{value} {unit} · Usual {usual}", { value: plain(a.latest), unit: n.unit, usual: whole(a.usual) }),
+      pill: diff == null ? "" : diff === 0 ? t("Usual") : `${signedWhole(diff)} ${n.unit}`,
     });
     const change = a.change30 == null ? null : Math.round(a.change30);
     stats.push({
-      name: n.short, value: plain(a.latest), unit: n.unit, hue: n.hue, values: a.values,
-      note: change == null ? "" : change === 0 ? "Steady" : `${signedWhole(change)} in 30 days`,
+      name: t(n.short), value: plain(a.latest), unit: n.unit, hue: n.hue, values: a.values,
+      note: change == null ? "" : change === 0 ? t("Steady") : t("{change} in 30 days", { change: signedWhole(change) }),
     });
   }
   if (real(training?.vo2max) && training.vo2max > 0) stats.push({ name: "VO2max", value: plain(training.vo2max), unit: "ml/kg/min", note: "", hue: "blue", values: [] });

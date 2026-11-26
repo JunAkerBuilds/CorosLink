@@ -6,6 +6,7 @@ import { changeDeveloper, readDeveloper, type DeveloperState } from "../develope
 import { replayIntro } from "../welcome";
 import { navigate } from "../router";
 import { startPreview } from "../updates";
+import { t } from "@/lib/i18n";
 
 // Activity screens for PACE Pro (experimental): loaded only here, and shown only where the main process allows it.
 const ActivityScreens = lazy(() => import("../parts/ActivityScreens"));
@@ -19,48 +20,50 @@ export default function Developer() {
 
   return (
     <main className="page" style={{ maxWidth: 760 }}>
-      <PageHead title="Developer" />
+      <PageHead title={t("Developer")} />
       {!state ? null : !state.devMode ? (
         <Card pad style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Setup's "Just look around" turns sample data on without developer mode: it's turned off here. */}
           {state.sample ? (
-            <Row title="Sample data" detail="Showing the sample athlete. Turn it off to see your own data.">
-              <Switch label="Sample data" checked disabled={busy} onChange={() => change({ sample: false }, "/")} />
+            <Row title={t("Sample data")} detail={t("Showing the sample athlete. Turn it off to see your own data.")}>
+              <Switch label={t("Sample data")} checked disabled={busy} onChange={() => change({ sample: false }, "/")} />
             </Row>
           ) : null}
-          <p style={{ margin: 0 }}>Developer mode is off.</p>
-          <div><Button disabled={busy} onClick={() => change({ devMode: true })}>Turn on developer mode</Button></div>
+          <p style={{ margin: 0 }}>{t("Developer mode is off.")}</p>
+          <div><Button disabled={busy} onClick={() => change({ devMode: true })}>{t("Turn on developer mode")}</Button></div>
         </Card>
       ) : (
         <>
           <Card pad style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <Row title="Sample data" detail={state.sample
-              ? `Showing the sample athlete${state.sampleItems != null ? ` (${state.sampleItems} items)` : ""}. Your own data and your phones' syncing are untouched.`
-              : "Show the sample athlete instead of your data. Your data stays as it is, and phones keep syncing to it."}>
-              <Switch label="Sample data" checked={state.sample} disabled={busy} onChange={(on) => change({ sample: on })} />
+            <Row title={t("Sample data")} detail={state.sample
+              ? (state.sampleItems != null
+                ? t("Showing the sample athlete ({n} items). Your own data and your phones' syncing are untouched.", { n: state.sampleItems })
+                : t("Showing the sample athlete. Your own data and your phones' syncing are untouched."))
+              : t("Show the sample athlete instead of your data. Your data stays as it is, and phones keep syncing to it.")}>
+              <Switch label={t("Sample data")} checked={state.sample} disabled={busy} onChange={(on) => change({ sample: on })} />
             </Row>
             {state.sample ? (<>
               <hr style={{ margin: 0, border: 0, borderTop: "1px solid var(--line)" }} />
-              <Row title="Reset sample data" detail="The sample athlete again, with today's dates. Changes made to the sample are lost.">
-                <Button disabled={busy} onClick={() => change({ resetSample: true })}>Reset</Button>
+              <Row title={t("Reset sample data")} detail={t("The sample athlete again, with today's dates. Changes made to the sample are lost.")}>
+                <Button disabled={busy} onClick={() => change({ resetSample: true })}>{t("Reset")}</Button>
               </Row>
             </>) : null}
           </Card>
           <Suspense fallback={null}><ActivityScreens /></Suspense>
           <Card pad style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <Row title="First-run intro" detail="The intro and Bring over my CorosLink data, as a new install shows them. CLINK_INTRO=1 does the same at launch.">
-              <Button disabled={busy} onClick={() => void replayIntro()}>Show again</Button>
+            <Row title={t("First-run intro")} detail={t("The intro and Bring over my CorosLink data, as a new install shows them. CLINK_INTRO=1 does the same at launch.")}>
+              <Button disabled={busy} onClick={() => void replayIntro()}>{t("Show again")}</Button>
             </Row>
-            <Row title="First-run setup" detail="Walk through setup again, as on a new install. What you pick there changes your settings.">
-              <Button onClick={() => navigate("/setup")}>Run setup</Button>
+            <Row title={t("First-run setup")} detail={t("Walk through setup again, as on a new install. What you pick there changes your settings.")}>
+              <Button onClick={() => navigate("/setup")}>{t("Run setup")}</Button>
             </Row>
-            <Row title="Update prompt" detail="A made-up update in the prompt and the account menu's Updates, to see them in a development build. Nothing is downloaded or installed.">
-              <Button onClick={startPreview}>Preview</Button>
+            <Row title={t("Update prompt")} detail={t("A made-up update in the prompt and the account menu's Updates, to see them in a development build. Nothing is downloaded or installed.")}>
+              <Button onClick={startPreview}>{t("Preview")}</Button>
             </Row>
           </Card>
           <Card pad style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <Row title="Developer mode" detail="This page, the Developer menu and the developer tools. Turning it off also turns sample data off.">
-              <Switch label="Developer mode" checked disabled={busy} onChange={() => change({ devMode: false }, "/")} />
+            <Row title={t("Developer mode")} detail={t("This page, the Developer menu and the developer tools. Turning it off also turns sample data off.")}>
+              <Switch label={t("Developer mode")} checked disabled={busy} onChange={() => change({ devMode: false }, "/")} />
             </Row>
           </Card>
         </>

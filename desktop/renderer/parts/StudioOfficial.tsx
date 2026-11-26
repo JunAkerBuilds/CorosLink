@@ -5,6 +5,7 @@
 // sprites" and the weather icon's sets (studioOfficial.ts says what each asks for). Loaded only when first opened.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Segmented, Select } from "@/components/ui";
+import { language, locale, t } from "@/lib/i18n";
 import { WATCHFACE_TARGETS, getWatchfaceTarget } from "../../watchface/watchfaceTargets";
 import { Icon } from "./StudioIcon";
 import { listOfficial, officialSet, officialStatus, officialStrip, refreshOfficial, said, type OfficialAsset, type OfficialFrames, type OfficialPage, type OfficialStatus } from "../studio";
@@ -26,8 +27,8 @@ const PAGE = 36;
 const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
 
 function progressText(s: OfficialStatus): string {
-  if (s.unit === "faces") return s.total ? `Unpacking COROS's official faces: ${s.done} of ${s.total}` : "Asking COROS for its official faces…";
-  return s.total ? `Downloading the library: ${mb(s.done)} of ${mb(s.total)} MB` : "Downloading the library…";
+  if (s.unit === "faces") return s.total ? t("Unpacking COROS's official faces: {done} of {total}", { done: s.done, total: s.total }) : t("Asking COROS for its official faces…");
+  return s.total ? t("Downloading the library: {done} of {total} MB", { done: mb(s.done), total: mb(s.total) }) : t("Downloading the library…");
 }
 
 export default function OfficialBrowser({ watch: faceWatch, request, onPick, onClose }: OfficialBrowserProps) {
@@ -68,7 +69,7 @@ export default function OfficialBrowser({ watch: faceWatch, request, onPick, onC
   useEffect(() => {
     if (!ready) return;
     const mine = ++asked.current;
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       setBusy(true);
       listOfficial(watch, {
         ...fixed, category: request.mode === "font" ? "fonts" : f.category || undefined, role: f.role || undefined, tag: f.tag || undefined,
@@ -78,7 +79,7 @@ export default function OfficialBrowser({ watch: faceWatch, request, onPick, onC
         .catch((e) => { if (mine === asked.current) setProblem(said(e)); })
         .finally(() => { if (mine === asked.current) setBusy(false); });
     }, f.q ? 180 : 0);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
     // `fixed` is made from `request`, which doesn't change while the browser is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, fetchedAt, watch, f]);
@@ -120,76 +121,76 @@ export default function OfficialBrowser({ watch: faceWatch, request, onPick, onC
   const option = (key: string, label: string, on: boolean, pick: () => void, n?: number) => (
     <button key={key} type="button" className="st-off-option" aria-pressed={on} onClick={pick}><span>{label}</span>{n !== undefined ? <small>{n}</small> : null}</button>
   );
-  const what = request.mode === "font" ? "Use this font" : request.mode === "sprites" ? "Use this set" : count > 1 ? `Use frame ${frame + 1}` : "Use this image";
+  const what = request.mode === "font" ? t("Use this font") : request.mode === "sprites" ? t("Use this set") : count > 1 ? t("Use frame {n}", { n: frame + 1 }) : t("Use this image");
 
   return (
     <div className="st-scrim" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="st-dialog st-off" role="dialog" aria-modal="true" aria-label={request.title}>
         <div className="st-dialog-head">
           <h2>{request.title}</h2>
-          <span className="st-off-credit">Artwork © COROS</span>
+          <span className="st-off-credit">{t("Artwork © COROS")}</span>
           <span className="st-grow" />
-          <button ref={closeButton} type="button" className="st-icon-btn" aria-label="Close" onClick={onClose}><Icon name="close" /></button>
+          <button ref={closeButton} type="button" className="st-icon-btn" aria-label={t("Close")} onClick={onClose}><Icon name="close" /></button>
         </div>
 
         <div className="st-off-body">
-          <aside className="st-off-side" aria-label="Filters">
-            <label className="st-select st-select-wide"><span>Watch</span>
-              <Select aria-label="Watch" value={watch} onChange={(e) => changeWatch(e.target.value)}>
-                {WATCHFACE_TARGETS.map((t) => <option key={t.model} value={t.model}>{t.label}</option>)}
+          <aside className="st-off-side" aria-label={t("Filters")}>
+            <label className="st-select st-select-wide"><span>{t("Watch")}</span>
+              <Select aria-label={t("Watch")} value={watch} onChange={(e) => changeWatch(e.target.value)}>
+                {WATCHFACE_TARGETS.map((w) => <option key={w.model} value={w.model}>{w.label}</option>)}
               </Select><Icon name="chevD" size={14} /></label>
 
-            {request.mode !== "font" && page?.categories.length ? group("Category", <>
-              {option("", "All", !f.category, () => filter({ category: "", role: "" }), page.categories.reduce((sum, c) => sum + c.count, 0))}
+            {request.mode !== "font" && page?.categories.length ? group(t("Category"), <>
+              {option("", t("All"), !f.category, () => filter({ category: "", role: "" }), page.categories.reduce((sum, c) => sum + c.count, 0))}
               {page.categories.map((c) => option(c.id, c.label, f.category === c.id, () => filter({ category: c.id, role: "" }), c.count))}
             </>) : null}
 
-            {(request.mode === "font" || f.category === "fonts") && (page?.roles.length ?? 0) > 1 ? group("Used as", <>
-              {option("", "Any", !f.role, () => filter({ role: "" }))}
+            {(request.mode === "font" || f.category === "fonts") && (page?.roles.length ?? 0) > 1 ? group(t("Used as"), <>
+              {option("", t("Any"), !f.role, () => filter({ role: "" }))}
               {page!.roles.map((r) => option(r.id, r.label, f.role === r.id, () => filter({ role: r.id }), r.count))}
             </>) : null}
 
-            {!fixed.configKey && (page?.tags.length ?? 0) > 1 ? group("Purpose", <>
-              {option("", "Any", !f.tag, () => filter({ tag: "" }))}
-              {page!.tags.slice(0, 12).map((t) => option(t.id, t.label, f.tag === t.id, () => filter({ tag: t.id }), t.count))}
+            {!fixed.configKey && (page?.tags.length ?? 0) > 1 ? group(t("Purpose"), <>
+              {option("", t("Any"), !f.tag, () => filter({ tag: "" }))}
+              {page!.tags.slice(0, 12).map((tag) => option(tag.id, tag.label, f.tag === tag.id, () => filter({ tag: tag.id }), tag.count))}
             </>) : null}
 
-            {!fixed.frameCount ? group("Frames", <>
+            {!fixed.frameCount ? group(t("Frames"), <>
               {request.mode === "image" ? (
-                <Segmented small label="Single pictures or sets" value={f.frames} onChange={(v) => filter({ frames: v, frameCount: 0 })}
-                  options={[{ value: "", label: "Any" }, { value: "single", label: "Single" }, { value: "multi", label: "Sets" }]} />
+                <Segmented small label={t("Single pictures or sets")} value={f.frames} onChange={(v) => filter({ frames: v, frameCount: 0 })}
+                  options={[{ value: "", label: t("Any") }, { value: "single", label: t("Single") }, { value: "multi", label: t("Sets") }]} />
               ) : null}
               {f.frames !== "single" && page?.frameCounts.length ? (
                 <div className="st-chips">
-                  {page.frameCounts.map((c) => <button key={c.frames} type="button" className="chip" aria-pressed={f.frameCount === c.frames} title={`${c.count} sets with ${c.frames} frames`}
+                  {page.frameCounts.map((c) => <button key={c.frames} type="button" className="chip" aria-pressed={f.frameCount === c.frames} title={t("{count} sets with {frames} frames", { count: c.count, frames: c.frames })}
                     onClick={() => filter({ frameCount: f.frameCount === c.frames ? 0 : c.frames })}>{c.frames}</button>)}
                 </div>
               ) : null}
             </>) : null}
 
             <span className="st-grow" />
-            <button type="button" className="chip st-chip-btn" disabled={status?.state === "loading"} title="Download this watch's library again" onClick={refresh}><Icon name="refresh" size={15} />Refresh library</button>
+            <button type="button" className="chip st-chip-btn" disabled={status?.state === "loading"} title={t("Download this watch's library again")} onClick={refresh}><Icon name="refresh" size={15} />{t("Refresh library")}</button>
           </aside>
 
-          <section className="st-off-main" aria-label="Official artwork">
+          <section className="st-off-main" aria-label={t("Official artwork")}>
             <label className="st-search"><Icon name="search" size={15} />
-              <input type="search" aria-label="Search official artwork" placeholder="Face name, config key, or a size like 60x80" value={f.q} onChange={(e) => filter({ q: e.target.value })} /></label>
+              <input type="search" aria-label={t("Search official artwork")} placeholder={t("Face name, config key, or a size like 60x80")} value={f.q} onChange={(e) => filter({ q: e.target.value })} /></label>
 
             {!status || status.state === "loading" || status.state === "idle" ? (
               <div className="st-off-state" role="status">
-                <p>{status ? progressText(status) : "Opening the library…"}</p>
-                <progress aria-label="Library download" {...(status?.total ? { max: status.total, value: status.done } : {})} />
-                <small>The first visit for a watch downloads its library once.</small>
+                <p>{status ? progressText(status) : t("Opening the library…")}</p>
+                <progress aria-label={t("Library download")} {...(status?.total ? { max: status.total, value: status.done } : {})} />
+                <small>{t("The first visit for a watch downloads its library once.")}</small>
               </div>
             ) : status.state === "error" ? (
               <div className="st-off-state" role="alert">
-                <p>{status.message ?? "The official library couldn't be loaded."}</p>
-                <Button onClick={refresh}>Try again</Button>
+                <p>{status.message ?? t("The official library couldn't be loaded.")}</p>
+                <Button onClick={refresh}>{t("Try again")}</Button>
               </div>
             ) : <>
               {problem ? <div className="notice" role="alert">{problem}</div> : null}
-              {status.message ? <div className="notice" role="status">{status.message} Showing the library saved on this computer.</div> : null}
-              <p className="st-off-count" aria-live="polite">{page ? `${page.total.toLocaleString()} ${page.total === 1 ? "set" : "sets"} from ${status.faceCount} official faces` : " "}</p>
+              {status.message ? <div className="notice" role="status">{status.message} {t("Showing the library saved on this computer.")}</div> : null}
+              <p className="st-off-count" aria-live="polite">{page ? (page.total === 1 ? t("1 set from {faces} official faces", { faces: status.faceCount }) : t("{n} sets from {faces} official faces", { n: page.total.toLocaleString(language() === "en" ? undefined : locale()), faces: status.faceCount })) : " "}</p>
               <div className="st-off-grid" aria-busy={busy}>
                 {page?.assets.map((a) => {
                   const k = Math.min(2.4, Math.max(0.35, 44 / a.height));
@@ -204,43 +205,43 @@ export default function OfficialBrowser({ watch: faceWatch, request, onPick, onC
                     </button>
                   );
                 })}
-                {page && !page.assets.length && !busy ? <p className="st-hint">Nothing matches these filters.</p> : null}
+                {page && !page.assets.length && !busy ? <p className="st-hint">{t("Nothing matches these filters.")}</p> : null}
               </div>
               {pages > 1 ? (
                 <div className="st-off-pager">
-                  <button type="button" className="st-icon-btn" aria-label="Previous page" disabled={f.page <= 1} onClick={() => setF((x) => ({ ...x, page: x.page - 1 }))}><Icon name="chevL" /></button>
-                  <span>Page {page?.page ?? f.page} of {pages}</span>
-                  <button type="button" className="st-icon-btn" aria-label="Next page" disabled={f.page >= pages} onClick={() => setF((x) => ({ ...x, page: x.page + 1 }))}><Icon name="chevR" /></button>
+                  <button type="button" className="st-icon-btn" aria-label={t("Previous page")} disabled={f.page <= 1} onClick={() => setF((x) => ({ ...x, page: x.page - 1 }))}><Icon name="chevL" /></button>
+                  <span>{t("Page {n} of {total}", { n: page?.page ?? f.page, total: pages })}</span>
+                  <button type="button" className="st-icon-btn" aria-label={t("Next page")} disabled={f.page >= pages} onClick={() => setF((x) => ({ ...x, page: x.page + 1 }))}><Icon name="chevR" /></button>
                 </div>
               ) : null}
             </>}
           </section>
 
           {picked ? (
-            <aside className="st-off-detail" aria-label="Preview">
+            <aside className="st-off-detail" aria-label={t("Preview")}>
               <div className="st-off-stage">
-                {picked.set ? <img src={picked.set.frames[Math.min(frame, picked.set.frames.length - 1)]} alt={`Frame ${frame + 1} of ${count}`}
+                {picked.set ? <img src={picked.set.frames[Math.min(frame, picked.set.frames.length - 1)]} alt={t("Frame {n} of {total}", { n: frame + 1, total: count })}
                   style={{ width: picked.asset.width * stageScale(picked.asset), height: picked.asset.height * stageScale(picked.asset) }} data-crisp={stageScale(picked.asset) >= 1 || undefined} /> : <span className="st-off-wait" aria-busy="true" />}
               </div>
               {count > 1 ? <>
-                <div className="st-off-step" role="group" aria-label="Frame">
-                  <button type="button" className="st-icon-btn" aria-label="Previous frame" title="Previous frame (←)" onClick={() => step(-1)}><Icon name="chevL" /></button>
-                  <span>Frame {frame + 1} of {count}</span>
-                  <button type="button" className="st-icon-btn" aria-label="Next frame" title="Next frame (→)" onClick={() => step(1)}><Icon name="chevR" /></button>
+                <div className="st-off-step" role="group" aria-label={t("Frame")}>
+                  <button type="button" className="st-icon-btn" aria-label={t("Previous frame")} title={t("Previous frame (←)")} onClick={() => step(-1)}><Icon name="chevL" /></button>
+                  <span>{t("Frame {n} of {total}", { n: frame + 1, total: count })}</span>
+                  <button type="button" className="st-icon-btn" aria-label={t("Next frame")} title={t("Next frame (→)")} onClick={() => step(1)}><Icon name="chevR" /></button>
                 </div>
                 {picked.set ? (
-                  <div className="st-off-frames" role="listbox" aria-label="Frames">
-                    {picked.set.frames.map((src, i) => <button key={i} type="button" role="option" aria-selected={i === frame} aria-label={`Frame ${i + 1}`} onClick={() => setFrame(i)}><img src={src} alt="" /></button>)}
+                  <div className="st-off-frames" role="listbox" aria-label={t("Frames")}>
+                    {picked.set.frames.map((src, i) => <button key={i} type="button" role="option" aria-selected={i === frame} aria-label={t("Frame {n}", { n: i + 1 })} onClick={() => setFrame(i)}><img src={src} alt="" /></button>)}
                   </div>
                 ) : null}
               </> : null}
               <dl className="st-off-facts">
-                <dt>Size</dt><dd>{picked.asset.width} × {picked.asset.height}{count > 1 ? ` · ${count} frames` : ""}</dd>
-                <dt>From</dt><dd>{picked.asset.faces.join(", ")}{picked.asset.faceCount > picked.asset.faces.length ? ` and ${picked.asset.faceCount - picked.asset.faces.length} more` : ""}</dd>
-                {picked.asset.tags.length ? <><dt>Used as</dt><dd>{picked.asset.tags.map((t) => t.label).join(", ")}</dd></> : null}
-                {picked.asset.configKeys.length ? <><dt>Config</dt><dd className="st-off-keys">{picked.asset.configKeys.slice(0, 3).join(", ")}</dd></> : null}
+                <dt>{t("Size")}</dt><dd>{picked.asset.width} × {picked.asset.height}{count > 1 ? ` · ${t("{n} frames", { n: count })}` : ""}</dd>
+                <dt>{t("From")}</dt><dd>{picked.asset.faceCount > picked.asset.faces.length ? t("{names} and {n} more", { names: picked.asset.faces.join(", "), n: picked.asset.faceCount - picked.asset.faces.length }) : picked.asset.faces.join(", ")}</dd>
+                {picked.asset.tags.length ? <><dt>{t("Used as")}</dt><dd>{picked.asset.tags.map((tag) => tag.label).join(", ")}</dd></> : null}
+                {picked.asset.configKeys.length ? <><dt>{t("Config")}</dt><dd className="st-off-keys">{picked.asset.configKeys.slice(0, 3).join(", ")}</dd></> : null}
               </dl>
-              <Button variant="primary" className="st-wide" disabled={!picked.set || using} onClick={() => void use()}><Icon name="check" size={16} width={2.4} />{using ? "Adding…" : what}</Button>
+              <Button variant="primary" className="st-wide" disabled={!picked.set || using} onClick={() => void use()}><Icon name="check" size={16} width={2.4} />{using ? t("Adding…") : what}</Button>
             </aside>
           ) : null}
         </div>

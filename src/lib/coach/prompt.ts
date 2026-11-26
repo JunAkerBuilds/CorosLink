@@ -2,6 +2,7 @@
 // own context for this answer, and the conversation so far. Pure. The rules follow the phone Coach's
 // (CorosKit PhoneCoach.toolRules), changed where the web differs: a desk, cards drawn from data, no watch actions.
 import type { CoachBlock, CoachMessage } from "@/data/coach";
+import { msg } from "@/lib/i18n";
 import { dayLabel, localParts, quoted, shiftDay, today, type AthleteItems, type Clock } from "./items";
 import { profileText, readCalendar, type PlanEntry } from "./read";
 import type { AthleteZones } from "./zones";
@@ -145,12 +146,12 @@ export function suggestionsFor(blocks: readonly CoachBlock[]): string[] {
   const kinds = new Set(blocks.map((b) => b.kind));
   if (kinds.has("question")) return [];
   const out: string[] = [];
-  if (kinds.has("recap")) out.push("Compare it with the last one like it", "What should tomorrow be?");
-  if (kinds.has("trend") || kinds.has("today")) out.push("Should I change today's plan?");
-  if (kinds.has("plancheck")) out.push("Move what I missed to this week");
-  if (kinds.has("workout")) out.push("Make it easier", "Write a brief for it");
-  if (kinds.has("fuel")) out.push("Another idea");
-  if (!out.length) out.push("How does today look?", "How did my last workout go?");
+  if (kinds.has("recap")) out.push(msg("Compare it with the last one like it"), msg("What should tomorrow be?"));
+  if (kinds.has("trend") || kinds.has("today")) out.push(msg("Should I change today's plan?"));
+  if (kinds.has("plancheck")) out.push(msg("Move what I missed to this week"));
+  if (kinds.has("workout")) out.push(msg("Make it easier"), msg("Write a brief for it"));
+  if (kinds.has("fuel")) out.push(msg("Another idea"));
+  if (!out.length) out.push(msg("How does today look?"), msg("How did my last workout go?"));
   return out.slice(0, 3);
 }
 

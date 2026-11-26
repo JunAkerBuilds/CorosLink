@@ -14,12 +14,16 @@ import { createRoot } from "react-dom/client";
 import { platformSlots } from "@/lib/platform";
 import { App } from "./App";
 import { LocalModeCards, LocalModePanel, LocalModeTools } from "./parts/LocalMode";
+import { CorosAccountPart, useCorosAccountConnected } from "./parts/CorosImport";
 import { RailFoot } from "./parts/RailFoot";
 import { UpdatesBadge, UpdatesMenuItem } from "./parts/Updates";
 import { CoachAI } from "./parts/CoachAI";
 import { ThisComputer } from "./parts/ThisComputer";
 import { WatchLink } from "./parts/WatchLink";
 import { startAutomationInbox } from "./studioAutomationInbox";
+import { msg } from "@/lib/i18n";
+import { loadLanguage } from "@/lib/i18n/load";
+import { tellLanguage } from "./settings";
 
 // What the web app's theme boot script does before the first paint: light, dark, or the system's.
 try {
@@ -52,16 +56,23 @@ platformSlots.watchLink = WatchLink;
 platformSlots.watchPanel = LocalModePanel;
 platformSlots.watchCards = LocalModeCards;
 platformSlots.watchTools = LocalModeTools;
+// The COROS account card on Connections: the import through COROS's MCP above Training Hub (parts/CorosImport.tsx).
+platformSlots.corosAccount = CorosAccountPart;
+platformSlots.useCorosAccountConnected = useCorosAccountConnected;
 // Media lives only here: the library on this computer and the watch as a USB drive (pages/Media.tsx).
 // Maps plans routes and puts COROS maps on the watch (pages/Maps.tsx, main/maps/service.ts).
 // Studio makes watch faces, kept on this computer (pages/Studio.tsx, main/studio.ts).
 platformSlots.nav = [
-  { href: "/media", label: "Media", group: 3, icon: "M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0a3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0a3 3 0 0 1 6 0z" },
-  { href: "/maps", label: "Maps", group: 3, icon: "M9 4 3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5zM9 4v13.5M15 6.5V20" },
-  { href: "/studio", label: "Studio", group: 3, icon: "M12 3a9 9 0 1 0 0 18c1.2 0 1.7-1 1.2-2-.5-1 .2-2.3 1.4-2.3H17a4 4 0 0 0 4-4C21 7 17 3 12 3zM7.5 11.5h.01M9.5 7.5h.01M14.5 7.5h.01" },
+  { href: "/media", label: msg("Media"), group: 3, icon: "M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0a3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0a3 3 0 0 1 6 0z" },
+  { href: "/maps", label: msg("Maps"), group: 3, icon: "M9 4 3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5zM9 4v13.5M15 6.5V20" },
+  { href: "/studio", label: msg("Studio"), group: 3, icon: "M12 3a9 9 0 1 0 0 18c1.2 0 1.7-1 1.2-2-.5-1 .2-2.3 1.4-2.3H17a4 4 0 0 0 4-4C21 7 17 3 12 3zM7.5 11.5h.01M9.5 7.5h.01M14.5 7.5h.01" },
 ];
 
 // Requests from the watch-face MCP server and Watchmaker reach the open Studio editor through this (studioAutomationInbox.ts).
 startAutomationInbox();
 
-createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+// The language's words load before the first paint (src/lib/i18n/load.ts); the main process hears which it is.
+void loadLanguage().then((lang) => {
+  void tellLanguage(lang);
+  createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+});

@@ -3,6 +3,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { app, type BrowserWindow } from "electron";
+import { isLang } from "@/lib/i18n";
 import { smokeStudioAssets } from "./smokeStudioAssets";
 import { smokeStudioPercent } from "./smokeStudioPercent";
 import { smokeStudioConvert } from "./smokeStudioConvert";
@@ -52,6 +53,12 @@ export async function runSmoke(window: BrowserWindow, origin: string, folder: st
   if (theme === "light" || theme === "dark") {
     await window.loadURL(origin + "/");
     await window.webContents.executeJavaScript(`localStorage.setItem("clink.theme", ${JSON.stringify(theme)})`).catch(() => {});
+  }
+  // CLINK_SMOKE_LANG=es|de|pt-BR|zh-Hans shows every screen in that language (src/lib/i18n/load.ts reads it at each load).
+  const lang = process.env.CLINK_SMOKE_LANG;
+  if (isLang(lang)) {
+    await window.loadURL(origin + "/");
+    await window.webContents.executeJavaScript(`localStorage.setItem("clink.language", ${JSON.stringify(JSON.stringify(lang))})`).catch(() => {});
   }
   // CLINK_SMOKE_MCP=1 adds the fixture MCP server (scripts/mcp-fixture.mjs) with one tool on; CLINK_SMOKE_COACH="…"
   // then asks Coach that question and logs the tools it used and its answer.

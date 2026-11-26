@@ -11,6 +11,7 @@ import { isMp3, safeName, withFile } from "./mp3";
 import { ffmpegArgs, run } from "./tools";
 import type { Work } from "./downloads";
 import { WatchProblem } from "./watchDrive";
+import { t } from "@/lib/i18n";
 
 export interface Show { id: string; title: string; author: string; artwork: string | null; episodes?: number; genre?: string | null }
 export interface Episode {
@@ -102,7 +103,7 @@ export class Podcasts {
 
   private async json<T>(url: URL): Promise<T> {
     const answer = await this.get(url.href, { headers: { Accept: "application/json" } });
-    if (!answer.ok) throw new WatchProblem("Apple Podcasts didn't answer. Try again in a moment.", "podcasts");
+    if (!answer.ok) throw new WatchProblem(t("Apple Podcasts didn't answer. Try again in a moment."), "podcasts");
     return (await answer.json()) as T;
   }
 
@@ -126,8 +127,8 @@ export class Podcasts {
     url.searchParams.set("entity", "podcast");
     url.searchParams.set("country", storefront());
     const r = (await this.json<{ results?: ItunesResult[] }>(url)).results?.find((x) => String(x.collectionId) === id);
-    if (!r) throw new WatchProblem("Apple Podcasts doesn't know that show.", "notFound");
-    if (!r.feedUrl) throw new WatchProblem("This show has no public feed, so its episodes can't be downloaded.", "noFeed");
+    if (!r) throw new WatchProblem(t("Apple Podcasts doesn't know that show."), "notFound");
+    if (!r.feedUrl) throw new WatchProblem(t("This show has no public feed, so its episodes can't be downloaded."), "noFeed");
     return { id, title: r.collectionName ?? "Podcast", author: r.artistName ?? "", artwork: r.artworkUrl600 ?? r.artworkUrl100 ?? null, genre: r.primaryGenreName ?? null, feed: r.feedUrl };
   }
 
@@ -136,7 +137,7 @@ export class Podcasts {
     if (cached && Date.now() - cached.at < FEED_TTL) return cached;
     const show = await this.lookup(id);
     const answer = await this.get(show.feed, { headers: { Accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1" } });
-    if (!answer.ok) throw new WatchProblem("The show's feed didn't load. Try again in a moment.", "feed");
+    if (!answer.ok) throw new WatchProblem(t("The show's feed didn't load. Try again in a moment."), "feed");
     const parsed = parseFeed(await answer.text());
     const entry = { at: Date.now(), show: { ...show, artwork: show.artwork ?? parsed.artwork, about: parsed.about }, episodes: parsed.episodes };
     this.feeds.set(id, entry);
@@ -153,7 +154,7 @@ export class Podcasts {
   async find(id: string, episodeId: string): Promise<Episode & { show: string }> {
     const { show, episodes } = await this.load(id);
     const ep = episodes.find((e) => e.id === episodeId);
-    if (!ep) throw new WatchProblem("That episode isn't in the show's feed any more.", "notFound");
+    if (!ep) throw new WatchProblem(t("That episode isn't in the show's feed any more."), "notFound");
     return { ...ep, artwork: ep.artwork ?? show.artwork, show: show.title };
   }
 
@@ -161,13 +162,13 @@ export class Podcasts {
   async episode(id: string, episodeId: string, ffmpeg: () => string | null): Promise<{ title: string; artist: string; origin: string; work: Work }> {
     const { show, episodes } = await this.load(id);
     const ep = episodes.find((e) => e.id === episodeId);
-    if (!ep) throw new WatchProblem("That episode isn't in the show's feed any more.", "notFound");
+    if (!ep) throw new WatchProblem(t("That episode isn't in the show's feed any more."), "notFound");
     const origin = `podcast:${id}:${ep.id}`;
     const work: Work = async ({ dir, progress, signal }) => {
       const answer = await this.get(ep.url, { signal });
-      if (!answer.ok || !answer.body) throw new Error(`The episode didn't download (${answer.status}).`);
+      if (!answer.ok || !answer.body) throw new Error(t("The episode didn't download ({status}).", { status: answer.status }));
       const total = Number(answer.headers.get("content-length")) || ep.bytes || 0;
-      if (total > MAX_EPISODE) throw new Error("That episode is too big for the watch.");
+      if (total > MAX_EPISODE) throw new Error(t("That episode is too big for the watch."));
       const ext = /mpeg|mp3/i.test(answer.headers.get("content-type") ?? ep.type) || /\.mp3(\?|$)/i.test(ep.url) ? "mp3" : "m4a";
       let file = path.join(dir, `episode.${ext}`);
       const out = createWriteStream(file);
@@ -178,7 +179,7 @@ export class Podcasts {
           const { done, value } = await reader.read();
           if (done) break;
           got += value.length;
-          if (got > MAX_EPISODE) throw new Error("That episode is too big for the watch.");
+          if (got > MAX_EPISODE) throw new Error(t("That episode is too big for the watch."));
           if (!out.write(value)) await once(out, "drain");
           if (total) progress(Math.min(0.95, got / total));
         }
@@ -188,7 +189,7 @@ export class Podcasts {
       }
       if (!(await withFile(file, (read) => isMp3(read)))) {
         const tool = ffmpeg();
-        if (!tool) throw new Error("This episode isn't an MP3, and converting it needs ffmpeg.");
+        if (!tool) throw new Error(t("This episode isn't an MP3, and converting it needs ffmpeg."));
         const mp3 = path.join(dir, "converted.mp3");
         if (ext === "mp3") { const m4a = path.join(dir, "episode.m4a"); await writeFile(m4a, await readFile(file)); file = m4a; }
         await run(tool, ffmpegArgs(file, mp3), () => {}, signal);

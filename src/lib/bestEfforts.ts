@@ -2,17 +2,18 @@
  * Fastest stretches of a recorded run: the quickest 400 m, 1 km, mile, 5 km and so on inside one activity,
  * worked out from its time and distance samples (linear between samples).
  */
+import { msg } from "@/lib/i18n";
 
 export interface Effort { name: string; metres: number; seconds: number }
 
 export const RUN_EFFORTS: readonly { name: string; metres: number }[] = [
   { name: "400 m", metres: 400 },
   { name: "1 km", metres: 1000 },
-  { name: "1 mile", metres: 1609.344 },
+  { name: msg("1 mile"), metres: 1609.344 },
   { name: "5 km", metres: 5000 },
   { name: "10 km", metres: 10000 },
-  { name: "Half marathon", metres: 21097.5 },
-  { name: "Marathon", metres: 42195 },
+  { name: msg("Half marathon"), metres: 21097.5 },
+  { name: msg("Marathon"), metres: 42195 },
 ];
 
 /**

@@ -1,4 +1,5 @@
 /** Number and time formatting. Athlete data keeps full precision: nothing here rounds away hundredths. */
+import { locale } from "@/lib/i18n";
 
 /** Seconds as m:ss or h:mm:ss, with `decimals` fractional digits kept (5:08.31). */
 export function clock(seconds: number, decimals = 0): string {
@@ -31,7 +32,7 @@ export function signed(value: number, decimals = 0): string {
 }
 
 export function thousands(value: number): string {
-  return Math.round(value).toLocaleString("en-US");
+  return Math.round(value).toLocaleString(locale("en-US"));
 }
 
 /** Local calendar day as YYYY-MM-DD (never via toISOString, which shifts across time zones). */

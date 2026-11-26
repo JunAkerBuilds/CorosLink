@@ -8,7 +8,8 @@ import type { HubExercise, HubSavedWorkout, HubSport } from "@/data/hub";
 import type { SavedWorkout } from "@/data/workouts";
 import type { Sport } from "@/lib/workout";
 import { compareCard, fuelCard, fuelTargetsOn, planCheckCard, recapCard, todayCard, trendCard } from "./cards";
-import { dayLabel, finite, isDay, quoted, shiftDay, today, type AthleteItems, type Clock } from "./items";
+import { msg, t, tx } from "@/lib/i18n";
+import { finite, isDay, quoted, shiftDay, shownDay, today, type AthleteItems, type Clock } from "./items";
 import { findEntry, parsePlanChange, planCard, planTarget, type PlanOp } from "./plan";
 import { addToDraft, findPlan, listPlansText, planEdit, readPlanText, type DraftWorkout, type MadeWorkout, type PlanBrief, type PlanDraft } from "./plans";
 import { findActivity, profileText, readActivities, readActivity, readCalendar, readFuel, readHealth, readStrength, readTraining, type PlanEntry } from "./read";
@@ -144,18 +145,19 @@ function built<T extends CoachBlock>(made: { card: T } | { error: string }, text
   return "error" in made ? fail(made.error) : { text, block: made.card, source };
 }
 
-/** What a running tool is called on the working card. */
+/** What a running tool is called on the working card (English; the loop translates it). */
 export const TOOL_WORDS: Record<string, string> = {
-  read_profile: "Reading your profile", read_activities: "Reading your activities", read_training: "Reading your training", read_health: "Reading sleep and recovery",
-  list_calendar: "Reading your calendar", read_fuel: "Reading Fuel", list_saved_workouts: "Reading your routines", show_workout_recap: "Drawing the recap",
-  show_comparison: "Comparing the two", show_trend: "Drawing the trend", show_today: "Putting today together", get_plan_compliance: "Checking the plan",
-  show_fuel: "Adding up today's food", propose_workout: "Building the workout", propose_plan_change: "Laying out the change", write_workout_brief: "Writing the brief",
-  log_workout_debrief: "Writing the debrief", remember_fact: "Making a note", request_coach_input: "Asking you",
-  read_saved_workout: "Reading a saved workout", read_workout: "Reading the workout", search_exercises: "Looking up exercises",
-  propose_workout_change: "Rewriting the workout", propose_training_plan: "Laying out the plan",
-  list_plans: "Reading your plans", read_plan: "Reading the plan", propose_plan_edit: "Laying out the plan change", build_plan: "Building the plan",
+  read_profile: msg("Reading your profile"), read_activities: msg("Reading your activities"), read_training: msg("Reading your training"), read_health: msg("Reading sleep and recovery"),
+  list_calendar: msg("Reading your calendar"), read_fuel: msg("Reading Fuel"), list_saved_workouts: msg("Reading your routines"), show_workout_recap: msg("Drawing the recap"),
+  show_comparison: msg("Comparing the two"), show_trend: msg("Drawing the trend"), show_today: msg("Putting today together"), get_plan_compliance: msg("Checking the plan"),
+  show_fuel: msg("Adding up today's food"), propose_workout: msg("Building the workout"), propose_plan_change: msg("Laying out the change"), write_workout_brief: msg("Writing the brief"),
+  log_workout_debrief: msg("Writing the debrief"), remember_fact: msg("Making a note"), request_coach_input: msg("Asking you"),
+  read_saved_workout: msg("Reading a saved workout"), read_workout: msg("Reading the workout"), search_exercises: msg("Looking up exercises"),
+  propose_workout_change: msg("Rewriting the workout"), propose_training_plan: msg("Laying out the plan"),
+  list_plans: msg("Reading your plans"), read_plan: msg("Reading the plan"), propose_plan_edit: msg("Laying out the plan change"), build_plan: msg("Building the plan"),
 };
 
+const FEEL_WORDS = [msg("Rough"), msg("Hard"), msg("OK"), msg("Good"), msg("Strong")];
 const NO_HUB = "COROS Training Hub isn't connected for this athlete, so COROS's exercise list and workout library can't be read. They connect it on the Connections page.";
 const HUB_SPORT_AS: Record<HubSport, Sport> = { run: "run", trailRun: "run", bike: "ride", swim: "swim", strength: "strength", hyrox: "strength", xcSki: "run", indoorClimb: "strength", bouldering: "strength" };
 
@@ -169,15 +171,16 @@ async function catalogFor(workout: unknown, ctx: ToolContext): Promise<readonly 
   return Array.isArray(list) ? list : null;
 }
 
-function shapeOf(saved: HubSavedWorkout): string {
-  const t = saved.totals, parts: string[] = [];
-  if (t && t.sets > 0) parts.push(`${t.sets} sets`);
-  if (t && t.meters > 0) parts.push(`${(t.meters / 1000).toFixed(2)} km`);
-  if (t && t.seconds > 0) parts.push(`${Math.round(t.seconds / 60)} min`);
+/** A saved workout's shape in a few words: English for the model, or in the app's language when `shown`. */
+function shapeOf(saved: HubSavedWorkout, shown = false): string {
+  const tot = saved.totals, parts: string[] = [];
+  if (tot && tot.sets > 0) parts.push(shown ? (tot.sets === 1 ? t("1 set") : t("{n} sets", { n: tot.sets })) : `${tot.sets} sets`);
+  if (tot && tot.meters > 0) parts.push(`${(tot.meters / 1000).toFixed(2)} km`);
+  if (tot && tot.seconds > 0) parts.push(`${Math.round(tot.seconds / 60)} min`);
   return parts.join(", ");
 }
 
-const detailOf = (made: CoachWorkout, card: { summary: string }): string => (made.workout ? card.summary : shapeOf({ id: "", name: "", sportCode: null, sport: made.sport, hasSteps: true, workout: made.hub, totals: null }) || card.summary);
+const detailOf = (made: CoachWorkout, card: { summary: string }): string => (made.workout ? card.summary : shapeOf({ id: "", name: "", sportCode: null, sport: made.sport, hasSteps: true, workout: made.hub, totals: null }, true) || card.summary);
 
 /** A workout Coach wrote for a plan, made the way a calendar card makes it (load included). */
 async function makeForPlan(raw: unknown, day: string, ctx: ToolContext): Promise<(MadeWorkout & { detail: string }) | { error: string }> {
@@ -195,27 +198,27 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
   const str = (v: unknown) => (typeof v === "string" ? v : undefined);
   switch (name) {
     case "read_profile":
-      return { text: profileText(items, clock), source: { title: "Your profile", detail: "Thresholds, sports, bests", href: "/" } };
+      return { text: profileText(items, clock), source: { title: t("Your profile"), detail: t("Thresholds, sports, bests"), href: "/" } };
     case "read_activities":
-      return { text: readActivities(items, clock, { days: num(input.days), sport: str(input.sport), limit: num(input.limit) }), source: { title: "Activities", detail: `Last ${Math.round(num(input.days) ?? 14)} days`, href: "/activities" } };
+      return { text: readActivities(items, clock, { days: num(input.days), sport: str(input.sport), limit: num(input.limit) }), source: { title: t("Activities"), detail: t("Last {n} days", { n: Math.round(num(input.days) ?? 14) }), href: "/activities" } };
     case "read_training": {
       const topic = str(input.topic) ?? "all";
       if (topic === "activity") {
         const a = findActivity(items, input.activity_id);
         if (!a) return fail(input.activity_id ? `no activity ${quoted(String(input.activity_id), 60)}. Use an id from read_activities.` : "activity needs activity_id from read_activities.");
-        return { text: readActivity(items, clock, a.id), source: { title: quoted(a.name, 40) || "Activity", detail: "Laps and heart rate zones", href: `/activities/${encodeURIComponent(a.id)}` } };
+        return { text: readActivity(items, clock, a.id), source: { title: quoted(a.name, 40) || t("Activity"), detail: t("Laps and heart rate zones"), href: `/activities/${encodeURIComponent(a.id)}` } };
       }
-      if (topic === "strength") return { text: readStrength(items, clock, { topic: "workouts" }), source: { title: "Strength", detail: "Gym workouts", href: "/strength" } };
-      if (topic === "muscles") return { text: readStrength(items, clock, { topic: "muscles" }), source: { title: "Strength", detail: "Muscle fatigue", href: "/strength" } };
-      return { text: readTraining(items, clock, { topic }), source: { title: "Training", detail: topic === "all" ? "Load, fitness, weeks" : topic[0].toUpperCase() + topic.slice(1), href: "/" } };
+      if (topic === "strength") return { text: readStrength(items, clock, { topic: "workouts" }), source: { title: t("Strength"), detail: t("Gym workouts"), href: "/strength" } };
+      if (topic === "muscles") return { text: readStrength(items, clock, { topic: "muscles" }), source: { title: t("Strength"), detail: t("Muscle fatigue"), href: "/strength" } };
+      return { text: readTraining(items, clock, { topic }), source: { title: t("Training"), detail: topic === "all" ? t("Load, fitness, weeks") : topic[0].toUpperCase() + topic.slice(1), href: "/" } };
     }
     case "read_health":
-      return { text: readHealth(items, clock, { topic: str(input.metric), days: num(input.days) }), source: { title: "Health", detail: `${str(input.metric) ?? "all"}, last ${Math.round(num(input.days) ?? 30)} days`, href: "/health" } };
+      return { text: readHealth(items, clock, { topic: str(input.metric), days: num(input.days) }), source: { title: t("Health"), detail: t("{metric}, last {n} days", { metric: str(input.metric) ?? t("all"), n: Math.round(num(input.days) ?? 30) }), href: "/health" } };
     case "list_calendar":
-      return { text: readCalendar(items, clock, ctx.entries, { from: str(input.start_date), to: str(input.end_date) }, ctx.hubNote), source: { title: "Calendar", detail: "Planned and done", href: "/calendar" } };
+      return { text: readCalendar(items, clock, ctx.entries, { from: str(input.start_date), to: str(input.end_date) }, ctx.hubNote), source: { title: t("Calendar"), detail: t("Planned and done"), href: "/calendar" } };
     case "read_fuel": {
       const day = isDay(input.date) ? input.date : today(clock);
-      return { text: readFuel(items, clock, { day }, fuelTargetsOn(items, day)), source: { title: "Fuel", detail: dayLabel(day), href: "/fuel" } };
+      return { text: readFuel(items, clock, { day }, fuelTargetsOn(items, day)), source: { title: t("Fuel"), detail: shownDay(day), href: "/fuel" } };
     }
     case "list_saved_workouts": {
       const query = (str(input.query) ?? "").trim().toLowerCase();
@@ -230,7 +233,7 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
           for (const w of hits) out.push(`coros-${w.id} · ${quoted(w.name)} · ${w.sport ?? "other"}${shapeOf(w) ? ` · ${shapeOf(w)}` : ""}`);
         }
       }
-      return { text: out.join("\n"), source: { title: "Saved workouts", detail: "Routines and the COROS library", href: "/strength" } };
+      return { text: out.join("\n"), source: { title: t("Saved workouts"), detail: t("Routines and the COROS library"), href: "/strength" } };
     }
     case "read_saved_workout": {
       const id = (str(input.workout) ?? "").trim();
@@ -267,24 +270,24 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
       const catalog = await ctx.hub.catalog();
       if (!Array.isArray(catalog)) return { text: `COROS's exercise list couldn't be read: ${catalog.problem} Use plain exercise names; the workout is then saved on this computer's calendar.${ownLine}` };
       const hits = searchExercises(catalog, query);
-      return { text: `${hits.length ? `COROS exercises: ${hits.map((e) => quoted(e.name, 60)).join("; ")}` : `No COROS exercise matches “${query}”. Search the movement's plain name: squat, row, curl, press.`}${ownLine}`, source: { title: "COROS exercises", detail: `${catalog.length} in the list`, href: "/strength" } };
+      return { text: `${hits.length ? `COROS exercises: ${hits.map((e) => quoted(e.name, 60)).join("; ")}` : `No COROS exercise matches “${query}”. Search the movement's plain name: squat, row, curl, press.`}${ownLine}`, source: { title: t("COROS exercises"), detail: t("{n} in the list", { n: catalog.length }), href: "/strength" } };
     }
     case "show_workout_recap":
-      return built(recapCard(items, clock, ctx.newId(), input), SHOWN, { title: "Activity", detail: "Splits and heart rate", href: `/activities/${encodeURIComponent(String(input.activity_id ?? ""))}` });
+      return built(recapCard(items, clock, ctx.newId(), input), SHOWN, { title: t("Activity"), detail: t("Splits and heart rate"), href: `/activities/${encodeURIComponent(String(input.activity_id ?? ""))}` });
     case "show_comparison":
-      return built(compareCard(items, clock, ctx.newId(), input), SHOWN, { title: "Activities", detail: "Two workouts compared", href: "/activities" });
+      return built(compareCard(items, clock, ctx.newId(), input), SHOWN, { title: t("Activities"), detail: t("Two workouts compared"), href: "/activities" });
     case "show_trend":
-      return built(trendCard(items, clock, ctx.newId(), input), SHOWN, { title: "Health", detail: "90-day trend", href: "/health" });
+      return built(trendCard(items, clock, ctx.newId(), input), SHOWN, { title: t("Health"), detail: t("90-day trend"), href: "/health" });
     case "show_today":
-      return built(todayCard(items, clock, ctx.newId(), ctx.entries, input), SHOWN, { title: "Health", detail: "Today", href: "/health" });
+      return built(todayCard(items, clock, ctx.newId(), ctx.entries, input), SHOWN, { title: t("Health"), detail: t("Today"), href: "/health" });
     case "get_plan_compliance": {
       const made = planCheckCard(items, clock, ctx.newId(), ctx.entries, input);
       if ("error" in made) return fail(made.error);
       const c = made.card;
-      return { text: `${SHOWN}\nOn the card: ${c.title}. ${c.daysLabel}.${c.misses.length ? ` Missed: ${c.misses.map((m) => `${m.day} “${m.name}” (${m.note})`).join("; ")}.` : ""}${ctx.hubNote ? `\n${ctx.hubNote}` : ""}`, block: c, source: { title: "Calendar", detail: "Planned against done", href: "/calendar" } };
+      return { text: `${SHOWN}\nOn the card: ${c.title}. ${c.daysLabel}.${c.misses.length ? ` Missed: ${c.misses.map((m) => `${m.day} “${m.name}” (${m.note})`).join("; ")}.` : ""}${ctx.hubNote ? `\n${ctx.hubNote}` : ""}`, block: c, source: { title: t("Calendar"), detail: t("Planned against done"), href: "/calendar" } };
     }
     case "show_fuel":
-      return built(fuelCard(items, clock, ctx.newId(), input), input.meal ? `${SHOWN} The meal is offered with a Log button; nothing is logged until they press it.` : SHOWN, { title: "Fuel", detail: "Today", href: "/fuel" });
+      return built(fuelCard(items, clock, ctx.newId(), input), input.meal ? `${SHOWN} The meal is offered with a Log button; nothing is logged until they press it.` : SHOWN, { title: t("Fuel"), detail: t("Today"), href: "/fuel" });
     case "propose_workout": {
       if (!isDay(input.date)) return fail("date must be a date, YYYY-MM-DD.");
       if (input.date < today(clock)) return fail(`${input.date} is in the past; the calendar plans from today on.`);
@@ -294,7 +297,7 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
       if (saved.startsWith("routine-") || (saved && !saved.startsWith("coros-"))) {
         const parsed = parsePlanChange(items, clock, ctx.entries, { changes: [{ action: "add_saved", saved_workout: saved, new_date: input.date }] }, ctx.newId);
         if ("error" in parsed) return fail(parsed.error);
-        return { text: `${AWAITING}\nThis is their gym routine exactly as saved, on C-LINK's own calendar: it reaches the phone at its next sync and is started there in the gym logger, not on the watch. Say so in a few words.`, block: planCard(items, clock, ctx.entries, parsed.ops, ctx.newId(), { title: `Add “${(parsed.ops[0] as { name: string }).name}”`, note: input.note }) };
+        return { text: `${AWAITING}\nThis is their gym routine exactly as saved, on C-LINK's own calendar: it reaches the phone at its next sync and is started there in the gym logger, not on the watch. Say so in a few words.`, block: planCard(items, clock, ctx.entries, parsed.ops, ctx.newId(), { title: t("Add “{name}”", { name: (parsed.ops[0] as { name: string }).name }), note: input.note }) };
       }
       if (saved) {
         if (!ctx.hub) return fail(NO_HUB);
@@ -345,15 +348,15 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
         const card = workoutCard(made, made.workout ? pacingFor(items, clock, made.workout.sport) : null, { id: "x", date: day });
         ops.push({ op: "add_workout", day, name: made.name, sport: HUB_SPORT_AS[made.sport], workout: made.workout, hub: made.hub, detail: detailOf(made, card), ...(card.totals ? { load: card.totals.load } : {}) });
       }
-      const title = quoted(input.name, 60) || "Training plan";
+      const title = quoted(input.name, 60) || t("Training plan");
       return { text: `${AWAITING}${ctx.hub ? "" : "\nTraining Hub isn't connected, so the workouts will be saved on this computer's calendar, not on COROS; say so in a few words."}`, block: planCard(items, clock, ctx.entries, ops, ctx.newId(), { title, note: quoted(input.overview, 240) || input.note }) };
     }
     case "list_plans":
-      return { text: listPlansText(ctx.plans ?? []), source: { title: "Plans", detail: "Library › Plans", href: "/calendar/plans" } };
+      return { text: listPlansText(ctx.plans ?? []), source: { title: t("Plans"), detail: t("Library › Plans"), href: "/calendar/plans" } };
     case "read_plan": {
       const plan = findPlan(ctx.plans ?? [], input.plan);
       if (!plan) return fail(input.plan ? `no plan ${quoted(String(input.plan), 60)}. Use an id from list_plans.` : "no plan is open in the editor; send plan with an id from list_plans.");
-      return { text: readPlanText(plan), source: { title: plan.name, detail: `${plan.weeks} weeks`, href: `/calendar/plans/edit?id=${encodeURIComponent(plan.id)}` } };
+      return { text: readPlanText(plan), source: { title: plan.name, detail: plan.weeks === 1 ? t("1 week") : t("{n} weeks", { n: plan.weeks }), href: `/calendar/plans/edit?id=${encodeURIComponent(plan.id)}` } };
     }
     case "propose_plan_edit": {
       const plan = findPlan(ctx.plans ?? [], input.plan);
@@ -372,7 +375,7 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
       if ("error" in edit) return fail(edit.error);
       return {
         text: `awaiting_confirmation: the athlete sees the changes to “${plan.name}” on a card. Nothing changes until they press Apply changes${plan.open ? " (it then changes the plan open in their editor, with Undo)" : ""}. Say in a sentence or two what changes and stop.`,
-        block: { kind: "planEdit", id: ctx.newId(), planId: plan.id, planName: plan.name, title: quoted(input.title, 60) || "Plan change", note: quoted(input.note, 280), rows: edit.rows, load: edit.load, ops: edit.ops },
+        block: { kind: "planEdit", id: ctx.newId(), planId: plan.id, planName: plan.name, title: quoted(input.title, 60) || t("Plan change"), note: quoted(input.note, 280), rows: edit.rows, load: edit.load, ops: edit.ops },
       };
     }
     case "build_plan": {
@@ -414,7 +417,7 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
       const cues = Array.isArray(input.cues) ? input.cues.map((c) => quoted(c, 160)).filter(Boolean).slice(0, 8) : [];
       if (!isDay(input.date)) return fail("date must be the workout's day, YYYY-MM-DD.");
       if (!goal || !cues.length || !title) return fail("a brief needs the workout's name, a goal and at least one cue.");
-      const card: BriefCard = { kind: "brief", id: ctx.newId(), eyebrow: `Brief · ${dayLabel(input.date)}`, title, day: input.date, goal, cues, fuel: quoted(input.fuel_plan, 240), saved: "", savedNote: "" };
+      const card: BriefCard = { kind: "brief", id: ctx.newId(), eyebrow: t("Brief · {day}", { day: shownDay(input.date) }), title, day: input.date, goal, cues, fuel: quoted(input.fuel_plan, 240), saved: "", savedNote: "" };
       return { text: "awaiting_confirmation: the athlete sees the brief on a card with a Save button. Don't repeat it in full.", block: card };
     }
     case "log_workout_debrief": {
@@ -424,8 +427,8 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
       if (feel === null) return fail("feel must be a number from 1 to 5, from what the athlete said.");
       const cues = Array.isArray(input.cue_outcomes) ? input.cue_outcomes.filter((c): c is { cue: string; outcome: string } => typeof c?.cue === "string").slice(0, 8).map((c) => ({ text: quoted(c.cue, 160), hit: c.outcome === "hit" })) : [];
       const card: DebriefCard = {
-        kind: "debrief", id: ctx.newId(), activityId: a.id, eyebrow: `Debrief · ${quoted(a.name, 40) || "Workout"}`, title: "How it went",
-        feel: { score: feel, of: 5, word: quoted(input.feel_word, 24) || ["Rough", "Hard", "OK", "Good", "Strong"][feel - 1] },
+        kind: "debrief", id: ctx.newId(), activityId: a.id, eyebrow: t("Debrief · {name}", { name: quoted(a.name, 40) || t("Workout") }), title: t("How it went"),
+        feel: { score: feel, of: 5, word: quoted(input.feel_word, 24) || tx("feel", FEEL_WORDS[feel - 1]) },
         cues, fuel: quoted(input.fueling_taken, 200), said: quoted(input.notes, 400), read: quoted(input.read, 240) || undefined,
       };
       return { text: "The athlete sees the debrief on a card in this conversation.", block: card };

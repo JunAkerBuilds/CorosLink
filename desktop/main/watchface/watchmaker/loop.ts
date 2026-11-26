@@ -7,6 +7,7 @@ import type { CoachModel, ModelMessage } from "@/lib/coach/loop";
 import type { CoachFile, UserPart } from "@/lib/coach/files";
 import type { ToolDef } from "@/lib/coach/tools";
 import type { Picture, PlanItem, ToolResult } from "./tools";
+import { msg, t } from "@/lib/i18n";
 
 export type WatchmakerEvent =
   | { t: "text"; delta: string }
@@ -37,10 +38,10 @@ export interface WatchmakerOutcome { text: string; rounds: number; edits: number
 
 /** What each tool is shown as in the chat while it runs. */
 export const STEP_WORDS: Record<string, string> = {
-  get_document: "Reading the face", get_schema: "Reading the schema", apply_commands: "Editing the face", undo: "Undoing a step",
-  render_preview: "Drawing a preview", get_geometry: "Measuring", check_contrast: "Checking contrast", sample_color: "Sampling colours",
-  validate: "Validating", inspect_asset: "Looking at an image", crop_image: "Cropping an image", render_svg: "Drawing artwork",
-  recolor_image: "Recolouring an image", generate_image: "Generating an image", update_plan: "Planning",
+  get_document: msg("Reading the face"), get_schema: msg("Reading the schema"), apply_commands: msg("Editing the face"), undo: msg("Undoing a step"),
+  render_preview: msg("Drawing a preview"), get_geometry: msg("Measuring"), check_contrast: msg("Checking contrast"), sample_color: msg("Sampling colours"),
+  validate: msg("Validating"), inspect_asset: msg("Looking at an image"), crop_image: msg("Cropping an image"), render_svg: msg("Drawing artwork"),
+  recolor_image: msg("Recolouring an image"), generate_image: msg("Generating an image"), update_plan: msg("Planning"),
 };
 
 /** Pictures kept in the conversation at once; older ones become a line of text. */
@@ -92,7 +93,7 @@ export async function runWatchmaker(run: WatchmakerRun): Promise<WatchmakerOutco
     for (const call of turn.calls) {
       if (run.signal?.aborted) { results.push({ type: "tool_result", tool_use_id: call.id, content: "Stopped by the person.", is_error: true }); continue; }
       const id = `s${++n}`;
-      run.emit({ t: "step", id, tool: call.name, label: STEP_WORDS[call.name] ?? "Working" });
+      run.emit({ t: "step", id, tool: call.name, label: call.name in STEP_WORDS ? t(STEP_WORDS[call.name]) : t("Working") });
       const result = turn.stop === "max_tokens"
         ? { text: "Error: this call was cut off at the output limit, so it wasn't run. Send it again, shorter.", isError: true }
         : await run.runTool(call.name, call.input, run.signal);

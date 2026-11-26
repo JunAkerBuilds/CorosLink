@@ -4,6 +4,8 @@
  * Days are local calendar days written YYYY-MM-DD; months are YYYY-MM.
  */
 
+import { language, locale } from "@/lib/i18n";
+
 const pad = (n: number) => String(n).padStart(2, "0");
 const toKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const toDate = (key: string) => {
@@ -146,37 +148,52 @@ export function hoursMinutes(seconds: number): string {
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+/** Dates in the app's language; English keeps the hand-made forms below. */
+const intl = (d: Date, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale(), options).format(d);
+
 export function weekdayName(day: string): string {
+  if (language() !== "en") return intl(toDate(day), { weekday: "long" });
   return DAYS[toDate(day).getDay()];
+}
+
+/** Thu: the weekday's short name. */
+export function shortWeekday(day: string): string {
+  if (language() !== "en") return intl(toDate(day), { weekday: "short" });
+  return DAYS[toDate(day).getDay()].slice(0, 3);
 }
 
 /** Thursday 19 November */
 export function longDay(day: string): string {
   const d = toDate(day);
+  if (language() !== "en") return intl(d, { weekday: "long", day: "numeric", month: "long" });
   return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
 /** Thu 19 Nov, with the year on request. */
 export function shortDay(day: string, withYear = false): string {
   const d = toDate(day);
+  if (language() !== "en") return intl(d, { weekday: "short", day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
   return `${DAYS[d.getDay()].slice(0, 3)} ${dayMonth(day)}${withYear ? ` ${d.getFullYear()}` : ""}`;
 }
 
 /** 28 Aug */
 export function dayMonth(day: string): string {
   const d = toDate(day);
+  if (language() !== "en") return intl(d, { day: "numeric", month: "short" });
   return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
 }
 
 /** November 2026 */
 export function monthTitle(month: string): string {
   const [y, m] = month.split("-").map(Number);
+  if (language() !== "en") return intl(new Date(y, m - 1, 1), { month: "long", year: "numeric" });
   return `${MONTHS[m - 1]} ${y}`;
 }
 
 /** 16 – 22 November 2026, or 30 Nov – 6 Dec 2026 when the week crosses months. */
 export function weekTitle(monday: string): string {
   const a = toDate(monday), b = toDate(addDays(monday, 6));
+  if (language() !== "en") return new Intl.DateTimeFormat(locale(), { day: "numeric", month: "long", year: "numeric" }).formatRange(a, b);
   if (a.getMonth() === b.getMonth()) return `${a.getDate()} – ${b.getDate()} ${MONTHS[b.getMonth()]} ${b.getFullYear()}`;
   const yearA = a.getFullYear() === b.getFullYear() ? "" : ` ${a.getFullYear()}`;
   return `${dayMonth(monday)}${yearA} – ${dayMonth(addDays(monday, 6))} ${b.getFullYear()}`;

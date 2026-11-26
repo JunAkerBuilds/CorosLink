@@ -10,6 +10,7 @@ import { AssetStore } from "./assets";
 import { EditorBroker } from "./broker";
 import { ENDPOINT, startMcpServer, type McpServerHandle } from "./server";
 import { automationTools, type ToolHost } from "./tools";
+import { t } from "@/lib/i18n";
 
 export { AssetStore } from "./assets";
 export { EditorBroker, EditorError } from "./broker";
@@ -96,7 +97,7 @@ export class StudioAutomation {
       this.problem = undefined;
       if (this.server.port !== this.saved.port) { this.saved.port = this.server.port; await this.store(); }
     } catch (error) {
-      this.problem = error instanceof Error ? error.message : "The server didn't start.";
+      this.problem = error instanceof Error ? error.message : t("The server didn't start.");
     }
   }
 
@@ -129,7 +130,7 @@ export class StudioAutomation {
     const route = pathname.slice("/api/desktop/studio/automation".length) || "/";
     if (!pathname.startsWith("/api/desktop/studio/automation")) return null;
     const get = request.method === "GET";
-    if (!get && request.headers.get("x-clink-hub") !== "1") return reply({ error: "forbidden", message: "Not from this app." }, 403);
+    if (!get && request.headers.get("x-clink-hub") !== "1") return reply({ error: "forbidden", message: t("Not from this app.") }, 403);
     if (get && route === "/inbox") return this.broker.open(request.signal);
     // A stored picture, for the chat and the panel (ids only; the store checks them).
     const asset = /^\/asset\/(img_[0-9a-f]{32})$/.exec(route);
@@ -146,12 +147,12 @@ export class StudioAutomation {
     if (get && route === "/") return reply(await this.status());
     if (!get && route === "/") {
       const body = (await request.json().catch(() => ({}))) as { enabled?: unknown };
-      if (typeof body.enabled !== "boolean") return reply({ error: "invalid", message: "Say on or off." }, 400);
+      if (typeof body.enabled !== "boolean") return reply({ error: "invalid", message: t("Say on or off.") }, 400);
       await this.setEnabled(body.enabled);
       return reply(await this.status());
     }
     if (!get && route === "/copy") {
-      if (!this.url || !this.token) return reply({ error: "off", message: "Turn automation on first." }, 400);
+      if (!this.url || !this.token) return reply({ error: "off", message: t("Turn automation on first.") }, 400);
       this.deps.copy(codexConfig(this.url, this.token));
       return reply({ copied: true });
     }

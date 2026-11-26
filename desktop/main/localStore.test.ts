@@ -47,6 +47,17 @@ describe("local store, speaking the sync API", () => {
     expect((await call(store, "GET", "/api/v1/me/sync?since=5")).body).toMatchObject({ items: [], cursor: 0 });
   });
 
+  it("writes a big import in batches the push takes, leaving out only an item too large for it", () => {
+    const store = open();
+    // 150 activity details of ~20 KB: 3 MB in all, more than one push takes, as the COROS account import writes.
+    const streams = Array.from({ length: 2500 }, (_, i) => i * 1.5);
+    const details = Array.from({ length: 150 }, (_, i) => ({ collection: "activity.detail", id: String(1000 + i), body: { streams: { x: streams } } }));
+    const huge = { collection: "activity.detail", id: "huge", body: { streams: { x: Array.from({ length: 60_000 }, (_, i) => i) } } };
+    expect(store.write([...details, huge])).toEqual({ written: 150, conflicts: 0, skipped: 1 });
+    expect(store.count("activity.detail")).toBe(150);
+    store.close();
+  });
+
   it("answers status and single items, and refuses other tokens and bad batches", async () => {
     const store = open();
     store.seed([{ collection: "health.day", id: "2026-11-20", body: { hrv: 61 } }]);

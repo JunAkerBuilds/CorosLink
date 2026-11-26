@@ -36,6 +36,8 @@ import { askedNamesFile, corosLinkKeychain } from "./coroslink/oldKeychain";
 import { guardSession } from "./dataMode";
 import { Updates, type Updater } from "./updates";
 import { DesktopSettings } from "./settings";
+import { applyLanguage } from "./language";
+import { t } from "@/lib/i18n";
 import { FirstRun } from "./setup";
 import { WatchEngine } from "./watch/engine/engine";
 import { spawnBle } from "./watch/engine/transport";
@@ -186,10 +188,10 @@ function buildMenu(dev: DevMode, change: (c: { devMode?: boolean; sample?: boole
   const isMac = process.platform === "darwin";
   // ⌘, opens Settings, or Coach settings from inside Coach.
   const inCoach = () => { try { return new URL(window?.webContents.getURL() ?? "").pathname.startsWith("/coach"); } catch { return false; } };
-  const settingsItem: MenuItemConstructorOptions = { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => void window?.loadURL(`${ORIGIN}${inCoach() ? "/coach/settings" : "/settings"}`) };
-  const aiItem: MenuItemConstructorOptions = { label: "Coach Settings…", click: () => void window?.loadURL(`${ORIGIN}/coach/settings`) };
-  const updatesItem: MenuItemConstructorOptions = { label: "Check for Updates…", click: () => void window?.loadURL(`${ORIGIN}/settings/about?check=1`) };
-  const devSwitch: MenuItemConstructorOptions = { label: "Developer Mode", type: "checkbox", checked: state.devMode, click: (item) => void change({ devMode: item.checked }, true) };
+  const settingsItem: MenuItemConstructorOptions = { label: t("Settings…"), accelerator: "CmdOrCtrl+,", click: () => void window?.loadURL(`${ORIGIN}${inCoach() ? "/coach/settings" : "/settings"}`) };
+  const aiItem: MenuItemConstructorOptions = { label: t("Coach Settings…"), click: () => void window?.loadURL(`${ORIGIN}/coach/settings`) };
+  const updatesItem: MenuItemConstructorOptions = { label: t("Check for Updates…"), click: () => void window?.loadURL(`${ORIGIN}/settings/about?check=1`) };
+  const devSwitch: MenuItemConstructorOptions = { label: t("Developer Mode"), type: "checkbox", checked: state.devMode, click: (item) => void change({ devMode: item.checked }, true) };
   const template: MenuItemConstructorOptions[] = [
     ...(isMac ? [{ role: "appMenu" as const, submenu: [
       { role: "about" as const }, updatesItem, { type: "separator" as const }, settingsItem, aiItem, devSwitch, { type: "separator" as const },
@@ -198,19 +200,19 @@ function buildMenu(dev: DevMode, change: (c: { devMode?: boolean; sample?: boole
     ] }] : []),
     { role: "fileMenu" },
     { role: "editMenu" },
-    { label: "View", submenu: [
+    { label: t("View"), submenu: [
       ...(state.devMode ? [{ role: "reload" as const }, { role: "forceReload" as const }, { role: "toggleDevTools" as const }, { type: "separator" as const }] : []),
       { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" },
     ] },
-    ...(state.devMode ? [{ label: "Developer", submenu: [
-      { label: "Sample Data", type: "checkbox" as const, checked: state.sample, accelerator: "CmdOrCtrl+Shift+S", click: (item: Electron.MenuItem) => void change({ sample: item.checked }, true) },
-      { label: "Reset Sample Data", enabled: state.sample, click: () => void change({ resetSample: true }, true) },
+    ...(state.devMode ? [{ label: t("Developer"), submenu: [
+      { label: t("Sample Data"), type: "checkbox" as const, checked: state.sample, accelerator: "CmdOrCtrl+Shift+S", click: (item: Electron.MenuItem) => void change({ sample: item.checked }, true) },
+      { label: t("Reset Sample Data"), enabled: state.sample, click: () => void change({ resetSample: true }, true) },
       { type: "separator" as const },
-      { label: "Developer Page", click: () => void window?.loadURL(`${ORIGIN}/developer`) },
-      { label: "Run Setup Again", click: () => void window?.loadURL(`${ORIGIN}/setup`) },
-      { label: "Open Data Folder", click: () => void shell.openPath(app.getPath("userData")) },
+      { label: t("Developer Page"), click: () => void window?.loadURL(`${ORIGIN}/developer`) },
+      { label: t("Run Setup Again"), click: () => void window?.loadURL(`${ORIGIN}/setup`) },
+      { label: t("Open Data Folder"), click: () => void shell.openPath(app.getPath("userData")) },
       ...(isMac ? [] : [{ type: "separator" as const }, devSwitch]),
-    ] }] : isMac ? [] : [{ label: "Help", submenu: [updatesItem, settingsItem, aiItem, devSwitch] }]),
+    ] }] : isMac ? [] : [{ label: t("Help"), submenu: [updatesItem, settingsItem, aiItem, devSwitch] }]),
     { role: "windowMenu" },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -270,7 +272,7 @@ void app.whenReady().then(async () => {
       save: (value) => vault.setSecret("chatgpt", value),
       // Its own window and an in-memory session each time, so the account picker always shows.
       openSignIn: (url, state, onClosed) => {
-        const signIn = new BrowserWindow({ width: 520, height: 720, title: "Sign in with ChatGPT", parent: window ?? undefined, webPreferences: { partition: `chatgpt-signin-${state}`, sandbox: true } });
+        const signIn = new BrowserWindow({ width: 520, height: 720, title: t("Sign in with ChatGPT"), parent: window ?? undefined, webPreferences: { partition: `chatgpt-signin-${state}`, sandbox: true } });
         signIn.on("closed", onClosed);
         void signIn.loadURL(url);
         return () => { signIn.removeListener("closed", onClosed); if (!signIn.isDestroyed()) signIn.close(); };
@@ -314,24 +316,28 @@ void app.whenReady().then(async () => {
     version: app.getVersion(),
     store: () => store,
     saveDialog: async (name) => {
-      const options = { defaultPath: path.join(app.getPath("documents"), name), filters: [{ name: "C-LINK backup", extensions: ["clinkbackup"] }] };
+      const options = { defaultPath: path.join(app.getPath("documents"), name), filters: [{ name: t("C-LINK backup"), extensions: ["clinkbackup"] }] };
       const picked = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
       return picked.canceled ? null : picked.filePath ?? null;
     },
     openDialog: async () => {
-      const options = { properties: ["openFile" as const], filters: [{ name: "C-LINK backup", extensions: ["clinkbackup"] }] };
+      const options = { properties: ["openFile" as const], filters: [{ name: t("C-LINK backup"), extensions: ["clinkbackup"] }] };
       const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
       return picked.canceled ? null : picked.filePaths[0] ?? null;
     },
     reveal: (target) => shell.showItemInFolder(target),
     restored: () => { void ensureSignedIn().then(() => window?.webContents.reload()); },
     confirm: async (message, detail, button) => {
-      const options = { type: "question" as const, message, detail, buttons: [button, "Cancel"], defaultId: 1, cancelId: 1 };
+      const options = { type: "question" as const, message, detail, buttons: [button, t("Cancel")], defaultId: 1, cancelId: 1 };
       return (window ? await dialog.showMessageBox(window, options) : await dialog.showMessageBox(options)).response === 0;
     },
     lastPhoneSync: () => phones.sessions.list().map((p) => p.lastUsedAt).sort().at(-1) ?? null,
     modeChanged: (mode) => { if (mode === "connected") watch.leftLocalMode(); else watch.enteredLocalMode(); },
+    languageChanged: (lang) => { applyLanguage(lang); buildMenu(dev, changeDev); },
   }, { replayIntro: !app.isPackaged && !!process.env.CLINK_INTRO, skipIntro: !app.isPackaged && !!process.env.CLINK_SMOKE });
+  // The menu in the language the page spoke last time, until the page says otherwise.
+  applyLanguage(settings.language);
+  buildMenu(dev, changeDev);
   // Local mode's watch over Bluetooth (watch/service.ts): the TypeScript watch engine over clink-ble (watch/engine,
   // docs/watch-engine.md), every platform.
   const bleBinary = app.isPackaged ? path.join(process.resourcesPath, process.platform === "win32" ? "clink-ble.exe" : "clink-ble")
@@ -360,7 +366,7 @@ void app.whenReady().then(async () => {
   const media = new MediaService(data, undefined, (line) => errors.add("app", line), {
     web: electronWeb(() => window), sealer: keychain, appPath: app.getAppPath(), reveal: (file) => shell.showItemInFolder(file),
     chooseFiles: async (extensions) => {
-      const options = { title: "Choose an audiobook", buttonLabel: "Choose", properties: ["openFile" as const, "multiSelections" as const], filters: [{ name: "Audiobooks", extensions: [...extensions] }] };
+      const options = { title: t("Choose an audiobook"), buttonLabel: t("Choose"), properties: ["openFile" as const, "multiSelections" as const], filters: [{ name: t("Audiobooks"), extensions: [...extensions] }] };
       const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
       return picked.canceled ? null : picked.filePaths;
     },
@@ -373,7 +379,7 @@ void app.whenReady().then(async () => {
     watch,
     account: new CorosAccount(path.join(data, "studio"), { sealer: keychain, secure: keychainSecure }),
     pickFolder: async () => {
-      const options = { properties: ["openDirectory" as const, "createDirectory" as const], buttonLabel: "Save here" };
+      const options = { properties: ["openDirectory" as const, "createDirectory" as const], buttonLabel: t("Save here") };
       const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
       return picked.canceled ? null : picked.filePaths[0] ?? null;
     },
@@ -384,7 +390,9 @@ void app.whenReady().then(async () => {
   const move = new CorosLinkMove({
     data,
     appData: app.getPath("appData"),
-    appFolders: process.platform === "darwin" ? ["/Applications", path.join(app.getPath("home"), "Applications")] : [],
+    appFolders: process.platform === "darwin" ? ["/Applications", path.join(app.getPath("home"), "Applications")]
+      : process.platform === "win32" ? [process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs"), process.env.ProgramFiles, process.env["ProgramFiles(x86)"]].filter((f): f is string => !!f)
+      : [],
     only: app.isPackaged ? null : process.env.CLINK_COROSLINK_DIR ?? null,
     store: () => store,
     saveRoute: (route) => maps.routes.save(route),

@@ -2,17 +2,18 @@
 import { HubInvalid } from "@/server/hub/errors";
 import { hub, hubRoute, readBody, readPending, sessionInfo, shareSession, writeSession } from "@/server/hub/http";
 import type { HubSessionInfo } from "@/data/hub";
+import { t } from "@/lib/i18n";
 
 async function pendingOrThrow() {
   const pending = await readPending();
-  if (!pending) throw new HubInvalid("That sign-in ran out. Enter your email and password again.");
+  if (!pending) throw new HubInvalid(t("That sign-in ran out. Enter your email and password again."));
   return pending;
 }
 
 /** Finishes the sign-in with `{ code }`. */
 export const POST = hubRoute({ write: true, signingIn: true }, async (request): Promise<HubSessionInfo> => {
   const body = await readBody(request);
-  if (typeof body.code !== "string" || body.code.length > 16) throw new HubInvalid("Enter the 6-digit code COROS emailed you.");
+  if (typeof body.code !== "string" || body.code.length > 16) throw new HubInvalid(t("Enter the 6-digit code COROS emailed you."));
   const pending = await pendingOrThrow();
   const stored = { session: await hub.verify(body.code, pending.challenge), email: pending.email };
   await writeSession(stored);

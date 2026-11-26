@@ -5,7 +5,8 @@ import type { HubWorkout } from "@/data/hub";
 import { calendarDayOf, type NativeGymPlanned } from "@/data/sync/native";
 import type { Workout } from "@/data/workouts";
 import type { Sport } from "@/lib/workout";
-import { dayLabel, dayOfRef, finite, isDay, mondayOfDay, quoted, shiftDay, today, type AthleteItems, type Clock } from "./items";
+import { t } from "@/lib/i18n";
+import { dayOfRef, finite, isDay, mondayOfDay, quoted, shiftDay, shownDay, today, type AthleteItems, type Clock } from "./items";
 import type { PlanEntry } from "./read";
 
 /** What a step of a plan change acts on: the entry as it was when Coach proposed it. */
@@ -74,7 +75,7 @@ export function parsePlanChange(items: AthleteItems, clock: Clock, entries: read
       const routine = items.routines.find((r) => r.id === id) ?? items.routines.find((r) => (r.name ?? "").toLowerCase() === String(c.saved_workout ?? "").trim().toLowerCase());
       if (!routine) return { error: `no saved workout “${quoted(String(c.saved_workout ?? ""), 60)}”. Find it with list_saved_workouts and use its id.` };
       if (!isDay(c.new_date) || c.new_date < now) return { error: "new_date must be a day from today on, YYYY-MM-DD." };
-      ops.push({ op: "add_routine", routineId: routine.id, name: quoted(routine.name) || "Gym workout", day: c.new_date, plannedId: newId() });
+      ops.push({ op: "add_routine", routineId: routine.id, name: quoted(routine.name) || t("Gym workout"), day: c.new_date, plannedId: newId() });
       continue;
     }
     if (c.action !== "move" && c.action !== "remove") return { error: `unknown action ${quoted(String(c.action), 20)}. Use move, remove or add_saved.` };
@@ -99,8 +100,8 @@ export function planCard(items: AthleteItems, clock: Clock, entries: readonly Pl
     else { days.add(o.entry.date); if (o.op === "move") days.add(o.to); }
   }
   const session = (name: string, sport: Sport, changed?: boolean): PlanSession => ({ name, hue: SPORT_HUE[sport], ...(changed ? { changed } : {}) });
-  const REST: PlanSession = { name: "Rest", hue: "none" };
-  const loadOf = (list: { load?: number }[]) => Math.round(list.reduce((t, e) => t + (finite(e.load) ? e.load : 0), 0));
+  const REST: PlanSession = { name: t("Rest"), hue: "none" };
+  const loadOf = (list: { load?: number }[]) => Math.round(list.reduce((sum, e) => sum + (finite(e.load) ? e.load : 0), 0));
   const after = (day: string): { name: string; sport: Sport; load?: number; changed?: boolean }[] => {
     const gone = new Set(ops.flatMap((o) => (o.op === "move" || o.op === "remove" ? [o.entry.id] : [])));
     const out: { name: string; sport: Sport; load?: number; changed?: boolean }[] = entries.filter((e) => e.date === day && !gone.has(e.id));
@@ -114,7 +115,7 @@ export function planCard(items: AthleteItems, clock: Clock, entries: readonly Pl
   const rows = [...days].sort().map((day) => {
     const now = entries.filter((e) => e.date === day), next = after(day);
     return {
-      day: dayLabel(day),
+      day: shownDay(day),
       now: now.length ? now.map((e) => session(e.name, e.sport)) : [REST],
       proposed: next.length ? next.map((e) => session(e.name, e.sport, e.changed)) : [{ ...REST, changed: true }],
       loadNow: loadOf(now), loadNext: loadOf(next),
@@ -122,7 +123,7 @@ export function planCard(items: AthleteItems, clock: Clock, entries: readonly Pl
   });
   const monday = mondayOfDay([...days].sort()[0]), sunday = shiftDay(monday, 6);
   const inWeek = (d: string) => d >= monday && d <= sunday;
-  const done = Math.round(items.activities.filter((a) => inWeek(dayOfRef(a.start ?? 0, clock))).reduce((t, a) => t + (a.trainingLoad ?? 0), 0));
+  const done = Math.round(items.activities.filter((a) => inWeek(dayOfRef(a.start ?? 0, clock))).reduce((sum, a) => sum + (a.trainingLoad ?? 0), 0));
   let before = done, afterLoad = done;
   for (let d = monday; d <= sunday; d = shiftDay(d, 1)) {
     if (d < today(clock)) continue;
@@ -130,8 +131,8 @@ export function planCard(items: AthleteItems, clock: Clock, entries: readonly Pl
     afterLoad += loadOf(after(d));
   }
   return {
-    kind: "plan", id, title: quoted(input.title, 80) || "Plan change", rows,
-    week: { label: `Week of ${dayLabel(monday)} · load`, before, after: afterLoad, done },
+    kind: "plan", id, title: quoted(input.title, 80) || t("Plan change"), rows,
+    week: { label: t("Week of {day} · load", { day: shownDay(monday) }), before, after: afterLoad, done },
     note: quoted(input.note, 240), ops: [...ops],
   };
 }

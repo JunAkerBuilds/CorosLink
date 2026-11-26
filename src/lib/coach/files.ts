@@ -1,6 +1,7 @@
 // Files sent with a question: photos, PDFs and text files. Pure. The browser reads them, the route checks them
 // here, and each model gets them in its own shape. They go to the model with this one question only: nothing is
 // stored, the conversation keeps just their names.
+import { t } from "@/lib/i18n";
 
 export type CoachFileKind = "image" | "pdf" | "text";
 
@@ -45,9 +46,9 @@ export const fileBytes = (f: CoachFile): number => (f.kind === "text" ? new Text
 
 /** Why a file can't go (a sentence for the athlete), or null when it can. */
 export function fileProblem(f: Pick<CoachFile, "name" | "kind">, bytes: number): string | null {
-  if (f.kind === "image" && bytes > MAX_IMAGE_BYTES) return `${f.name} is over 5 MB. Send a smaller photo.`;
-  if (f.kind === "pdf" && bytes > MAX_PDF_BYTES) return `${f.name} is over 10 MB.`;
-  if (f.kind === "text" && bytes > MAX_TEXT_CHARS * 4) return `${f.name} is too long to read.`;
+  if (f.kind === "image" && bytes > MAX_IMAGE_BYTES) return t("{name} is over 5 MB. Send a smaller photo.", { name: f.name });
+  if (f.kind === "pdf" && bytes > MAX_PDF_BYTES) return t("{name} is over 10 MB.", { name: f.name });
+  if (f.kind === "text" && bytes > MAX_TEXT_CHARS * 4) return t("{name} is too long to read.", { name: f.name });
   return null;
 }
 

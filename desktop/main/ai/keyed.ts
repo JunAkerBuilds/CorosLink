@@ -7,6 +7,7 @@ import { answerOnce } from "@/server/ai/host";
 import { anthropicModel, CoachModelError, modelError } from "@/server/coach/anthropic";
 import { chatCompletionsModel } from "@/server/coach/chatCompletions";
 import { defaultModel, LOCAL_SERVERS, retiredGemini, writesText, type Provider } from "./catalog";
+import { t } from "@/lib/i18n";
 import { GEMINI_BASE, geminiModel, statusError as geminiError } from "./gemini";
 
 type Fetch = typeof fetch;
@@ -18,10 +19,10 @@ export interface Reach { key: string | null; localUrl?: string | null }
 const baseOf = (p: Provider, reach: Reach): string => (p.group === "computer" ? reach.localUrl ?? LOCAL_SERVERS[0] : p.base ?? "");
 
 function httpError(p: Provider, status: number): CoachModelError {
-  if (status === 401 || status === 403) return new CoachModelError("bad_key", `${p.name} didn't accept the key.`);
-  if (status === 402) return new CoachModelError("rate_limited", `The ${p.name} account is out of credit.`);
-  if (status === 429) return new CoachModelError("rate_limited", `${p.name} is busy or the key is out of credit. Try again in a minute.`);
-  return new CoachModelError("overloaded", `${p.name} couldn't list its models (${status}).`);
+  if (status === 401 || status === 403) return new CoachModelError("bad_key", t("{name} didn't accept the key.", { name: p.name }));
+  if (status === 402) return new CoachModelError("rate_limited", t("The {name} account is out of credit.", { name: p.name }));
+  if (status === 429) return new CoachModelError("rate_limited", t("{name} is busy or the key is out of credit. Try again in a minute.", { name: p.name }));
+  return new CoachModelError("overloaded", t("{name} couldn't list its models ({status}).", { name: p.name, status }));
 }
 
 /** Every text model the key (or local server) can reach, sorted by name. Throws CoachModelError. */
@@ -44,7 +45,7 @@ export async function listModels(p: Provider, reach: Reach, fetchImpl: Fetch = (
       cache: "no-store", redirect: "manual", signal: AbortSignal.timeout(LIST_TIMEOUT_MS),
     });
   } catch {
-    throw new CoachModelError("unreachable", p.group === "computer" ? "Nothing answered at that address. Is the server running?" : `${p.name} couldn't be reached.`);
+    throw new CoachModelError("unreachable", p.group === "computer" ? t("Nothing answered at that address. Is the server running?") : t("{name} couldn't be reached.", { name: p.name }));
   }
   if (!response.ok) {
     if (gemini) { let detail = ""; try { detail = String(((await response.json()) as { error?: { message?: string } }).error?.message ?? ""); } catch { /* none */ } throw geminiError(response.status, detail); }
@@ -74,7 +75,7 @@ export function keyedModel(p: Provider, reach: Reach, model: string): CoachModel
 export async function checkReach(p: Provider, reach: Reach, wanted: string | null): Promise<{ models: string[]; model: string }> {
   const models = await listModels(p, reach);
   const first = wanted && (models.includes(wanted) || !models.length) ? wanted : defaultModel(p, models);
-  if (!first) throw new CoachModelError("refused_request", p.group === "computer" ? "The server has no models yet. Download one first." : `${p.name} lists no models for this key.`);
+  if (!first) throw new CoachModelError("refused_request", p.group === "computer" ? t("The server has no models yet. Download one first.") : t("{name} lists no models for this key.", { name: p.name }));
   const candidates = [first, ...p.preferred.filter((m) => m !== first && models.includes(m))].slice(0, 3);
   let last: unknown = null;
   for (const model of candidates) {

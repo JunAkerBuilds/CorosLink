@@ -1,6 +1,7 @@
 // One part of a live-data field (digits, icon, unit, states…) edited on its own, as CorosLink's NativeDataInspector
 // does it: an official set or one image per picture, a picture's text, the part's box, alignment, font size and own
 // font, and putting the part back. Pure functions over the field's style; each returns the patch to merge into it.
+import { t } from "@/lib/i18n";
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceNativePartStyle as PartStyle } from "../watchface/types";
 import { nativePartForFontSize, nativeRoleIndices, withNativeFont } from "../watchface/engine/nativeDataParts";
 import { NATIVE_DATA_BY_ID, nativeConfigPrefix } from "../watchface/watchfaceNativeCatalog";
@@ -32,7 +33,7 @@ export function nativeOfficialRequest(id: string, style: Style, role: Role, part
   const set = nativeRoleIndices(id, style, role).length > 1;
   const label = NATIVE_DATA_BY_ID.get(id)?.label ?? id;
   const configKey = nativeOfficialConfigKey(id, role);
-  return { mode: set ? "sprites" : "image", title: `Official ${partName.toLowerCase()} for ${label}`, ...(configKey ? { configKey } : {}) };
+  return { mode: set ? "sprites" : "image", title: t("Official {part} for {name}", { part: partName.toLowerCase(), name: t(label) }), ...(configKey ? { configKey } : {}) };
 }
 
 /** A picked official set as pictures by index: a whole set fills the part's pictures in order; an image fills `index`. */

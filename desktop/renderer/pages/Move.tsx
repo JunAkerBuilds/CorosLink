@@ -4,6 +4,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { BrandMark } from "@/components/shell/BrandMark";
 import { Button, Switch } from "@/components/ui";
+import { language, locale, msg, t, tx } from "@/lib/i18n";
+import { computerWord } from "../computer";
 import { navigate } from "../router";
 import { changeSetup } from "../setup";
 import { formatBytes, leaveIntro, moveProgress, readMove, startMove, type MoveJob, type MoveSurvey, type Tile, type TileId } from "../welcome";
@@ -27,8 +29,12 @@ const LOOK: Record<TileId, { hue: Hue; d: string }> = {
   prefs: { hue: "gold", d: "M12 9a3 3 0 1 0 0 6a3 3 0 0 0 0-6zM19 12h2M3 12h2M12 3v2M12 19v2M17 7l1.4-1.4M5.6 18.4L7 17M17 17l1.4 1.4M5.6 5.6L7 7" },
 };
 /** What a tile C-LINK can't take asks of the athlete once the rest is here. */
-const AGAIN: Partial<Record<TileId, string>> = { watch: "Pair again", phones: "Pair again", links: "Sign in again" };
-const MAP: [string, string][] = [["Overview", "Dashboard"], ["Training Hub", "Activities"], ["Training Library", "Calendar"], ["Watch Faces", "Studio"], ["Maps", "Routes"], ["Data", "Settings"]];
+const AGAIN: Partial<Record<TileId, string>> = { watch: msg("Pair again"), phones: msg("Pair again"), links: msg("Sign in again") };
+/** CorosLink's pages and where they are in C-LINK, translated where shown. */
+const MAP: [string, string][] = [
+  [msg("Overview"), msg("Dashboard")], ["Training Hub", msg("Activities")], [msg("Training Library"), msg("Calendar")],
+  [msg("Watch Faces"), msg("Studio")], [msg("Maps"), msg("Routes")], [msg("Data"), msg("Settings")],
+];
 
 function Icon({ d, size = 18, width = 2 }: { d: string; size?: number; width?: number }) {
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={width} strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>;
@@ -36,13 +42,14 @@ function Icon({ d, size = 18, width = 2 }: { d: string; size?: number; width?: n
 
 /** "Today, 09:12", "Yesterday, 21:14", or "Nov 3, 21:14". */
 function when(iso: string | null): string {
-  if (!iso) return "Unknown";
+  if (!iso) return t("Unknown");
   const at = new Date(iso), now = new Date();
-  const time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const tag = language() === "en" ? [] : locale();
+  const time = at.toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit" });
   const days = Math.round((new Date(now.toDateString()).getTime() - new Date(at.toDateString()).getTime()) / 86_400_000);
-  if (days === 0) return `Today, ${time}`;
-  if (days === 1) return `Yesterday, ${time}`;
-  return `${at.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
+  if (days === 0) return t("Today, {time}", { time });
+  if (days === 1) return t("Yesterday, {time}", { time });
+  return t("{date}, {time}", { date: at.toLocaleDateString(tag, { month: "short", day: "numeric" }), time });
 }
 
 interface TileView { state: "pick" | "wait" | "going" | "done" | "attn" | "left"; label: string; pct: number; detail: string }
@@ -52,14 +59,14 @@ function tileView(tile: Tile, job: MoveJob | null, stage: "pick" | "moving" | "d
   if (stage === "pick") return { ...base, state: "pick", label: "" };
   const p = job?.tiles[tile.id];
   if (!p) {
-    if (stage === "done" && !tile.ready && AGAIN[tile.id] && tile.figure !== "0" && tile.figure !== "None") return { ...base, state: "attn", label: AGAIN[tile.id]! };
-    return { ...base, state: "left", label: tile.ready ? "Left out" : tile.instead === "coros" ? "From COROS" : "Not yet" };
+    if (stage === "done" && !tile.ready && AGAIN[tile.id] && tile.figure !== "0" && tile.figure !== "None") return { ...base, state: "attn", label: t(AGAIN[tile.id]!) };
+    return { ...base, state: "left", label: tile.ready ? t("Left out") : tile.instead === "coros" ? t("From COROS") : tx("not ready", "Not yet") };
   }
-  if (p.state === "done") return { state: "done", label: "✓ Done", pct: 100, detail: p.note ?? tile.detail };
-  if (p.state === "attn") return { state: "attn", label: AGAIN[tile.id] ?? "Needs you", pct: 100, detail: p.note ?? tile.detail };
-  if (p.state === "failed") return { state: "attn", label: "Didn't copy", pct: p.pct, detail: p.note ?? tile.detail };
+  if (p.state === "done") return { state: "done", label: `✓ ${tx("status", "Done")}`, pct: 100, detail: p.note ?? tile.detail };
+  if (p.state === "attn") return { state: "attn", label: AGAIN[tile.id] ? t(AGAIN[tile.id]!) : t("Needs you"), pct: 100, detail: p.note ?? tile.detail };
+  if (p.state === "failed") return { state: "attn", label: t("Didn't copy"), pct: p.pct, detail: p.note ?? tile.detail };
   if (p.state === "going") return { state: "going", label: `${p.pct}%`, pct: p.pct, detail: tile.detail };
-  return { ...base, state: "wait", label: "Waiting" };
+  return { ...base, state: "wait", label: t("Waiting") };
 }
 
 
@@ -78,11 +85,11 @@ export default function Move() {
   const [readAt, setReadAt] = useState(0);
 
   useEffect(() => {
-    document.title = "Bring your data · C-LINK";
+    document.title = `${t("Bring your data")} · C-LINK`;
     void readMove().then((s) => {
       if (!s?.found) { setSurvey("missing"); return; }
       setSurvey(s);
-      setOn(Object.fromEntries((s.tiles ?? []).map((t) => [t.id, t.on])));
+      setOn(Object.fromEntries((s.tiles ?? []).map((tile) => [tile.id, tile.on])));
       if (s.job) setJob(s.job);
     });
   }, []);
@@ -99,13 +106,13 @@ export default function Move() {
   if (!survey || survey === "missing") return <div className="ground mx-ground" />;
 
   const stage: "pick" | "moving" | "done" = !job ? "pick" : job.stage;
-  const picked = tiles.filter((t) => t.ready && on[t.id]);
-  const pickedBytes = picked.reduce((sum, t) => sum + (survey.bytes?.[t.id] ?? 0), 0);
+  const picked = tiles.filter((tile) => tile.ready && on[tile.id]);
+  const pickedBytes = picked.reduce((sum, tile) => sum + (survey.bytes?.[tile.id] ?? 0), 0);
   const pct = stage === "done" ? 100 : job?.pct ?? 0;
   const counts = survey.counts ?? { activities: 0, healthDays: 0, chats: 0, faces: 0 };
-  const views = tiles.map((t) => ({ tile: t, view: tileView(t, job, stage) }));
+  const views = tiles.map((tile) => ({ tile, view: tileView(tile, job, stage) }));
   const needs = views.filter((v) => v.view.state === "attn").length;
-  const brought = job ? Object.values(job.tiles).filter((t) => t?.state === "done").length : 0;
+  const brought = job ? Object.values(job.tiles).filter((tile) => tile?.state === "done").length : 0;
   const minutesLeft = (() => {
     if (!job || !pct || !readAt) return null;
     const spent = readAt - Date.parse(job.startedAt);
@@ -114,16 +121,16 @@ export default function Move() {
 
   const start = async () => {
     setError(null);
-    const started = await startMove(picked.map((t) => t.id)).catch(() => null);
+    const started = await startMove(picked.map((tile) => tile.id)).catch(() => null);
     if (started) setJob(started);
-    else setError("The copy didn't start. Try again.");
+    else setError(t("The copy didn't start. Try again."));
   };
 
   const coach = stage === "moving"
-    ? { img: "/img/coach-search.webp", line: job?.tiles.acts?.state === "going" ? "Packing your workouts. This is the fun part." : "Bringing it over. This is the fun part." }
+    ? { img: "/img/coach-search.webp", line: job?.tiles.acts?.state === "going" ? t("Packing your workouts. This is the fun part.") : t("Bringing it over. This is the fun part.") }
     : stage === "done"
-      ? { img: "/img/coach-cheer.webp", line: needs ? `All here! ${needs === 1 ? "One thing needs" : `${needs} things need`} you.` : "All here!" }
-      : { img: "/img/coach-cheer.webp", line: "You've been busy! Leave these on and I'll bring them over." };
+      ? { img: "/img/coach-cheer.webp", line: needs ? (needs === 1 ? t("All here! One thing needs you.") : t("All here! {n} things need you.", { n: needs })) : t("All here!") }
+      : { img: "/img/coach-cheer.webp", line: t("You've been busy! Leave these on and I'll bring them over.") };
 
   return (
     <div className="ground mx-ground">
@@ -132,27 +139,27 @@ export default function Move() {
 
         <section className="mx-hero" aria-labelledby="mx-title">
           <div>
-            <span className="mx-kicker">{stage === "pick" ? "From CorosLink" : stage === "moving" ? "Moving in" : "Moved in"}</span>
+            <span className="mx-kicker">{stage === "pick" ? t("From CorosLink") : stage === "moving" ? t("Moving in") : t("Moved in")}</span>
             <h1 id="mx-title">
-              {stage === "pick" ? "Bring everything" : stage === "moving" ? "Bringing it" : "Everything’s"}<br />
-              <span>{stage === "pick" ? "with you." : stage === "moving" ? "all over." : "here."}</span>
+              {stage === "pick" ? t("Bring everything") : stage === "moving" ? t("Bringing it") : t("Everything’s")}<br />
+              <span>{stage === "pick" ? t("with you.") : stage === "moving" ? t("all over.") : t("here.")}</span>
             </h1>
           </div>
           {stage !== "moving" ? (<>
             <div className="mx-swap" aria-hidden="true"><span className="mx-app" data-old="">CL</span><span className="mx-dash"><i /><i /><i /></span><span className="mx-app" data-new=""><img src="/img/clink-mark.png" alt="" width={53} height={58} /></span></div>
             <div className="mx-big">
-              <div><b>{counts.activities.toLocaleString("en-US")}</b><span>activities</span></div>
-              <div><b>{counts.healthDays.toLocaleString("en-US")}</b><span>days of sleep and health</span></div>
-              <div><b>{counts.chats.toLocaleString("en-US")}</b><span>Coach chats</span></div>
-              <div><b>{counts.faces.toLocaleString("en-US")}</b><span>watch faces</span></div>
+              <div><b>{counts.activities.toLocaleString(locale("en-US"))}</b><span>{t("activities")}</span></div>
+              <div><b>{counts.healthDays.toLocaleString(locale("en-US"))}</b><span>{t("days of sleep and health")}</span></div>
+              <div><b>{counts.chats.toLocaleString(locale("en-US"))}</b><span>{t("Coach chats")}</span></div>
+              <div><b>{counts.faces.toLocaleString(locale("en-US"))}</b><span>{t("watch faces")}</span></div>
             </div>
           </>) : (<>
             <span />
-            <div className="mx-track" role="status" aria-label={`${pct}% brought over`}>
+            <div className="mx-track" role="status" aria-label={t("{pct}% brought over", { pct })}>
               <span className="mx-pct">{pct}%</span>
               <span className="mx-track-line"><i style={{ width: `${pct}%` }} /></span>
               <span className="mx-runner" style={{ left: `${pct}%` }}>
-                <span className="mx-sprite" role="img" aria-label="Coach running"><img src="/img/coach-run.webp" alt="" /></span>
+                <span className="mx-sprite" role="img" aria-label={t("Coach running")}><img src="/img/coach-run.webp" alt="" /></span>
               </span>
             </div>
           </>)}
@@ -183,25 +190,25 @@ export default function Move() {
             <div className="mx-coach"><img src={coach.img} alt="" width={72} height={72} /><div className="mx-bubble" role="status">{coach.line}</div></div>
             {stage === "pick" ? (<>
               <div className="card mx-box">
-                <h3>Found on this Mac</h3>
-                <div className="mx-fig"><span>CorosLink</span><strong>{survey.found?.version ?? "Installed"}</strong></div>
-                <div className="mx-fig"><span>Last opened</span><strong>{when(survey.found?.lastOpened ?? null)}</strong></div>
-                {survey.found?.free != null ? <div className="mx-fig"><span>Free on this Mac</span><strong>{formatBytes(survey.found.free)}</strong></div> : null}
+                <h3>{t("Found on this {computer}", { computer: computerWord() })}</h3>
+                <div className="mx-fig"><span>CorosLink</span><strong>{survey.found?.version ?? t("Installed")}</strong></div>
+                <div className="mx-fig"><span>{t("Last opened")}</span><strong>{when(survey.found?.lastOpened ?? null)}</strong></div>
+                {survey.found?.free != null ? <div className="mx-fig"><span>{t("Free on this {computer}", { computer: computerWord() })}</span><strong>{formatBytes(survey.found.free)}</strong></div> : null}
               </div>
               <div className="card mx-box">
-                <span className="lm-done" style={{ alignSelf: "flex-start" }}><Icon d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z" size={14} />A copy, not a move</span>
-                <p>CorosLink&apos;s folder isn&apos;t changed. If anything looks wrong, you can still open it.</p>
+                <span className="lm-done" style={{ alignSelf: "flex-start" }}><Icon d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z" size={14} />{t("A copy, not a move")}</span>
+                <p>{t("CorosLink's folder isn't changed. If anything looks wrong, you can still open it.")}</p>
               </div>
             </>) : stage === "moving" ? (
               <div className="card mx-box">
-                <h3>{minutesLeft ? `About ${minutesLeft} min left` : "Starting"}</h3>
-                <p>Keep using your Mac. Leave C-LINK open until it&apos;s done; closing it pauses, nothing is lost.</p>
+                <h3>{minutesLeft ? t("About {n} min left", { n: minutesLeft }) : t("Starting")}</h3>
+                <p>{t("Keep using your {computer}. Leave C-LINK open until it's done; closing it pauses, nothing is lost.", { computer: computerWord() })}</p>
               </div>
             ) : (
               <div className="card mx-box">
-                <h3>Where things moved</h3>
+                <h3>{t("Where things moved")}</h3>
                 <div className="mx-map">
-                  {MAP.map(([from, to]) => <div key={from}><span>{from}</span><Icon d="M5 12h14M13 6l6 6-6 6" size={16} /><span>{to}</span></div>)}
+                  {MAP.map(([from, to]) => <div key={from}><span>{t(from)}</span><Icon d="M5 12h14M13 6l6 6-6 6" size={16} /><span>{t(to)}</span></div>)}
                 </div>
               </div>
             )}
@@ -211,24 +218,24 @@ export default function Move() {
         <div className="mx-bar">
           <div className="mx-bar-text">
             {stage === "pick" ? (<>
-              <strong>{picked.length} of {tiles.length} picked{pickedBytes ? ` · ${formatBytes(pickedBytes)}` : ""}</strong>
-              <span>{error ?? "You can keep using your Mac while it copies."}</span>
+              <strong>{t("{n} of {total} picked", { n: picked.length, total: tiles.length })}{pickedBytes ? ` · ${formatBytes(pickedBytes)}` : ""}</strong>
+              <span>{error ?? t("You can keep using your {computer} while it copies.", { computer: computerWord() })}</span>
             </>) : stage === "moving" ? (<>
-              <strong>Copying {job?.bytes ? formatBytes(job.bytes) : "your data"} from CorosLink</strong>
-              <span>You can keep using C-LINK while it works</span>
+              <strong>{job?.bytes ? t("Copying {size} from CorosLink", { size: formatBytes(job.bytes) }) : t("Copying your data from CorosLink")}</strong>
+              <span>{t("You can keep using C-LINK while it works")}</span>
             </>) : (<>
-              <strong>{brought} brought over{needs ? `, ${needs} ${needs === 1 ? "needs" : "need"} you` : ""}.</strong>
-              <span>CorosLink is untouched if you ever need it</span>
+              <strong>{!needs ? t("{n} brought over.", { n: brought }) : needs === 1 ? t("{n} brought over, 1 needs you.", { n: brought }) : t("{n} brought over, {needs} need you.", { n: brought, needs })}</strong>
+              <span>{t("CorosLink is untouched if you ever need it")}</span>
             </>)}
           </div>
           <span className="mx-grow" />
           {stage === "pick" ? (<>
-            <Button className="mx-btn" onClick={() => void leaveIntro("/setup")}>Start fresh instead</Button>
-            <Button variant="primary" className="mx-btn" disabled={!picked.length} onClick={() => void start()}>Bring it over<Icon d="M5 12h14M13 6l6 6-6 6" /></Button>
+            <Button className="mx-btn" onClick={() => void leaveIntro("/setup")}>{t("Start fresh instead")}</Button>
+            <Button variant="primary" className="mx-btn" disabled={!picked.length} onClick={() => void start()}>{t("Bring it over")}<Icon d="M5 12h14M13 6l6 6-6 6" /></Button>
           </>) : stage === "moving" ? (
-            <Button className="mx-btn" onClick={() => void movedIn()}>Run in the background</Button>
+            <Button className="mx-btn" onClick={() => void movedIn()}>{t("Run in the background")}</Button>
           ) : (
-            <Button variant="primary" className="mx-btn" onClick={() => void movedIn()}>Open Dashboard<Icon d="M5 12h14M13 6l6 6-6 6" /></Button>
+            <Button variant="primary" className="mx-btn" onClick={() => void movedIn()}>{t("Open Dashboard")}<Icon d="M5 12h14M13 6l6 6-6 6" /></Button>
           )}
         </div>
       </div>

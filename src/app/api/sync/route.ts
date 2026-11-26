@@ -7,6 +7,7 @@ import { touchesShared, withoutShared } from "@/server/hub/shared";
 import { touchesConnections, withoutConnections } from "@/server/connections";
 import { adoptLogin as adoptHevy } from "@/server/hevy/http";
 import { adoptLogin as adoptIntervals } from "@/server/intervals/http";
+import { t } from "@/lib/i18n";
 
 const MAX_BODY = 1024 * 1024 + 4096;
 const PATH = "/api/v1/me/sync";
@@ -34,9 +35,9 @@ export async function GET(request: NextRequest): Promise<Response> {
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
-  if (!sameSite(request)) return fail(403, "forbidden", "That request didn't come from this app.");
+  if (!sameSite(request)) return fail(403, "forbidden", t("That request didn't come from this app."));
   const body = await request.text();
-  if (body.length > MAX_BODY) return fail(413, "SYNC_TOO_LARGE", "That's too much to send at once.");
-  if (touchesShared(body) || touchesConnections(body)) return fail(400, "INVALID_SYNC", "That item isn't the browser's to change.");
+  if (body.length > MAX_BODY) return fail(413, "SYNC_TOO_LARGE", t("That's too much to send at once."));
+  if (touchesShared(body) || touchesConnections(body)) return fail(400, "INVALID_SYNC", t("That item isn't the browser's to change."));
   return forward(PATH, { method: "POST", body });
 }

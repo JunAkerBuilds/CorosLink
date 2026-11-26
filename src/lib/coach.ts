@@ -1,8 +1,9 @@
 /** Pure helpers for Coach's conversation cards. */
+import { t } from "@/lib/i18n";
 
 /** Where a reading sits against the person's usual range, in the words the trend card uses. */
 export function rangeNote(value: number, usual: readonly [number, number]): string {
-  return value < usual[0] ? "below your range" : value > usual[1] ? "above your range" : "in range";
+  return value < usual[0] ? t("below your range") : value > usual[1] ? t("above your range") : t("in range");
 }
 
 /** The last `count` values, or all of them when there are fewer. */
@@ -13,7 +14,7 @@ export function lastValues<T>(values: readonly T[], count: number): T[] {
 /** The mean to one decimal, written without a trailing ".0". Null for an empty list. */
 export function averageText(values: readonly number[]): string | null {
   if (!values.length) return null;
-  const mean = values.reduce((t, v) => t + v, 0) / values.length;
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
   return String(Math.round(mean * 10) / 10);
 }
 

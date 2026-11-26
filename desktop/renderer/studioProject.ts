@@ -1,6 +1,7 @@
 // The face's project settings that live outside its layers: the template's raw config files edited by hand, and the
 // identity the built archive carries (template ID, watch-face ID, manifest name). CorosLink's Project tab, as pure
 // edits on the design so they undo, save and travel with the project.
+import { t } from "@/lib/i18n";
 import type { CorosWatchfaceTemplateDetails } from "../watchface/types";
 import type { Design } from "./studioFace";
 
@@ -56,12 +57,12 @@ export type ArchiveOverride = "templateId" | "watchfaceId" | "templateName";
 export function archiveOverrideProblem(field: ArchiveOverride, value: string): string | null {
   const v = value.trim();
   if (!v) return null;
-  if (field === "templateId") return /^\d{1,20}$/.test(v) && !/^0+$/.test(v) ? null : "1–20 digits, not all zero.";
+  if (field === "templateId") return /^\d{1,20}$/.test(v) && !/^0+$/.test(v) ? null : t("1–20 digits, not all zero.");
   if (field === "watchfaceId") {
     if (/^0x[0-9a-f]{1,8}$/i.test(v)) return null;
-    return /^(?:0|[1-9]\d{0,9})$/.test(v) && Number(v) <= 0xffffffff ? null : "A 32-bit number, decimal or 0x hex.";
+    return /^(?:0|[1-9]\d{0,9})$/.test(v) && Number(v) <= 0xffffffff ? null : t("A 32-bit number, decimal or 0x hex.");
   }
-  return v.length <= 64 ? null : "64 characters at most.";
+  return v.length <= 64 ? null : t("64 characters at most.");
 }
 
 /** Sets one override; blank removes it, and the field goes when none is left. */
