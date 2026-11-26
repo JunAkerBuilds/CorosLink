@@ -151,6 +151,9 @@
           "to": "clink-ble"
         }
       ]
+    },
+    "deb": {
+      "packageName": "coroslink"
     }
   },
   "overrides": {

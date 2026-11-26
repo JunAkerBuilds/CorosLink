@@ -259,6 +259,8 @@ jobs:
           set -euo pipefail
           ls -la release
           ls release/*.AppImage release/*.deb
+          # The deb replaces CorosLink's (package "coroslink") instead of installing beside it.
+          dpkg-deb -f release/*.deb Package | grep -qx coroslink
           test -x release/linux-unpacked/resources/clink-ble
           if ls release/latest-linux.yml 2>/dev/null; then
             case "$GITHUB_REF_NAME" in *-clink.*) echo "A beta must not make latest-linux.yml"; exit 1 ;; esac
