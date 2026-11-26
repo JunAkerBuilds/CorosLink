@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { angleOfFrame, frameFromAngle, frameFromDrag, frameFromHover, stripPosition, wrapFrame } from "./turntable";
+import { angleOfFrame, frameFromDrag, frameFromHover, stripPosition, wrapFrame } from "./turntable";
 
 describe("wrapFrame", () => {
   it("keeps frames in range", () => {
@@ -51,15 +51,6 @@ describe("frameFromDrag", () => {
 });
 
 describe("angles", () => {
-  it("finds the nearest view to an angle", () => {
-    expect(frameFromAngle(0, 12)).toBe(0);
-    expect(frameFromAngle(30, 12)).toBe(1);
-    expect(frameFromAngle(44, 12)).toBe(1);
-    expect(frameFromAngle(46, 12)).toBe(2);
-    expect(frameFromAngle(360, 12)).toBe(0);
-    expect(frameFromAngle(-30, 12)).toBe(11);
-    expect(frameFromAngle(750, 12)).toBe(1);
-  });
   it("gives the angle a view shows", () => {
     expect(angleOfFrame(0, 12)).toBe(0);
     expect(angleOfFrame(3, 12)).toBe(90);

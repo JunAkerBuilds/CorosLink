@@ -149,11 +149,6 @@ export function totals(items: readonly WorkoutItem[], pacing: Pacing): Totals {
   return { seconds, metres, load: Math.round((effort / 3600) * LOAD_PER_HOUR) };
 }
 
-/** Totals of one repeat block, all its rounds together. */
-export function repeatTotals(block: RepeatBlock, pacing: Pacing): Totals {
-  return totals([block], pacing);
-}
-
 /** Second line for a calendar entry: "9.60 km · 49:56", or the time alone when nothing is covered. */
 export function describe(items: readonly WorkoutItem[], pacing: Pacing): string {
   const t = totals(items, pacing);
@@ -193,15 +188,6 @@ export function shapePaths(segs: readonly ShapeSegment[], w = 500, h = 120, gap 
     x += bw;
   }
   return out;
-}
-
-/** Times to print under the shape: start, end of the first item, start of the last item, finish. */
-export function shapeTicks(items: readonly WorkoutItem[], pacing: Pacing): number[] {
-  const spans = items.map((item) => totals([item], pacing).seconds);
-  const total = spans.reduce((a, b) => a + b, 0);
-  if (!(total > 0)) return [0];
-  const ticks = items.length >= 3 ? [0, spans[0], total - spans[spans.length - 1], total] : [0, total];
-  return ticks.filter((t, k) => k === 0 || Math.round(t) > Math.round(ticks[k - 1]));
 }
 
 /* ───────────── Edits ───────────── */
@@ -270,11 +256,6 @@ export function updateStep<I extends ItemLike>(items: readonly I[], id: string, 
 export function setRepeatCount<I extends ItemLike>(items: readonly I[], blockId: string, count: number): I[] {
   const next = Number.isFinite(count) ? Math.max(1, Math.min(MAX_REPEATS, Math.round(count))) : 1;
   return mapBlocks(items, (b) => (b.id === blockId ? { ...b, count: next } : b)) as I[];
-}
-
-/** Replaces a repeat block with its steps, once, where the block stood. */
-export function ungroup<I extends ItemLike>(items: readonly I[], blockId: string): I[] {
-  return (items as readonly ItemLike[]).flatMap((item) => (item.type === "repeat" && item.id === blockId ? item.steps : [item])) as I[];
 }
 
 function place(items: readonly ItemLike[], id: string, blockId: string | null, index: number): ItemLike[] {
@@ -356,26 +337,6 @@ export function canMove(items: readonly ItemLike[], id: string, dir: -1 | 1): bo
 
 /* ───────────── Units and text ───────────── */
 
-export function lengthUnit(length: StepLength): LengthUnit {
-  return length.type === "time" ? "min" : length.unit;
-}
-
-/**
- * The same step measured another way. Between km and m the distance stays; switching to time
- * gives the estimated time for the distance, and switching to distance the estimated distance
- * for the time (to the nearest 10 m).
- */
-export function convertLength(step: WorkoutStep, unit: LengthUnit, pacing: Pacing): StepLength {
-  if (unit === "min") {
-    if (step.length.type === "time") return step.length;
-    return { type: "time", seconds: Math.max(1, Math.round(stepSeconds(step, pacing))) };
-  }
-  if (step.length.type === "distance") return { ...step.length, unit };
-  const p = stepPace(step, pacing) ?? pacing.easyPace;
-  const metres = Math.max(10, Math.round(((step.length.seconds / p) * 1000) / 10) * 10);
-  return { type: "distance", metres, unit };
-}
-
 /** m:ss or h:mm:ss, to the whole second. */
 export function formatClock(seconds: number): string {
   const total = Math.max(0, Math.round(seconds));
@@ -399,37 +360,7 @@ export function parseClock(text: string): number | null {
   return Math.round(nums.reduce((sum, n) => sum * 60 + n, 0));
 }
 
-/** What the length box shows: 2.00 for km, 400 for m, 1:30 for time. */
-export function formatLength(length: StepLength): string {
-  if (length.type === "time") return formatClock(length.seconds);
-  return length.unit === "km" ? (length.metres / 1000).toFixed(2) : String(Math.round(length.metres));
-}
-
-/** Reads the length box back. Null when the text is not a positive length. */
-export function parseLength(text: string, unit: LengthUnit): StepLength | null {
-  if (unit === "min") {
-    const seconds = parseClock(text);
-    return seconds && seconds > 0 && seconds <= 86400 ? { type: "time", seconds } : null;
-  }
-  const t = text.trim().replace(",", ".");
-  if (!/^\d+(\.\d+)?$/.test(t)) return null;
-  const metres = unit === "km" ? Math.round(parseFloat(t) * 1000) : Math.round(parseFloat(t));
-  return metres > 0 && metres <= 1_000_000 ? { type: "distance", metres, unit } : null;
-}
-
 /* ───────────── New steps ───────────── */
-
-const WORK_LABEL: Record<Sport, string> = { run: "Run", ride: "Ride", swim: "Swim", strength: "Work" };
-
-export function kindLabel(kind: StepKind, sport: Sport): string {
-  switch (kind) {
-    case "warmup": return "Warm up";
-    case "cooldown": return "Cool down";
-    case "recovery": return "Recovery";
-    case "rest": return "Rest";
-    default: return WORK_LABEL[sport];
-  }
-}
 
 /** A sensible fresh step of a kind. The hard step aims 5 s either side of the top zone's pace. */
 export function newStep(id: string, kind: StepKind, sport: Sport, pacing: Pacing): WorkoutStep {

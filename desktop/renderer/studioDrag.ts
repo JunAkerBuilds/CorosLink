@@ -4,6 +4,7 @@
 // dragging, the base stands in for the face and the sprite follows the pointer; after the drop both stay until the
 // face composed at the new place is ready, then it replaces them in one paint. So there's never a frame with the
 // artwork in two places, or in none.
+import { chartDragSplit } from "../watchface/engine/chartReadouts";
 import { makeWatchfaceDragForegroundDesign } from "../watchface/engine/watchfaceDragIsolation";
 import type { WatchfacePreviewScenario } from "../watchface/engine/watchfaceSimulation";
 import { allLayersOf, editMode, layersOf, masterSize, renderFace, rowsOf, spotsOf, type Design, type EditorLayer, type FaceSource, type Mode, type SpotChoice } from "./studioFace";
@@ -62,7 +63,10 @@ export function withoutLayers(design: Design, layers: EditorLayer[]): Design {
     designSprites: (design.designSprites ?? []).filter((s) => !sprites.has(s.id)),
     backgroundElements: (design.backgroundElements ?? []).filter((e) => !elements.has(e.id)),
     staticSeparators: Object.fromEntries(Object.entries(design.staticSeparators ?? {}).map(([id, s]) => [id, separators.has(id as never) ? { ...s, enabled: false } : s])) as Design["staticSeparators"],
-    nativeData: design.nativeData ? Object.fromEntries(Object.entries(design.nativeData).map(([id, n]) => [id, natives.has(id) ? { ...n, enabled: false } : n])) : design.nativeData,
+    // The chart keeps the readouts it isn't editing in place on the face: only the edited readout and the graph move
+    // with it, so only they come off (turning the chart off would lift every readout on the page with them).
+    nativeData: design.nativeData ? Object.fromEntries(Object.entries(design.nativeData).map(([id, n]) => [id, !natives.has(id) ? n
+      : id === "chart" ? chartDragSplit(chartDragSplit(n, "readout", false), "graph", false) : { ...n, enabled: false }])) : design.nativeData,
     weatherIndicator: has("weatherIndicator") && design.weatherIndicator ? { ...design.weatherIndicator, enabled: false } : design.weatherIndicator,
     ampmIndicator: has("ampmIndicator") && design.ampmIndicator ? { ...design.ampmIndicator, enabled: false } : design.ampmIndicator,
     animation: has("animation") && design.animation ? { ...design.animation, enabled: false } : design.animation,
@@ -119,6 +123,29 @@ export async function composeDragFrames(
   return {
     key: dragKey(layers.map((l) => l.id), mode, size, choice), design: root, base, sprite, size, lifted: [...liftedIds],
     ink: { moving: sprite ? toBox({ x0: sprite.x, y0: sprite.y, x1: sprite.x + sprite.w, y1: sprite.y + sprite.h }) : null, targets: measured },
+  };
+}
+
+/**
+ * Drag frames for one part of a layer that moves on its own (an icon apart from its number): the face with that part
+ * taken away (`away`, which must leave everything else where it is), and the part alone on a sprite. Nothing snaps
+ * to anything; the frames only spare the face a redraw for every pointer move.
+ */
+export async function composePartFrames(
+  source: FaceSource, root: Design, mode: Mode, key: string, away: (d: Design) => Design, size: number, scenario?: WatchfacePreviewScenario, choice?: SpotChoice,
+): Promise<DragFrames> {
+  const foreground = (d: Design) => makeWatchfaceDragForegroundDesign(d);
+  const [base, fg, fgBase] = await Promise.all([
+    renderFace(source, editMode(root, mode, away), mode, size, scenario, true, choice),
+    renderFace(source, editMode(root, mode, foreground), mode, size, scenario, false, choice),
+    renderFace(source, editMode(root, mode, (d) => foreground(away(d))), mode, size, scenario, false, choice),
+  ]);
+  const { sprite } = await difference(fg, fgBase, size);
+  await Promise.all([base, sprite?.src].map((src) => (src ? decode(src).then((img) => img.decode()).catch(() => {}) : null)));
+  const toMaster = masterSize(source) / size;
+  return {
+    key, design: root, base, sprite, size, lifted: [],
+    ink: { moving: sprite ? { x0: sprite.x * toMaster, y0: sprite.y * toMaster, x1: (sprite.x + sprite.w) * toMaster, y1: (sprite.y + sprite.h) * toMaster } : null, targets: new Map() },
   };
 }
 

@@ -9,7 +9,7 @@ import { describeTemplate, inspectTemplate, templateAssets, templateConfigTexts 
 import { buildWatchfaceArchive } from "../../watchface/archive/build";
 import { duplicateName, templatesFor, WatchfaceStudio, type ProjectSummary, type StoredProject } from "./studio";
 import { getWatchfaceTarget } from "../../watchface/watchfaceTargets";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { PhoneSend } from "./phoneSend";
 import { compiledFixture } from "../../watchface/archive/testFixtures";
 
@@ -45,12 +45,13 @@ const TEMPLATE_ID = templatesFor(PACE_PRO).themes[0].id!;
 function studio(extra: { pickFolder?: () => Promise<string | null>; phone?: PhoneSend } = {}) {
   const starter = template();
   const fetched: string[] = [];
-  const s = new WatchfaceStudio(mkdtempSync(path.join(tmpdir(), "studio-")), {
+  const root = mkdtempSync(path.join(tmpdir(), "studio-"));
+  const s = new WatchfaceStudio(root, {
     ...extra,
     fetch: (async (url: string) => { fetched.push(String(url)); return new Response(new Uint8Array(starter)); }) as typeof fetch,
     archiveWorker: "/nowhere/watchfaceArchive.cjs", compilerWorker: "/nowhere/watchfaceCompiler.cjs",
   });
-  return { s, fetched, starter };
+  return { s, fetched, starter, root };
 }
 const call = async (s: WatchfaceStudio, method: string, route: string, body?: unknown, hub = true) =>
   s.answer(new Request(`clink://app/api/desktop/studio${route}`, {
@@ -212,6 +213,26 @@ describe("Studio projects", () => {
     expect((await call(s, "POST", `/prepared/${prepared.id}/folder`, { folderId: folder, name: "x" })).status).toBe(400);
     expect((await call(s, "POST", "/prepared/00000000-0000-0000-0000-000000000000/bin", {})).status).toBe(410);
     expect((await call(s, "POST", `/prepared/${prepared.id}/bin`, {}, false)).status).toBe(403);
+  });
+
+  it("lists projects from their small summaries, and from project.json when a summary is missing or out of date", async () => {
+    const { s, root } = studio();
+    const made = (await jsonOf<{ project: ProjectSummary }>(await call(s, "POST", "/projects", { watch: "pace-pro", templateId: TEMPLATE_ID, name: "First", design: design() }))).project;
+    const dir = path.join(root, "studio", "projects", made.projectId);
+    const names = async () => (await jsonOf<{ projects: ProjectSummary[] }>(await call(s, "GET", "/projects"))).projects.map((p) => p.name);
+    expect(JSON.parse(readFileSync(path.join(dir, "summary.json"), "utf8")).project).not.toHaveProperty("design");
+    // The list doesn't open project.json while the summary matches it.
+    const summary = JSON.parse(readFileSync(path.join(dir, "summary.json"), "utf8"));
+    writeFileSync(path.join(dir, "summary.json"), JSON.stringify({ ...summary, project: { ...summary.project, name: "From summary" } }));
+    expect(await names()).toEqual(["From summary"]);
+    // project.json changed behind its back: the summary no longer matches and is made again.
+    const stored = JSON.parse(readFileSync(path.join(dir, "project.json"), "utf8"));
+    writeFileSync(path.join(dir, "project.json"), JSON.stringify({ ...stored, name: "Changed elsewhere" }));
+    expect(await names()).toEqual(["Changed elsewhere"]);
+    // Projects saved before summaries existed get one on first listing.
+    rmSync(path.join(dir, "summary.json"));
+    expect(await names()).toEqual(["Changed elsewhere"]);
+    expect(existsSync(path.join(dir, "summary.json"))).toBe(true);
   });
 
   it("converts to another watch as a new project and keeps scratch copies out of the list", async () => {

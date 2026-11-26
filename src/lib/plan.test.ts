@@ -5,7 +5,7 @@ import { sampleProfile } from "@/data/sample/workouts";
 import {
   activeTrainingPlanCalendarInstall, addRestDay, addTrainingPlanPhase, addTrainingPlanWeek, calendarBlockedEntries, clampPhase, createTrainingPlan, duplicateTrainingPlan, duplicateTrainingPlanWeek,
   durationText, entryDay, entryMeta, insertRecoveryWeek, installStanding, installTrainingPlan, moveTrainingPlanEntry, peakOf, phaseForWeek, planCalendarPreview, planDate, planDayNames,
-  planEntryFromWorkout, planFactsLine, planGoalPreset, planNeedsAttention, planScopes, planStatus, planSuggestions, planToday, planView, quickPlanEntry, removeTrainingPlanFromCalendar,
+  planEntryFromWorkout, planGoalPreset, planNeedsAttention, planScopes, planStatus, planSuggestions, planToday, planView, removeTrainingPlanFromCalendar,
   removeTrainingPlanWeek, reorderTrainingPlanWeek, saveStatus, scheduledWeeks, shiftTrainingPlan, summarizeTrainingPlan, trainingPlanCalendarRevision, trainingPlanEntryMetrics,
   upcomingTrainingPlanCalendarWorkoutCount, updateTrainingPlanPhase, validateTrainingPlan, visiblePlans, withDerivedSportMix, withPhaseKind,
   type PlanEnv, type PlanWorkout, type TrainingPlanDocument, type TrainingPlanEntry,
@@ -113,21 +113,12 @@ describe("entries", () => {
     expect(p.entries[4]).toMatchObject({ kind: "rest", weekIndex: 0, dayIndex: 0, title: "Rest day" });
     expect(addRestDay(p, 0, 0)).toBe(p);
   });
-  it("makes a quick workout of so many minutes for the holding area", () => {
-    const run = quickPlanEntry(" Hill strides ", "run", 45, "s1", env());
-    expect(run).toMatchObject({ kind: "workout", weekIndex: 0, title: "Hill strides", workout: { sport: "run", doc: { name: "Hill strides", items: [{ kind: "training", target: "time", seconds: 2700 }] } } });
-    expect(run.dayIndex).toBeUndefined();
-    expect(trainingPlanEntryMetrics(run).durationSeconds).toBe(2700);
-    const gym = quickPlanEntry("Core", "strength", 20, "s2", env());
-    expect(gym.workout?.doc?.items[0]).toMatchObject({ target: "time", seconds: 1200, sets: 1, restSeconds: 0, name: "Core" });
-    expect(trainingPlanEntryMetrics(gym).durationSeconds).toBe(1200);
-  });
   it("follows the workouts for the plan's sports", () => {
     expect(withDerivedSportMix(plan(), env()).sportMix).toEqual(["bike", "run"]);
   });
   it("says which scheduled workouts the calendar would refuse", () => {
     const p = plan();
-    const gym = { ...quickPlanEntry("Core", "strength", 20, "s2", env()), dayIndex: 4 };
+    const gym = planEntryFromWorkout(workout("sample-lib-push"), 0, 4, undefined, env());
     const withGym = { ...p, entries: [...p.entries, gym] };
     expect(calendarBlockedEntries(withGym, false)).toEqual([]);
     expect(calendarBlockedEntries(withGym, true)).toEqual([{ entry: gym, why: "its exercises must come from COROS’s list" }]);
@@ -197,7 +188,6 @@ describe("figures", () => {
     const s = summarizeTrainingPlan(plan());
     expect(s).toMatchObject({ weekCount: 4, workouts: 4, durationSeconds: 10200, distanceMeters: 19200, trainingLoad: 380, restDays: 25, peakWeek: 2, taperDetected: true, conflictCount: 0, sportDistribution: { bike: 2, run: 2 } });
     expect(s.weekly.map((w) => w.trainingLoad)).toEqual([160, 220, 0, 0]);
-    expect(planFactsLine(plan(), s)).toBe("4 weeks · 4 workouts · 380 estimated load · start 30 Nov");
   });
   it("counts scheduled workouts only for the week rows and finds the peak", () => {
     const weeks = scheduledWeeks(plan());

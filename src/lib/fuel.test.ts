@@ -4,7 +4,7 @@ import { FUEL_SAMPLE } from "@/data/sample/fuel";
 import { FOODS } from "@/data/sample/foods";
 import {
   addFood, addNutrients, basisOf, burnedKcal, changeAmount, copyFoods, dayTotals, daysEnding, dial, emptyDay, foodCount,
-  foodLabel, foodNutrients, kcalFromMacros, logFood, macroCheck, macroPercents, mealTargetKcal, mealTotals, mean,
+  foodLabel, foodNutrients, kcalFromMacros, macroCheck, macroPercents, mealTargetKcal, mealTotals, mean,
   parseAmount, petalsLit, remaining, removeFood, scaleNutrients, searchFoods, shiftDay, trim, ZERO,
 } from "./fuel";
 
@@ -185,13 +185,6 @@ describe("editing a day", () => {
     expect(next.meals.breakfast.map((f) => f.id)).toEqual(["x", "new-0"]);
     expect(next.meals.lunch.map((f) => f.id)).toEqual(["new-1"]);
     expect(dayTotals(next).kcal).toBeCloseTo(390);
-  });
-  it("logs a listed food in grams or millilitres", () => {
-    const milk = FOODS.find((f) => f.id === "milk-semi-skimmed")!;
-    const entry = logFood(milk, 200, "id1");
-    expect(entry.unit).toBe("ml");
-    expect(foodNutrients(entry).kcal).toBe(100);
-    expect(logFood(FOODS.find((f) => f.id === "banana")!, 120, "id2").unit).toBe("g");
   });
 });
 

@@ -19,11 +19,6 @@ export function frameFromDrag(startFrame: number, dx: number, pxPerFrame: number
   return wrapFrame(startFrame + Math.round(dx / pxPerFrame), frames);
 }
 
-/** The view nearest to an angle in degrees (any sign, any number of turns). */
-export function frameFromAngle(degrees: number, frames: number): number {
-  return wrapFrame((degrees / 360) * frames, frames);
-}
-
 /** The angle a view shows, 0…360 exclusive. */
 export function angleOfFrame(frame: number, frames: number): number {
   if (frames <= 0) return 0;

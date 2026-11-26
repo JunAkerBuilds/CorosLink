@@ -58,11 +58,20 @@ export interface NativePicturesProps {
 }
 
 /** The part's pictures: pick one to replace, remove or retext it; or take a whole official set. */
+// What the picture grid sits on. The checkerboard is mid-grey, which hides grey sprites; black and white show them.
+type Backdrop = "checker" | "black" | "white";
+const BACKDROP: Record<Backdrop, { label: string; icon: "grid" | "moon" | "sun"; next: Backdrop }> = {
+  checker: { label: "checkerboard", icon: "grid", next: "black" },
+  black: { label: "black", icon: "moon", next: "white" },
+  white: { label: "white", icon: "sun", next: "checker" },
+};
+
 export function NativePictures({ design, edit, layer, part, partName, role, indexes, urls, watch, fail, onImportFolder }: NativePicturesProps) {
   const n = nativeOf(design, layer);
   const id = layer.nativeDataId ?? "";
   const [chosen, setChosen] = useState<{ key: string; index: number } | null>(null);
   const [official, setOfficial] = useState(false);
+  const [backdrop, setBackdrop] = useState<Backdrop>("checker");
   const key = `${id}:${part}`;
   const index = chosen?.key === key && indexes.includes(chosen.index) ? chosen.index : indexes[0] ?? 0;
   if (!n) return null;
@@ -81,11 +90,13 @@ export function NativePictures({ design, edit, layer, part, partName, role, inde
   };
   const restore = () => patchNative(edit, layer, (s) => { const assets = { ...s.assets }; delete assets[role]; return { assets: Object.keys(assets).length ? assets : undefined }; });
   return (
-    <div className="st-wx-card">
+    <div className="st-wx-card" data-backdrop={backdrop === "checker" ? undefined : backdrop}>
       <div className="st-wx-head">
         <b>Pictures</b>
         <span className="st-wx-badge" data-custom={custom ? "" : undefined}>{custom ? (custom === indexes.length ? "Your PNGs" : `${custom} of ${indexes.length} yours`) : "Drawn"}</span>
         <span className="st-grow" />
+        <button type="button" className="st-icon-btn" aria-label={`Backdrop: ${BACKDROP[backdrop].label}`} title={`Backdrop: ${BACKDROP[backdrop].label}`}
+          onClick={() => setBackdrop(BACKDROP[backdrop].next)}><Icon name={BACKDROP[backdrop].icon} size={15} /></button>
         <button type="button" className="st-icon-btn" aria-label="Import numbered PNGs" title={`Import PNGs named ${pad(indexes[0]!)}${indexes.length > 1 ? `–${pad(indexes[indexes.length - 1]!)}` : ""}`} onClick={onImportFolder}><Icon name="folder" size={15} /></button>
         {custom ? <button type="button" className="st-icon-btn" aria-label="Back to the drawn pictures" title="Back to the drawn pictures" onClick={restore}><Icon name="refresh" size={15} /></button> : null}
       </div>

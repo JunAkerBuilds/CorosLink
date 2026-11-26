@@ -240,12 +240,11 @@ describe("Images that share a place on the watch are one spot", () => {
     }
   });
 
-  it("opens a face saved before spots the same: nothing about a spot is in the design", () => {
+  it("opens a face saved before spots the same", () => {
     const details = template({ sleep: true });
     const saved: Design = { ...makeDefaultDesign(), layoutOffsets: { bluetoothStatus: { dx: 12, dy: 0 } }, lockedLayerIds: [id("bluetooth_off_icon")],
       configAssetOverrides: { "config:sleep_mode_icon": { enabled: false } } };
     const v = view(details, saved);
-    expect(JSON.stringify(saved)).not.toMatch(/spot/i);
     expect(isLocked(saved, v.row("bluetoothStatus"))).toBe(true);
     expect(v.row("doNotDisturbStatus").visible).toBe(true);
     expect(v.at("sleep_mode_icon").visible).toBe(false);

@@ -389,8 +389,36 @@ export class WatchfaceStudio {
     await fs.promises.mkdir(dir, { recursive: true });
     if (starter) await writeWhole(path.join(dir, "starter.dat"), starter);
     if (preview) await writeWhole(path.join(dir, "preview.png"), preview);
-    await writeWhole(path.join(dir, "project.json"), JSON.stringify(stored));
+    const manifest = path.join(dir, "project.json");
+    await writeWhole(manifest, JSON.stringify(stored));
+    await this.writeSummary(stored, manifest);
     return stored;
+  }
+
+  /**
+   * summary.json beside project.json: the project without its design, tied to project.json's size and time, so the
+   * list doesn't read every design (those run to tens of MB each). One that doesn't match is ignored and made again.
+   */
+  private async writeSummary(stored: StoredProject, manifest: string): Promise<void> {
+    try {
+      const { size, mtimeMs } = await fs.promises.stat(manifest);
+      const { design: _design, ...project } = stored;
+      await writeWhole(path.join(path.dirname(manifest), "summary.json"), JSON.stringify({ size, mtimeMs, project }));
+    } catch { /* the list reads project.json instead */ }
+  }
+
+  private async readSummary(id: string): Promise<Omit<StoredProject, "design">> {
+    const dir = this.projectDir(id), manifest = path.join(dir, "project.json");
+    try {
+      const { size, mtimeMs } = await fs.promises.stat(manifest);
+      const saved = JSON.parse(await fs.promises.readFile(path.join(dir, "summary.json"), "utf8")) as { size?: number; mtimeMs?: number; project?: ProjectSummary };
+      if (saved.size === size && saved.mtimeMs === mtimeMs && saved.project?.projectId === id &&
+        typeof saved.project.name === "string" && typeof saved.project.updatedAt === "string") return saved.project;
+    } catch { /* none yet, or damaged */ }
+    const stored = await this.readStored(id);
+    await this.writeSummary(stored, manifest);
+    const { design: _design, ...summary } = stored;
+    return summary;
   }
 
   /** Every project, last edited first, without designs (those can be tens of MB). Damaged folders are skipped. */
@@ -398,7 +426,7 @@ export class WatchfaceStudio {
     const names = await fs.promises.readdir(this.projects).catch(() => [] as string[]);
     const found = await Promise.all(names.filter((n) => /^[a-f0-9-]{36}$/i.test(n)).map(async (id): Promise<ProjectSummary | null> => {
       try {
-        const { design: _design, ...summary } = await this.readStored(id);
+        const summary = await this.readSummary(id);
         if (summary.scratch) {
           if (Date.parse(summary.updatedAt) < this.now() - 60 * 60_000) await this.remove(id);
           return null;

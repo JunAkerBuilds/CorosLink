@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapVersionFor, quadkey, takesMapAreas, tileAt, tileBounds } from "../../../maps/types";
+import { quadkey, takesMapAreas, tileAt, tileBounds } from "../../../maps/types";
 import { estimate, joinLegs, pointAt, profile, shares, terrain } from "./routeMath";
 import { haversine, lengthM, place, shapeOutline, textOutline } from "./sketchShapes";
 
@@ -59,13 +59,6 @@ describe("sketch outlines", () => {
 });
 
 describe("maps rules", () => {
-  it("knows each watch's map version (v6 PACE 4 Pro; v5 APEX 4, PACE 4, NOMAD, PACE Pro; v4 VERTIX, APEX 2; else v5)", () => {
-    expect(mapVersionFor("PACE 4 Pro")).toBe(6);
-    for (const w of ["APEX 4", "PACE 4", "NOMAD", "PACE Pro"]) expect(mapVersionFor(w)).toBe(5);
-    for (const w of ["VERTIX 2S", "APEX 2 Pro", "APEX Pro"]) expect(mapVersionFor(w)).toBe(4);
-    expect(mapVersionFor(undefined)).toBe(5);
-  });
-
   it("takes map areas only on PACE 4, PACE 4 Pro, PACE Pro and APEX 4", () => {
     for (const w of ["PACE 4", "PACE 4 Pro", "PACE Pro", "APEX 4"]) expect(takesMapAreas(w)).toBe(true);
     for (const w of ["VERTIX 2", "APEX 2 Pro", "NOMAD", "PACE 3"]) expect(takesMapAreas(w)).toBe(false);

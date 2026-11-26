@@ -13,7 +13,7 @@ import { CommunityTab, FitsDialog } from "../parts/StudioCommunity";
 import { TemplatesTab, titleCase, type TemplateItem, type TemplateSort } from "../parts/StudioTemplates";
 import { navigate } from "../router";
 import {
-  chooseWatch, chosenWatch, corosAccount, createProject, deleteProject, duplicateProject, edited, importProjectFile, listProjects,
+  chooseWatch, chosenWatch, corosAccount, createProject, deleteProject, duplicateProject, edited, importProjectFile, knownProjects, listProjects,
   openCommunity, openCorosFace, projectPicture, said, StudioProblem, type AccountStatus, type CommunityFace, type CorosCatalog, type ProjectSummary,
 } from "../studio";
 import "./studio.css";
@@ -29,7 +29,7 @@ const blankBase = (templates: TemplateItem[]) => templates.find((t) => t.templat
 const UNSET = { version: 1 } as unknown as CorosWatchfaceDesignState;
 
 export default function Studio() {
-  const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
+  const [projects, setProjects] = useState<ProjectSummary[] | null>(knownProjects);
   const [watch, setWatch] = useState(chosenWatch);
   const [tab, setTabState] = useState<Tab>("mine");
   const [query, setQuery] = useState("");

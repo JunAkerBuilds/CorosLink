@@ -285,6 +285,28 @@ function kindForGroup(groupId: string): EditorLayerKind {
 }
 
 /**
+ * A metric hidden through the layers panel draws nothing, so it has no box and
+ * would drop out of the list with no way to show it again. Measure it as it
+ * would draw when shown, so it stays listed (with its eye) where it was.
+ */
+function hiddenMetricBounds(
+  details: CorosWatchfaceTemplateDetails,
+  design: CorosWatchfaceDesignState,
+  metricId: WatchfaceMetricId,
+  groupId: string,
+  templateShows: boolean
+): WatchfaceLayoutGroupBounds | null {
+  if (design.metricChanges?.[metricId] !== false) return null;
+  // A metric the template shows draws from its own rect once the override goes;
+  // one Studio added draws where switching it on puts it.
+  const metricChanges = { ...design.metricChanges };
+  if (templateShows) delete metricChanges[metricId];
+  else metricChanges[metricId] = true;
+  return deriveEditorLayers(details, { ...design, metricChanges })
+    .find((layer) => layer.id === groupId)?.bounds ?? null;
+}
+
+/**
  * Builds the ordered layer list for the editor from a template and the current
  * design. Bounds already reflect the design's layout offsets, so the canvas can
  * draw selection boxes and hit-test drags directly against them.
@@ -399,6 +421,7 @@ export function deriveEditorLayers(
     if (groupId === "battery") {
       const capability = metricActivity.get("battery");
       const visible = design.metricChanges?.battery ?? capability?.active ?? false;
+      const shownBounds = bounds ?? hiddenMetricBounds(details, design, "battery", groupId, capability?.active ?? false);
       layers.push({
         id: groupId,
         kind: "battery",
@@ -407,14 +430,31 @@ export function deriveEditorLayers(
         metricId: "battery",
         visible,
         canHide: true,
-        present: bounds !== null,
-        bounds,
+        present: shownBounds !== null,
+        bounds: shownBounds,
         capabilities: capabilitiesForGroup(groupId)
       });
       continue;
     }
 
     if (groupId === "batteryIcon") {
+      // Hiding switches the picture's override off, which also drops the
+      // battery_icon_dir/pos Studio wrote for a battery it added, so the
+      // hidden picture has no box. Measure it as it would draw when shown,
+      // so it stays listed (with its eye) where it was.
+      const batteryOverride = design.configAssetOverrides?.["config:battery_icon"];
+      const hiddenBounds =
+        bounds === null && batteryOverride?.enabled === false
+          ? deriveEditorLayers(details, {
+              ...design,
+              layerVisibility: { ...design.layerVisibility, batteryIcon: true },
+              configAssetOverrides: {
+                ...design.configAssetOverrides,
+                "config:battery_icon": { ...batteryOverride, enabled: true }
+              }
+            }).find((layer) => layer.id === groupId)?.bounds ?? null
+          : null;
+      const batteryBounds = bounds ?? hiddenBounds;
       layers.push({
         id: groupId,
         kind: "batteryIcon",
@@ -422,8 +462,8 @@ export function deriveEditorLayers(
         layoutGroupId: groupId,
         visible: bounds !== null && design.layerVisibility?.batteryIcon !== false,
         canHide: true,
-        present: bounds !== null,
-        bounds,
+        present: batteryBounds !== null,
+        bounds: batteryBounds,
         capabilities: capabilitiesForGroup(groupId)
       });
       continue;
@@ -482,6 +522,7 @@ export function deriveEditorLayers(
       }
       const overridden = design.metricChanges?.[metricId];
       const visible = overridden ?? capability.active;
+      const shownBounds = bounds ?? hiddenMetricBounds(details, design, metricId, groupId, capability.active);
       layers.push({
         id: groupId,
         kind: "metric",
@@ -490,8 +531,8 @@ export function deriveEditorLayers(
         metricId,
         visible,
         canHide: true,
-        present: bounds !== null,
-        bounds,
+        present: shownBounds !== null,
+        bounds: shownBounds,
         capabilities: capabilitiesForGroup(groupId)
       });
       continue;

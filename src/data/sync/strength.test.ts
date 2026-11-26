@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   changeText, dateText, doneSetCount, durationSeconds, liftedRanges, liftNote, mainLifts, muscleRow, strengthFromItems,
-  suggestionCard, topLine, volumeKg, weeksAgo, weekStart, workingSets, workoutRows, NOTHING_YET,
+  suggestionCard, topLine, volumeKg, weeksAgo, weekStart, workingSets, workoutRows,
 } from "./strength";
 import { dateToRef, type NativeGymSet, type NativeGymWorkout, type ViewStrengthBody } from "./native";
 import { seedItems } from "@/data/sampleSeed";
@@ -248,7 +248,6 @@ describe("suggestion and the whole screen", () => {
 
   it("keeps the card's shell with one short line when there is no suggestion", () => {
     expect(suggestionCard(undefined)).toMatchObject({ title: "No suggestion yet", text: "" });
-    expect(NOTHING_YET).toBe("Nothing from your phone yet");
   });
 
   it("is an honest empty screen with no gym items", () => {

@@ -46,6 +46,7 @@ export const STUDIO_ICONS: Record<string, string> = {
   line: "<path d=\"M5 19L19 5\"></path>",
   link: "<path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1\"></path><path d=\"M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1\"></path>",
   lock: "<rect x=\"5\" y=\"11\" width=\"14\" height=\"9\" rx=\"2\"></rect><path d=\"M8 11V8a4 4 0 0 1 8 0v3\"></path>",
+  unlock: "<rect x=\"5\" y=\"11\" width=\"14\" height=\"9\" rx=\"2\"></rect><path d=\"M8 11V8a4 4 0 0 1 7.7-1.5\"></path>",
   mic: "<rect x=\"9\" y=\"3\" width=\"6\" height=\"11\" rx=\"3\"></rect><path d=\"M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21\"></path>",
   minus: "<path d=\"M5 12h14\"></path>",
   moon: "<path d=\"M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z\"></path>",

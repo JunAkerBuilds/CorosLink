@@ -215,6 +215,44 @@ export function setIconOffset(design: Design, id: string, dx: number, dy: number
   return { ...design, controlIconOffsets };
 }
 
+export interface SlotIconGrip { id: WatchfaceComplicationId; label: string; bounds: { x0: number; y0: number; x1: number; y1: number } }
+
+/**
+ * The icon the watch preview draws, for dragging it on the face apart from the value: the previewed type's, while
+ * Icon offset can move it and the slot isn't locked. The engine gives the slot's icons no box of their own, so it is
+ * measured as the engine measures the whole slot: the slot's origin, the icon's place in it (offset included) and the
+ * picture's size, in master pixels.
+ */
+export function slotIconGrip(details: CorosWatchfaceTemplateDetails, design: Design, types: SlotType[]): SlotIconGrip | null {
+  if (design.lockedLayerIds?.includes(SLOT_LAYER)) return null;
+  const t = types.find((x) => x.id === slotPreview(types, design));
+  const c = t?.canOffset && t.icon !== "hidden" ? WATCHFACE_COMPLICATIONS.find((x) => x.id === t.id) : undefined;
+  if (!t || !c) return null;
+  const { resolution, config } = slotConfig(details, design);
+  const originKey = Object.keys(config).find((k) => /^rect_control\d+_pos$/.test(k));
+  const origin = parseConfigPos(originKey ? config[originKey] : undefined);
+  const key = `control_${c.controlPrefix}_icon`;
+  const pos = parseConfigPos(config[`${key}_pos`]);
+  if (!resolution || !origin || !pos) return null;
+  const size = iconSize(resolution, config, key, design.configAssetOverrides?.[t.iconLayer?.configAssetId ?? `config:${key}`]?.replacement);
+  if (!size) return null;
+  const x0 = origin.x + pos.x, y0 = origin.y + pos.y;
+  return { id: t.id, label: `${t.label} icon`, bounds: { x0, y0, x1: x0 + size.width, y1: y0 + size.height } };
+}
+
+type Resolution = NonNullable<ReturnType<typeof pickPreviewResolution>>;
+
+/** The picture's size: the template's file, the first of its level pictures, or the designer's own. */
+function iconSize(resolution: Resolution, config: Record<string, string>, key: string, own?: { width: number; height: number }) {
+  const path = (v: string | undefined) => (v ? `${resolution.directory}/${v.trim().replace(/\\/g, "/").replace(/^\.\//, "")}` : "");
+  const file = resolution.icons.find((i) => i.path === path(config[key]));
+  if (file) return { width: file.width, height: file.height };
+  const dir = config[`${key}_dir`]?.trim().replace(/\\/g, "/");
+  const state = dir ? resolution.spriteFolders.find((f) => f.kind === "state" && f.folder === dir)?.files[0] : undefined;
+  if (state) return { width: state.width, height: state.height };
+  return own ? { width: own.width, height: own.height } : null;
+}
+
 // ───── Value tint ─────
 
 /** Selectable value tint: the colour the slot's digits are drawn in; undefined follows the face's colour. */

@@ -18,4 +18,21 @@ describe("hidden layers keep their box", () => {
       expect(layer.bounds).not.toBeNull();
     }
   });
+
+  it("so hidden battery data or a hidden metric stays in the list with its eye", () => {
+    const directory = "watchface_416x416";
+    const digits = Array.from({ length: 10 }, (_, i) => ({ path: `${directory}/digits/0${i}.png`, width: 18, height: 28 }));
+    const metrics = { archiveId: "m", resolutions: [{ directory, width: 416, height: 416, aodConfig: {}, icons: [],
+      config: { battery_level_rect: "{170,250,230,280,0}", battery_level_font: "digits", heartreate_level_rect: "{35,250,95,280,0}", heartreate_level_font: "digits" },
+      spriteFolders: [{ folder: "digits", kind: "digits", aod: false, files: digits }] }] } as unknown as CorosWatchfaceTemplateDetails;
+    const shown = deriveEditorLayers(metrics, makeDefaultDesign());
+    const hidden = deriveEditorLayers(metrics, { ...makeDefaultDesign(), metricChanges: { battery: false, heartRate: false } });
+    for (const id of ["battery", "heartRate"]) {
+      const before = shown.find((l) => l.id === id)!, after = hidden.find((l) => l.id === id)!;
+      expect(before.present).toBe(true);
+      expect(after.visible).toBe(false);
+      expect(after.present).toBe(true);
+      expect(after.bounds).toEqual(before.bounds);
+    }
+  });
 });

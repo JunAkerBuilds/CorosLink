@@ -8,10 +8,11 @@ import { chartPageFillers, chartSourceOf } from "../watchface/engine/chartReadou
 import { NATIVE_DATA_BY_ID, NATIVE_DATA_FIELDS, nativeFieldKeys, nativeStatePositionKey } from "../watchface/watchfaceNativeCatalog";
 import {
   addAnalogHands, addAnimation, addBatteryField, addChartPageField, addDatePart, addImage, addNativeField, addNegativeSign, addSeconds, addShape,
-  addStatusField, canRemove, chartPagesOnFace, freeSpot, HOUR_HAND_LAYER, imageLayerId, libraryItems, NEGATIVE_SIGN_LAYER, newImage, newShape,
+  addStatusField, canRemove, chartPagesOnFace, deleteLayer, freeSpot, HOUR_HAND_LAYER, imageLayerId, libraryItems, NEGATIVE_SIGN_LAYER, newImage, newShape,
   removeLayer, restoreTemplateLayer, searchLibrary, shapeLayerId, type LibraryContext,
 } from "./studioLibrary";
 import { faceLayers, groupOf, setVisible, type FaceSource } from "./studioFace";
+import { isLocked, setLocked } from "./studioEdits";
 import { deriveDesignDetails } from "../watchface/engine/watchfaceCompose";
 import { resolveWatchfaceModeDesign } from "../watchface/engine/watchfaceDisplayModes";
 import { panelOf } from "./studioEdits";
@@ -372,6 +373,37 @@ describe("Add → Artwork, time and date on a blank face", () => {
     }
     expect(design.artworkLayerOrder).toEqual([]);
     expect(canRemove(design, layerOf(design, "hours")!, built(design))).toBe(false);
+  });
+
+  // CorosLink must-not-regress: Delete unlocks a locked layer it deletes; template parts don't delete.
+  it("deletes artwork and unlocks it on the way", () => {
+    let design = blank();
+    const rect = newShape(design, "rect", built(design));
+    design = addShape(design, rect);
+    const layer = layerOf(design, shapeLayerId(rect.id))!;
+    design = setLocked(design, layer, true);
+    expect(isLocked(design, layer)).toBe(true);
+    const next = deleteLayer(design, layer, built(design));
+    expect(layerOf(next, shapeLayerId(rect.id))).toBeUndefined();
+    expect(next.lockedLayerIds).not.toContain(layer.id);
+  });
+
+  it("deletes live data from Add, minimum and maximum together", () => {
+    let design = addNativeField(blank(), "sleep_score", built(blank()));
+    design = addNativeField(design, "weather_temp_min", built(design));
+    const sleep = layerOf(design, "native:sleep_score")!;
+    expect(canRemove(design, sleep, built(design))).toBe(true);
+    design = deleteLayer(setLocked(design, sleep, true), sleep, built(design));
+    expect(layerOf(design, "native:sleep_score")).toBeUndefined();
+    expect(design.lockedLayerIds ?? []).not.toContain("native:sleep_score");
+    design = deleteLayer(design, layerOf(design, "native:weather_temp_max")!, built(design));
+    expect(design.nativeData?.weather_temp_min).toBeUndefined();
+    expect(design.nativeData?.weather_temp_max).toBeUndefined();
+  });
+
+  it("leaves a template part to its eye", () => {
+    const design = setLocked(blank(), layerOf(blank(), "hours")!, true);
+    expect(deleteLayer(design, layerOf(design, "hours")!, built(design))).toBe(design);
   });
 
   it("adds seconds from the minute digits, at half size, under the minutes", () => {

@@ -120,7 +120,7 @@ export function LayerInspector(p: LayerInspectorProps) {
               <button type="button" role="menuitem" onClick={() => edit((x) => setLocked(x, layer, !locked))}><Icon name="lock" size={16} />{locked ? "Unlock" : "Lock"}</button>
               {layer.canHide && layer.visible ? <button type="button" role="menuitem" onClick={p.onHide}><Icon name="eyeOff" size={16} />Hide from the face</button> : null}
               {layer.canHide && !layer.visible ? <button type="button" role="menuitem" onClick={p.onShow}><Icon name="eye" size={16} />Show on the face</button> : null}
-              {p.onRemove ? <button type="button" role="menuitem" onClick={p.onRemove}><Icon name="trash" size={16} />{layer.id === "seconds" ? "Remove seconds" : "Remove from the face"}</button> : null}
+              {p.onRemove ? <button type="button" role="menuitem" onClick={p.onRemove}><Icon name="trash" size={16} />{locked ? "Unlock and delete" : layer.id === "seconds" ? "Remove seconds" : "Delete"}</button> : null}
             </div>
           ) : null}
         </div>

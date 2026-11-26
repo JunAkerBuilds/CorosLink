@@ -135,34 +135,6 @@ export interface WeekSummary {
 /** A week's recorded load that fills the bar. */
 export const LOAD_BAR_FULL = 500;
 
-const sum = (list: readonly PlacedEntry[], pick: (e: PlacedEntry) => number | undefined) =>
-  list.reduce((total, e) => total + (pick(e) ?? 0), 0);
-
-/**
- * The totals column for one week: the account's own totals, adjusted for workouts saved here
- * (`added`) and the planned entries they replaced.
- * Running distance counts what was recorded once anything is; before that, what is planned.
- */
-export function weekSummary(base: WeekBase | undefined, added: readonly PlacedEntry[], replaced: readonly PlacedEntry[]): WeekSummary {
-  const isRun = (e: PlacedEntry) => e.sport === "run";
-  const runDelta = sum(added.filter(isRun), (e) => e.metres) - sum(replaced.filter(isRun), (e) => e.metres);
-  const loadDelta = sum(added, (e) => e.load) - sum(replaced, (e) => e.load);
-  const recorded = base != null && base.timeSeconds != null;
-
-  const run = recorded ? base.runMetres : Math.max(0, (base?.runMetres ?? 0) + runDelta);
-  const load = base?.load ?? null;
-  let plannedLoad = base?.plannedLoad ?? null;
-  if (added.length > 0 || replaced.length > 0) plannedLoad = Math.max(0, (plannedLoad ?? load ?? 0) + loadDelta);
-
-  return {
-    timeSeconds: base?.timeSeconds ?? null,
-    runMetres: base == null && run === 0 ? null : run,
-    load,
-    plannedLoad,
-    bar: load == null ? 0 : Math.max(0, Math.min(100, Math.round((load / LOAD_BAR_FULL) * 100))),
-  };
-}
-
 /** Hours and minutes of a week's time, as the column prints it (4:32). */
 export function hoursMinutes(seconds: number): string {
   const minutes = Math.floor(Math.max(0, seconds) / 60);

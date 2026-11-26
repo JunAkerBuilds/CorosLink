@@ -11,7 +11,7 @@ import { nudge, panelOf, replaceAsset, restoreAsset, setAsset, setBatteryStates,
 import { rowOf, rowsOf, setVisible, spotsOf, type Design, type EditorLayer, type FaceSource } from "./studioFace";
 import {
   barometerPieces, iconOffsetOf, isSlotPart, nextSlotPreview, setIconOffset, setSlotPreview, setSlotType, setValueTint, showSlot, SLOT_STARTER, slotListed,
-  SLOT_LABEL, slotImagePaths, slotOnFace, slotPreview, slotSelector, slotShared, slotTypes, valueTintOf,
+  SLOT_LABEL, slotIconGrip, slotImagePaths, slotOnFace, slotPreview, slotSelector, slotShared, slotTypes, valueTintOf,
 } from "./studioSlot";
 
 /**
@@ -307,6 +307,20 @@ describe("A type's icon", () => {
     expect(setIconOffset({ ...design, lockedLayerIds: ["complication"] }, "heartRate", 5, 5)).toMatchObject({ controlIconOffsets: { heartRate: { dx: -24, dy: 8 } } });
   });
 
+  it("gives the previewed type's icon a grip on the face that follows its offset, none when locked", () => {
+    const details = template({ slot: true });
+    const design = setSlotPreview(makeDefaultDesign(), "heartRate");
+    const grip = (d: Design) => slotIconGrip(details, d, view(details, d).types);
+    // The template's heart icon: 40 px at the slot's origin.
+    expect(grip(design)).toEqual({ id: "heartRate", label: "Heart rate icon", bounds: { x0: 300, y0: 560, x1: 340, y1: 600 } });
+    const moved = setIconOffset(design, "heartRate", 30, -10);
+    expect(grip(moved)?.bounds).toEqual({ x0: 330, y0: 550, x1: 370, y1: 590 });
+    // Moving the slot carries the grip with it.
+    expect(grip(nudge(design, view(details, design).slot, 5, 7))?.bounds).toMatchObject({ x0: 305, y0: 567 });
+    expect(grip({ ...design, lockedLayerIds: ["complication"] })).toBeNull();
+    expect(grip(setSlotPreview(design, "steps"))?.id).toBe("steps");
+  });
+
   it("moving the slot moves icon and value together, by its one origin", () => {
     const details = template({ slot: true });
     const v = view(details, makeDefaultDesign());
@@ -500,8 +514,7 @@ describe("Layers and older faces", () => {
     expect(v.type("heartRate").icon).toBe("custom");
     expect(iconOffsetOf(saved, "steps")).toEqual({ dx: 4, dy: 0 });
     for (const config of built(details, saved)) { expect(controlKeys(config, "battery")).toEqual([]); expect(controlKeys(config, "sunrise")).toEqual([]); }
-    // Reading the slot changes nothing in the design; a new switch wins over the old flag.
-    expect(JSON.stringify(saved)).toBe(JSON.stringify({ ...saved }));
+    // A new switch wins over the old flag.
     expect(on(view(details, setSlotType(saved, details, "current", "sunrise", true)).types)).toEqual(["heartRate", "steps", "sunrise"]);
   });
 });

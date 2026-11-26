@@ -37,6 +37,18 @@ describe("studio drag isolation", () => {
     expect(design.nativeData?.heart_rate?.enabled).toBe(true);
   });
 
+  it("lifts only the chart's edited readout and graph, leaving the page's other readouts on the face", () => {
+    const design = {
+      ...base(),
+      nativeData: { chart: { enabled: true, x: 300, y: 300, scale: 1, chartSource: "chart_kcal",
+        readouts: { chart_heart: { enabled: true, x: 100, y: 300, scale: 1 }, chart_step: { enabled: true, x: 300, y: 100, scale: 1 } } } },
+    } as unknown as ReturnType<typeof makeDefaultDesign>;
+    const chart = withoutLayers(design, [layer({ id: "native:chart", nativeDataId: "chart" })]).nativeData!.chart!;
+    expect(chart.enabled).toBe(true);
+    expect(Object.keys(chart.readouts ?? {})).toEqual(["chart_heart", "chart_step"]);
+    for (const part of ["icon", "value", "plot"] as const) expect(chart.parts?.[part]?.enabled).toBe(false);
+  });
+
   it("keys drag frames by the layers, whatever order they were picked in", () => {
     expect(dragKey(["b", "a"], "current", 800)).toBe(dragKey(["a", "b"], "current", 800));
     expect(dragKey(["a"], "current", 800)).not.toBe(dragKey(["a"], "aod", 800));

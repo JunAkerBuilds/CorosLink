@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import golden from "./fixtures/activityScreensGolden.json";
-import { buildLayout, decodePages, decodeSports, READ, WRITE } from "./activityScreensProtocol";
+import { buildLayout, decodePages, decodeSports } from "./activityScreensProtocol";
 import { ActivityScreens, type Device } from "./activityScreens";
 
 // Made by CorosLink's own codec (corosActivityScreenProtocol.ts at c2ff5110) from the same pages: Run, four pages of
@@ -36,7 +36,6 @@ describe("activity pages protocol", () => {
     expect(() => decodeSports(Buffer.from([0, 4, 29, 64]))).not.toThrow();
     expect(decodeSports(Buffer.from([0, 4, 29, 64])).map((s) => s.name)).toEqual(["Run", "Bike"]);
     expect(() => decodeSports(Buffer.from([0, 0]))).toThrow();
-    expect([READ, WRITE]).toEqual([0x9e, 0x9f]);
   });
 });
 

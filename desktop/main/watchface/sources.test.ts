@@ -10,8 +10,6 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { encodePng } from "../../watchface/compiler/png";
 import { compileWatchface } from "../../watchface/compiler/compiler";
-import { inspectTemplate } from "../../watchface/archive/template";
-import { recoverCompiledCorosWatchface } from "../../watchface/recoverBin";
 import { readZip } from "../../watchface/zipRead";
 import { createStoreZip } from "../../watchface/zipStore";
 import type { Sealer } from "../secrets";
@@ -303,10 +301,6 @@ describe("opening an official face", () => {
     expect(project).toMatchObject({ name: "Dusk", firmwareType: "COROS W332", startedFrom: "template" });
     const opened = await studio.open(project.projectId);
     expect(opened.template.resolutionDirectories).toContain("watchface_416x416");
-  });
-  it("is a BIN CorosLink's recovery reads back", () => {
-    const recovered = recoverCompiledCorosWatchface(compiled(), "Dusk");
-    expect(inspectTemplate(recovered.zip).resolutionDirectories).toEqual(["watchface_416x416"]);
   });
 });
 

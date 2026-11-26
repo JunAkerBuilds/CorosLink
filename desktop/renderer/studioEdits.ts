@@ -14,7 +14,7 @@ import {
 } from "../watchface/engine/watchfaceStudio";
 import { createWatchfaceStroke, resolveWatchfaceLayerStrokes } from "../watchface/engine/watchfaceEditorStrokes";
 import { createWatchfaceShadowEffect, resolveWatchfaceLayerEffects } from "../watchface/engine/watchfaceEditorEffects";
-import { nativeComponentFontSize, nativeFontSizePart, nativeParts, nativeScaleForFontSize, withNativeFont } from "../watchface/engine/nativeDataParts";
+import { nativeComponentFontSize, nativeFontSizePart, nativePart, nativeParts, nativeScaleForFontSize, withNativeFont } from "../watchface/engine/nativeDataParts";
 import { clampAnimationDelay } from "../watchface/engine/watchfaceAnimation";
 import type { Design, EditorLayer } from "./studioFace";
 
@@ -459,6 +459,28 @@ export function setPart(design: Design, layer: EditorLayer, part: CorosWatchface
   const n = nativeOf(design, layer);
   if (!n) return design;
   return setNative(design, layer, { parts: { ...n.parts, [part]: { ...n.parts?.[part], ...patch } } });
+}
+
+/**
+ * Where a native field's icon sits on the face, in master pixels, for dragging it apart from its number (the
+ * part's Shift X / Y). Null when the field shows no icon, or nothing beside it that the icon could move against.
+ */
+export function nativeIconBox(design: Design, layer: EditorLayer): { x0: number; y0: number; x1: number; y1: number } | null {
+  const n = nativeOf(design, layer), id = layer.nativeDataId;
+  if (!n || !id || isLocked(design, layer)) return null;
+  const names = nativeParts(id, n), icon = nativePart(id, n, "icon");
+  if (!names.includes("icon") || !icon.enabled) return null;
+  if (!names.some((p) => (p === "value" || p === "states") && nativePart(id, n, p).enabled)) return null;
+  const x0 = n.x + icon.x * n.scale, y0 = n.y + icon.y * n.scale;
+  return { x0, y0, x1: x0 + icon.width * n.scale, y1: y0 + icon.height * n.scale };
+}
+
+/** Moves a native field's icon by master pixels on the face; the number and the field stay put. */
+export function moveNativeIcon(design: Design, layer: EditorLayer, dx: number, dy: number): Design {
+  const n = nativeOf(design, layer);
+  if (!n || !layer.nativeDataId || isLocked(design, layer) || (!Math.round(dx) && !Math.round(dy))) return design;
+  const icon = nativePart(layer.nativeDataId, n, "icon"), k = n.scale || 1;
+  return setPart(design, layer, "icon", { x: Math.round(icon.x + dx / k), y: Math.round(icon.y + dy / k) });
 }
 
 // ───── Progress (the calories and exercise layers carry their arc and bar) ─────

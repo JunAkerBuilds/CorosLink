@@ -35,7 +35,7 @@ import { WATCHFACE_STATUS_GROUPS, watchfaceStatusGroupOf } from "../watchface/en
 import type { CorosWatchfaceDesignState as Design } from "../watchface/types";
 import { deriveEditorLayers, type EditorLayer } from "../watchface/engine/watchfaceEditorModel";
 import type { WatchfacePreviewMode as Mode } from "../watchface/engine/watchfaceStudio";
-import { faceLayers, groupOf, type LayerGroup } from "./studioFace";
+import { faceLayers, groupOf, type EditorLayer as Row, type LayerGroup } from "./studioFace";
 import { isSlotPart, showSlot, SLOT_LABEL, SLOT_LAYER } from "./studioSlot";
 
 type Box = { x0: number; y0: number; x1: number; y1: number };
@@ -645,9 +645,24 @@ export function addAnimation(design: Design, imported: { frames: string[]; width
 
 // ───── Taking things off again ─────
 
-/** Whether Remove applies: artwork (it is deleted) and the seconds and date parts Studio added. Everything else hides. */
+/** The live data fields a delete takes off: minimum and maximum temperature go together (the watch draws neither alone). */
+function nativeIdsOf(design: Design, layer: EditorLayer): string[] {
+  const id = layer.nativeDataId;
+  // The chart has its own pages to see to (its panel hides it).
+  if (!id || id === "chart" || !design.nativeData?.[id]) return [];
+  return id === "weather_temp_min" || id === "weather_temp_max" ? ["weather_temp_min", "weather_temp_max"] : [id];
+}
+
+/** Whether Remove applies: artwork, live data from Add, and the seconds and date parts Studio added. Everything else hides. */
 export function canRemove(design: Design, layer: EditorLayer, ctx: LibraryContext): boolean {
-  return !!layer.spriteId || !!layer.backgroundElementId || addedByStudio(design, layer.id, ctx);
+  return !!layer.spriteId || !!layer.backgroundElementId || nativeIdsOf(design, layer).length > 0 || addedByStudio(design, layer.id, ctx);
+}
+
+/** Removes a layer the way the Layers row's trash and the Delete key do: unlocked first (CorosLink's "Unlock and delete"). */
+export function deleteLayer(design: Design, layer: Row, ctx: LibraryContext): Design {
+  if (!canRemove(design, layer, ctx)) return design;
+  const ids = layer.spot ? layer.spot.states.map((s) => s.layer.id) : [layer.id];
+  return removeLayer(design.lockedLayerIds ? { ...design, lockedLayerIds: design.lockedLayerIds.filter((id) => !ids.includes(id)) } : design, layer, ctx);
 }
 
 export function removeLayer(design: Design, layer: EditorLayer, ctx: LibraryContext): Design {
@@ -658,6 +673,12 @@ export function removeLayer(design: Design, layer: EditorLayer, ctx: LibraryCont
   if (layer.backgroundElementId) {
     return { ...design, backgroundElements: (design.backgroundElements ?? []).filter((e) => e.id !== layer.backgroundElementId),
       artworkLayerOrder: design.artworkLayerOrder?.filter((id) => id !== layer.id), lockedLayerIds: design.lockedLayerIds?.filter((id) => id !== layer.id) };
+  }
+  const native = nativeIdsOf(design, layer);
+  if (native.length) {
+    const nativeData = { ...design.nativeData };
+    for (const id of native) delete nativeData[id];
+    return { ...design, nativeData, lockedLayerIds: design.lockedLayerIds?.filter((id) => !native.some((n) => id === `native:${n}`)) };
   }
   if (!addedByStudio(design, layer.id, ctx)) return design;
   return layer.id === "seconds" ? removeSeconds(design) : removeDatePart(design, layer.id as WatchfaceDatePartId);

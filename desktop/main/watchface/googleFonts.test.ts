@@ -4,7 +4,6 @@ import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { uploadsToCoros } from "../dataMode";
 import {
   BUILT_IN_GOOGLE_FAMILIES, GOOGLE_CSS_URL, GOOGLE_FAMILY_FRESH_MS, GOOGLE_LIST_FRESH_MS, GOOGLE_LIST_URL, GoogleFonts, googleCssUrl,
   MAX_GOOGLE_FONT_FILE, parseGoogleCss, parseGoogleFontList, trustedFontFile,
@@ -257,10 +256,6 @@ describe("in the app", () => {
     const never = new GoogleFonts(folder(), { fetch: offline });
     expect(await never.resolve(["Oswald", "Arial"])).toEqual({ loaded: [], failed: [{ family: "Oswald", message: "Google Fonts couldn't be reached, and Oswald isn't saved on this computer yet." }] });
     expect(await never.resolve("Oswald")).toEqual({ loaded: [], failed: [] });
-  });
-
-  it("only reads from Google, so Local-Only Mode lets it through", () => {
-    for (const url of [GOOGLE_LIST_URL, `${GOOGLE_CSS_URL}?family=Oswald`, "https://fonts.gstatic.com/s/oswald/v57/lat.woff2"]) expect(uploadsToCoros(new URL(url), "GET")).toBe(false);
   });
 
   it("answers Studio's routes: the list, a family, its files and resolve", async () => {

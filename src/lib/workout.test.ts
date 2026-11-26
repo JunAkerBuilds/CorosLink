@@ -1,8 +1,8 @@
 import { describe as suite, expect, it } from "vitest";
 import {
-  addItem, canMove, convertLength, defaultTarget, describe, expand, findItem, formatClock, formatLength, kindLabel, lengthUnit,
-  locate, moveItem, moveNear, moveTo, newRepeat, newStep, paceIntensity, parseClock, parseLength, removeItem, repeatTotals,
-  segments, setRepeatCount, shapePaths, shapeTicks, stepIntensity, stepMetres, stepPace, stepSeconds, totals, ungroup, updateStep,
+  addItem, canMove, defaultTarget, describe, expand, findItem, formatClock,
+  locate, moveItem, moveNear, moveTo, newRepeat, newStep, paceIntensity, parseClock, removeItem,
+  segments, setRepeatCount, shapePaths, stepIntensity, stepMetres, stepPace, stepSeconds, totals, updateStep,
   type Pacing, type RepeatBlock, type StepKind, type StepLength, type StepTarget, type WorkoutItem, type WorkoutStep,
 } from "./workout";
 
@@ -84,11 +84,6 @@ suite("totals", () => {
     expect(t.load).toBe(104);
     expect(describe(cruise(), pacing)).toBe("9.60 km · 49:56");
   });
-  it("totals a repeat block over all its rounds: 5.60 km, 27:56", () => {
-    const t = repeatTotals(cruise()[1] as RepeatBlock, pacing);
-    expect(t.metres).toBe(5600);
-    expect(formatClock(t.seconds)).toBe("27:56");
-  });
   it("follows the repeat count", () => {
     const six = setRepeatCount(cruise(), "rep", 6);
     expect(totals(six, pacing).metres).toBe(4000 + 6 * 1400);
@@ -139,11 +134,6 @@ suite("shape", () => {
     const thin = shapePaths([{ bucket: "hard", seconds: 1, intensity: 2 }, { bucket: "easy", seconds: 9999, intensity: 0.4 }]);
     expect(thin.hard).toBe("M0.0 0.0h0.5v120.0h-0.5z");
   });
-  it("prints the canvas ticks", () => {
-    expect(shapeTicks(cruise(), pacing).map(formatClock)).toEqual(["0:00", "11:00", "38:56", "49:56"]);
-    expect(shapeTicks(cruise().slice(0, 2), pacing).map(formatClock)).toEqual(["0:00", "38:56"]);
-    expect(shapeTicks([], pacing)).toEqual([0]);
-  });
 });
 
 suite("edits", () => {
@@ -175,7 +165,7 @@ suite("edits", () => {
     const before = cruise();
     const copy = JSON.stringify(before);
     removeItem(before, "rec"); moveItem(before, "wu", 1); addItem(before, step("n", "rest", secs(1)), "rep");
-    setRepeatCount(before, "rep", 9); ungroup(before, "rep"); updateStep(before, "rec", { kind: "rest" }); moveNear(before, "cd", "run", false);
+    setRepeatCount(before, "rep", 9); updateStep(before, "rec", { kind: "rest" }); moveNear(before, "cd", "run", false);
     expect(JSON.stringify(before)).toBe(copy);
   });
   it("updates a step in place", () => {
@@ -192,10 +182,6 @@ suite("edits", () => {
     expect(count(500)).toBe(99);
     expect(count(NaN)).toBe(1);
   });
-  it("ungroups a block where it stood, once", () => {
-    expect(ids(ungroup(cruise(), "rep"))).toBe("wu run rec cd");
-    expect(ids(ungroup(cruise(), "wu"))).toBe("wu rep[run,rec] cd");
-  });
 
   it("moves a step up and down inside a block", () => {
     expect(ids(moveItem(cruise(), "rec", -1))).toBe("wu rep[rec,run] cd");
@@ -210,7 +196,8 @@ suite("edits", () => {
     expect(ids(moveItem(cruise(), "cd", -1))).toBe("wu rep[run,rec,cd]");
   });
   it("swaps plain neighbours and moves blocks whole", () => {
-    const flat = ungroup(cruise(), "rep");
+    const block = cruise()[1] as RepeatBlock;
+    const flat = [cruise()[0], ...block.steps, cruise()[2]];
     expect(ids(moveItem(flat, "run", -1))).toBe("run wu rec cd");
     expect(ids(moveItem(flat, "run", 1))).toBe("wu rec run cd");
     expect(ids(moveItem(cruise(), "rep", -1))).toBe("rep[run,rec] wu cd");
@@ -276,47 +263,9 @@ suite("units and text", () => {
   it("rejects what is not a time", () => {
     for (const bad of ["", "abc", "4:75", "1:2:3:4", "-3", "4:", ":30", "4:3x"]) expect(parseClock(bad)).toBeNull();
   });
-  it("formats and parses lengths in each unit", () => {
-    expect(formatLength(km(2))).toBe("2.00");
-    expect(formatLength(m(400))).toBe("400");
-    expect(formatLength(secs(90))).toBe("1:30");
-    expect(parseLength("2.5", "km")).toEqual({ type: "distance", metres: 2500, unit: "km" });
-    expect(parseLength("2,5", "km")).toEqual({ type: "distance", metres: 2500, unit: "km" });
-    expect(parseLength("400", "m")).toEqual({ type: "distance", metres: 400, unit: "m" });
-    expect(parseLength("1:30", "min")).toEqual({ type: "time", seconds: 90 });
-    expect(parseLength("2", "min")).toEqual({ type: "time", seconds: 120 });
-  });
-  it("rejects empty, zero, negative and absurd lengths", () => {
-    for (const bad of ["", "0", "-1", "x", "1e3", "2000"]) expect(parseLength(bad, "km")).toBeNull();
-    expect(parseLength("0:00", "min")).toBeNull();
-    expect(parseLength("30:00:00", "min")).toBeNull();
-  });
-  it("names the unit of a length", () => {
-    expect(lengthUnit(km(1))).toBe("km");
-    expect(lengthUnit(m(1))).toBe("m");
-    expect(lengthUnit(secs(1))).toBe("min");
-  });
-  it("converts a step between distance and time by its target", () => {
-    const run = step("a", "work", km(1), { type: "pace", fast: 270, slow: 280 });
-    expect(convertLength(run, "min", pacing)).toEqual({ type: "time", seconds: 275 });
-    expect(convertLength(run, "m", pacing)).toEqual({ type: "distance", metres: 1000, unit: "m" });
-    const timed = { ...run, length: secs(275) };
-    expect(convertLength(timed, "km", pacing)).toEqual({ type: "distance", metres: 1000, unit: "km" });
-    expect(convertLength(timed, "min", pacing)).toEqual({ type: "time", seconds: 275 });
-    expect(convertLength(step("r", "rest", secs(60)), "m", pacing)).toEqual({ type: "distance", metres: 170, unit: "m" });
-  });
 });
 
 suite("new steps", () => {
-  it("labels kinds by sport", () => {
-    expect(kindLabel("work", "run")).toBe("Run");
-    expect(kindLabel("work", "ride")).toBe("Ride");
-    expect(kindLabel("work", "strength")).toBe("Work");
-    expect(kindLabel("warmup", "swim")).toBe("Warm up");
-    expect(kindLabel("cooldown", "run")).toBe("Cool down");
-    expect(kindLabel("recovery", "run")).toBe("Recovery");
-    expect(kindLabel("rest", "run")).toBe("Rest");
-  });
   it("makes the canvas's steps by default", () => {
     expect(newStep("a", "work", "run", pacing)).toMatchObject({ length: km(1), target: { type: "pace", fast: 270, slow: 280 } });
     expect(newStep("a", "recovery", "run", pacing)).toMatchObject({ length: m(400), target: { type: "none" } });
@@ -326,7 +275,7 @@ suite("new steps", () => {
     const block = newRepeat(["b", "b1", "b2"], "run", pacing);
     expect(block.count).toBe(4);
     expect(block.steps.map((s) => s.kind)).toEqual(["work", "recovery"]);
-    expect(formatClock(repeatTotals(block, pacing).seconds)).toBe("27:56");
+    expect(formatClock(totals([block], pacing).seconds)).toBe("27:56");
   });
   it("picks a target when the target type changes", () => {
     const run = step("a", "work", km(1));

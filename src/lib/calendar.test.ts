@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays, addMonths, hoursMinutes, isDayKey, isMonthKey, mondayOf, monthOf, monthOfWeek, monthWeeks, occurrences,
-  dayMonth, longDay, monthTitle, placeEntries, shortDay, weekDays, weekInMonth, weekSummary, weekTitle, weekdayName, type PlacedEntry,
+  dayMonth, longDay, monthTitle, placeEntries, shortDay, weekDays, weekInMonth, weekTitle, weekdayName, type PlacedEntry,
 } from "./calendar";
 
 describe("days and months", () => {
@@ -138,55 +138,6 @@ describe("placing entries", () => {
 });
 
 describe("week totals", () => {
-  it("passes the account's totals through", () => {
-    expect(weekSummary({ timeSeconds: 16320, runMetres: 28100, load: 455, plannedLoad: null }, [], []))
-      .toEqual({ timeSeconds: 16320, runMetres: 28100, load: 455, plannedLoad: null, bar: 91 });
-    expect(weekSummary({ timeSeconds: 10680, runMetres: 14100, load: 253, plannedLoad: 463 }, [], []).bar).toBe(51);
-    expect(weekSummary({ timeSeconds: 18300, runMetres: 30100, load: 470, plannedLoad: null }, [], []).bar).toBe(94);
-  });
-  it("shows no bar for a week that is only planned", () => {
-    expect(weekSummary({ timeSeconds: null, runMetres: 36000, load: null, plannedLoad: 480 }, [], []))
-      .toEqual({ timeSeconds: null, runMetres: 36000, load: null, plannedLoad: 480, bar: 0 });
-  });
-  it("is empty for a week with nothing", () => {
-    expect(weekSummary(undefined, [], [])).toEqual({ timeSeconds: null, runMetres: null, load: null, plannedLoad: null, bar: 0 });
-  });
-  it("swaps a replaced plan for the saved workout in a planned week", () => {
-    const s = weekSummary(
-      { timeSeconds: null, runMetres: 36000, load: null, plannedLoad: 480 },
-      [entry("s26", "2026-11-26", "planned", "browser", "run", 9600, 104)],
-      [entry("p26", "2026-11-26", "planned", "sample", "run", 10000, 110)],
-    );
-    expect(s.runMetres).toBe(35600);
-    expect(s.plannedLoad).toBe(474);
-    expect(s.bar).toBe(0);
-  });
-  it("leaves recorded running alone once the week has started, but adds to the plan", () => {
-    const s = weekSummary(
-      { timeSeconds: 10680, runMetres: 14100, load: 253, plannedLoad: 463 },
-      [entry("s21", "2026-11-21", "planned", "browser", "run", 9600, 104)],
-      [entry("p21", "2026-11-21", "planned", "sample", "strength", 0, 44)],
-    );
-    expect(s.runMetres).toBe(14100);
-    expect(s.load).toBe(253);
-    expect(s.plannedLoad).toBe(523);
-  });
-  it("starts a plan on top of what is done when a finished week gets a saved workout", () => {
-    const s = weekSummary({ timeSeconds: 16320, runMetres: 28100, load: 455, plannedLoad: null }, [entry("s", "2026-10-30", "planned", "browser", "run", 5000, 50)], []);
-    expect(s.plannedLoad).toBe(505);
-    expect(s.load).toBe(455);
-  });
-  it("totals saved workouts in a week the account knows nothing about", () => {
-    const s = weekSummary(undefined, [
-      entry("a", "2027-03-02", "planned", "browser", "run", 9600, 104),
-      entry("b", "2027-03-04", "planned", "browser", "ride", 25000, 62),
-      entry("c", "2027-03-05", "planned", "browser", "strength"),
-    ], []);
-    expect(s).toEqual({ timeSeconds: null, runMetres: 9600, load: null, plannedLoad: 166, bar: 0 });
-  });
-  it("caps the bar at full", () => {
-    expect(weekSummary({ timeSeconds: 1, runMetres: 0, load: 900, plannedLoad: null }, [], []).bar).toBe(100);
-  });
   it("prints hours and minutes", () => {
     expect(hoursMinutes(16320)).toBe("4:32");
     expect(hoursMinutes(10694)).toBe("2:58");

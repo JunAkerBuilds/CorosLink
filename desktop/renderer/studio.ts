@@ -35,7 +35,10 @@ const project = (id: string) => `/projects/${encodeURIComponent(id)}`;
 export const listTemplates = (watch: string) => get<{ savedAt: string; templates: StudioTemplate[] }>(`/templates?watch=${encodeURIComponent(watch)}`);
 export const templatePicture = (watch: string, id: string) => `${BASE}/templates/${encodeURIComponent(id)}/picture?watch=${encodeURIComponent(watch)}`;
 
-export const listProjects = () => get<{ projects: ProjectSummary[] }>("/projects").then((b) => b.projects);
+let lastProjects: ProjectSummary[] | null = null;
+/** The list as Studio last got it, so coming back shows it at once while listProjects refreshes it. */
+export const knownProjects = () => lastProjects;
+export const listProjects = () => get<{ projects: ProjectSummary[] }>("/projects").then((b) => (lastProjects = b.projects));
 export const openProject = (id: string) => get<{ project: StoredProject; template: TemplateInfo }>(project(id));
 export const projectPicture = (p: ProjectSummary) => `${BASE}${project(p.projectId)}/preview?at=${encodeURIComponent(p.previewUpdatedAt ?? p.updatedAt)}`;
 export const createProject = (body: { watch: string; templateId: string; blank?: boolean; name?: string; design: CorosWatchfaceDesignState }) =>

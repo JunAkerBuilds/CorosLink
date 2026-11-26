@@ -43,7 +43,7 @@ describe("synced calendar entries", () => {
   });
 
   it("carries a done entry's distance and time, for how much of a plan it did", () => {
-    expect(entries.find((e) => e.id === "synced-476000000000001")).toMatchObject({ metres: expect.any(Number), seconds: expect.any(Number) });
+    expect(entries.find((e) => e.id === "synced-476000000000001")).toMatchObject({ metres: 6100, seconds: 2028 });
   });
 
   it("maps every one of the phone's sports: runs are runs, and walks, hikes, skiing and rowing are not", () => {

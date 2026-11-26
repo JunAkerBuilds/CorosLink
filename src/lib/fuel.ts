@@ -183,11 +183,6 @@ export function copyFoods(from: DayLog, into: DayLog, newId: () => string): DayL
   return { ...into, meals };
 }
 
-/** A food from the built-in list, logged at `amount` grams or millilitres. */
-export function logFood(item: FoodItem, amount: number, id: string): LoggedFood {
-  return { id, name: item.name, unit: item.liquid ? "ml" : "g", amount, per: { ...item.per100 } };
-}
-
 // MARK: Words
 
 /** Foods whose name holds every word typed, names that start with the query first. */

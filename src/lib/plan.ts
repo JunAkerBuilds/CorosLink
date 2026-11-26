@@ -7,8 +7,8 @@
  * out from the plan's start date, and a calendar occurrence remembers where this app wrote it.
  */
 import type { HubSport } from "@/data/hub";
-import { defaultTarget, docReady, docToLegacy, docTotals, docUnwired, newDoc, newStep, pacingFor, sportLabel, targetsFor, type BuilderDoc } from "@/lib/builder";
-import { addDays, dayMonth, isDayKey, shortDay } from "@/lib/calendar";
+import { docReady, docToLegacy, docTotals, docUnwired, pacingFor, sportLabel, type BuilderDoc } from "@/lib/builder";
+import { addDays, isDayKey, shortDay } from "@/lib/calendar";
 import { thousands } from "@/lib/format";
 import { totals, type Pacing, type Sport } from "@/lib/workout";
 
@@ -327,21 +327,6 @@ export function planEntryFromWorkout(workout: PlanWorkout, weekIndex: number, da
   return { id: env.newId("entry"), kind: "workout", weekIndex, dayIndex, sortOrder: 0, title: workout.name, workout: structuredClone(workout), ...(programId ? { programId } : {}) };
 }
 
-/**
- * "Create a quick workout": one training step of so many minutes. A sport whose training can't be timed
- * (climbing counts routes) keeps its usual step, and the minutes are recorded on the entry instead.
- */
-export function quickPlanEntry(name: string, sport: HubSport, minutes: number, stepId: string, env: PlanEnv = planEnv): TrainingPlanEntry {
-  const seconds = Math.max(1, Math.round(minutes) || 1) * 60;
-  const shell = newDoc(sport, [stepId, stepId, stepId]);
-  let step = newStep(stepId, "training", shell);
-  const timed = targetsFor(sport, step).includes("time");
-  if (timed) step = { ...step, ...defaultTarget("time", sport, "training"), seconds, ...(step.sets !== undefined ? { sets: 1, restSeconds: 0, name: name.trim() } : {}) };
-  const doc: BuilderDoc = { ...shell, name: name.trim(), items: [step] };
-  const entry = planEntryFromWorkout({ key: `local:${stepId}`, name: name.trim(), sport, doc }, 0, undefined, undefined, env);
-  return timed ? entry : { ...entry, plannedDurationSeconds: seconds };
-}
-
 /** Scheduled workouts the calendar would refuse as they are, with the reason: steps missing a value, or a target this app can't write to COROS yet. */
 export function calendarBlockedEntries(plan: TrainingPlanDocument, toCoros: boolean): { entry: TrainingPlanEntry; why: string }[] {
   const out: { entry: TrainingPlanEntry; why: string }[] = [];
@@ -605,16 +590,6 @@ export function entryMeta(entry: TrainingPlanEntry, pacing: PlanPacing = null): 
   else if (m.strengthSets) parts.push(count(m.strengthSets, "set", "sets"));
   if (m.trainingLoad) parts.push(thousands(m.trainingLoad));
   return parts.join(" · ") || (entry.workout ? sportLabel(entry.workout.sport) : "");
-}
-
-/** The line under the plan's name: "8 weeks · 32 workouts · 2,168 estimated load · start 30 Nov". */
-export function planFactsLine(plan: TrainingPlanDocument, summary: TrainingPlanSummary): string {
-  const start = planDate(plan.startDate);
-  return [
-    count(summary.weekCount, "week", "weeks"), count(summary.workouts, "workout", "workouts"),
-    ...(summary.trainingLoad ? [`${thousands(summary.trainingLoad)} estimated load`] : []),
-    ...(start ? [`start ${dayMonth(start)}`] : []),
-  ].join(" · ");
 }
 
 /* ───────────── The Plans index ───────────── */

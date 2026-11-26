@@ -20,15 +20,15 @@ import {
   type Design, type EditorLayer, type FaceSource, type Mode, type SpotChoice,
 } from "../studioFace";
 import { currentGesture } from "../studioGesture";
-import { canMove, canResize, isLocked, nudge, readFrames, readPicture, resizeBy } from "../studioEdits";
+import { canMove, canResize, isLocked, moveNativeIcon, setLocked, nativeIconBox, nudge, readFrames, readPicture, resizeBy } from "../studioEdits";
 import { CHART_GRAPH_ICON, CHART_GRAPH_SHORT, canPreviewPage, chartPageChange, chartPageRows, chartReadoutName, chartReadoutToEdit, chartStartOptions, nextChartPage, showTemplateChartPage, type ChartPageRow, type ChartStartOption } from "../studioCharts";
 import { chartReadoutBounds, chartSourceOf } from "../../watchface/engine/chartReadouts";
 import {
   addAnalogHands, addAnimation, addBatteryField, addChartPageField, addDatePart, addImage, addNativeField, addNegativeSign, addSeconds, addShape,
-  addSlotField, addStatusField, canRemove, imageLayerId, libraryItems, negativeSignSize, newImage, newShape, removeLayer, restoreTemplateLayer, searchLibrary,
+  addSlotField, addStatusField, canRemove, deleteLayer, imageLayerId, libraryItems, negativeSignSize, newImage, newShape, restoreTemplateLayer, searchLibrary,
   shapeLayerId, type LibraryContext, type LibraryItem,
 } from "../studioLibrary";
-import { nextSlotPreview, setSlotPreview, slotOnFace, slotPreview, slotTypes } from "../studioSlot";
+import { iconOffsetOf, nextSlotPreview, setIconOffset, setSlotPreview, SLOT_LAYER, slotIconGrip, slotOnFace, slotPreview, slotTypes } from "../studioSlot";
 import { renderDefaultAnalogHands } from "../../watchface/engine/watchfaceAnalogHands";
 import { importAnimationFrames } from "../../watchface/engine/watchfaceAnimation";
 import { defaultStatusIndicatorPosition, renderDefaultBatteryStates, renderDefaultStatusIndicator } from "../../watchface/engine/watchfaceDefaultIndicators";
@@ -39,7 +39,7 @@ import { Dots, FaceInspector, LayerInspector, MultiInspector } from "./StudioIns
 import { AnimationPlayer, type AnimationPlayback } from "../parts/StudioAnimation";
 import { resolveWatchfaceModeDesign } from "../../watchface/engine/watchfaceDisplayModes";
 import { FaceView } from "../parts/FaceView";
-import { composeDragFrames, dragKey, snapTargets, type DragFrames } from "../studioDrag";
+import { composeDragFrames, composePartFrames, dragKey, snapTargets, type DragFrames } from "../studioDrag";
 import { moveBox, snapGaps, snapGuides, snapMove, snapPartners, type Box, type SnapGap, type SnapGuide, type SnapHold, type SnapTarget } from "../studioSnap";
 import { Icon } from "../parts/StudioIcon";
 import { ConvertDialog, SendDialog, type SendTab } from "../parts/StudioSend";
@@ -123,6 +123,9 @@ export default function StudioEditor() {
   const [drag, setDrag] = useState<{ ids: string[]; dx: number; dy: number } | null>(null);
   const [held, setHeld] = useState<{ dx: number; dy: number; from: Design; frames: DragFrames } | null>(null);
   const [frames, setFrames] = useState<DragFrames | null>(null);
+  // The same for an icon dragged apart from its number: the face without the icon, and the icon on top.
+  const [iconDrag, setIconDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const [iconFrames, setIconFrames] = useState<DragFrames | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
@@ -289,6 +292,18 @@ export default function StudioEditor() {
   const master = source ? masterSize(source) : 800;
   const scale = (FACE_PX * zoom) / master;
   const hasAutoTime = layers.some((l) => l.id === "autoTime");
+  // With the selectable slot picked alone, the previewed type's icon has a grip of its own on the face.
+  // An icon that can move apart from its number gets a grip of its own on the face, with one layer picked: the
+  // selectable slot's previewed type, or a native field's (a chart page's readouts among them).
+  const iconGrip = ((): { label: string; bounds: { x0: number; y0: number; x1: number; y1: number }; move: (x: Design, dx: number, dy: number) => Design } | null => {
+    if (!layer || extra.length || !active) return null;
+    if (layer.kind === SLOT_LAYER) {
+      const g = library && slotNow.length ? slotIconGrip(library.ctx.details, active, slotNow) : null;
+      return g ? { label: g.label, bounds: g.bounds, move: (x, dx, dy) => { const o = iconOffsetOf(x, g.id); return setIconOffset(x, g.id, o.dx + dx, o.dy + dy); } } : null;
+    }
+    const bounds = nativeIconBox(active, layer);
+    return bounds ? { label: `${layer.label} icon`, bounds, move: (x, dx, dy) => moveNativeIcon(x, layer, dx, dy) } : null;
+  })();
   // Its corners resize it when one layer is picked and something sizes it.
   const resizable = !!layer && !extra.length && !!active && canResize(active, layer, resolution);
 
@@ -332,9 +347,42 @@ export default function StudioEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, design, mode, pixels, dragSetKey, waiting]);
 
+  // The icon grip's frames, composed ahead of a drag like the layers' (the icon taken off by moving it past the face,
+  // which leaves the number and everything else where they are).
+  const iconKey = iconGrip && layer ? `icon:${iconGrip.label}:${dragKey([layer.id], mode, pixels, choice)}` : "";
+  const iconMove = useRef(iconGrip?.move);
+  const iconFramesNow = useRef(iconFrames);
+  useEffect(() => { iconMove.current = iconGrip?.move; iconFramesNow.current = iconFrames; });
+  useEffect(() => {
+    if (!source || !design || !iconKey || waiting) return;
+    const have = iconFramesNow.current;
+    if (have && have.key === iconKey && have.design === design) return;
+    const move = iconMove.current;
+    if (!move) return;
+    let live = true;
+    const t = setTimeout(() => {
+      composePartFrames(source, design, mode, iconKey, (x) => move(x, master, master), pixels, scenarioNow.current, choiceNow.current)
+        .then((f) => { if (live) setIconFrames(f); })
+        .catch((e) => console.warn("Studio couldn't prepare the icon drag.", e));
+    }, 40);
+    return () => { live = false; clearTimeout(t); };
+  }, [source, design, mode, pixels, iconKey, waiting, master]);
+
   const hide = (l: EditorLayer) => { edit((x) => setVisible(x, l, false, source ?? undefined, mode)); if (layer?.id === l.id) setSel(null); say(`Hid ${l.label}. Bring it back from Add, or undo with ⌘Z.`); };
 
-  const remove = (l: EditorLayer) => { if (!library) return; const { ctx } = library; edit((x) => removeLayer(x, l, ctx)); if (layer?.id === l.id) setSel(null); say(`Removed ${l.label}. Undo with ⌘Z.`); };
+  // Delete: the row's trash, the context bar, the inspector and the Delete key. A locked layer, or several, ask first.
+  const remove = (ls: EditorLayer[]) => {
+    if (!library || !active) return;
+    const { ctx } = library;
+    const gone = ls.filter((l) => canRemove(active, l, ctx));
+    if (!gone.length) return;
+    const locked = gone.filter((l) => isLocked(active, l));
+    if (gone.length > 1 && !confirm(`Delete ${gone.length} layers?${locked.length ? ` ${locked.length} of them ${locked.length === 1 ? "is" : "are"} locked.` : ""}`)) return;
+    if (gone.length === 1 && locked.length && !confirm(`${gone[0]!.label} is locked. Unlock and delete it?`)) return;
+    edit((x) => gone.reduce((acc, l) => deleteLayer(acc, l, ctx), x));
+    if (layer && gone.some((l) => l.id === layer.id)) setSel(null);
+    say(`${gone.length === 1 ? `Deleted ${gone[0]!.label}` : `Deleted ${gone.length} layers`}. Undo with ⌘Z.`);
+  };
 
   // The face's own artwork: a copy just above it (⌘D), and its paint order (Alt+↑ / Alt+↓, Shift for the front or back).
   const copyArtwork = (l: EditorLayer) => {
@@ -364,8 +412,8 @@ export default function StudioEditor() {
       if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown") && isArtwork(layer.id)) {
         e.preventDefault(); orderArtwork(layer, e.key === "ArrowUp" ? (e.shiftKey ? "front" : "forward") : (e.shiftKey ? "back" : "backward")); return;
       }
-      // Delete takes artwork and Studio's own seconds and date off the face; everything else it hides.
-      if ((e.key === "Delete" || e.key === "Backspace") && library && canRemove(active, layer, library.ctx)) { e.preventDefault(); remove(layer); return; }
+      // Delete takes artwork and Studio's own seconds and date off the face; a template part it hides (Add brings it back).
+      if ((e.key === "Delete" || e.key === "Backspace") && library && selected.some((l) => canRemove(active, l, library.ctx))) { e.preventDefault(); remove(selected); return; }
       if ((e.key === "Delete" || e.key === "Backspace") && layer.canHide) { e.preventDefault(); hide(layer); return; }
       const step = e.shiftKey ? 10 : 1;
       const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
@@ -647,6 +695,54 @@ export default function StudioEditor() {
     addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up);
   };
 
+  /**
+   * The slot's icon dragged on its own (the slot's Icon offset): the value stays, the face redraws as it goes, Shift
+   * keeps it on one axis, and letting go leaves one undo step.
+   */
+  const startIconDrag = (move: (x: Design, dx: number, dy: number) => Design, e: ReactPointerEvent<HTMLElement>) => {
+    if (e.button !== 0 || !doc.now) return;
+    e.preventDefault(); e.stopPropagation();
+    const before = doc.now, from = before.design, start = toMaster(e.clientX, e.clientY), key = iconKey;
+    // With the frames ready, only the icon's picture follows the pointer and the face is drawn once, after the drop;
+    // until they are, the face redraws as it goes.
+    const ready = () => { const f = iconFramesNow.current; return f && f.key === key && f.design === from && f.sprite ? f : null; };
+    let raf = 0, changed = false, moved = false, last = { dx: 0, dy: 0 };
+    const paint = () => {
+      raf = 0;
+      if (ready()) { setIconDrag({ ...last }); return; }
+      // Always from where the drag began, so the moves don't add up.
+      const next = editMode(from, mode, (x) => move(x, last.dx, last.dy));
+      changed = next !== from;
+      setDoc((d) => (d.now ? { ...d, now: { ...d.now, design: next } } : d));
+    };
+    const onMove = (ev: PointerEvent) => {
+      const p = toMaster(ev.clientX, ev.clientY);
+      let dx = p.x - start.x, dy = p.y - start.y;
+      if (!moved && Math.abs(dx) + Math.abs(dy) < 3 / scale) return;
+      moved = true;
+      if (ev.shiftKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
+      last = { dx: Math.round(dx), dy: Math.round(dy) };
+      if (!raf) raf = requestAnimationFrame(paint);
+    };
+    const up = () => {
+      removeEventListener("pointermove", onMove); removeEventListener("pointerup", up); removeEventListener("pointercancel", up);
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      setIconDrag(null);
+      const f = ready();
+      if (f && !changed) {
+        if (!last.dx && !last.dy) return;
+        // The frames stay where they were dropped until the face is drawn there.
+        setHeld({ ...last, from, frames: f });
+        edit((x) => move(x, last.dx, last.dy));
+        return;
+      }
+      if (!changed) return;
+      dirty.current = true;
+      setDoc((d) => (d.now ? { now: d.now, past: [...d.past.slice(-99), before], future: [] } : d));
+    };
+    addEventListener("pointermove", onMove); addEventListener("pointerup", up); addEventListener("pointercancel", up);
+  };
+
   const onDrop = (e: DragEvent) => {
     const key = e.dataTransfer.getData(LAYER_TYPE);
     const item = library?.items.find((x) => x.key === key);
@@ -697,7 +793,8 @@ export default function StudioEditor() {
   };
   // While dragging, and after a drop until the face is redrawn: the face without the moving layers, and them on top.
   const live = drag && frames && frames.design === design && frames.key === dragKey(drag.ids, mode, pixels, choice) ? { ...drag, frames } : null;
-  const lifted = live ?? holding;
+  const iconLive = iconDrag && iconFrames && iconFrames.design === design && iconFrames.key === iconKey ? { ...iconDrag, frames: iconFrames } : null;
+  const lifted = live ?? iconLive ?? holding;
   const k = lifted ? (FACE_PX * zoom) / lifted.frames.size : 1;
   const sprite = lifted?.frames.sprite;
   const animation = mode === "current" && active?.animation?.enabled && active.animation.frames.length ? active.animation : null;
@@ -759,6 +856,18 @@ export default function StudioEditor() {
                         <Icon name={l.spot ? SPOT_ICON[l.spot.id] ?? "image" : ICON[l.kind] ?? "rect"} size={16} /><span>{l.label}</span>
                         {l.spot ? <span className="st-layer-state">{spotActive(l.spot, choice).label}</span> : null}
                       </button>
+                      {library && canRemove(active, l, library.ctx) ? (
+                        <button type="button" className="st-icon-btn st-row-act" aria-label={`Delete ${l.label}`} title={isLocked(active, l) ? "Unlock and delete" : "Delete"} onClick={() => remove([l])}>
+                          <Icon name="trash" size={15} />
+                        </button>
+                      ) : null}
+                      {canMove(l) && l.bounds ? (
+                        <button type="button" className="st-icon-btn st-row-act st-lock" data-locked={isLocked(active, l) || undefined} aria-pressed={isLocked(active, l)}
+                          aria-label={`${isLocked(active, l) ? "Unlock" : "Lock"} ${l.label} position`} title={isLocked(active, l) ? "Unlock position" : "Lock position"}
+                          onClick={() => edit((x) => setLocked(x, l, !isLocked(x, l)))}>
+                          <Icon name={isLocked(active, l) ? "lock" : "unlock"} size={15} />
+                        </button>
+                      ) : null}
                       {l.canHide ? (
                         <button type="button" className="st-icon-btn st-eye" aria-label={`${l.visible ? "Hide" : "Show"} ${l.label}`} onClick={() => edit((x) => setVisible(x, l, !l.visible, source, mode))}>
                           <Icon name={l.visible ? "eye" : "eyeOff"} size={16} />
@@ -873,7 +982,12 @@ export default function StudioEditor() {
                   <span className="st-sep" aria-hidden="true" />
                   <button type="button" className="st-icon-btn" aria-label="Back to the template's place" title="Back to the template's place" onClick={() => edit((x) => moveTo(x, layer, 0, 0))}><Icon name="refresh" /></button>
                 </> : null}
-                {layer.canHide ? <button type="button" className="st-icon-btn" aria-label="Hide" title="Hide (Delete)" onClick={() => hide(layer)}><Icon name="eyeOff" /></button> : null}
+                {layer.canHide ? <button type="button" className="st-icon-btn" aria-label="Hide" title={library && canRemove(active, layer, library.ctx) ? "Hide" : "Hide (⌫)"} onClick={() => hide(layer)}><Icon name="eyeOff" /></button> : null}
+                {canMove(layer) && layer.bounds ? (
+                  <button type="button" className="st-icon-btn" aria-pressed={isLocked(active, layer)} aria-label={isLocked(active, layer) ? "Unlock position" : "Lock position"} title={isLocked(active, layer) ? "Unlock position" : "Lock position"}
+                    onClick={() => edit((x) => setLocked(x, layer, !isLocked(x, layer)))}><Icon name={isLocked(active, layer) ? "lock" : "unlock"} /></button>
+                ) : null}
+                {library && canRemove(active, layer, library.ctx) ? <button type="button" className="st-icon-btn" aria-label="Delete" title="Delete (⌫)" onClick={() => remove(selected)}><Icon name="trash" /></button> : null}
               </div>
             ) : null}
           </div>
@@ -908,6 +1022,11 @@ export default function StudioEditor() {
                       ))}
                       <span>{selected.length > 1 ? `${selected.length} layers` : `${layer.label}${stateLabel(layer)}`}</span>
                     </div>
+                  ) : null}
+                  {iconGrip && layer?.visible && left === "layers" && !drag ? (
+                    <div className="st-icon-grip" data-dragging={iconLive ? true : undefined}
+                      style={spot(iconLive ? { x0: iconGrip.bounds.x0 + iconLive.dx, y0: iconGrip.bounds.y0 + iconLive.dy, x1: iconGrip.bounds.x1 + iconLive.dx, y1: iconGrip.bounds.y1 + iconLive.dy } : iconGrip.bounds)} role="button" aria-label={`Move the ${iconGrip.label.toLowerCase()}`}
+                      title="Drag to move the icon (Shift: one direction)" onPointerDown={(e) => startIconDrag(iconGrip.move, e)} />
                   ) : null}
                 </FaceView>
               </div>
@@ -984,7 +1103,7 @@ export default function StudioEditor() {
                 onStateVisible={(l, v) => edit((x) => setVisible(x, l, v, source, mode))} layer={layer} design={active} edit={edit} details={detailsOf(source, design, mode)} resolution={resolution}
                 master={master} icon={(layer.spot && SPOT_ICON[layer.spot.id]) || (ICON[layer.kind] ?? "rect")} aodNote={mode === "aod"} say={say} loadAssets={source.loadAssets} watch={watch.model}
                 watchLabel={watch.label} playback={playback} onPlayback={setPlayback}
-                onRemove={library && canRemove(active, layer, library.ctx) ? () => remove(layer) : null}
+                onRemove={library && canRemove(active, layer, library.ctx) ? () => remove([layer]) : null}
                 arrange={isArtwork(layer.id) ? { place: artworkPlace(active, layer.id), move: (step) => orderArtwork(layer, step), copy: () => copyArtwork(layer) } : undefined}
                 onHide={() => hide(layer)} onShow={() => edit((x) => setVisible(x, layer, true, source, mode))} onSplitTime={splitTime}
                 onHome={layer.capabilities.position && layer.layoutGroupId ? () => edit((x) => moveTo(x, layer, 0, 0)) : null}

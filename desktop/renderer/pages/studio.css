@@ -229,8 +229,9 @@
 .st-layer-pick { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px; border: 0; background: none; color: inherit; font: 500 13px Inter, sans-serif; text-align: left; cursor: pointer; }
 .st-layer-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-layer-pick .st-layer-state { margin-left: auto; flex: 0 0 auto; padding: 2px 7px; border-radius: 999px; background: var(--line); color: var(--muted); font-size: 11px; font-weight: 600; }
-.st-eye { opacity: 0; }
-.st-layer-row:hover .st-eye, .st-layer-row[data-hidden] .st-eye, .st-eye:focus-visible { opacity: 1; }
+.st-eye, .st-row-act { opacity: 0; }
+.st-layer-row:hover .st-eye, .st-layer-row[data-hidden] .st-eye, .st-eye:focus-visible,
+.st-layer-row:hover .st-row-act, .st-row-act:focus-visible, .st-lock[data-locked] { opacity: 1; }
 .st-aod-card { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; margin-top: 10px; border-radius: 16px; border: 1px solid var(--line); }
 .st-aod-card > span:nth-child(2) { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
 .st-aod-card b { font-size: 13px; }
@@ -314,6 +315,10 @@
 .st-sel i { position: absolute; width: 8px; height: 8px; box-sizing: border-box; border: 1.5px solid #12b886; border-radius: 2px; background: #fff; }
 .st-sel i:nth-child(1) { left: -5px; top: -5px; } .st-sel i:nth-child(2) { right: -5px; top: -5px; }
 .st-sel i:nth-child(3) { left: -5px; bottom: -5px; } .st-sel i:nth-child(4) { right: -5px; bottom: -5px; }
+/* The selectable slot's icon, dragged on its own inside the slot. */
+.st-icon-grip { position: absolute; box-sizing: border-box; border: 1.5px dashed rgba(18, 184, 134, 0.85); border-radius: 4px; cursor: move; touch-action: none; transition: background-color 120ms ease; }
+.st-icon-grip:hover { background: rgba(18, 184, 134, 0.14); border-style: solid; }
+.st-icon-grip:active { background: rgba(18, 184, 134, 0.22); }
 /* Corners that resize: they take the pointer (the box itself doesn't), with a wider invisible grab area. */
 .st-sel i[data-resize] { pointer-events: auto; cursor: nwse-resize; }
 .st-sel i[data-resize="1"], .st-sel i[data-resize="2"] { cursor: nesw-resize; }
@@ -340,7 +345,7 @@
 .st-spot:hover, .st-spot[aria-pressed="true"] { background: rgba(83, 203, 161, 0.16); border: 1.5px solid #53cba1; color: #bff3df; }
 .st-tools {
   position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 2px; padding: 5px; border-radius: 16px; white-space: nowrap;
-  background: var(--tip-bg); border: 1px solid var(--tip-border); box-shadow: var(--tip-shadow);
+  background: var(--card-bg); border: 1px solid var(--line); box-shadow: var(--card-shadow);
 }
 .st-tools .chip { height: 32px; margin-left: 2px; }
 .st-zoom { min-width: 44px; text-align: center; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -357,9 +362,28 @@
 
 /* Simulation */
 .st-sim {
-  position: absolute; left: 16px; right: 16px; bottom: 70px; z-index: 10; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 20px;
-  background: var(--tip-bg); border: 1px solid var(--tip-border); box-shadow: var(--tip-shadow);
+  position: absolute; left: 16px; right: 16px; bottom: 70px; z-index: 10; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 22px;
+  background: var(--card-bg); border: 1px solid var(--line); box-shadow: var(--card-shadow);
 }
+/* The floating simulation and tool bars look like the side panels: the same card, line and shadow (on a solid base so
+   the face doesn't show through), and the same soft filled fields, chips and tracks: no outline, a mint ring on focus. */
+.st-sim, .st-tools {
+  --field-bg: rgba(15, 21, 20, 0.055); --field-bg-hover: rgba(15, 21, 20, 0.085); --field-border: transparent; --field-shadow: none;
+  --well-bg: rgba(15, 21, 20, 0.055); --well-shadow: none;
+}
+:is(.night, [data-theme="dark"]) :is(.st-sim, .st-tools) {
+  background: var(--card-bg), #151515;
+  --field-bg: rgba(255, 255, 255, 0.11); --field-bg-hover: rgba(255, 255, 255, 0.16); --well-bg: rgba(255, 255, 255, 0.11); color-scheme: dark;
+}
+:is(.st-sim, .st-tools) .chip { border-color: transparent; background: var(--field-bg); transition: background 0.12s; }
+:is(.st-sim, .st-tools) .chip:hover { border-color: transparent; background: var(--field-bg-hover); }
+:is(.st-sim, .st-tools) .chip[aria-pressed="true"] { border-color: transparent; background: rgba(83, 203, 161, 0.18); }
+.st-sim :is(.st-num, .st-sim-field, .st-sim-date, .st-sim-time, .select) { transition: background 0.12s, box-shadow 0.12s; }
+.st-sim :is(.st-num, .st-sim-field, .st-sim-date, .st-sim-time, .select):hover { --field-bg: var(--field-bg-hover); }
+.st-sim :is(.st-num, .st-sim-field):focus-within, .st-sim :is(.st-sim-date, .st-sim-time, .select):focus-visible {
+  outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--h-mint-ink, #53cba1) 55%, transparent);
+}
+.st-sim .select { height: 32px; border-radius: 9px; }
 .st-sim-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
 .st-sim-row input[type="range"] { flex: 1 1 180px; min-width: 140px; }
 .st-play { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: var(--primary-bg); color: var(--on-accent); box-shadow: var(--primary-shadow); cursor: pointer; }
@@ -613,6 +637,8 @@
 .st-wx-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px 4px; }
 .st-wx-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
 .st-wx-cell img { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 7px; }
+.st-wx-card[data-backdrop="black"] .st-wx-cell img { background: #000; }
+.st-wx-card[data-backdrop="white"] .st-wx-cell img { background: #fff; }
 .st-wx-cell small { font-size: 9.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .st-glyph-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .st-wx-cell > i { display: block; width: 100%; aspect-ratio: 1; border-radius: 7px; background: var(--field-bg); }

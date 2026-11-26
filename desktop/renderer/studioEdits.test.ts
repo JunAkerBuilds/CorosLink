@@ -3,7 +3,7 @@ import { makeDefaultDesign } from "../watchface/engine/watchfaceBackground";
 import type { EditorLayer } from "../watchface/engine/watchfaceEditorModel";
 import {
   addShadow, addStroke, align, assetKey, canMove, distribute, nudge, panelOf, replaceAsset, restoreAsset, setLocked, isLocked, setStrokes,
-  setTypo, shadowsOf, strokesOf, typoOf, isPercentLayer, percentOf, setPercent, resizeBy, canResize,
+  setTypo, shadowsOf, strokesOf, typoOf, isPercentLayer, percentOf, setPercent, resizeBy, canResize, moveNativeIcon, nativeIconBox,
 } from "./studioEdits";
 
 const base = () => ({ ...makeDefaultDesign(), staticSeparators: { colon: { enabled: true, x: 400, y: 300, size: 80, color: "#ffffff" }, dateSlash: { enabled: false, x: 0, y: 0, size: 20, color: "#ffffff" } } });
@@ -127,5 +127,32 @@ describe("studio inspector edits", () => {
     d = setPercent(d, { color: undefined, size: 1, gap: 0, align: "middle" });
     expect(percentOf(d)).toEqual({});
     expect(d.metricStyles.battery).toEqual({ scale: 1, color: "#ff0000" });
+  });
+});
+
+describe("a native field's icon on the face", () => {
+  const chart = layer({ id: "native:chart", kind: "metric", nativeDataId: "chart" });
+  const withChart = (scale = 1) => ({ ...base(), nativeData: { chart: { enabled: true, x: 300, y: 400, scale, color: "#ffffff", chartSource: "chart_heart" } } });
+
+  it("has a box where the icon is drawn, and moves alone: the number and the field stay", () => {
+    const d = withChart(2);
+    expect(nativeIconBox(d, chart)).toEqual({ x0: 300, y0: 400, x1: 372, y1: 496 });
+    const moved = moveNativeIcon(d, chart, 20, -10);
+    // Master pixels on the face, written as the part's shift before the field's scale.
+    expect(moved.nativeData!.chart.parts?.icon).toMatchObject({ x: 10, y: -5 });
+    expect(nativeIconBox(moved, chart)).toEqual({ x0: 320, y0: 390, x1: 392, y1: 486 });
+    expect(moved.nativeData!.chart).toMatchObject({ x: 300, y: 400 });
+    // The number keeps its place beside where the icon was.
+    expect(moved.nativeData!.chart.parts?.value).toBeUndefined();
+  });
+
+  it("offers no grip with the icon off, on a locked layer, or with nothing to move against", () => {
+    const off = { ...withChart(), nativeData: { chart: { ...withChart().nativeData.chart, parts: { icon: { enabled: false } } } } };
+    expect(nativeIconBox(off, chart)).toBeNull();
+    const locked = setLocked(withChart(), chart, true);
+    expect(nativeIconBox(locked, chart)).toBeNull();
+    expect(moveNativeIcon(locked, chart, 5, 5)).toBe(locked);
+    const alone = { ...withChart(), nativeData: { chart: { ...withChart().nativeData.chart, parts: { value: { enabled: false } } } } };
+    expect(nativeIconBox(alone, chart)).toBeNull();
   });
 });
