@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Segmented, Switch } from "@/components/ui";
 import { WATCHFACE_TARGETS, getWatchfaceTarget, type WatchfaceTarget } from "../../watchface/watchfaceTargets";
 import { buildInput, initialDesign, openFaceSource, type Design, type FaceSource } from "../studioFace";
+import { carriedWatchfacePreferences } from "../../watchface/engine/watchfaceCarriedPreferences";
 import {
   convertProject, corosAccount, corosSignOut, deleteProject, downloadPreparedBin, downloadPreparedFinal, openProject, phoneStatus, pickFolder,
   installPrepared, prepareSend, said, savePreparedTo, sendToPhone, shareToCoros, stopPhone, watchConnection, watchSlots,
@@ -412,7 +413,7 @@ export function ConvertDialog(p: ConvertDialogProps) {
     try {
       const { project, result } = await convertProject(p.projectId, {
         watch: goal.model, design: p.design, name: `${baseName(p.name, WATCHFACE_TARGETS)} (${goal.label})`,
-        ...(rebuilt ? { build: await buildInput(p.source, p.design) } : {}),
+        ...(rebuilt ? { build: await buildInput(p.source, p.design), carried: carriedWatchfacePreferences(p.design) } : {}),
       });
       setMade({ id: project.projectId, name: project.name, note: convertedNote(goal, result) });
     } catch (e) { setProblem(said(e)); } finally { setBusy(false); }
@@ -467,7 +468,7 @@ async function allWatches(p: TabProps, progress: (label: string) => void): Promi
         scratch = (await convertProject(p.projectId, { watch: w.model, design: p.design, name, scratch: true })).project.projectId;
         const { project } = await openProject(scratch);
         const source = await openFaceSource(scratch, project.firmwareType);
-        face = await prepareSend(scratch, await buildInput(source, await initialDesign(source, project.design, project.startedFrom)));
+        face = await prepareSend(scratch, await buildInput(source, await initialDesign(source, project.design, project.startedFrom, project.carried)));
       }
       await savePreparedTo(face.id, { folderId: folder.id, name });
       saved++;

@@ -44,6 +44,7 @@ import { LocalWatch } from "./watch/service";
 import { ActivityScreens } from "./watch/activityScreens";
 import { runSmoke } from "./smoke";
 import { CorosLinkMove } from "./coroslink/move";
+import { ActivityRules } from "./activities/duplicates";
 import { smokeWatchmakerModel } from "./smokeStudioWatchmaker";
 import { simulatedPacePro } from "./smokeActivityScreens";
 
@@ -224,6 +225,14 @@ void app.whenReady().then(async () => {
   // Everything stays on this computer: the app's own store answers the sync API, and the app is always signed in
   // to it. There is no C-LINK account and no C-LINK cloud.
   const store = new LocalStore(path.join(data, "clink.db"));
+  // One workout, one activity: a run read from the watch and the same run from the phone become one (activities/
+  // duplicates.ts), on every write and once over everything here at launch.
+  const activityRules = new ActivityRules(store, { fitFolder: path.join(data, "watch", "fit"), ledger: path.join(data, "activity-merges.json"), log: (line) => errors.add("app", line) });
+  store.attachRules(activityRules);
+  {
+    const { merged, details } = activityRules.cleanup();
+    if (merged || details) errors.add("app", `Workouts: ${merged} duplicate${merged === 1 ? "" : "s"} merged, ${details} detail${details === 1 ? "" : "s"} made from FIT files`);
+  }
   // Developer mode, and with it sample data in a store of its own (devMode.ts). `npm run dev:sample` starts in it.
   const dev = new DevMode(data, store, { devMode: !app.isPackaged, sample: false });
   if (process.env.CLINK_SAMPLE) dev.set({ devMode: true, sample: true });

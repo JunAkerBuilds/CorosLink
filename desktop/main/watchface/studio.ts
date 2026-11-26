@@ -13,6 +13,8 @@
 // - Sources (phase 5, pulled forward for the home page): Community faces (community.ts) and the COROS account's
 //   catalogs (corosAccount.ts) open as projects through the same import as a file. A compiled face (official faces are
 //   BINs) is recovered into an editable starter first (desktop/watchface/recoverBin.ts).
+import type { WatchfaceCarriedPreferences } from "../../watchface/engine/watchfaceCarriedPreferences";
+import { NATIVE_CHART_SOURCES } from "../../watchface/watchfaceNativeCatalog";
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -84,6 +86,8 @@ export interface StoredProject {
   startedFrom?: "template" | "blank";
   /** A converted copy made for All watches and removed after; never listed, cleaned up after an hour. */
   scratch?: true;
+  /** A face rebuilt for another watch: the chart group it had open, so it opens on the same one (CorosLink's carriedPreferences). */
+  carried?: WatchfaceCarriedPreferences;
 }
 export type ProjectSummary = Omit<StoredProject, "design"> & { previewUpdatedAt?: string };
 
@@ -133,6 +137,15 @@ export function duplicateName(source: string, existing: Iterable<string>): strin
     const candidate = `${root.slice(0, Math.max(1, 80 - suffix.length)).trimEnd()}${suffix}`;
     if (!taken.has(candidate.toLowerCase())) return candidate;
   }
+}
+
+/** The carried chart groups, kept only when they name chart readouts the catalog knows. */
+function carriedOf(value: unknown): { carried?: WatchfaceCarriedPreferences } {
+  const chart = (value as WatchfaceCarriedPreferences | undefined)?.chartSource;
+  if (!chart || typeof chart !== "object") return {};
+  const known = new Set<string>(NATIVE_CHART_SOURCES.map((c) => c.id));
+  const chartSource = Object.fromEntries((["current", "aod"] as const).flatMap((m) => (typeof chart[m] === "string" && known.has(chart[m]!) ? [[m, chart[m]!]] : [])));
+  return Object.keys(chartSource).length ? { carried: { chartSource } } : {};
 }
 
 function checkDesign(design: unknown): CorosWatchfaceDesignState {
@@ -449,7 +462,7 @@ export class WatchfaceStudio {
    * A new project for another watch, converted from this one's 800 px master with that watch's official carrier
    * (convert.ts); this project is left as it is. Raw config edits move into the new baseline; the design comes along.
    */
-  async convert(id: string, input: { watch?: unknown; design?: unknown; name?: unknown; scratch?: unknown; build?: unknown }): Promise<{ project: ProjectSummary; result: ConversionResult }> {
+  async convert(id: string, input: { watch?: unknown; design?: unknown; name?: unknown; scratch?: unknown; build?: unknown; carried?: unknown }): Promise<{ project: ProjectSummary; result: ConversionResult }> {
     const target = typeof input.watch === "string" ? getWatchfaceTarget(input.watch) : undefined;
     if (!target || target.model !== input.watch) throw new StudioProblem("Choose a watch to convert to.", "badInput");
     const stored = await this.readStored(id);
@@ -485,7 +498,7 @@ export class WatchfaceStudio {
    * the page's composition is built for the destination as Send does, and the finished archive becomes the new
    * project's starter. The edits are part of that starter, so the new project starts from it with an empty design.
    */
-  private async convertBuilt(id: string, stored: StoredProject, target: WatchfaceTarget, input: { name?: unknown; scratch?: unknown; build?: unknown }): Promise<{ project: ProjectSummary; result: ConversionResult }> {
+  private async convertBuilt(id: string, stored: StoredProject, target: WatchfaceTarget, input: { name?: unknown; scratch?: unknown; build?: unknown; carried?: unknown }): Promise<{ project: ProjectSummary; result: ConversionResult }> {
     if (!input.build || typeof input.build !== "object") throw new StudioProblem("This face is rebuilt for the other watch; send its composition.", "badInput");
     const { archive } = await this.buildFinal(id, input.build as WatchfaceBuildInput, target.model);
     const info = inspectTemplate(archive);
@@ -499,6 +512,7 @@ export class WatchfaceStudio {
       design: { version: 1 } as CorosWatchfaceDesignState,
       startedFrom: "template",
       ...(input.scratch === true ? { scratch: true as const } : {}),
+      ...carriedOf(input.carried),
     }, archive, preview);
     return { project: summary, result: { rebuilt: true, generatedAod: false, noCorosTemplate: isLocalTemplateId(info.sourceTemplateId) } };
   }

@@ -635,6 +635,12 @@ export interface CorosWatchfaceDesignState {
   /** Deletes blank `[key]=` config lines from built archives (see creator input). */
   stripBlankConfigKeys?: boolean;
   /**
+   * Identity rewrites for the built archive: `o_template_id` and `m_name` in
+   * info.json, `[watchface_id]` in every config.txt and AODconfig.txt. Absent
+   * keeps the template's own. Validated again by the archive builder.
+   */
+  archiveOverrides?: { templateId?: string; watchfaceId?: string; templateName?: string };
+  /**
    * Watch languages that get the custom weekday labels, chosen in the Export
    * panel: "all", "english", or extra language prefixes. Absent uses the
    * legacy weekday style fields, then the user's remembered preference.

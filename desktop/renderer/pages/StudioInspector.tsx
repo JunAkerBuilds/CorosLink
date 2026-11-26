@@ -4,10 +4,10 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { beginGesture, endGesture } from "../studioGesture";
 import { Segmented, Select, Switch } from "@/components/ui";
-import type { CorosWatchfaceArtwork, CorosWatchfaceNativePart, CorosWatchfaceResolutionDetails, CorosWatchfaceShadowEffect, CorosWatchfaceStroke } from "../../watchface/types";
+import type { CorosWatchfaceArtwork, CorosWatchfaceNativePart, CorosWatchfaceResolutionDetails } from "../../watchface/types";
 import { WATCH_LANGUAGE_NAMES } from "../../watchface/engine/watchfaceLanguages";
 import { watchThemeSupport, watchThemeSwatch } from "../../watchface/engine/watchfaceThemeColor";
-import { defaultNativeDataStyle, nativeAssetText, nativePartRole, nativeRoleIndices } from "../../watchface/engine/nativeDataParts";
+import { defaultNativeDataStyle, nativePart, nativePartRole, nativeRoleIndices } from "../../watchface/engine/nativeDataParts";
 import { nativeDataAsset } from "../../watchface/engine/nativeData";
 import { pickPreviewResolution } from "../../watchface/engine/watchfaceStudio";
 import { NATIVE_DATA_BY_ID } from "../../watchface/watchfaceNativeCatalog";
@@ -15,6 +15,14 @@ import { Icon } from "../parts/StudioIcon";
 import type { AnimationPlayback } from "../parts/StudioAnimation";
 import { DEFAULT_ANIMATION_DELAY, MAX_ANIMATION_DELAY, MAX_ANIMATION_FRAMES, MIN_ANIMATION_DELAY } from "../../watchface/engine/watchfaceAnimationLimits";
 import { OfficialPicker } from "../parts/StudioOfficialPicker";
+import { Shadows, Strokes } from "../parts/StudioStacks";
+import { ExerciseSeparatorFold } from "../parts/StudioExerciseSeparator";
+import { TemplateImageFacts, TemplatePicture } from "../parts/StudioTemplateImage";
+import { AmPmPictures } from "../parts/StudioAmPmPictures";
+import { SpotHeight } from "../parts/StudioSpotHeight";
+import { NativePartLayout, NativePictures } from "../parts/StudioNativePart";
+import { animationOutcomeText, droppedFrames, useAnimationOutcome } from "../studioAnimationOutcome";
+import { animationOutcomeNeedsNotice } from "../../watchface/engine/watchfaceAnimationOutcome";
 import { SlotTop } from "../parts/StudioSlot";
 import { officialArtwork, officialBatteryRequest, officialBatteryStates, officialImageRequest, officialWeatherRequest, restoreWeatherSet, setWeatherSet, weatherSetCount } from "../studioOfficial";
 import { googleWeights } from "../studioGoogleFonts";
@@ -80,6 +88,8 @@ export interface LayerInspectorProps {
   /** The animation on the canvas: playing, or held on one frame. */
   playback?: AnimationPlayback;
   onPlayback?: (next: AnimationPlayback) => void;
+  /** The face's own artwork: where it stands in the paint order (0 at the back), moving it, and copying it. */
+  arrange?: { place: { index: number; count: number }; move: (step: "forward" | "backward" | "front" | "back") => void; copy: () => void };
 }
 
 export function LayerInspector(p: LayerInspectorProps) {
@@ -106,6 +116,7 @@ export function LayerInspector(p: LayerInspectorProps) {
           {more ? (
             <div className="st-menu st-menu-down st-insp-more" role="menu" onClick={() => setMore(false)}>
               {p.onHome ? <button type="button" role="menuitem" onClick={p.onHome}><Icon name="refresh" size={16} />Back to the template's place</button> : null}
+              {p.arrange ? <ArrangeItems {...p.arrange} /> : null}
               <button type="button" role="menuitem" onClick={() => edit((x) => setLocked(x, layer, !locked))}><Icon name="lock" size={16} />{locked ? "Unlock" : "Lock"}</button>
               {layer.canHide && layer.visible ? <button type="button" role="menuitem" onClick={p.onHide}><Icon name="eyeOff" size={16} />Hide from the face</button> : null}
               {layer.canHide && !layer.visible ? <button type="button" role="menuitem" onClick={p.onShow}><Icon name="eye" size={16} />Show on the face</button> : null}
@@ -125,7 +136,8 @@ export function LayerInspector(p: LayerInspectorProps) {
             : layer.capabilities.color ? <ColourRow label={kind === "selectable" ? "Values and icons" : "Color"} {...layerColour(design, layer, edit)} /> : null}
           <TypeFields design={design} layer={layer} edit={edit} kind={kind} fontSize={fontSize} resolution={resolution} />
         </> : null}
-        {kind === "native" ? <NativeParts design={design} edit={edit} layer={layer} fail={fail} /> : null}
+        {kind === "ampm" ? <AmPmPictures design={design} edit={edit} fail={fail} /> : null}
+        {kind === "native" ? <NativeParts design={design} edit={edit} layer={layer} fail={fail} watch={p.watch} resolution={resolution} /> : null}
         {kind === "weather" ? <WeatherTop {...p} fail={fail} /> : null}
         {kind === "batteryIcon" ? <BatteryTop {...p} fail={fail} /> : null}
         {layer.spot ? <SpotTop {...p} fail={fail} /> : kind === "image" ? <ImageTop {...p} fail={fail} /> : null}
@@ -145,6 +157,8 @@ export function LayerInspector(p: LayerInspectorProps) {
             replaced={["config", "aod"].some((scope) => design.configAssetOverrides?.[`${scope}:battery_level_percent_icon`]?.replacement)} />
         </Fold>
       ) : null}
+
+      {kind === "metric" && layer.metricId === "exercise" ? <ExerciseSeparatorFold design={design} edit={edit} details={p.details} fail={fail} /> : null}
 
       {progress ? (
         <Fold title="Progress">
@@ -188,7 +202,7 @@ export function LayerInspector(p: LayerInspectorProps) {
             </div>
             {layer.bounds ? <AlignRow onAlign={(e) => edit((x) => align(x, [layer], e, p.master))} /> : null}
           </> : null}
-          {layer.spot && layer.capabilities.scale ? <Slider key={`z:${layer.id}`} label="Zoom" value={Math.round((scaleOf(design, layer) ?? 1) * 100)} min={10} max={300} unit="%" onCommit={(v) => edit((x) => setSpotScale(x, layer, v / 100))} /> : null}
+          {layer.spot && layer.capabilities.scale && layer.bounds ? <SpotHeight layer={layer} scale={scaleOf(design, layer) ?? 1} set={(v) => edit((x) => setSpotScale(x, layer, v))} /> : null}
           {kind === "time" || kind === "metric" || kind === "date" || kind === "selectable" ? (
             <NumberField label="Rotation" unit="°" value={Math.round(typo?.rotation ?? 0)} min={0} max={360} onChange={(v) => edit((x) => setTypo(x, layer, { rotation: ((v % 360) + 360) % 360 }))} />
           ) : null}
@@ -230,6 +244,18 @@ export function LayerInspector(p: LayerInspectorProps) {
       ) : null}
     </div>
   );
+}
+
+/** The More menu's artwork rows: copy, and the paint order (CorosLink's shortcuts beside each). */
+function ArrangeItems({ place, move, copy }: NonNullable<LayerInspectorProps["arrange"]>) {
+  const top = place.index >= place.count - 1, bottom = place.index <= 0;
+  return <>
+    <button type="button" role="menuitem" onClick={copy}><Icon name="plus" size={16} />Duplicate<kbd>⌘D</kbd></button>
+    <button type="button" role="menuitem" disabled={top} onClick={() => move("forward")}><Icon name="chevU" size={16} />Bring forward<kbd>⌥↑</kbd></button>
+    <button type="button" role="menuitem" disabled={bottom} onClick={() => move("backward")}><Icon name="chevD" size={16} />Send backward<kbd>⌥↓</kbd></button>
+    <button type="button" role="menuitem" disabled={top} onClick={() => move("front")}><Icon name="chevU" size={16} />Bring to front<kbd>⇧⌥↑</kbd></button>
+    <button type="button" role="menuitem" disabled={bottom} onClick={() => move("back")}><Icon name="chevD" size={16} />Send to back<kbd>⇧⌥↓</kbd></button>
+  </>;
 }
 
 /* ───────────── Type ───────────── */
@@ -468,13 +494,13 @@ function SpotTop(p: LayerInspectorProps & { fail: (e: unknown) => void }) {
   </>;
 }
 
-function ImageTop({ design, edit, layer, fail, watch, zoom = true }: LayerInspectorProps & { fail: (e: unknown) => void; zoom?: boolean }) {
+function ImageTop({ design, edit, layer, fail, watch, details, loadAssets, zoom = true }: LayerInspectorProps & { fail: (e: unknown) => void; zoom?: boolean }) {
   const o = assetOf(design, layer);
   const input = useRef<HTMLInputElement>(null);
   const [official, setOfficial] = useState(false);
   return <>
     <div className="st-img-row">
-      <span className="st-img-prev">{o?.replacement ? <img src={o.replacement.dataUrl} alt="" /> : <Icon name="image" size={22} />}</span>
+      <TemplatePicture details={details} configAssetId={layer.configAssetId} replacement={o?.replacement?.dataUrl} loadAssets={loadAssets} />
       <span className="st-img-actions">
         <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="upload" size={15} />Replace image</button>
         <button type="button" className="chip st-chip-btn" onClick={() => setOfficial(true)}><Icon name="spark" size={15} />Official library</button>
@@ -483,6 +509,7 @@ function ImageTop({ design, edit, layer, fail, watch, zoom = true }: LayerInspec
     </div>
     <input ref={input} type="file" hidden accept="image/png" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void readArtwork(f).then((art) => edit((x) => replaceAsset(x, layer, art))).catch(fail); }} />
     {official ? <OfficialPicker watch={watch} request={officialImageRequest(layer)} onClose={() => setOfficial(false)} onPick={(set, frame) => edit((x) => replaceAsset(x, layer, officialArtwork(set, frame)))} /> : null}
+    <TemplateImageFacts details={details} configAssetId={layer.configAssetId} label={layer.label} replacement={o?.replacement} loadAssets={loadAssets} />
     {layer.capabilities.color ? <ColourRow label="Tint" {...layerColour(design, layer, edit)} /> : null}
     {zoom && layer.capabilities.scale ? <Slider label="Zoom" value={Math.round((o?.scale ?? 1) * 100)} min={10} max={300} unit="%" onCommit={(v) => edit((x) => setScale(x, layer, v / 100))} /> : null}
   </>;
@@ -517,7 +544,7 @@ const partName = (id: string, part: CorosWatchfaceNativePart) =>
  * A live-data field's parts (digits, minus, unit, icon…) behind one switcher. Each part shows the pictures the watch
  * gets for it, drawn from the font as the build draws them or the PNGs that replace them, and its own fine-tuning.
  */
-function NativeParts({ design, edit, layer, fail }: { design: Design; edit: Edit; layer: EditorLayer; fail: (e: unknown) => void }) {
+function NativeParts({ design, edit, layer, fail, watch, resolution }: { design: Design; edit: Edit; layer: EditorLayer; fail: (e: unknown) => void; watch: string; resolution: CorosWatchfaceResolutionDetails | null }) {
   const n = nativeOf(design, layer);
   const id = layer.nativeDataId ?? "";
   const parts = partsOf(design, layer).filter((part) => PART_LABEL[part]);
@@ -539,9 +566,9 @@ function NativeParts({ design, edit, layer, fail }: { design: Design; edit: Edit
   }, [n, id, role]);
   if (!n) return null;
   const ps = n.parts?.[part];
-  const shownOn = part === "value" || ps?.enabled !== false;
+  // Off by default for some parts (stamina, stress, UV, AQI and weekly load states), as the engine draws them.
+  const shownOn = part === "value" || nativePart(id, n, part).enabled;
   const urls = pictures?.key === key ? pictures.urls : [];
-  const custom = role ? Object.keys(n.assets?.[role] ?? {}).length : 0;
   const name = (i: number) => String(i).padStart(2, "0");
   const load = async (files: FileList | null) => {
     if (!files?.length || !role) return;
@@ -556,42 +583,14 @@ function NativeParts({ design, edit, layer, fail }: { design: Design; edit: Edit
       edit((x) => { const cur = nativeOf(x, layer); return cur ? setNative(x, layer, { assets: { ...cur.assets, [role]: { ...cur.assets?.[role], ...got } } }) : x; });
     } catch (e) { fail(e); }
   };
-  const restore = () => edit((x) => {
-    const cur = nativeOf(x, layer);
-    if (!role || !cur?.assets?.[role]) return x;
-    const assets = { ...cur.assets };
-    delete assets[role];
-    return setNative(x, layer, { assets });
-  });
   return <>
     {parts.length > 1 ? <Segmented small label="Part" value={part} onChange={setPicked} options={parts.map((p) => ({ value: p, label: partName(id, p) }))} /> : null}
     {part !== "value" ? <div className="st-row"><span>Show {partName(id, part).toLowerCase()}</span>
       <Switch label={`Show ${partName(id, part)}`} checked={shownOn} onChange={(v) => edit((x) => setPart(x, layer, part, { enabled: v }))} /></div> : null}
-    {shownOn && role && indexes.length ? (
-      <div className="st-wx-card">
-        <div className="st-wx-head">
-          <b>Pictures</b>
-          <span className="st-wx-badge" data-custom={custom ? "" : undefined}>{custom ? "Your PNGs" : "From the font"}</span>
-          <span className="st-grow" />
-          {custom ? <button type="button" className="st-icon-btn" aria-label="Back to the font's pictures" title="Back to the font's pictures" onClick={restore}><Icon name="refresh" size={15} /></button> : null}
-        </div>
-        <div className="st-wx-grid st-glyph-grid" role="list" aria-label={`${partName(id, part)} pictures`}>
-          {indexes.map((i, k) => {
-            const text = role === "digits" ? null : nativeAssetText(id, n, role, i);
-            return (
-              <span key={i} className="st-wx-cell" role="listitem" title={`${name(i)}.png${text ? ` (${text})` : ""}`}>
-                {urls[k] ? <img src={urls[k]} alt="" draggable={false} /> : <i />}<small>{text ? `${name(i)} · ${text}` : name(i)}</small>
-              </span>
-            );
-          })}
-        </div>
-        <div className="st-fold-line">
-          <span className="st-note">Replace with PNGs named {name(indexes[0]!)}{indexes.length > 1 ? `–${name(indexes[indexes.length - 1]!)}` : ""}</span>
-          <button type="button" className="chip st-chip-btn" onClick={() => input.current?.click()}><Icon name="folder" size={15} />Import</button>
-        </div>
-        <input ref={input} type="file" hidden multiple accept="image/png" {...{ webkitdirectory: "" }} onChange={(e) => { void load(e.target.files); e.target.value = ""; }} />
-      </div>
-    ) : null}
+    {shownOn && role && indexes.length ? <>
+      <NativePictures design={design} edit={edit} layer={layer} part={part} partName={partName(id, part)} role={role} indexes={indexes} urls={urls} watch={watch} fail={fail} onImportFolder={() => input.current?.click()} />
+      <input ref={input} type="file" hidden multiple accept="image/png" {...{ webkitdirectory: "" }} onChange={(e) => { void load(e.target.files); e.target.value = ""; }} />
+    </> : null}
     {shownOn ? <>
       {part !== "value" ? <ColourRow label={`${partName(id, part)} color`} value={ps?.color ?? n.color} onPick={(c) => edit((x) => setPart(x, layer, part, { color: c }))} /> : null}
       <div className="st-nums">
@@ -599,14 +598,16 @@ function NativeParts({ design, edit, layer, fail }: { design: Design; edit: Edit
         <NumberField label="Shift Y" value={ps?.y ?? 0} onChange={(v) => edit((x) => setPart(x, layer, part, { y: v }))} />
         {part === "value" && ps?.digitWidth !== undefined ? <NumberField label="Digit width" unit="px" value={ps.digitWidth} min={1} max={400} onChange={(v) => edit((x) => setPart(x, layer, part, { digitWidth: v }))} /> : null}
       </div>
+      <NativePartLayout design={design} edit={edit} layer={layer} part={part} partName={partName(id, part)} role={role} resolution={resolution} />
     </> : null}
     <TextField label="Canvas sample" value={n.previewValue ?? ""} placeholder="Live value" onCommit={(v) => edit((x) => setNative(x, layer, { previewValue: v || undefined }))} />
   </>;
 }
 
-function AnimationFolds({ design, edit, fail, watchLabel, playback = { playing: true, still: 0 }, onPlayback }: LayerInspectorProps & { fail: (e: unknown) => void }) {
+function AnimationFolds({ design, edit, fail, watchLabel, watch: model, resolution, playback = { playing: true, still: 0 }, onPlayback }: LayerInspectorProps & { fail: (e: unknown) => void }) {
   const a = design.animation;
   const input = useRef<HTMLInputElement>(null);
+  const outcome = useAnimationOutcome(a, model, resolution?.width);
   if (!a) return null;
   const load = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -632,6 +633,7 @@ function AnimationFolds({ design, edit, fail, watchLabel, playback = { playing: 
     onPlayback?.({ playing: playback.playing, still: Math.max(0, Math.min(still, a.frames.length - 2)) });
   };
   const watch = watchLabel ?? "the watch";
+  const dropped = droppedFrames(outcome, a.frames.length);
   return <>
     <Fold title="Playback" note={`${a.frames.length} ${a.frames.length === 1 ? "frame" : "frames"} · ${loop.toLocaleString(undefined, { maximumFractionDigits: 2 })} s loop`}>
       <div className="st-nums">
@@ -641,12 +643,12 @@ function AnimationFolds({ design, edit, fail, watchLabel, playback = { playing: 
         <NumberField key={uniform ? `d${delays[0]}` : "mixed"} label={uniform ? "Delay" : "Set all"} unit="ms" value={delays[0] ?? DEFAULT_ANIMATION_DELAY} min={MIN_ANIMATION_DELAY} max={MAX_ANIMATION_DELAY}
           onChange={(v) => edit((x) => setDelays(x, (x.animation?.frames ?? []).map(() => v)))} />
       </div>
-      <span className="st-note">{a.enabled ? `Plays on ${watch} while the face is lit. Always-on shows no animation.` : "Hidden: the face is built without the animation."}</span>
+      <span className="st-note" data-warn={animationOutcomeNeedsNotice(outcome) || undefined}>{a.enabled ? animationOutcomeText(outcome, watch) : "Hidden: the face is built without the animation."}</span>
     </Fold>
     <Fold title="Frames" note={`${Math.round(a.width)} × ${Math.round(a.height)} px`}>
       <ol className="st-anim-frames" aria-label="Animation frames">
         {a.frames.map((f, i) => (
-          <li key={i} data-shown={!playback.playing && playback.still === i ? "" : undefined}>
+          <li key={i} data-shown={!playback.playing && playback.still === i ? "" : undefined} data-dropped={dropped.has(i) || undefined} title={dropped.has(i) ? `${watch} leaves this frame out` : undefined}>
             <button type="button" className="st-anim-thumb" title={`Show frame ${i + 1}`} aria-label={`Show frame ${i + 1}`}
               onClick={() => onPlayback?.({ playing: false, still: i })}>
               <img src={f} alt="" draggable={false} /><span>{i + 1}</span>
@@ -1272,50 +1274,4 @@ function Toggle({ label, on, set }: { label: string; on: boolean; set: (v: boole
   return <div className="st-row"><span>{label}</span><Switch label={label} checked={on} onChange={set} /></div>;
 }
 
-function Strokes({ list, add, set }: { list: CorosWatchfaceStroke[]; add: () => void; set: (list: CorosWatchfaceStroke[]) => void }) {
-  const put = (i: number, patch: Partial<CorosWatchfaceStroke>) => set(list.map((s, j) => (j === i ? { ...s, ...patch } : s)));
-  return (
-    <div className="st-stack">
-      <div className="st-row"><span>Stroke</span><button type="button" className="st-icon-btn" aria-label="Add stroke" title="Add stroke" onClick={add}><Icon name="plus" /></button></div>
-      {list.map((s, i) => (
-        <div key={s.id} className="st-stack-item">
-          <div className="st-nums">
-            <ColorField label="Stroke color" value={s.paint.kind === "solid" ? s.paint.color : s.paint.from} onPick={(c) => put(i, { paint: { kind: "solid", color: c } })} />
-            <NumberField label="W" unit="px" value={s.weight} min={1} max={64} onChange={(v) => put(i, { weight: v })} />
-          </div>
-          <div className="st-stack-line">
-            <Segmented small label="Stroke position" value={s.position} onChange={(v) => put(i, { position: v })} options={[{ value: "outside", label: "Outside" }, { value: "center", label: "Center" }, { value: "inside", label: "Inside" }]} />
-            <button type="button" className="st-icon-btn" aria-label={s.enabled ? "Hide stroke" : "Show stroke"} onClick={() => put(i, { enabled: !s.enabled })}><Icon name={s.enabled ? "eye" : "eyeOff"} size={16} /></button>
-            <button type="button" className="st-icon-btn" aria-label="Remove stroke" onClick={() => set(list.filter((_, j) => j !== i))}><Icon name="close" size={16} /></button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
-function Shadows({ list, add, set }: { list: CorosWatchfaceShadowEffect[]; add: () => void; set: (list: CorosWatchfaceShadowEffect[]) => void }) {
-  const put = (i: number, patch: Partial<CorosWatchfaceShadowEffect>) => set(list.map((s, j) => (j === i ? { ...s, ...patch } : s)));
-  return (
-    <div className="st-stack">
-      <div className="st-row"><span>Shadow</span><button type="button" className="st-icon-btn" aria-label="Add shadow" title="Add shadow" onClick={add}><Icon name="plus" /></button></div>
-      {list.map((s, i) => (
-        <div key={s.id} className="st-stack-item">
-          <div className="st-stack-line">
-            <Segmented small label="Shadow kind" value={s.kind} onChange={(v) => put(i, { kind: v })} options={[{ value: "outer-shadow", label: "Drop" }, { value: "inner-shadow", label: "Inner" }]} />
-            <button type="button" className="st-icon-btn" aria-label={s.enabled ? "Hide shadow" : "Show shadow"} onClick={() => put(i, { enabled: !s.enabled })}><Icon name={s.enabled ? "eye" : "eyeOff"} size={16} /></button>
-            <button type="button" className="st-icon-btn" aria-label="Remove shadow" onClick={() => set(list.filter((_, j) => j !== i))}><Icon name="close" size={16} /></button>
-          </div>
-          <div className="st-nums">
-            <ColorField label="Shadow color" value={s.color} onPick={(c) => put(i, { color: c })} />
-            <NumberField label="Opacity" unit="%" value={Math.round(s.opacity * 100)} min={0} max={100} onChange={(v) => put(i, { opacity: v / 100 })} />
-            <NumberField label="Blur" value={s.blur} min={0} max={64} onChange={(v) => put(i, { blur: v })} />
-            <NumberField label="Spread" value={s.spread} min={-32} max={64} onChange={(v) => put(i, { spread: v })} />
-            <NumberField label="Distance" value={s.distance} min={0} max={128} onChange={(v) => put(i, { distance: v })} />
-            <NumberField label="Angle" unit="°" value={s.angle} min={0} max={360} onChange={(v) => put(i, { angle: v })} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}

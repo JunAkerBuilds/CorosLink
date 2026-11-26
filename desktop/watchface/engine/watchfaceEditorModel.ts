@@ -304,6 +304,11 @@ export function deriveEditorLayers(
   );
   const offsetDetails = laidOutDetails;
   const resolution = pickPreviewResolution(offsetDetails);
+  let hiddenStatus: ReturnType<typeof pickPreviewResolution> | undefined;
+  const hiddenStatusResolution = () =>
+    hiddenStatus === undefined
+      ? (hiddenStatus = pickPreviewResolution(applyLayoutToDetails(details, design.layoutOffsets ?? {})))
+      : hiddenStatus;
   const boundsById = new Map<string, WatchfaceLayoutGroupBounds>();
   if (resolution) {
     // Same face font as the editor's limits, so a time font size measures the
@@ -541,7 +546,8 @@ export function deriveEditorLayers(
       visible,
       canHide: true,
       present: true,
-      bounds: visible && separatorBounds
+      // Kept while hidden so Align and X / Y still work; hidden layers are never drawn or snapped to.
+      bounds: separatorBounds
         ? {
             id,
             label,
@@ -581,16 +587,15 @@ export function deriveEditorLayers(
       visible: style.enabled,
       canHide: true,
       present: true,
-      bounds: style.enabled
-        ? {
-            id: "ampm",
-            label: "AM/PM indicator",
-            x0: style.x,
-            y0: style.y,
-            x1: style.x + width,
-            y1: style.y + height
-          }
-        : null,
+      // Kept while hidden, as for the separators above.
+      bounds: {
+        id: "ampm",
+        label: "AM/PM indicator",
+        x0: style.x,
+        y0: style.y,
+        x1: style.x + width,
+        y1: style.y + height
+      },
       capabilities: {
         position: true,
         color: true,
@@ -705,7 +710,14 @@ export function deriveEditorLayers(
       statusLayoutGroupId && resolution
         ? getWatchfaceControlStatusPreviewLayers(resolution).find(
             (layer) => layer.configKey === reference.configKey
-          ) ?? null
+          ) ??
+          // A hidden image is gone from the styled config; place it from the
+          // template's own, with the same layout offsets.
+          (override?.enabled === false && hiddenStatusResolution()
+            ? getWatchfaceControlStatusPreviewLayers(hiddenStatusResolution()!).find(
+                (layer) => layer.configKey === reference.configKey
+              ) ?? null
+            : null)
         : null;
     const statusPosition =
       statusPreviewLayer
@@ -739,8 +751,10 @@ export function deriveEditorLayers(
             }
           )
         : null;
+    // A hidden status image keeps its box, so its place can still be edited
+    // (CorosLink's Transform does); hidden layers are never drawn or snapped to.
     const statusBounds =
-      statusPosition && statusCanvas && override?.enabled !== false
+      statusPosition && statusCanvas
         ? {
             id: `configAsset:${reference.id}`,
             label: reference.label,

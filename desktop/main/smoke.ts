@@ -10,6 +10,7 @@ import { smokeStudioAutomation } from "./smokeStudioAutomation";
 import { smokeStudioWatchmaker } from "./smokeStudioWatchmaker";
 import { smokeActivityScreens } from "./smokeActivityScreens";
 import { smokeStudioSlot } from "./smokeStudioSlot";
+import { smokeStudioCompare } from "./smokeStudioCompare";
 
 const SCREENS = ["/", "/calendar", "/calendar?view=list", "/activities", "/health", "/health/sleep", "/fuel", "/body", "/strength", "/coach", "/watch", "/media", "/connect", "/calendar/new", "/calendar/plans", "/studio", "/setup"];
 
@@ -273,6 +274,20 @@ export async function runSmoke(window: BrowserWindow, origin: string, folder: st
       log.push(`--- studio add ${label}: ${found} → ${await run(`document.querySelector(".st-toast")?.textContent ?? ""`)}`);
     }
     window.webContents.invalidate(); await wait(400); await shot("studio-added.png");
+    // A live-data part edited on its own (StudioNativePart.tsx): weekly load's states, one picked, then its icon with
+    // an own font.
+    await click(".st-left .st-tabs button", "Layers"); await wait(800);
+    log.push(`--- studio parts: layer ${await click(".st-layer-pick", "Weekly training load")}`); await wait(800);
+    log.push(`--- studio parts: states ${await click('.st-insp [aria-label="Part"] button', "States")}; show ${await click('.st-insp [aria-label="Show States"][aria-checked="false"]')}`); await wait(1200);
+    log.push(`--- studio parts: pick 03 ${await click(".st-insp .st-np-cell", "03")}`); await wait(600);
+    const partControls = `[...document.querySelectorAll(".st-insp .st-np-actions button, .st-insp .st-num span, .st-insp .st-np-reset")].map((b) => b.textContent).join(" | ")`;
+    log.push(`--- studio parts: controls ${await run(partControls)}`);
+    await run(`document.querySelector(".st-insp .st-np-grid")?.scrollIntoView({ block: "start" })`);
+    window.webContents.invalidate(); await wait(400); await shot("studio-parts-states.png");
+    log.push(`--- studio parts: icon ${await click('.st-insp [aria-label="Part"] button', "Icon")}; own font ${await click('.st-insp [aria-label="Icon own font"]')}`); await wait(1200);
+    log.push(`--- studio parts: icon controls ${await run(partControls)}`);
+    await run(`document.querySelector(".st-insp .st-np-grid")?.scrollIntoView({ block: "start" })`);
+    window.webContents.invalidate(); await wait(400); await shot("studio-parts-icon.png");
     // The chart's pages (studioCharts.ts): the list as Daily activity left it, the Sun page looked at before it's
     // on, added, then the preview stepped the way the watch's Back button goes.
     await click(".st-left .st-tabs button", "Layers");
@@ -460,6 +475,8 @@ export async function runSmoke(window: BrowserWindow, origin: string, folder: st
   if (process.env.CLINK_SMOKE_STUDIO_PERCENT) await smokeStudioPercent(window, origin, folder, log);
   // The selectable data slot on a Start-blank face (smokeStudioSlot.ts).
   if (process.env.CLINK_SMOKE_STUDIO_SLOT) await smokeStudioSlot(window, origin, folder, log);
+  // Every layer's inspector on one saved face, to compare with CorosLink (smokeStudioCompare.ts).
+  if (process.env.CLINK_SMOKE_STUDIO_COMPARE) await smokeStudioCompare(window, origin, folder, log);
   // The watch-face MCP server against the open editor (smokeStudioAutomation.ts).
   if (process.env.CLINK_SMOKE_STUDIO_AUTOMATION) await smokeStudioAutomation(window, origin, folder, log);
   // Watchmaker in the editor, with a scripted model (smokeStudioWatchmaker.ts).

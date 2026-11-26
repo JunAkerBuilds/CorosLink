@@ -15,6 +15,15 @@ const KEY = /^[a-z][a-z0-9.]{0,39}\/[A-Za-z0-9._:-]{1,128}$/;
 interface Row { collection: string; id: string; version: number; updatedAt: string; deleted: boolean; body?: Record<string, unknown> }
 interface DbRow { collection: string; id: string; version: number; updated_at: string; deleted: number; body: string | null }
 export interface Seed { collection: string; id: string; body: object }
+type Change = { collection: string; id: string; body?: object; deleted?: true; base?: number };
+
+/** Rules run on the store's writes (activities/duplicates.ts: one workout, one activity). */
+export interface StoreRules {
+  /** Before C-LINK's own writes. */
+  prepare(changes: readonly Change[]): Change[];
+  /** After any write that changed something, a phone's push included. */
+  afterWrite(changed: readonly { collection: string; id: string }[]): void;
+}
 
 const isBag = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -108,13 +117,23 @@ export class LocalStore {
     return (this.q.collection.all(collection) as unknown as DbRow[]).map((r) => ({ id: r.id, version: r.version, body: JSON.parse(r.body ?? "{}") as Record<string, unknown> }));
   }
 
+  private rules: StoreRules | null = null;
+  attachRules(rules: StoreRules | null): void { this.rules = rules; }
+
+  /** One live item's body, or undefined. */
+  get(collection: string, id: string): Record<string, unknown> | undefined {
+    const row = this.q.one.get(collection, id) as DbRow | undefined;
+    return row && row.deleted === 0 && row.body ? (JSON.parse(row.body) as Record<string, unknown>) : undefined;
+  }
+
   /**
    * Writes as a client's push would, by the same rules (an unchanged body keeps its version, `base` guards against
    * writing over a change made meanwhile), in batches the push takes. For the app's own services, which write as
    * a phone would: the watch in Local mode.
    */
-  write(changes: readonly { collection: string; id: string; body?: object; deleted?: true; base?: number }[]): { written: number; conflicts: number } {
+  write(changes: readonly Change[]): { written: number; conflicts: number } {
     let written = 0, conflicts = 0;
+    if (this.rules) changes = this.rules.prepare(changes);
     for (let at = 0; at < changes.length; at += 100) {
       const answer = this.push(JSON.stringify({ changes: changes.slice(at, at + 100) }));
       if (answer.status !== 200) throw new Error(`The store refused a write (${answer.status}).`);
@@ -235,6 +254,9 @@ export class LocalStore {
       this.q.setCursor.run(String(cursor));
       return { results, cursor };
     });
+    const changed = results.filter((r) => r.changed);
+    // The rules' own writes run in here; `lastPush` is this push's, set after them.
+    if (this.rules && changed.length) this.rules.afterWrite(changed);
     this.lastPush = results;
     return reply({ results, cursor });
   }

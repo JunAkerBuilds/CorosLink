@@ -412,7 +412,8 @@ textarea.field { height: auto; padding: 10px; font-weight: 500; resize: vertical
 .select.dd-small, [data-theme="dark"] .select.dd-small { height: 28px; padding: 0 24px 0 11px; font-weight: 500; background-position: right 9px center; background-size: 10px 10px; }
 
 .dd-menu {
-  --dd-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.42));
+  /* Opaque: over busy pages (Studio faces, maps) any see-through fill lets the text underneath show through the list. */
+  --dd-fill: linear-gradient(180deg, #ffffff, #f7f9f8);
   --dd-rim: linear-gradient(150deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.25) 40%, rgba(255, 255, 255, 0.1) 60%, rgba(255, 255, 255, 0.6));
   --dd-sheen: rgba(255, 255, 255, 0.55);
   --dd-row: rgba(var(--fg-rgb), 0.06);
@@ -423,7 +424,7 @@ textarea.field { height: auto; padding: 10px; font-weight: 500; resize: vertical
   transform-origin: top left; animation: dd-in 0.28s cubic-bezier(0.25, 1.35, 0.45, 1);
 }
 [data-theme="dark"] .dd-menu {
-  --dd-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.05)), rgba(22, 30, 29, 0.38);
+  --dd-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)), rgb(22, 30, 29);
   --dd-rim: linear-gradient(150deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08) 40%, rgba(255, 255, 255, 0.03) 60%, rgba(255, 255, 255, 0.22));
   --dd-sheen: rgba(255, 255, 255, 0.12);
   --dd-row: rgba(255, 255, 255, 0.08);

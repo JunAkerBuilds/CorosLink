@@ -4,6 +4,7 @@
 // opens, list its layers, draw it at the 800 master, apply the edits the screens offer, and compose what the main
 // process builds into the watch's archive. Rewritten from CorosLink's WatchfaceEditor.tsx (its template-loading
 // effect, setDesign, renderExportPreview and createArchive), keeping their order of steps.
+import type { WatchfaceCarriedPreferences } from "../watchface/engine/watchfaceCarriedPreferences";
 import type {
   CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceDesignState, CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateDetails,
@@ -99,7 +100,7 @@ async function templateBackground(source: FaceSource): Promise<CorosWatchfaceTem
  * weather, the exercise divider, its own always-on layout and any data sprites it carries. "blank" then switches
  * everything off, before the first undo step, so Undo never returns to the template's design.
  */
-export async function initialDesign(source: FaceSource, saved: Design | undefined, startedFrom?: "template" | "blank"): Promise<Design> {
+export async function initialDesign(source: FaceSource, saved: Design | undefined, startedFrom?: "template" | "blank", carried?: WatchfaceCarriedPreferences): Promise<Design> {
   const { details: described, loadAssets, watch } = source;
   const fresh = !!startedFrom || !saved || Object.keys(saved).length <= 1;
   const initial = fresh ? undefined : saved;
@@ -119,11 +120,11 @@ export async function initialDesign(source: FaceSource, saved: Design | undefine
     }
   }
   // A template that carries its own weather or data sprites keeps them instead of the generated defaults.
-  const hydrated = initial ? undefined : await recoverWatchfaceDesign(described, loadAssets).catch(() => undefined);
+  const hydrated = initial ? undefined : await recoverWatchfaceDesign(described, loadAssets, carried?.chartSource?.current).catch(() => undefined);
   const carriesOwnAssets = Boolean(hydrated?.weatherIndicator?.assets) || Object.keys(hydrated?.nativeData ?? {}).length > 0;
   const recoveredCurrent = carriesOwnAssets ? hydrated : undefined;
   const recoveredAod = recoveredCurrent && hasWatchfaceAod(described)
-    ? await recoverWatchfaceDesign(detailsForCompositionMode(described, "aod"), loadAssets).catch(() => undefined) : undefined;
+    ? await recoverWatchfaceDesign(detailsForCompositionMode(described, "aod"), loadAssets, carried?.chartSource?.aod).catch(() => undefined) : undefined;
   const graphlessChart = initial && !initial.nativeData?.chart
     ? await recoverGraphlessChart(applyConfigTextEditsToDetails(described, initial.configTextEdits), loadAssets).catch(() => null) : null;
   const templateAnimation = initial?.animation ? undefined
@@ -738,6 +739,9 @@ export async function buildInput(source: FaceSource, root: Design): Promise<Watc
     ...(keepTemplateBackground ? { keepTemplateBackground: true } : {}),
     ...(root.archiveWatchFaceVersion !== undefined ? { watchFaceVersion: root.archiveWatchFaceVersion } : {}),
     ...(root.stripBlankConfigKeys ? { stripBlankConfigKeys: true } : {}),
+    ...(root.archiveOverrides?.templateId ? { templateIdOverride: root.archiveOverrides.templateId } : {}),
+    ...(root.archiveOverrides?.watchfaceId ? { watchfaceIdOverride: root.archiveOverrides.watchfaceId } : {}),
+    ...(root.archiveOverrides?.templateName ? { templateNameOverride: root.archiveOverrides.templateName } : {}),
     ...(assetReplacements.length ? { assetReplacements: assetReplacements.map(({ path, dataUrl, create, allowDimensionOverride }) => ({ path, dataUrl, ...(create ? { create } : {}), ...(allowDimensionOverride ? { allowDimensionOverride } : {}) })) } : {}),
     ...(configOverrides.length ? { configOverrides } : {}),
     ...(configTextReplacements.length ? { configTextReplacements } : {}),

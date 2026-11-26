@@ -141,6 +141,8 @@ export interface FontPickerProps {
   sample: string;
   /** Offer the template's digits as the first choice. */
   template: boolean;
+  /** What an empty family draws with, by name: the template's ("Template") or the system font. */
+  empty?: string;
   resolution: CorosWatchfaceResolutionDetails | null;
   layerId: string;
   loadAssets?: LoadAssets;
@@ -156,13 +158,16 @@ export function FontPicker(p: FontPickerProps) {
   const button = useRef<HTMLButtonElement>(null);
   const close = () => { setOpen(false); button.current?.focus(); };
   const font = p.family ? { fontFamily: `"${p.family}"`, fontWeight: p.weight, fontStyle: p.style } : undefined;
-  const tpl = <TemplateSample resolution={p.resolution} layerId={p.layerId} loadAssets={p.loadAssets} text="10" />;
+  // An empty family draws the template's digits where the layer has them, else the system font (text, separators).
+  const empty = p.empty ?? (p.template ? "Template" : "System font");
+  const tpl = empty === "System font" ? <span style={{ fontFamily: "system-ui, sans-serif" }}>{p.sample}</span>
+    : <TemplateSample resolution={p.resolution} layerId={p.layerId} loadAssets={p.loadAssets} text="10" />;
   const source = p.source ?? (!p.raster && isGoogleFamily(p.family) ? "Google Fonts" : undefined);
   return (
     <div className="st-fp">
-      <button ref={button} type="button" className="st-pick" aria-expanded={open} aria-label={`${p.label}: ${p.raster?.label ?? (p.family || "Template")}`} onClick={() => setOpen((o) => !o)}>
+      <button ref={button} type="button" className="st-pick" aria-expanded={open} aria-label={`${p.label}: ${p.raster?.label ?? (p.family || empty)}`} onClick={() => setOpen((o) => !o)}>
         <span className="st-pick-prev" style={font}>{p.raster ? <img src={p.raster.dataUrl} alt="" /> : p.family ? "10" : tpl}</span>
-        <span className="st-pick-name"><b>{p.raster?.label ?? (p.family || "Template")}</b>{source ? <small>{source}</small> : null}</span>
+        <span className="st-pick-name"><b>{p.raster?.label ?? (p.family || empty)}</b>{source ? <small>{source}</small> : null}</span>
         <Icon name={open ? "chevD" : "chevR"} size={15} />
       </button>
       {open ? <FontSheet {...p} close={close} /> : null}
@@ -301,7 +306,7 @@ export function LayerFontPicker({ design, layer, edit, resolution, loadAssets, f
   const canPng = kind === "time" || kind === "metric" || kind === "date" || kind === "selectable" || kind === "ampm";
   return (
     <FontPicker label="Font" family={familyOf(design, layer) ?? ""} raster={raster} source={layerSource(design, layer)} weight={ty.fontWeight} style={ty.fontStyle}
-      sample={sampleOf(kind)} template={kind !== "separator" && kind !== "ampm"} resolution={resolution} layerId={layer.id} loadAssets={loadAssets}
+      sample={sampleOf(kind)} template={kind !== "separator" && kind !== "ampm"} empty={kind === "ampm" ? "Template" : undefined} resolution={resolution} layerId={layer.id} loadAssets={loadAssets}
       onFamily={(f, weight) => edit((x) => setTypo(x, layer, { fontFamily: f, rasterFont: undefined, ...(weight ? { fontWeight: weight } : {}) }))}
       png={canPng ? <PngPane design={design} layer={layer} edit={edit} fail={fail} watch={watch} kind={kind} /> : undefined} />
   );

@@ -8,16 +8,16 @@
 // (parts/StudioSend.tsx).
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { CorosWatchfaceNativeDataStyle, CorosWatchfaceTemplateDetails } from "../../watchface/types";
-import { Button, Segmented, Select } from "@/components/ui";
+import { Button, Segmented } from "@/components/ui";
 import { getWatchfaceTarget } from "../../watchface/watchfaceTargets";
 import {
-  activeSimulationScenario, advanceSimulationDateTime, createWatchfaceSimulation, parseSimulationDateTime, simulationPreset,
+  activeSimulationScenario, advanceSimulationDateTime, createWatchfaceSimulation,
   type WatchfaceSimulation,
 } from "../../watchface/engine/watchfaceSimulation";
 import {
   allLayersOf, buildInput, colour, colourOf, detailsOf, editMode, grouped, initialDesign, isChartPart, LAYER_GROUPS, layersOf, masterSize, moveTo,
   openFaceSource, renderFace, resolutionOf, rowOf, rowsOf, separateTime, setVisible, sourceDetailsOf, spotActive, spotKeyOf, spotsOf, supportsAlwaysOn,
-  type Design, type EditorLayer, type FaceSource, type Mode, type Spot, type SpotChoice,
+  type Design, type EditorLayer, type FaceSource, type Mode, type SpotChoice,
 } from "../studioFace";
 import { currentGesture } from "../studioGesture";
 import { canMove, canResize, isLocked, nudge, readFrames, readPicture, resizeBy } from "../studioEdits";
@@ -28,14 +28,14 @@ import {
   addSlotField, addStatusField, canRemove, imageLayerId, libraryItems, negativeSignSize, newImage, newShape, removeLayer, restoreTemplateLayer, searchLibrary,
   shapeLayerId, type LibraryContext, type LibraryItem,
 } from "../studioLibrary";
-import { nextSlotPreview, setSlotPreview, slotOnFace, slotPreview, slotTypes, type SlotType } from "../studioSlot";
+import { nextSlotPreview, setSlotPreview, slotOnFace, slotPreview, slotTypes } from "../studioSlot";
 import { renderDefaultAnalogHands } from "../../watchface/engine/watchfaceAnalogHands";
 import { importAnimationFrames } from "../../watchface/engine/watchfaceAnimation";
 import { defaultStatusIndicatorPosition, renderDefaultBatteryStates, renderDefaultStatusIndicator } from "../../watchface/engine/watchfaceDefaultIndicators";
 import { watchfaceStatusGroupOf } from "../../watchface/engine/watchfaceStatusPairs";
 import { pickPreviewResolution, pickWatchPreviewResolution, type WatchfaceDatePartId } from "../../watchface/engine/watchfaceStudio";
 import { attachWatchfaceFontSnapshots } from "../../watchface/engine/watchfaceFontSnapshots";
-import { Dots, FaceInspector, LayerInspector, MultiInspector, rangeFill } from "./StudioInspector";
+import { Dots, FaceInspector, LayerInspector, MultiInspector } from "./StudioInspector";
 import { AnimationPlayer, type AnimationPlayback } from "../parts/StudioAnimation";
 import { resolveWatchfaceModeDesign } from "../../watchface/engine/watchfaceDisplayModes";
 import { FaceView } from "../parts/FaceView";
@@ -43,6 +43,9 @@ import { composeDragFrames, dragKey, snapTargets, type DragFrames } from "../stu
 import { moveBox, snapGaps, snapGuides, snapMove, snapPartners, type Box, type SnapGap, type SnapGuide, type SnapHold, type SnapTarget } from "../studioSnap";
 import { Icon } from "../parts/StudioIcon";
 import { ConvertDialog, SendDialog, type SendTab } from "../parts/StudioSend";
+import { SimPanel, SIM_SPEEDS, type SimSpeed } from "../parts/StudioSimulation";
+import { ProjectFolds } from "../parts/StudioProject";
+import { arrange, artworkPlace, duplicate, isArtwork, type ArrangeStep } from "../studioArrange";
 import { OfficialPicker } from "../parts/StudioOfficialPicker";
 import { addOfficialImage, officialArtwork } from "../studioOfficial";
 import { openGoogleFonts } from "../studioGoogleFonts";
@@ -57,8 +60,6 @@ const Watchmaker = lazy(() => import("../parts/StudioWatchmaker"));
 
 const FACE_PX = 460;
 const LAYER_TYPE = "application/x-clink-face-layer";
-const SPEEDS = { real: 1, min: 60, hour: 3600, day: 86400 } as const;
-type Speed = keyof typeof SPEEDS;
 const ICON: Partial<Record<EditorLayer["kind"], string>> = {
   background: "image", time: "clock", seconds: "clock", date: "cal", weekday: "cal", separators: "line", battery: "battery",
   batteryIcon: "battery", controlBatteryIcon: "battery", complication: "gauge", metric: "pulse", weather: "sun", animation: "spark",
@@ -100,7 +101,7 @@ export default function StudioEditor() {
   // it's placed against.
   const [snapped, setSnapped] = useState<Snapped>(NO_SNAP);
   const [sim, setSim] = useState<WatchfaceSimulation>(() => createWatchfaceSimulation());
-  const [speed, setSpeed] = useState<Speed>("min");
+  const [speed, setSpeed] = useState<SimSpeed>("min");
   // The face as last drawn, with the design it was drawn from, and which drawing the page has on screen.
   const [shot, setShot] = useState<{ src: string; design: Design; parts?: { under: string; over: string } } | null>(null);
   // The animation on the canvas: playing, or held on one frame picked in the inspector.
@@ -135,7 +136,7 @@ export default function StudioEditor() {
     (async () => {
       const { project: stored } = await openProject(id);
       const faceSource = await openFaceSource(id, stored.firmwareType);
-      const opened = await initialDesign(faceSource, stored.design, stored.startedFrom);
+      const opened = await initialDesign(faceSource, stored.design, stored.startedFrom, stored.carried);
       // Google fonts the face names load before it is first drawn; ones that arrive later redraw it (studioGoogleFonts.ts).
       const fonts = await openGoogleFonts(opened, (message) => { if (!live) return; setSource((s) => (s ? { ...s } : s)); if (message) setToast(message); });
       if (!live) return;
@@ -213,7 +214,7 @@ export default function StudioEditor() {
   // The simulation's clock: one tick a tenth of a second, at the chosen speed.
   useEffect(() => {
     if (!sim.playing) return;
-    const t = setInterval(() => setSim((s) => ({ ...s, dateTime: advanceSimulationDateTime(s.dateTime, SPEEDS[speed] / 10) })), 100);
+    const t = setInterval(() => setSim((s) => ({ ...s, dateTime: advanceSimulationDateTime(s.dateTime, SIM_SPEEDS[speed] / 10) })), 100);
     return () => clearInterval(t);
   }, [sim.playing, speed]);
   const scenario = useMemo(() => activeSimulationScenario(sim), [sim]);
@@ -325,6 +326,20 @@ export default function StudioEditor() {
 
   const remove = (l: EditorLayer) => { if (!library) return; const { ctx } = library; edit((x) => removeLayer(x, l, ctx)); if (layer?.id === l.id) setSel(null); say(`Removed ${l.label}. Undo with ⌘Z.`); };
 
+  // The face's own artwork: a copy just above it (⌘D), and its paint order (Alt+↑ / Alt+↓, Shift for the front or back).
+  const copyArtwork = (l: EditorLayer) => {
+    if (!isArtwork(l.id) || !design) return;
+    try {
+      const out = duplicate(resolveWatchfaceModeDesign(design, mode), l.id);
+      if (!out) return;
+      edit((x) => duplicate(x, l.id)?.design ?? x); setSel(out.layerId); say(`Copied ${l.label}.`);
+    } catch (e) { say(e instanceof Error ? e.message : String(e)); }
+  };
+  const orderArtwork = (l: EditorLayer, step: ArrangeStep) => {
+    edit((x) => arrange(x, l.id, step));
+    say({ forward: "Brought forward", backward: "Sent backward", front: "Brought to the front", back: "Sent to the back" }[step] + ".");
+  };
+
   // Keys: save, undo/redo, hide, nudge, clear. Not while typing in a field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -335,6 +350,10 @@ export default function StudioEditor() {
       if ((mod && e.key.toLowerCase() === "z") || (e.ctrlKey && e.key.toLowerCase() === "y")) { e.preventDefault(); if (e.shiftKey || e.key.toLowerCase() === "y") redo(); else undo(); return; }
       if (e.key === "Escape") { setSel(null); return; }
       if (!layer || !active) return;
+      if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); copyArtwork(layer); return; }
+      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown") && isArtwork(layer.id)) {
+        e.preventDefault(); orderArtwork(layer, e.key === "ArrowUp" ? (e.shiftKey ? "front" : "forward") : (e.shiftKey ? "back" : "backward")); return;
+      }
       // Delete takes artwork and Studio's own seconds and date off the face; everything else it hides.
       if ((e.key === "Delete" || e.key === "Backspace") && library && canRemove(active, layer, library.ctx)) { e.preventDefault(); remove(layer); return; }
       if ((e.key === "Delete" || e.key === "Backspace") && layer.canHide) { e.preventDefault(); hide(layer); return; }
@@ -909,7 +928,7 @@ export default function StudioEditor() {
             </div>
           ) : null}
 
-          {sim.enabled ? <SimPanel sim={sim} setSim={setSim} speed={speed} setSpeed={setSpeed} spots={spots} choice={choice} setChoice={setChoice}
+          {sim.enabled ? <SimPanel sim={sim} setSim={setSim} speed={speed} setSpeed={setSpeed} design={active} layers={library?.ctx.layers ?? []} spots={spots} choice={choice} setChoice={setChoice}
             slot={slotNow} slotShown={slotPreview(slotNow, active)} onSlot={(id) => edit((x) => setSlotPreview(x, id))} /> : null}
           {toast ? <div className="st-toast" role="status"><Icon name="check" size={15} width={2.6} />{toast}</div> : null}
 
@@ -944,6 +963,7 @@ export default function StudioEditor() {
                 master={master} icon={(layer.spot && SPOT_ICON[layer.spot.id]) || (ICON[layer.kind] ?? "rect")} aodNote={mode === "aod"} say={say} loadAssets={source.loadAssets} watch={watch.model}
                 watchLabel={watch.label} playback={playback} onPlayback={setPlayback}
                 onRemove={library && canRemove(active, layer, library.ctx) ? () => remove(layer) : null}
+                arrange={isArtwork(layer.id) ? { place: artworkPlace(active, layer.id), move: (step) => orderArtwork(layer, step), copy: () => copyArtwork(layer) } : undefined}
                 onHide={() => hide(layer)} onShow={() => edit((x) => setVisible(x, layer, true, source, mode))} onSplitTime={splitTime}
                 onHome={layer.capabilities.position && layer.layoutGroupId ? () => edit((x) => moveTo(x, layer, 0, 0)) : null}
                 showsOn={layer.canHide && layer.kind !== "background" ? (supportsAlwaysOn(source) ? (["current", "aod"] as const) : (["current"] as const)).flatMap((m) => {
@@ -957,11 +977,13 @@ export default function StudioEditor() {
                 <p>Click something on the watch to change it, or open <button type="button" className="st-link" onClick={() => setLeft("add")}>Add</button> for artwork, time and live data.</p>
               </div>
             )
-          ) : (
+          ) : (<>
             <FaceInspector design={active} edit={edit} details={detailsOf(source, design, mode)} resolution={resolution} loadAssets={source.loadAssets} fail={(e) => say(e instanceof Error ? e.message : String(e))}
               watchRow={<div className="st-watch-row"><FaceView src={frame} size={44} />
                 <span><b>{watch.label}</b><small>{watch.previewSize} × {watch.previewSize} · {watch.display === "amoled" ? "AMOLED" : "Memory-in-pixel"}{project.sourceTemplateId ? ` · template ${project.sourceTemplateId}` : ""}</small></span></div>} />
-          )}
+            <ProjectFolds design={design} editRoot={(fn) => apply((s) => { const next = fn(s.design); return next === s.design ? s : { ...s, design: next }; })}
+              details={source.details} baselines={source.baselines} mode={mode} sourceTemplateId={project.sourceTemplateId} />
+          </>)}
         </aside>
       </div>
 
@@ -1032,76 +1054,4 @@ function ChartMates({ design, row, details, loadAssets, spot, onPick }: {
     <button key={`mate:${m.source}`} type="button" className="st-hit" aria-label={`Edit ${chartReadoutName(m.source)}`} title={`${chartReadoutName(m.source)}: click to move it`}
       style={spot(m.bounds)} onPointerDown={(e) => { e.stopPropagation(); onPick(m.readout); }} />
   ))}</>;
-}
-
-function SimPanel({ sim, setSim, speed, setSpeed, spots, choice, setChoice, slot, slotShown, onSlot }: {
-  sim: WatchfaceSimulation; setSim: (s: WatchfaceSimulation | ((p: WatchfaceSimulation) => WatchfaceSimulation)) => void; speed: Speed; setSpeed: (s: Speed) => void;
-  spots: Spot[]; choice: SpotChoice; setChoice: (c: SpotChoice | ((p: SpotChoice) => SpotChoice)) => void;
-  /** The selectable slot's types that are on, the one the preview draws, and showing another. */
-  slot: SlotType[]; slotShown: string; onSlot: (id: string) => void;
-}) {
-  const slotType = slot.find((t) => t.id === slotShown);
-  // A spot's states the face has an image for; one state alone has nothing to switch.
-  const switches = spots.map((spot) => ({ spot, states: spot.states.filter((s) => s.layer.present) })).filter((x) => x.states.length > 1);
-  const at = parseSimulationDateTime(sim.dateTime);
-  const minutes = at.getHours() * 60 + at.getMinutes();
-  const battery = Number(sim.values.battery ?? 80);
-  const preset = (key: string) => setSim((s) => ({ ...simulationPreset(key, s), playing: key === "midnight" || key === "yearEnd" || key === "leapDay" }));
-  return (
-    <section className="st-sim" aria-label="Simulation">
-      <div className="st-sim-row">
-        <button type="button" className="st-play" aria-label={sim.playing ? "Pause" : "Play"} onClick={() => setSim((s) => ({ ...s, playing: !s.playing }))}><Icon name={sim.playing ? "pause" : "play"} size={18} width={2.3} /></button>
-        <div className="st-sim-clock"><b>{sim.dateTime.slice(11, 16)}</b><small>{at.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</small></div>
-        <input type="range" min={0} max={1439} value={minutes} aria-label="Time" style={rangeFill(minutes, 0, 1439)} onChange={(e) => {
-          const m = Number(e.target.value), d = new Date(at);
-          d.setHours(Math.floor(m / 60), m % 60, 0);
-          setSim((s) => ({ ...s, dateTime: `${s.dateTime.slice(0, 11)}${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:00` }));
-        }} />
-        <Segmented small label="Speed" value={speed} onChange={setSpeed} options={[{ value: "real", label: "Real time" }, { value: "min", label: "1 min/s" }, { value: "hour", label: "1 h/s" }, { value: "day", label: "1 day/s" }]} />
-        <button type="button" className="st-icon-btn" aria-label="Close the simulation" onClick={() => setSim((s) => ({ ...s, enabled: false, playing: false }))}><Icon name="close" /></button>
-      </div>
-      <div className="st-chips">
-        <button type="button" className="chip" onClick={() => preset("lowBattery")}>Low battery</button>
-        <button type="button" className="chip" onClick={() => preset("fullBattery")}>Full battery</button>
-        <button type="button" className="chip" onClick={() => preset("midnight")}>Midnight</button>
-        <button type="button" className="chip" onClick={() => preset("yearEnd")}>New year</button>
-        <button type="button" className="chip" onClick={() => preset("leapDay")}>Leap day 2028</button>
-        <button type="button" className="chip" onClick={() => preset("wide")}>Widest values</button>
-        <button type="button" className="chip" onClick={() => preset("reset")}>Reset</button>
-      </div>
-      <div className="st-sim-row st-sim-more">
-        <label className="st-range"><span>Battery</span><input type="range" min={0} max={100} value={battery} aria-label="Battery" style={rangeFill(battery, 0, 100)} onChange={(e) => setSim((s) => ({ ...s, values: { ...s.values, battery: e.target.value } }))} /><b>{battery}%</b></label>
-        <label className="st-range"><span>Weather</span>
-          <Select field aria-label="Weather state" value={sim.weather?.condition ?? 0} onChange={(e) => setSim((s) => ({ ...s, weather: { condition: Number(e.target.value), night: s.weather?.night ?? false } }))}>
-            {Array.from({ length: 41 }, (_, i) => <option key={i} value={i}>State {String(i).padStart(2, "0")}</option>)}
-          </Select></label>
-        <Segmented small label="Day or night" value={sim.weather?.night ? "night" : "day"} onChange={(v) => setSim((s) => ({ ...s, weather: { condition: s.weather?.condition ?? 0, night: v === "night" } }))}
-          options={[{ value: "day", label: "Day" }, { value: "night", label: "Night" }]} />
-      </div>
-      {slotType ? (
-        <div className="st-sim-row st-sim-more">
-          <label className="st-range"><span>Wearer picks</span>
-            <button type="button" className="st-icon-btn" aria-label="The type before" disabled={slot.length < 2} onClick={() => onSlot(nextSlotPreview(slot, slotShown, -1))}><Icon name="chevL" size={16} width={2.2} /></button>
-            <Select field aria-label="Type the slot shows" value={slotShown} onChange={(e) => onSlot(e.target.value)}>
-              {slot.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-            </Select>
-            <button type="button" className="st-icon-btn" aria-label="The next type" disabled={slot.length < 2} onClick={() => onSlot(nextSlotPreview(slot, slotShown, 1))}><Icon name="chevR" size={16} width={2.2} /></button></label>
-          {slotType.id !== "battery" && slotType.id !== "date" ? (
-            <label className="st-range"><span>Value</span>
-              <input className="field st-sim-value" type="text" aria-label={`${slotType.label} sample value`} maxLength={12} placeholder={slotType.sample} value={sim.values[slotType.id] ?? ""}
-                onChange={(e) => { const value = e.target.value; setSim((s) => { const values = { ...s.values }; if (value.trim()) values[slotType.id] = value; else delete values[slotType.id]; return { ...s, values }; }); }} /></label>
-          ) : null}
-        </div>
-      ) : null}
-      {switches.length ? (
-        <div className="st-sim-row st-sim-more">
-          {switches.map(({ spot, states }) => (
-            <label key={spot.id} className="st-range"><span>{spot.label}</span>
-              <Segmented small label={`${spot.label} state`} value={spotActive(spot, choice).key} onChange={(key) => setChoice((c) => ({ ...c, [spot.id]: key }))}
-                options={states.map((s) => ({ value: s.key, label: s.label }))} /></label>
-          ))}
-        </div>
-      ) : null}
-    </section>
-  );
 }

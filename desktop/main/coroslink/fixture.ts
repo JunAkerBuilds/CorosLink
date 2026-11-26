@@ -122,6 +122,12 @@ export function makeCorosLinkFolder(folder: string, options: { activities?: numb
     verification, sport_type, name, start_time, duration, distance, avg_hr, max_hr, calories, elevation_gain, imported_at)
     VALUES (?, ?, ?, 'watch-ble', 'watch', ?, 'fit', ?, 9, 'verified', 100, 'Run', ?, 1800, 5000, 140, 160, 300, 12, ?)`)
     .run("watch-846db480-coros-1792419428", "dev-1", "coros-1792419428-0", "fit/27/277d.fit", "277d", 1792419428, at);
+  // The newest run COROS lists, read from the watch too: its start rounded 40 s apart. One workout, so it comes over once.
+  writeFileSync(path.join(folder, "local-archive", "fit", "27", "27aa.fit"), Buffer.from("FIT-TWIN"));
+  db.prepare(`INSERT INTO local_activity_files (activity_id, device_id, watch_activity_id, source, provenance, file_path, format, sha256, size_bytes,
+    verification, sport_type, name, start_time, duration, distance, avg_hr, max_hr, calories, elevation_gain, imported_at)
+    VALUES (?, ?, ?, 'watch-ble', 'watch', ?, 'fit', ?, 9, 'verified', 100, 'Run', ?, 2180, 4006, 150, 175, 366, 16, ?)`)
+    .run("watch-846db480-coros-1794418242", "dev-1", "coros-1794418242-0", "fit/27/27aa.fit", "27aa", 1794418242, at);
 
   const h = db.prepare("INSERT INTO local_health_summaries (day, metric, device_id, value, unit, method, computed_at) VALUES (?, ?, 'dev-1', ?, 'count', 'watch-day-total', ?)");
   h.run("20261021", "steps", 7250, at); h.run("20261021", "active_time", 1800, at); h.run("20261022", "steps", 9100, at);

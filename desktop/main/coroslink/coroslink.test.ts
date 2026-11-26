@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { refToMs } from "@/data/sync/native";
 import type { RouteSave } from "../../maps/types";
+import { ActivityRules } from "../activities/duplicates";
 import { LocalStore } from "../localStore";
 import { plain } from "../media/vault";
 import { LocalWatch } from "../watch/service";
@@ -206,6 +207,8 @@ describe("bringing it over", () => {
     mkdirSync(data);
     const source = makeCorosLinkFolder(path.join(appData, "CorosLink"));
     const store = new LocalStore(path.join(data, "clink.db"));
+    // As main.ts runs it: one workout, one activity.
+    store.attachRules(new ActivityRules(store, { fitFolder: path.join(data, "watch", "fit"), ledger: path.join(data, "activity-merges.json") }));
     const routes: RouteSave[] = [];
     const ai = { picked: null as string | null, models: {} as Record<string, string>, efforts: {} as Record<string, string>, localUrl: null as string | null };
     const secrets = new Map<string, string>();
@@ -275,6 +278,9 @@ describe("bringing it over", () => {
     expect(store.count("coach.memory")).toBe(1);
     expect(store.list("coach.brief")[0].body).toMatchObject({ title: "Easy 5K", day: "2026-12-08", goal: "Stay easy", cues: ["Relax shoulders"], fuel: "Water" });
     expect(readFileSync(path.join(data, "watch", "fit", "coros-1792419428-0.fit"), "utf8")).toBe("FIT-BYTES");
+    // The watch's copy of the newest run went into COROS's, its FIT file with it.
+    expect(store.list("activity").map((a) => a.id)).not.toContain("coros-1794418242-0");
+    expect(readFileSync(path.join(data, "watch", "fit", "481686637942702580.fit"), "utf8")).toBe("FIT-TWIN");
     const project = path.join(data, "studio", "projects", FIXTURE_PROJECT);
     expect(readdirSync(project).sort()).toEqual(["preview.png", "project.json", "starter.dat"]);
     expect(routes.map((r) => r.name)).toEqual(["5.0 km loop"]);

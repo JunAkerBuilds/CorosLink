@@ -1,0 +1,65 @@
+/* Studio pieces ported from CorosLink's editor: the simulation's date, steps and values, and the Face tab's project
+   sections. Kept apart from studio.css; same tokens. */
+
+/* Simulation */
+.st-sim-date, .st-sim-time { height: 32px; box-sizing: border-box; padding: 0 9px; border-radius: 9px; border: 1px solid var(--field-border); background: var(--field-bg); color: var(--fg); font: 500 13px Inter, sans-serif; font-variant-numeric: tabular-nums; }
+.st-sim-date { width: 138px; }
+.st-sim-time { width: 112px; }
+.st-sim-steps { gap: 6px; }
+.st-sim-num { display: inline-flex; width: 150px; }
+.st-sim-num .st-num { width: 100%; }
+.st-sim-toggle { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.st-sim-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.st-sim-values { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; max-height: 168px; overflow-y: auto; padding-top: 10px; border-top: 1px solid var(--line); }
+.st-sim-values .st-sim-num { width: auto; }
+.st-sim-field { display: flex; align-items: center; gap: 6px; height: 32px; box-sizing: border-box; padding: 0 9px; border-radius: 9px; border: 1px solid var(--field-border); background: var(--field-bg); }
+.st-sim-field span { flex: none; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700; color: var(--dim); }
+.st-sim-field input.st-sim-value { flex: 1 1 auto; min-width: 0; width: 100%; height: auto; padding: 0; border: 0; outline: 0; box-shadow: none; background: transparent; color: var(--fg); font: 500 13px Inter, sans-serif; font-variant-numeric: tabular-nums; }
+
+/* Face tab: config files and archive identity */
+.st-cfg-text { width: 100%; box-sizing: border-box; min-height: 220px; resize: vertical; padding: 10px; border-radius: 10px; border: 1px solid var(--field-border); background: var(--field-bg); color: var(--fg); font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre; overflow-wrap: normal; overflow-x: auto; }
+.st-cfg-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.st-cfg-foot code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--dim); }
+.st-cfg-id { display: flex; flex-direction: column; gap: 4px; }
+.st-cfg-id > span { font-size: 11px; font-weight: 700; color: var(--dim); }
+.st-cfg-id .field { width: 100%; box-sizing: border-box; font-variant-numeric: tabular-nums; }
+.st-cfg-id .field[aria-invalid] { border-color: var(--h-red, #e03131); }
+.st-cfg-id small { font-size: 11.5px; color: var(--muted); }
+
+/* Shortcut hints in a layer's More menu */
+.st-menu [role="menuitem"] kbd { margin-left: auto; padding-left: 12px; font: 500 11.5px Inter, sans-serif; color: var(--dim); }
+.st-menu [role="menuitem"]:disabled { opacity: 0.45; cursor: default; }
+
+/* Animation: frames the watch leaves out, and a note that says so */
+.st-anim-frames li[data-dropped] .st-anim-thumb img { opacity: 0.3; }
+.st-anim-frames li[data-dropped] .st-anim-thumb span { text-decoration: line-through; }
+.st-note[data-warn] { color: var(--h-orange, #e8590c); }
+
+/* Template image facts: Download, size, file and key */
+.st-img-prev[data-checker] { background: repeating-conic-gradient(var(--line) 0% 25%, transparent 0% 50%) 50% / 12px 12px; }
+.st-img-prev img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.st-tpl-facts { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.st-tpl-facts dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; font-size: 12px; }
+.st-tpl-facts dt { font-weight: 700; color: var(--dim); }
+.st-tpl-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--fg); font-variant-numeric: tabular-nums; }
+.st-tpl-facts code { font-size: 11.5px; }
+
+/* AM and PM pictures */
+.st-ampm { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.st-ampm-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+.st-ampm-pic { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--field-border); background: var(--field-bg); color: var(--fg); cursor: pointer; text-align: left; }
+.st-ampm-pic > svg { margin-left: auto; color: var(--dim); }
+.st-ampm-prev { display: grid; place-items: center; width: 36px; height: 28px; border-radius: 6px; overflow: hidden; font-size: 11px; }
+.st-ampm-prev img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.st-ampm-copy { display: flex; flex-direction: column; font-size: 12.5px; }
+.st-ampm-copy small { font-size: 11px; color: var(--dim); }
+.st-ampm-prev[data-checker] { background: repeating-conic-gradient(var(--line) 0% 25%, transparent 0% 50%) 50% / 10px 10px; }
+
+/* Live-data parts: pick one picture to replace, remove or retext it */
+.st-np-cell { padding: 3px 2px 2px; border: 0; border-radius: 9px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.st-np-cell:hover { background: var(--field-bg); }
+.st-np-cell[aria-selected="true"] { background: rgba(83, 203, 161, 0.16); box-shadow: inset 0 0 0 1.5px var(--h-mint); }
+.st-np-cell[data-custom] small { color: var(--h-mint-ink); font-weight: 700; }
+.st-np-cell:focus-visible { outline: 2px solid var(--h-mint); outline-offset: 1px; }
+.st-np-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-np-reset { align-self: flex-start; }

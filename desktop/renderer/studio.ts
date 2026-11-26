@@ -1,4 +1,5 @@
 // The Studio pages' calls to the main process (desktop/main/watchface/studio.ts), at /api/desktop/studio.
+import type { WatchfaceCarriedPreferences } from "../watchface/engine/watchfaceCarriedPreferences";
 import type { CorosWatchfaceDesignState, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../watchface/types";
 import type { WatchfaceBuildInput } from "../watchface/archive/build";
 import type { CorosFace, ProjectSummary, StoredProject, StudioTemplate } from "../main/watchface/studio";
@@ -114,7 +115,7 @@ export interface ConversionResult { rebuilt: boolean; generatedAod: boolean; noC
  * A new project for another watch, converted from this one's 800 px master; `scratch` ones are for All watches. A face
  * built from its own layout sends its composition (`build`) and is rebuilt for the watch with the edits applied.
  */
-export const convertProject = (id: string, body: { watch: string; design: CorosWatchfaceDesignState; name?: string; scratch?: boolean; build?: WatchfaceBuildInput }) =>
+export const convertProject = (id: string, body: { watch: string; design: CorosWatchfaceDesignState; name?: string; scratch?: boolean; build?: WatchfaceBuildInput; carried?: WatchfaceCarriedPreferences }) =>
   post<{ project: ProjectSummary; result: ConversionResult }>(`${project(id)}/convert`, body);
 export const watchConnection = () => get<{ watch: { connected: boolean; reason?: string } }>("/watch").then((b) => b.watch);
 

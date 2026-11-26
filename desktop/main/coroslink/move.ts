@@ -17,6 +17,7 @@ import type { LocalStore } from "../localStore";
 import type { RouteSave } from "../../maps/types";
 import type { McpServerInput } from "../ai/mcpStore";
 import { savedFromDoc } from "@/lib/savedWorkout";
+import { duplicateGroups } from "../activities/duplicates";
 import { findCorosLink, freeBytes, type DetectOptions, type FoundCorosLink } from "./detect";
 import {
   activityChanges, chatChanges, healthChanges, journalChanges, maskEmail, memoryChanges, pairedWatch, routeSave, watchKeyText,
@@ -195,7 +196,9 @@ export class CorosLinkMove {
     try {
       const list = db.all<ActivityRow>("SELECT * FROM training_activities");
       const files = db.all<ActivityFileRow>("SELECT * FROM local_activity_files");
-      const activities = activityChanges(list, files).length;
+      // Workouts, not copies: a run COROS lists and the watch's archive kept too counts once (activities/duplicates.ts).
+      const changes = activityChanges(list, files).map((c) => ({ id: c.id, body: c.body as Record<string, unknown> }));
+      const activities = changes.length - duplicateGroups(changes).reduce((n, g) => n + g.length - 1, 0);
       const healthDays = new Set([
         ...db.all<{ day: string }>("SELECT DISTINCT day FROM local_health_summaries").map((r) => r.day.replaceAll("-", "")),
         ...db.all<{ day: string }>("SELECT DISTINCT day FROM local_sleep_sessions").map((r) => r.day.replaceAll("-", "")),
@@ -410,11 +413,9 @@ export class CorosLinkMove {
     switch (id) {
       case "acts": {
         const files = db.all<ActivityFileRow>("SELECT * FROM local_activity_files");
-        const added = await this.writeNew(activityChanges(db.all<ActivityRow>("SELECT * FROM training_activities"), files), tick);
-        // The watch's FIT files go where Local mode keeps its own (watch/fit/<watch id>.fit), so the next watch sync
-        // reads them instead of building them again.
-        // TODO(coroslink-move): activity.detail (laps, streams, route) from these FIT files needs a FIT reader on
-        // this side; until then the workouts come over as summaries and their detail arrives with the next sync.
+        // The watch's FIT files go where Local mode keeps its own (watch/fit/<watch id>.fit) first: the next watch sync
+        // reads them instead of building them again, and the store makes each workout's detail (laps, streams, map)
+        // from them as it's written (activities/duplicates.ts), which also keeps a workout COROS lists too as one.
         const fitFolder = path.join(this.host.data, "watch", "fit");
         let fits = 0;
         for (const f of files) {
@@ -426,6 +427,7 @@ export class CorosLinkMove {
           await clone(source, target);
           fits++;
         }
+        const added = await this.writeNew(activityChanges(db.all<ActivityRow>("SELECT * FROM training_activities"), files), tick);
         // Every original the watch sent and every FIT the athlete imported, as CorosLink kept them (its own backups
         // are made of these): the only copy once CorosLink is gone. In-progress transfers aren't.
         await copyTree(path.join(found.folder, "local-archive"), path.join(this.keptFolder, "local-archive"), (name) => name === "partial");
