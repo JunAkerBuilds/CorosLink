@@ -17,7 +17,9 @@
     "binaries:prepare": "node scripts/prepare-binaries.mjs",
     "binaries:pin": "node scripts/pin-binaries.mjs",
     "dist:mac": "npm run build && electron-builder --mac --arm64 --x64 --publish never && node scripts/stamp-mac-update-minimum.mjs",
-    "release:version": "node scripts/release-version.mjs"
+    "release:version": "node scripts/release-version.mjs",
+    "dist:win": "npm run build && electron-builder --win --x64 --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --x64 --publish never"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.12.0",
@@ -85,10 +87,6 @@
         "filter": [
           "**/*"
         ]
-      },
-      {
-        "from": "native/ble/target/release/clink-ble",
-        "to": "clink-ble"
       }
     ],
     "mac": {
@@ -108,14 +106,60 @@
         "NSBluetoothAlwaysUsageDescription": "C-LINK uses Bluetooth to connect to your COROS watch.",
         "NSLocalNetworkUsageDescription": "C-LINK syncs with C-LINK on your phone over the same Wi-Fi network.",
         "NSLocationUsageDescription": "C-LINK uses your location only when you choose Use my location."
-      }
+      },
+      "extraResources": [
+        {
+          "from": "native/ble/target/release/clink-ble",
+          "to": "clink-ble"
+        }
+      ]
     },
     "dmg": {
       "artifactName": "CorosLink-${version}-${arch}.${ext}"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "artifactName": "CorosLink-Setup-${version}.${ext}",
+      "extraResources": [
+        {
+          "from": "native/ble/target/release/clink-ble.exe",
+          "to": "clink-ble.exe"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "CorosLink-Setup-${version}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "icon": "build/icon.png",
+      "executableName": "clink",
+      "artifactName": "CorosLink-${version}-${arch}.${ext}",
+      "maintainer": "C-LINK <JunAkerBuilds@users.noreply.github.com>",
+      "synopsis": "C-LINK: a local companion app for COROS watches",
+      "syncDesktopName": true,
+      "extraResources": [
+        {
+          "from": "native/ble/target/release/clink-ble",
+          "to": "clink-ble"
+        }
+      ]
     }
   },
   "overrides": {
     "minimatch@^9.0.0": "^11.0.9",
     "minimatch@^10.0.0": "^11.0.9"
-  }
+  },
+  "author": {
+    "name": "C-LINK",
+    "email": "JunAkerBuilds@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/JunAkerBuilds/CorosLink"
 }

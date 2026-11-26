@@ -1,9 +1,14 @@
 # Changelog
 
-C-LINK desktop betas (`vX.Y.Z-clink.N`). They go only to CorosLink installs that opted in to C-LINK, and to earlier
-C-LINK betas. Each section here is also that release's notes on GitHub.
+C-LINK desktop betas (`vX.Y.Z-clink.N`). They go to CorosLink installs on a Mac that opted in to C-LINK, to earlier
+C-LINK betas, and to anyone who downloads them from the release page. Each section here is also that release's notes on GitHub.
 
 ## [0.2.0-clink.2] - 2026-11-26
+
+### Windows and Linux
+- C-LINK betas now come for Windows (installer) and Linux (AppImage and deb), not just the Mac. Download them from
+  this release. CorosLink on Windows and Linux doesn't offer the beta as an update, so install it by hand; after
+  that, the beta updates itself (on Linux, the AppImage does).
 
 ### Watch Studio
 - Studio now matches CorosLink's editor: config files, the full simulation panel, Duplicate (⌘D), and moving layers

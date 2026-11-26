@@ -25,7 +25,10 @@ Rules:
   as a **prerelease**. A beta published as a normal release would go to everyone.
 - Keep C-LINK betas above every CorosLink release (0.2.0-clink.N > 0.1.x), and the first stable C-LINK above the last
   beta's base version.
-- Windows and Linux: C-LINK isn't built for them yet; CorosLink there never opts in and keeps CorosLink releases.
-  When C-LINK ships there, its release must include `latest.yml` / `latest-linux.yml`.
+- Windows and Linux: betas are built for them (NSIS installer; AppImage and deb) with `clink.yml` /
+  `clink-linux.yml`. CorosLink there has no opt-in and reads `latest.yml` / `latest-linux.yml` from the newest full
+  release, so it never sees a beta: people install the beta from the release page, and a C-LINK beta then updates
+  itself (on Linux only the AppImage updates itself). Stable tags don't build Windows or Linux yet; when C-LINK
+  replaces CorosLink there, its release must include `latest.yml` / `latest-linux.yml`.
 - Going back from the beta isn't automatic: download CorosLink's last DMG. The move only copies, so CorosLink's data
   is still there.

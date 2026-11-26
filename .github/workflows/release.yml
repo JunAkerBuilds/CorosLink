@@ -5,7 +5,8 @@ name: Release C-LINK (draft)
 # uploads it to a DRAFT release, which the updater can't see. Going live is a person pressing "Publish release" on
 # GitHub (with stagingPercentage set in latest-mac.yml for a staged rollout).
 #
-# Mac only: latest.yml / latest-linux.yml are never made, so CorosLink on Windows and Linux stays on 0.1.x.
+# Windows and Linux are built for betas only, with clink.yml / clink-linux.yml: latest.yml / latest-linux.yml are
+# never made, so CorosLink on Windows and Linux keeps CorosLink releases.
 #
 # Tags (docs/releases.md): v0.2.0-clink.N makes a draft PRERELEASE with clink-mac.yml, the opt-in beta: once
 # published, only CorosLink installs that opted in to C-LINK (and C-LINK betas) take it; everyone else stays on
@@ -147,20 +148,149 @@ jobs:
             release/*.zip.blockmap
             release/*-mac.yml
 
+  # Windows and Linux: betas only (v0.2.0-clink.N) for now. A beta makes clink.yml / clink-linux.yml, which no
+  # CorosLink install reads (CorosLink there reads latest.yml from the newest full release), so only people who
+  # download the beta and later C-LINK betas take it. A stable tag skips these jobs until C-LINK replaces CorosLink there.
+  windows:
+    name: Windows installer
+    needs: [check, dependency-scan]
+    if: contains(github.ref_name, '-clink.') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: npm run release:version -- "$RELEASE_TAG"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build clink-ble
+        working-directory: native/ble
+        run: |
+          cargo build --release --locked
+          target/release/clink-ble.exe --version
+
+      - name: Fetch yt-dlp and ffmpeg
+        run: node scripts/prepare-binaries.mjs --platform=win32 --arch=x64
+
+      - name: Build NSIS installer
+        run: npm run dist:win
+
+      - name: Verify installer and feed
+        run: |
+          set -euo pipefail
+          ls -la release
+          ls release/*.exe
+          test -f release/win-unpacked/resources/clink-ble.exe
+          if ls release/latest.yml 2>/dev/null; then
+            case "$GITHUB_REF_NAME" in *-clink.*) echo "A beta must not make latest.yml"; exit 1 ;; esac
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then test -f release/clink.yml; cat release/clink.yml; fi
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: clink-windows
+          path: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/clink.yml
+
+  linux:
+    name: Linux AppImage and deb
+    needs: [check, dependency-scan]
+    if: contains(github.ref_name, '-clink.') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: npm run release:version -- "$RELEASE_TAG"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # clink-ble pairs through BlueZ over D-Bus.
+      - name: Install D-Bus headers
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - name: Build clink-ble
+        working-directory: native/ble
+        run: |
+          cargo build --release --locked
+          target/release/clink-ble --version
+
+      - name: Fetch yt-dlp and ffmpeg
+        run: node scripts/prepare-binaries.mjs --platform=linux --arch=x64
+
+      - name: Build AppImage and deb
+        run: npm run dist:linux
+
+      - name: Verify packages and feed
+        run: |
+          set -euo pipefail
+          ls -la release
+          ls release/*.AppImage release/*.deb
+          test -x release/linux-unpacked/resources/clink-ble
+          if ls release/latest-linux.yml 2>/dev/null; then
+            case "$GITHUB_REF_NAME" in *-clink.*) echo "A beta must not make latest-linux.yml"; exit 1 ;; esac
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then test -f release/clink-linux.yml; cat release/clink-linux.yml; fi
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: clink-linux
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/clink-linux.yml
+
   draft:
     name: Draft GitHub release
-    needs: [macos]
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, windows, linux]
+    if: >-
+      !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.macos.result == 'success'
+      && needs.windows.result != 'failure' && needs.linux.result != 'failure'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
       attestations: write
     steps:
-      - name: Download the app
+      - name: Download the apps
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: clink-macos
+          pattern: clink-*
+          merge-multiple: true
           path: release
 
       - name: Write SHA-256 checksums
@@ -182,9 +312,9 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           name: C-LINK ${{ github.ref_name }}
           body: |
-            C-LINK, the new CorosLink. Draft: check it, then publish by hand. A beta (prerelease, clink-mac.yml)
-            reaches only CorosLink installs that opted in; a release (latest-mac.yml, stagingPercentage for a
-            staged rollout) reaches every CorosLink on a Mac. Mac only; CorosLink on Windows and Linux stays on 0.1.x.
+            C-LINK, the new CorosLink. Draft: check it, then publish by hand. A beta (prerelease, clink-mac.yml,
+            clink.yml, clink-linux.yml) reaches only CorosLink installs on a Mac that opted in, C-LINK betas, and
+            people who download it here; a release (latest-mac.yml) reaches every CorosLink on a Mac.
           generate_release_notes: false
           files: |
             release/*
