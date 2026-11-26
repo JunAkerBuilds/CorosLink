@@ -165,6 +165,7 @@ export function FontPicker(p: FontPickerProps) {
   const source = p.source ?? (!p.raster && isGoogleFamily(p.family) ? "Google Fonts" : undefined);
   return (
     <div className="st-fp">
+      <span className="st-label" aria-hidden="true">{p.label}</span>
       <button ref={button} type="button" className="st-pick" aria-expanded={open} aria-label={`${p.label}: ${p.raster?.label ?? (p.family || empty)}`} onClick={() => setOpen((o) => !o)}>
         <span className="st-pick-prev" style={font}>{p.raster ? <img src={p.raster.dataUrl} alt="" /> : p.family ? "10" : tpl}</span>
         <span className="st-pick-name"><b>{p.raster?.label ?? (p.family || empty)}</b>{source ? <small>{source}</small> : null}</span>

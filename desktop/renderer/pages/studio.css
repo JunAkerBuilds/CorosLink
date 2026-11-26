@@ -202,9 +202,19 @@
 }
 /* The panels scroll; what's in them keeps its own height (else the tabs at the top get squeezed flat). */
 .st-left > *, .st-right > * { flex-shrink: 0; }
+/* Fields in the side panels are soft filled wells, not outlined boxes: no border or inset shadow, a mint ring on focus. */
+.st-left, .st-right { --field-bg: rgba(15, 21, 20, 0.055); --field-border: transparent; --field-shadow: none; }
+:is(.night, [data-theme="dark"]) :is(.st-left, .st-right) { --field-bg: rgba(255, 255, 255, 0.11); }
+.st-right :is(.st-num, .st-colorfield, .st-select, .st-colour-now, .st-pick):hover { --field-bg: rgba(15, 21, 20, 0.085); }
+:is(.night, [data-theme="dark"]) .st-right :is(.st-num, .st-colorfield, .st-select, .st-colour-now, .st-pick):hover { --field-bg: rgba(255, 255, 255, 0.16); }
+.st-right .st-num:focus-within, .st-right .st-colour-now:focus-within { box-shadow: 0 0 0 2px color-mix(in srgb, var(--h-mint-ink, #53cba1) 55%, transparent); }
 .st-left { width: 276px; }
 .st-right { width: 304px; gap: 0; padding: 14px 0 0; }
 .st-right > .st-tabs { margin: 0 16px 12px; }
+/* The inspector's left edge: drag it to make the panel wider or narrower. It sits in the gap, costing no space. */
+.st-resize { flex: none; position: relative; width: 12px; margin: 0 -12px; z-index: 2; cursor: col-resize; touch-action: none; outline: none; }
+.st-resize::after { content: ""; position: absolute; top: 50%; left: 50%; width: 4px; height: 44px; margin: -22px 0 0 -2px; border-radius: 2px; background: var(--line); opacity: 0; transition: opacity 0.15s, background 0.15s; }
+.st-resize:hover::after, .st-resize:focus-visible::after, .st-resize:active::after { opacity: 1; background: var(--h-mint-ink, #53cba1); }
 .st-tabs { display: flex; }
 .st-tabs button { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 
@@ -411,7 +421,9 @@
 .st-colour-top { display: flex; align-items: center; gap: 8px; }
 .st-colour-reset { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; }
 .st-colour-now { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 5px; border-radius: 9px; border: 1px solid var(--field-border); background: var(--field-bg); }
-.st-colour-chip { width: 20px; height: 20px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.45); }
+.st-colour-chip { width: 20px; height: 20px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.45); position: relative; overflow: hidden; cursor: pointer; }
+.st-colour-chip input { position: absolute; inset: -6px; opacity: 0; cursor: pointer; }
+.st-colour-chip:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
 .st-colour-now input { width: 64px; border: 0; outline: 0; background: transparent; color: var(--fg); font: 500 12.5px Inter, sans-serif; font-variant-numeric: tabular-nums; text-transform: uppercase; }
 .st-swatches { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
 .st-swatch-btn { position: relative; display: grid; place-items: center; height: 30px; padding: 0; border: 0; border-radius: 9px; color: #fff; cursor: pointer;
@@ -548,7 +560,8 @@
 @media (max-width: 1100px) {
   .st-work { flex-wrap: wrap; overflow: auto; }
   .st-canvas { flex: 1 1 100%; min-height: 640px; order: -1; }
-  .st-left, .st-right { flex: 1 1 280px; width: auto; max-height: 560px; }
+  .st-left, .st-right { flex: 1 1 280px; width: auto !important; max-height: 560px; }
+  .st-resize { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .st-card, .st-tile, .st-dot, .st-hit { transition: none; }
@@ -733,6 +746,13 @@
 .st-ch-ro-copy[data-editing] b::after { content: " · editing"; font-weight: 500; color: var(--muted); }
 /* The readout the chart layer is editing: a mint row. */
 .st-ch-ro:has(.st-ch-ro-copy[data-editing]) { background: rgba(83, 203, 161, 0.14); color: var(--h-mint-ink); }
+/* The edited readout's font, colour, size and parts, tucked under its row. */
+/* The edited readout's name folds its settings away; the chevron sits after "· editing". */
+.st-ch-ro-copy[aria-expanded] b { display: flex; align-items: center; gap: 0; }
+.st-ch-ro-copy[aria-expanded] b::after { order: 1; white-space: pre; }
+.st-ch-fold { order: 2; display: inline-flex; margin-left: 6px; color: var(--muted); transform: rotate(180deg); transition: transform 0.15s; }
+.st-ch-fold[data-shut] { transform: none; }
+.st-ch-look { display: flex; flex-direction: column; gap: 10px; margin: 6px 6px 10px; min-width: 0; }
 .st-ch-ro-copy[data-editing] b::after { color: var(--h-mint-ink); }
 .st-ch-ro .st-icon-btn { width: 30px; height: 30px; }
 .st-ch-ro[data-state="missing"] { border: 1px dashed rgba(var(--fg-rgb), 0.2); }

@@ -38,7 +38,7 @@ export async function smokeStudioPercent(window: BrowserWindow, origin: string, 
   say(`panel: ${await run(`document.querySelector(".st-insp-body")?.innerText.replace(/\\s+/g, " ")`)}`);
   say(`own colour ${await click('.st-insp-body [aria-label="Same color as the digits"]')}`);
   await wait(400);
-  say(`a colour swatch ${await run(`(() => { const d = [...document.querySelectorAll(".st-insp-body button.st-swatch-btn")]; d[7]?.click(); return d.length + " swatches, picked " + (d[7]?.title ?? "none"); })()`)}`);
+  say(`a colour ${await run(`(() => { const i = document.querySelector(".st-insp-body .st-colour-now input[type=text]"); if (!i) return "no hex field"; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set; set.call(i, "#6aa5ff"); i.dispatchEvent(new Event("input", { bubbles: true })); i.blur(); return "typed #6aa5ff"; })()`)}`);
   await wait(400);
   say(`size 55 ${await slide("Size", 55)}`);
   await wait(400);

@@ -1,13 +1,13 @@
 // Studio's right panel, from the design's "Studio inspector by layer type" boards: the header, what a kind of layer
 // needs first, then its sections (Position and size, the kind's own, Look and visibility, Advanced), all open unless
 // folded by hand. Every control writes the design field CorosLink's editor writes for it (studioEdits.ts).
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { beginGesture, endGesture } from "../studioGesture";
 import { Segmented, Select, Switch } from "@/components/ui";
 import type { CorosWatchfaceArtwork, CorosWatchfaceNativePart, CorosWatchfaceResolutionDetails } from "../../watchface/types";
 import { WATCH_LANGUAGE_NAMES } from "../../watchface/engine/watchfaceLanguages";
 import { watchThemeSupport, watchThemeSwatch } from "../../watchface/engine/watchfaceThemeColor";
-import { defaultNativeDataStyle, nativePart, nativePartRole, nativeRoleIndices } from "../../watchface/engine/nativeDataParts";
+import { defaultNativeDataStyle, nativeComponentFontSize, nativeFontSizePart, nativePart, nativePartForFontSize, nativePartRole, nativeParts, nativeRoleIndices } from "../../watchface/engine/nativeDataParts";
 import { nativeDataAsset } from "../../watchface/engine/nativeData";
 import { pickPreviewResolution } from "../../watchface/engine/watchfaceStudio";
 import { NATIVE_DATA_BY_ID } from "../../watchface/watchfaceNativeCatalog";
@@ -49,7 +49,7 @@ export const PALETTE = ["#ffffff", "#53cba1", "#ff8a3d", "#6aa5ff", "#ff6b9a", "
 export const KIND: Partial<Record<PanelKind, string>> = {
   time: "Time digits", metric: "Live data", date: "Date", selectable: "Wearer picks", ampm: "12-hour clock", separator: "Separator",
   native: "Live data", weather: "Day and night", batteryIcon: "12 states", image: "Template image", animation: "Animation",
-  sprite: "Image", shape: "Shape", text: "Text", background: "Face", chart: "Experimental", other: "Layer",
+  sprite: "Image", shape: "Shape", text: "Text", background: "Face", chart: "Chart", other: "Layer",
 };
 
 type Edit = (fn: (d: Design) => Design) => void;
@@ -268,7 +268,7 @@ const weightChoices = (family: string | undefined, current: number): number[] =>
   return has ? [...new Set([...has, current])].sort((a, b) => a - b) : [...WEIGHTS];
 };
 
-function TypeFields({ design, layer, edit, kind, fontSize, resolution }: { design: Design; layer: EditorLayer; edit: Edit; kind: PanelKind; fontSize: number | null; resolution: CorosWatchfaceResolutionDetails | null }) {
+function TypeFields({ design, layer, edit, kind, fontSize, resolution, onSize }: { design: Design; layer: EditorLayer; edit: Edit; kind: PanelKind; fontSize: number | null; resolution: CorosWatchfaceResolutionDetails | null; onSize?: (v: number) => void }) {
   const t = typoOf(design, layer);
   const ty = typographyOf(design, layer);
   const sprite = !familyOf(design, layer) && !ty.rasterFont;
@@ -277,7 +277,7 @@ function TypeFields({ design, layer, edit, kind, fontSize, resolution }: { desig
   const scale = scaleOf(design, layer);
   return <>
     <div className="st-nums">
-      {fontSize !== null ? <NumberField label="Size" unit="px" value={fontSize} min={4} max={400} onChange={(v) => edit((x) => setFontSize(x, layer, v, resolution))} /> : null}
+      {fontSize !== null ? <NumberField label="Size" unit="px" value={fontSize} min={4} max={400} onChange={(v) => (onSize ? onSize(v) : edit((x) => setFontSize(x, layer, v, resolution)))} /> : null}
       {fontSize === null && scale !== null ? <NumberField label="Scale" unit="%" value={Math.round(scale * 100)} min={10} max={400} onChange={(v) => edit((x) => setScale(x, layer, v / 100))} /> : null}
       {hasSpacing && !sprite ? <NumberField label="Spacing" unit="%" value={Math.round((ty.letterSpacing ?? 0) * 100)} min={-35} max={25} onChange={(v) => edit((x) => setTypo(x, layer, { letterSpacing: Math.max(-0.35, Math.min(0.25, v / 100)) }))} /> : null}
     </div>
@@ -528,8 +528,10 @@ function PercentLook({ design, edit, replaced }: { design: Design; edit: Edit; r
     <div className="st-row"><span>Same color as the digits</span>
       <Switch label="Same color as the digits" checked={!look.color} onChange={(v) => edit((x) => setPercent(x, { color: v ? undefined : digits }))} /></div>
     {look.color ? <ColourRow label="Color" value={look.color} onPick={(c) => edit((x) => setPercent(x, { color: c }))} /> : null}
-    <Slider label="Size" value={size} min={30} max={150} unit="%" onCommit={(v) => edit((x) => setPercent(x, { size: v / 100 }))} />
-    <Slider label="Gap" value={Math.round(look.gap ?? 0)} min={0} max={40} unit=" px" onCommit={(v) => edit((x) => setPercent(x, { gap: v }))} />
+    <div className="st-nums">
+      <Slider label="Size" value={size} min={30} max={150} unit="%" onCommit={(v) => edit((x) => setPercent(x, { size: v / 100 }))} />
+      <Slider label="Gap" value={Math.round(look.gap ?? 0)} min={0} max={40} unit="px" onCommit={(v) => edit((x) => setPercent(x, { gap: v }))} />
+    </div>
     {size < 100 ? <div className="st-row"><span>Sits at</span>
       <Segmented small label="Sits at" value={look.align ?? "middle"} onChange={(v) => edit((x) => setPercent(x, { align: v }))}
         options={[{ value: "top", label: "Top" }, { value: "middle", label: "Middle" }, { value: "bottom", label: "Bottom" }]} /></div> : null}
@@ -547,7 +549,7 @@ const partName = (id: string, part: CorosWatchfaceNativePart) =>
 function NativeParts({ design, edit, layer, fail, watch, resolution }: { design: Design; edit: Edit; layer: EditorLayer; fail: (e: unknown) => void; watch: string; resolution: CorosWatchfaceResolutionDetails | null }) {
   const n = nativeOf(design, layer);
   const id = layer.nativeDataId ?? "";
-  const parts = partsOf(design, layer).filter((part) => PART_LABEL[part]);
+  const parts = partsOf(design, layer).filter((part) => PART_LABEL[part] && (id !== "chart" || !n || chartReadoutDraws(chartSourceOf(n), part)));
   const [picked, setPicked] = useState<CorosWatchfaceNativePart>(parts[0] ?? "value");
   const part = parts.includes(picked) ? picked : parts[0] ?? "value";
   // A state field (Bluetooth on/off…) shows its state pictures where a number shows digits.
@@ -774,6 +776,53 @@ function ElementTop({ design, edit, layer, resolution }: LayerInspectorProps) {
   </>;
 }
 
+/**
+ * The look of the readout the chart layer is editing (Stress, Sunrise…), under its row: its font, colour, size and
+ * parts, the same fields a live data field has. Size resizes the readout's own boxes, never the layer's scale, which
+ * would grow the graph too.
+ */
+function ReadoutLook(p: LayerInspectorProps) {
+  const { design, edit, layer, resolution } = p;
+  const n = nativeOf(design, layer);
+  if (!n) return null;
+  const fail = (e: unknown) => p.say(e instanceof Error ? e.message : String(e));
+  const sizePart = nativeFontSizePart("chart", n);
+  const size = Math.round(nativeComponentFontSize("chart", n, sizePart));
+  const resize = (v: number) => edit((x) => {
+    const cur = nativeOf(x, layer);
+    if (!cur) return x;
+    const factor = Math.max(4, Math.min(400, v)) / Math.max(1, nativeComponentFontSize("chart", cur, nativeFontSizePart("chart", cur)));
+    const parts = { ...cur.parts };
+    for (const part of nativeParts("chart", cur).filter((q) => CHART_READOUT_PARTS.has(q))) {
+      const ps = nativePart("chart", cur, part);
+      parts[part] = { ...parts[part], ...nativePartForFontSize("chart", cur, part, nativeComponentFontSize("chart", cur, part) * factor),
+        x: Math.round(ps.x * factor), y: Math.round(ps.y * factor) };
+    }
+    return setNative(x, layer, { parts });
+  });
+  return (
+    <div className="st-ch-look">
+      <LayerFontPicker design={design} layer={layer} edit={edit} resolution={resolution} loadAssets={p.loadAssets} fail={fail} watch={p.watch} />
+      <ColourRow label="Color" {...layerColour(design, layer, edit)} />
+      <TypeFields design={design} layer={layer} edit={edit} kind="native" fontSize={size} resolution={resolution} onSize={resize} />
+      <NativeParts design={design} edit={edit} layer={layer} fail={fail} watch={p.watch} resolution={resolution} />
+    </div>
+  );
+}
+/**
+ * Signs (−, °, %, :) and the decimal point are pictures the whole chart shares; a readout shows their tabs only when
+ * it draws them: below-zero elevation and tide, the sun's angle, moon illumination, sunrise and moonrise times, and
+ * barometer and tide decimals. Stress, stamina, heart rate, steps and calories are whole numbers with neither.
+ */
+const CHART_SIGNS = new Set(["chart_elevation", "chart_tide", "chart_sun_angle", "chart_moon_percent", "chart_sunrise", "chart_moonrise"]);
+const CHART_DECIMALS = new Set(["chart_baro", "chart_tide"]);
+function chartReadoutDraws(source: string, part: CorosWatchfaceNativePart): boolean {
+  if (part === "symbols") return CHART_SIGNS.has(source);
+  if (part === "decimal") return CHART_DECIMALS.has(source);
+  return true;
+}
+const CHART_READOUT_PARTS = new Set<CorosWatchfaceNativePart>(["icon", "value", "unit", "states", "symbols", "decimal"]);
+
 const READOUT_ICON: Record<string, string> = {
   chart_baro: "gauge", chart_tide: "tide", chart_sunrise: "sun", chart_sun_angle: "arc", chart_moonrise: "moon", chart_moon: "moon", chart_moon_percent: "drop",
   chart_stress: "pulse", chart_stamina: "gauge", chart_elevation: "mountain", chart_kcal: "flame", chart_heart_rate: "heart", chart_step: "steps",
@@ -784,10 +833,12 @@ const READOUT_ICON: Record<string, string> = {
  * (Barometer and Tide share one), then the picked page's readouts and what the watch hides while it shows, then the
  * one graph with only the styles the face's pages draw.
  */
-function ChartTop({ design, edit, layer, details, master, onHide, aodNote, loadAssets }: LayerInspectorProps) {
+function ChartTop(p: LayerInspectorProps) {
+  const { design, edit, layer, details, master, onHide, aodNote, loadAssets } = p;
   const n = nativeOf(design, layer);
   const [picked, setPicked] = useState<string | null>(null);
   const [why, setWhy] = useState<{ source: string; text: string } | null>(null); // why a readout can't go on every page
+  const [lookShut, setLookShut] = useState(false); // the edited readout's settings folded away
   if (!n) return null;
   // Make fixed is offered on the Current face only, as in CorosLink.
   const pin = (source: string) => {
@@ -819,7 +870,6 @@ function ChartTop({ design, edit, layer, details, master, onHide, aodNote, loadA
   const next = nextChartPage(rows);
   const visible = page.readouts.filter((r) => r.state === "shown" || r.state === "template").length;
   const fixedReadouts = fixedChartReadouts(rows);
-  const coloured = !!(cs.upperColor || cs.lowerColor || cs.selectedBarColor || cs.unselectedBarColor);
 
   const pageRow = (r: ChartPageRow) => (
     <div key={r.id} className="st-ch-pg" data-on={r.on || undefined} data-cur={r.id === page.id || undefined}>
@@ -854,12 +904,16 @@ function ChartTop({ design, edit, layer, details, master, onHide, aodNote, loadA
             const there = r.state === "shown" || r.state === "hidden";
             const sub = r.state === "fixed" ? "On every page" : r.state === "template" ? "From the template" : r.state === "hidden" ? (r.required ? "Hidden, page stays" : "Hidden")
               : r.state === "missing" ? (r.required ? "Kept invisibly" : "Optional") : "";
+            const look = page.shown && r.source === editing;
             return (
-              <div key={r.source} className="st-ch-ro" data-state={r.state}>
+              <Fragment key={r.source}>
+              <div className="st-ch-ro" data-state={r.state}>
                 <Icon name={READOUT_ICON[r.source] ?? "pulse"} size={16} />
                 {page.shown && r.source !== editing && (r.state === "shown" || r.state === "template") && loadAssets
                   ? <button type="button" className="st-ch-ro-copy st-ch-ro-pick" title="Edit and move this readout on the watch" onClick={() => editReadout(r.source)}><b>{r.label}</b>{sub ? <small>{sub}</small> : null}</button>
-                  : <span className="st-ch-ro-copy" data-editing={page.shown && r.source === editing || undefined}><b>{r.label}</b>{sub ? <small>{sub}</small> : null}</span>}
+                  : look ? <button type="button" className="st-ch-ro-copy st-ch-ro-pick" data-editing aria-expanded={!lookShut} title={lookShut ? "Show its settings" : "Hide its settings"} onClick={() => setLookShut((v) => !v)}>
+                      <b>{r.label}<span className="st-ch-fold" data-shut={lookShut || undefined}><Icon name="chevD" size={13} /></span></b>{sub ? <small>{sub}</small> : null}</button>
+                  : <span className="st-ch-ro-copy"><b>{r.label}</b>{sub ? <small>{sub}</small> : null}</span>}
                 {r.required && r.state !== "template" && r.state !== "fixed" ? <span className="st-ch-need">Needed</span> : null}
                 {r.state === "fixed" ? <button type="button" className="st-icon-btn" aria-label={`Put ${r.label} back on its page`} title="Back to its page" aria-pressed="true" onClick={() => edit((x) => unfixChartReadout(x, r.source))}><Icon name="pin" size={16} /></button> : null}
                 {there ? <button type="button" className="st-icon-btn" aria-label={`Show ${r.label} on every page`} title="Show on every page" onClick={() => pin(r.source)}><Icon name="pin" size={16} /></button> : null}
@@ -869,6 +923,8 @@ function ChartTop({ design, edit, layer, details, master, onHide, aodNote, loadA
                   onClick={() => edit((x) => setChartReadout(x, r.source, r.state === "hidden", face))}><Icon name={r.state === "shown" ? "eye" : "eyeOff"} size={16} /></button> : null}
                 {there && !r.required ? <button type="button" className="st-icon-btn" aria-label={`Remove ${r.label}`} title="Remove from this page" onClick={() => edit((x) => removeChartReadout(x, r.source))}><Icon name="trash" size={16} /></button> : null}
               </div>
+              {look && !lookShut ? <ReadoutLook {...p} /> : null}
+              </Fragment>
             );
           })}
         </div>
@@ -876,7 +932,6 @@ function ChartTop({ design, edit, layer, details, master, onHide, aodNote, loadA
         {page.hides.length ? <div className="st-ch-wx"><span className="st-label">Hidden here</span>{page.hides.map((f) => <span key={f.id} className="st-ch-tag" data-kind="minus">{f.label}</span>)}</div> : null}
         {!page.canShow && page.graph === "bars" ? <p className="st-ch-why"><Icon name="eye" size={14} /><span>The preview shows this page once it has its reading.</span></p> : null}
         {page.graph === "bars" ? <p className="st-ch-why"><Icon name="phone" size={14} /><span>Blank on the watch until the phone has synced.</span></p> : null}
-        {page.id === "daily-b" ? <p className="st-ch-why"><Icon name="send" size={14} /><span>Needs Send from Studio. The COROS app drops this page.</span></p> : null}
         {page.graph === "none" && visible === 0 ? <p className="st-ch-why"><Icon name="eyeOff" size={14} /><span>Nothing visible. Back still stops here.</span></p> : null}
       </> : <>
         <div className="st-ch-wx"><span className="st-label">Adds</span>
@@ -884,7 +939,6 @@ function ChartTop({ design, edit, layer, details, master, onHide, aodNote, loadA
             : page.readouts.filter((r) => r.required).map((r) => <span key={r.source} className="st-ch-tag" data-kind="plus">{r.label}</span>)}</div>
         {page.hides.length ? <div className="st-ch-wx"><span className="st-label">Hides</span>{page.hides.map((f) => <span key={f.id} className="st-ch-tag" data-kind="minus">{f.label}</span>)}</div> : null}
         {page.graph === "bars" ? <p className="st-ch-why"><Icon name="phone" size={14} /><span>Blank on the watch until the phone has synced.</span></p> : null}
-        {page.id === "daily-b" ? <p className="st-ch-why"><Icon name="send" size={14} /><span>Needs Send from Studio. The COROS app drops this page.</span></p> : null}
         <button type="button" className="btn btn-primary st-ch-add" onClick={() => toggle(page.id, true)}><Icon name="plus" size={16} width={2.2} />{bar(page.id) ? "Add Barometer and Tide" : `Add ${page.label}`}</button>
       </>}
     </div>
@@ -920,7 +974,6 @@ function ChartTop({ design, edit, layer, details, master, onHide, aodNote, loadA
           <ColorField label="Others" value={cs.unselectedBarColor ?? "#4b5753"} onPick={(c) => setStyle({ unselectedBarColor: c })} />
         </div></div>
         : <div className="st-ch-na"><span><b>Bars</b>Barometer and Tide only</span></div>}
-      {coloured ? <p className="st-ch-why" data-warn><Icon name="warn" size={14} /><span>Through the COROS app, PACE Pro draws these dark blue. Send from Studio keeps them.</span></p> : null}
     </div>
   </>;
 }
@@ -1046,11 +1099,7 @@ function layerColour(design: Design, layer: EditorLayer, edit: Edit) {
   };
 }
 
-/** The colours offered first: whites and greys for MIP faces, then the bright ones that read on a watch. */
-const SWATCHES = ["#ffffff", "#c9ccd1", "#7d828a", "#000000", "#53cba1", "#2fb344", "#38c6e0",
-  "#6aa5ff", "#a77bff", "#ff6b9a", "#ff5a5a", "#ff8a3d", "#ffd166"] as const;
-
-/** A colour: the one in use with its hex to type, and a grid of big swatches plus the system picker for any other. */
+/** A colour: the one in use with its hex to type; its chip opens the system picker. No preset swatches: they took room and added little. */
 function ColourRow({ label, value, onPick, onReset, note }: { label: string; value: string; onPick: (c: string) => void; onReset?: (() => void) | null; note?: string | null }) {
   const [text, setText] = useState<string | null>(null);
   const valid = /^#[0-9a-f]{6}$/i.test(value);
@@ -1067,22 +1116,12 @@ function ColourRow({ label, value, onPick, onReset, note }: { label: string; val
         <span className="st-grow" />
         {onReset ? <button type="button" className="st-link st-colour-reset" title="Back to the original colour" onClick={onReset}><Icon name="refresh" size={13} />Original</button> : null}
         <span className="st-colour-now">
-          <span className="st-colour-chip" style={{ background: valid ? value : "transparent" }} aria-hidden="true" />
+          <label className="st-colour-chip" style={{ background: valid ? value : "transparent" }} title="Pick a colour">
+            <input type="color" aria-label={`${label}: pick a colour`} value={valid ? value : "#ffffff"} onChange={(e) => onPick(e.target.value)} />
+          </label>
           <input type="text" aria-label={`${label} hex`} spellCheck={false} maxLength={7} value={text ?? hex(value)}
             onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
         </span>
-      </div>
-      <div className="st-swatches" role="group" aria-label={label}>
-        {SWATCHES.map((c) => (
-          <button key={c} type="button" className="st-swatch-btn" style={{ background: c }} title={c.toUpperCase()} aria-label={`${label} ${c.toUpperCase()}`}
-            aria-pressed={value.toLowerCase() === c} data-light={c === "#ffffff" || c === "#ffd166" || c === "#c9ccd1" ? "" : undefined} onClick={() => onPick(c)}>
-            {value.toLowerCase() === c ? <Icon name="check" size={14} width={2.6} /> : null}
-          </button>
-        ))}
-        <label className="st-swatch-btn st-swatch-any" title="Any colour">
-          <Icon name="plus" size={14} width={2.6} />
-          <input type="color" aria-label={`${label}: any colour`} value={valid ? value : "#ffffff"} onChange={(e) => onPick(e.target.value)} />
-        </label>
       </div>
       {note ? <span className="st-note">{note}</span> : null}
     </div>
@@ -1157,17 +1196,12 @@ export function rangeFill(v: number, min: number, max: number): CSSProperties {
   return { ["--fill" as string]: `${pct}%` } as CSSProperties;
 }
 
-/** A slider that makes one undo step per drag, when it's let go. */
+/**
+ * A percentage or size, shown as the same number field every other value uses (type it, or drag sideways on it) so
+ * the panel has one kind of control for numbers, not sliders in some places and boxes in others.
+ */
 export function Slider({ label, value, min, max, unit, onCommit }: { label: string; value: number; min: number; max: number; unit?: string; onCommit: (v: number) => void }) {
-  const [moving, setMoving] = useState<number | null>(null);
-  const v = moving ?? value;
-  const commit = () => { if (moving !== null && moving !== value) onCommit(moving); setMoving(null); };
-  return (
-    <label className="st-range st-opacity"><span>{label}</span>
-      <input type="range" min={min} max={max} value={v} aria-label={label} style={rangeFill(v, min, max)} onChange={(e) => setMoving(Number(e.target.value))} onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
-      <b>{v}{unit}</b>
-    </label>
-  );
+  return <NumberField label={label} value={value} min={min} max={max} unit={unit?.trim() || undefined} onChange={onCommit} />;
 }
 
 /**

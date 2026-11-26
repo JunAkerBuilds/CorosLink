@@ -70,8 +70,18 @@ const ICON: Partial<Record<EditorLayer["kind"], string>> = {
 interface Snapshot { name: string; design: Design }
 interface Doc { now: Snapshot | null; past: Snapshot[]; future: Snapshot[] }
 
+/** The inspector's width: dragged by its left edge, kept on this computer, 280–600 px. */
+const INSPECTOR_WIDTH = { min: 280, max: 600, start: 304, key: "studio.inspectorWidth" };
+const clampInspector = (w: number) => Math.round(Math.max(INSPECTOR_WIDTH.min, Math.min(INSPECTOR_WIDTH.max, w)));
+function savedInspectorWidth(): number {
+  try { const v = Number(localStorage.getItem(INSPECTOR_WIDTH.key)); return v ? clampInspector(v) : INSPECTOR_WIDTH.start; } catch { return INSPECTOR_WIDTH.start; }
+}
+
 export default function StudioEditor() {
   const { id } = useRouteParams();
+  const [inspWidth, setInspWidth] = useState(savedInspectorWidth);
+  const inspDrag = useRef<{ x: number; w: number } | null>(null);
+  const keepInspWidth = (w: number) => { try { localStorage.setItem(INSPECTOR_WIDTH.key, String(w)); } catch { /* not kept */ } };
   const [doc, setDoc] = useState<Doc>({ now: null, past: [], future: [] });
   const [project, setProject] = useState<StoredProject | null>(null);
   const [source, setSource] = useState<FaceSource | null>(null);
@@ -773,7 +783,7 @@ export default function StudioEditor() {
             <div className="st-ch-pick">
               <div className="st-ch-pick-head">
                 <button type="button" className="st-icon-btn" aria-label="Back to Add" onClick={() => setPicking(false)}><Icon name="chevL" size={18} width={2.2} /></button>
-                <b>Chart</b><span className="st-grow" /><span className="st-exp-badge">Experimental</span>
+                <b>Chart</b>
               </div>
               <p className="st-hint">One page at a time; the watch's Back button goes to the next. Pick the first:</p>
               {chartStartOptions(active, library.ctx.details).map((o) => (
@@ -818,7 +828,6 @@ export default function StudioEditor() {
                           <span className="st-ch-mini"><Icon name="chart" size={20} /></span><Icon name="chevR" size={13} width={2.4} />
                           <span className="st-ch-mini"><Icon name="wave" size={20} /></span><Icon name="chevR" size={13} width={2.4} />
                           <span className="st-ch-mini"><Icon name="nums" size={20} /></span>
-                          <span className="st-tile-tag" data-tag="Experimental">Experimental</span>
                         </span>
                         <span className="st-ch-card-name"><span>Chart</span>{chartOn ? <Icon name="check" size={13} width={2.6} /> : null}
                           <small>{chartOn ? `${chartPages} ${chartPages === 1 ? "page" : "pages"}` : "6 pages to pick from"}</small></span>
@@ -829,8 +838,7 @@ export default function StudioEditor() {
                         aria-label={`${i.added ? "Select" : "Add"} ${i.label}`} title={i.hint}
                         onDragStart={(e) => { e.dataTransfer.setData(LAYER_TYPE, i.key); e.dataTransfer.effectAllowed = "copy"; }}
                         onClick={() => void add(i)}>
-                        <span className="st-tile-prev">{i.icons ? i.icons.map((n) => <Icon key={n} name={n} size={18} />) : <Icon name={i.icon} size={18} />}{i.sample ? <span className="st-tile-sample">{i.sample}</span> : null}
-                          {i.tag ? <span className="st-tile-tag" data-tag={i.tag}>{i.tag}</span> : null}</span>
+                        <span className="st-tile-prev">{i.icons ? i.icons.map((n) => <Icon key={n} name={n} size={18} />) : <Icon name={i.icon} size={18} />}{i.sample ? <span className="st-tile-sample">{i.sample}</span> : null}</span>
                         <span className="st-tile-name"><span>{i.label}</span>{i.added ? <Icon name="check" size={13} width={2.6} /> : null}</span>
                       </button>
                     ))}
@@ -949,7 +957,21 @@ export default function StudioEditor() {
         </section>
 
         {/* ───── Right: the inspector, from the design's StudioEditor and StudioFace boards ───── */}
-        <aside className="st-right" aria-label="Inspector" data-tab={insp}>
+        <div className="st-resize" role="separator" aria-orientation="vertical" aria-label="Inspector width" aria-valuemin={INSPECTOR_WIDTH.min} aria-valuemax={INSPECTOR_WIDTH.max} aria-valuenow={inspWidth}
+          tabIndex={0} title="Drag to resize. Double-click for the usual width."
+          onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); inspDrag.current = { x: e.clientX, w: inspWidth }; }}
+          onPointerMove={(e) => { const d = inspDrag.current; if (d) setInspWidth(clampInspector(d.w + d.x - e.clientX)); }}
+          onPointerUp={(e) => { if (!inspDrag.current) return; inspDrag.current = null; keepInspWidth(clampInspector(inspWidth)); e.currentTarget.releasePointerCapture(e.pointerId); }}
+          onPointerCancel={() => { inspDrag.current = null; }}
+          onDoubleClick={() => { setInspWidth(INSPECTOR_WIDTH.start); keepInspWidth(INSPECTOR_WIDTH.start); }}
+          onKeyDown={(e) => {
+            const step = e.shiftKey ? 40 : 10;
+            const next = e.key === "ArrowLeft" ? inspWidth + step : e.key === "ArrowRight" ? inspWidth - step : null;
+            if (next === null) return;
+            e.preventDefault(); e.stopPropagation();
+            const w = clampInspector(next); setInspWidth(w); keepInspWidth(w);
+          }} />
+        <aside className="st-right" aria-label="Inspector" data-tab={insp} style={{ width: inspWidth }}>
           <Segmented label="Inspector" value={insp} onChange={setInsp} className="st-tabs"
             options={[{ value: "layer", label: "Layer" }, { value: "face", label: "Face" }, { value: "ai", label: <><Icon name="spark" size={14} />AI</> }]} />
           {insp === "ai" ? (

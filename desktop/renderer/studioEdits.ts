@@ -70,7 +70,8 @@ export function typoOf(design: Design, layer: EditorLayer): Typo | null {
       const s = design.staticSeparators?.[layer.staticSeparatorId!];
       return s ? { color: s.color, fontFamily: s.fontFamily, fontWeight: s.fontWeight, fontStyle: s.fontStyle } : null;
     }
-    case "native": return design.nativeData?.[layer.nativeDataId!] ?? null;
+    // The chart layer's type is the readout it edits (its value, icon and unit), so it reads like any live field.
+    case "native": case "chart": return design.nativeData?.[layer.nativeDataId!] ?? null;
     default: return null;
   }
 }
@@ -114,7 +115,7 @@ export function setTypo(design: Design, layer: EditorLayer, patch: Typo): Design
       const next = { ...s, ...(color !== undefined ? { color } : {}), ...("fontFamily" in patch ? { fontFamily } : {}), ...(fontWeight !== undefined ? { fontWeight } : {}), ...(fontStyle !== undefined ? { fontStyle } : {}) };
       return { ...design, staticSeparators: { ...design.staticSeparators, [id]: next } };
     }
-    case "native": {
+    case "native": case "chart": {
       const id = layer.nativeDataId!;
       const current = design.nativeData?.[id];
       if (!current) return design;
