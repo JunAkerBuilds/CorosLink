@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { Button, Card, PageHead, Switch } from "@/components/ui";
 import { changeDeveloper, readDeveloper, type DeveloperState } from "../developer";
 import { replayIntro } from "../welcome";
+import { showWhatsNew } from "../whatsNew";
 import { navigate } from "../router";
 import { startPreview } from "../updates";
 import { t } from "@/lib/i18n";
@@ -53,6 +54,9 @@ export default function Developer() {
           <Card pad style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <Row title={t("First-run intro")} detail={t("The intro and Bring over my CorosLink data, as a new install shows them. CLINK_INTRO=1 does the same at launch.")}>
               <Button disabled={busy} onClick={() => void replayIntro()}>{t("Show again")}</Button>
+            </Row>
+            <Row title={t("What's new")} detail={t("This release's What's new sheet, as people see it once after updating.")}>
+              <Button onClick={showWhatsNew}>{t("Show again")}</Button>
             </Row>
             <Row title={t("First-run setup")} detail={t("Walk through setup again, as on a new install. What you pick there changes your settings.")}>
               <Button onClick={() => navigate("/setup")}>{t("Run setup")}</Button>

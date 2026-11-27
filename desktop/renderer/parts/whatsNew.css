@@ -1,0 +1,68 @@
+/* What's new (WhatsNew.tsx): a sheet over the app, in the app's own cards, tints and buttons. */
+.wn-scrim { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(15, 21, 20, 0.32); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); -webkit-app-region: no-drag; animation: wn-fade 0.24s ease both; }
+[data-theme="dark"] .wn-scrim { background: rgba(0, 0, 0, 0.55); }
+.wn { width: 620px; max-width: 100%; max-height: calc(100vh - 48px); display: flex; flex-direction: column; border-radius: 28px; overflow: hidden;
+  background: var(--card-bg); border: 1px solid var(--line); box-shadow: var(--shadow-popover), 0 30px 80px rgba(16, 24, 40, 0.22);
+  animation: wn-in 0.42s cubic-bezier(.16, 1, .3, 1) both; }
+:root:not([data-theme="dark"]) .wn { background: #ffffff; }
+[data-theme="dark"] .wn { background: #151a19; }
+
+.wn-top { display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 8px 18px 0 26px; }
+.wn-eyebrow { font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--h-mint-ink); }
+[data-theme="dark"] .wn-eyebrow { color: #74dfba; }
+.wn-skip { height: 34px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.wn-skip:hover { background: rgba(var(--fg-rgb), 0.06); color: var(--fg); }
+
+.wn-page { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 26px 8px; display: flex; flex-direction: column; gap: 20px; animation: wn-page 0.36s cubic-bezier(.16, 1, .3, 1) both; }
+
+/* The hero: the page's icon on a band of its tint, with two slow rings. */
+.wn-hero { --tint: var(--h-mint); --ink: var(--h-mint-ink); position: relative; flex: none; height: 170px; border-radius: 22px; overflow: hidden; isolation: isolate;
+  display: flex; align-items: center; justify-content: center; gap: 22px;
+  background: radial-gradient(120% 140% at 50% 0%, color-mix(in srgb, var(--tint) 26%, transparent), color-mix(in srgb, var(--tint) 6%, transparent) 70%); }
+.wn-hero[data-tint="blue"] { --tint: var(--h-blue); --ink: var(--h-blue-ink); }
+.wn-hero[data-tint="violet"] { --tint: var(--h-violet); --ink: var(--h-violet-ink); }
+.wn-hero[data-tint="amber"] { --tint: var(--h-amber); --ink: var(--h-amber-ink); }
+.wn-ring { position: absolute; z-index: -1; width: 320px; height: 320px; left: 50%; top: 50%; margin: -160px 0 0 -160px; border-radius: 999px; border: 1.5px solid color-mix(in srgb, var(--tint) 30%, transparent);
+  animation: wn-breathe 6s ease-in-out infinite; }
+.wn-ring[data-b] { width: 210px; height: 210px; margin: -105px 0 0 -105px; animation-delay: -3s; }
+.wn-hero-icon { width: 76px; height: 76px; border-radius: 24px; display: flex; align-items: center; justify-content: center; color: #ffffff;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 88%, #ffffff), var(--tint)); box-shadow: 0 14px 30px color-mix(in srgb, var(--tint) 40%, transparent), inset 0 1px 1px rgba(255, 255, 255, 0.5); }
+.wn-swap { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: var(--ink); }
+.wn-swap > span:not(.wn-arrow) { padding: 9px 14px; border-radius: 999px; background: var(--card-bg); box-shadow: var(--card-shadow); border: 1px solid var(--line); }
+:root:not([data-theme="dark"]) .wn-swap > span:not(.wn-arrow) { background: #ffffff; }
+[data-theme="dark"] .wn-swap { color: var(--fg); }
+.wn-swap b { font-size: 20px; font-weight: 900; letter-spacing: -0.02em; }
+.wn-arrow { display: flex; opacity: 0.7; }
+
+.wn-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.wn-copy h2 { margin: 0; font-size: 28px; line-height: 1.12; font-weight: 900; letter-spacing: -0.03em; }
+.wn-copy p { margin: 0; font-size: 15px; line-height: 22px; color: var(--soft); }
+.wn-beta { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--h-mint-ink); background: color-mix(in srgb, var(--h-mint) 16%, transparent); }
+
+.wn-points, .wn-fixes { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.wn-points { gap: 12px; }
+.wn-points li { display: flex; align-items: center; gap: 14px; font-size: 15px; line-height: 21px; font-weight: 600; }
+.wn-point-icon { flex: none; width: 36px; height: 36px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--h-mint-ink); background: color-mix(in srgb, var(--h-mint) 14%, transparent); }
+[data-theme="dark"] .wn-point-icon { color: #74dfba; }
+.wn-fixes { gap: 2px; }
+.wn-fixes li { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; font-size: 14px; line-height: 20px; border-top: 1px solid var(--line); }
+.wn-fixes li:first-child { border-top: 0; }
+.wn-fixes svg { flex: none; margin-top: 2px; color: var(--h-mint-ink); }
+[data-theme="dark"] .wn-fixes svg { color: #74dfba; }
+
+.wn-bottom { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 22px 20px 26px; border-top: 1px solid var(--line); }
+.wn-dots { display: flex; gap: 6px; }
+.wn-dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 999px; background: rgba(var(--fg-rgb), 0.18); cursor: pointer; transition: width 0.24s ease, background 0.24s ease; }
+.wn-dots button[data-on] { width: 22px; background: var(--h-mint); }
+.wn-dots button:focus-visible { outline: 2px solid var(--h-mint); outline-offset: 2px; }
+.wn-actions { display: flex; gap: 10px; }
+.wn-actions .btn { min-width: 96px; justify-content: center; }
+
+@keyframes wn-fade { from { opacity: 0; } }
+@keyframes wn-in { from { opacity: 0; transform: translateY(18px) scale(0.98); } }
+@keyframes wn-page { from { opacity: 0; transform: translateX(14px); } }
+@keyframes wn-breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.06); opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) {
+  .wn-scrim, .wn, .wn-page, .wn-ring { animation: none; }
+}

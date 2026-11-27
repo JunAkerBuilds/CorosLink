@@ -170,6 +170,16 @@ describe("settings file", () => {
     expect([l.usageAllowed, l.crashesAllowed]).toEqual([false, false]);
   });
 
+  it("keeps the release whose What's new was last shown", async () => {
+    const whatsNew = (s: DesktopSettings, body?: object) => s.answer(new Request("clink://app/api/desktop/settings/whats-new", body
+      ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {})).then((r) => r.json() as Promise<{ shown: string }>);
+    const dir = folder();
+    expect((await whatsNew(new DesktopSettings(dir, new ErrorLog(dir), host()))).shown).toBe("");
+    expect((await whatsNew(new DesktopSettings(dir, new ErrorLog(dir), host()), { shown: "0.2.0-clink.4" })).shown).toBe("0.2.0-clink.4");
+    expect((await whatsNew(new DesktopSettings(dir, new ErrorLog(dir), host()))).shown).toBe("0.2.0-clink.4");
+    expect((await whatsNew(new DesktopSettings(dir, new ErrorLog(dir), host()), { shown: "x".repeat(65) })).shown).toBe("0.2.0-clink.4");
+  });
+
   it("counts what phones synced here", async () => {
     const dir = folder();
     const store = new LocalStore(path.join(dir, "clink.db"));

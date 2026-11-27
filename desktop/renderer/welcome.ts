@@ -1,6 +1,7 @@
 // The first-run intro and the move from CorosLink, as the page asks the main process for them
 // (main/settings.ts `/intro`, main/coroslink/move.ts).
 import { navigate } from "./router";
+import { markWhatsNew } from "./whatsNew";
 
 export type TileId = "acts" | "health" | "plans" | "lift" | "coach" | "watch" | "phones" | "faces" | "routes" | "links" | "cals" | "media" | "prefs";
 export interface Tile { id: TileId; label: string; detail: string; figure: string; ready: boolean; on: boolean; instead?: "again" | "later" | "coros" }
@@ -59,6 +60,8 @@ export async function replayIntro(): Promise<void> {
 /** Leaves the intro: for setup ("/setup", a new start) or the app (after a move from CorosLink). */
 export async function leaveIntro(to = "/"): Promise<void> {
   await post("/api/desktop/settings/intro", { intro: "seen" }).catch(() => undefined);
+  // A new install has just seen what C-LINK does: no What's new on top of it.
+  await markWhatsNew();
   dispatchEvent(new Event(INTRO_SEEN));
   navigate(to, { replace: true });
 }

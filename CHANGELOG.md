@@ -5,6 +5,10 @@ C-LINK betas, and to anyone who downloads them from the release page. Each secti
 
 ## [0.2.0-clink.4] - 2026-11-27
 
+### What's new
+- After an update, a What's new sheet shows the release's new features, each with Try it to open it, then the
+  fixes. It shows once per release; Help → What's New… opens it again.
+
 ### Your privacy, your call
 - A new step in the first-run intro asks about usage counts and crash reports before anything is sent. If you
   already use C-LINK, it shows once on its own after this update.

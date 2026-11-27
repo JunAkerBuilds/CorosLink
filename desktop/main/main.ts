@@ -211,6 +211,11 @@ function buildMenu(dev: DevMode, change: (c: { devMode?: boolean; sample?: boole
   const updatesItem: MenuItemConstructorOptions = { label: t("Check for Updates…"), click: () => void window?.loadURL(`${ORIGIN}/settings/about?check=1`) };
   // Straight to Settings → Error logs, the message box ready: the error log and a note go to the developer (reports.ts).
   const reportItem: MenuItemConstructorOptions = { label: t("Report a Problem…"), click: () => void window?.loadURL(`${ORIGIN}/settings/logs?send`) };
+  // This release's What's new sheet again (desktop/renderer/whatsNew.ts), over the page that's open.
+  const whatsNewItem: MenuItemConstructorOptions = { label: t("What's New…"), click: () => {
+    const at = (() => { try { return new URL(window?.webContents.getURL() ?? "").pathname; } catch { return "/"; } })();
+    void window?.loadURL(`${ORIGIN}${at.startsWith("/welcome") || at === "/setup" ? "/" : at}?whats-new`);
+  } };
   const devSwitch: MenuItemConstructorOptions = { label: t("Developer Mode"), type: "checkbox", checked: state.devMode, click: (item) => void change({ devMode: item.checked }, true) };
   const template: MenuItemConstructorOptions[] = [
     ...(isMac ? [{ role: "appMenu" as const, submenu: [
@@ -234,7 +239,7 @@ function buildMenu(dev: DevMode, change: (c: { devMode?: boolean; sample?: boole
       ...(isMac ? [] : [{ type: "separator" as const }, devSwitch]),
     ] }] : []),
     { role: "windowMenu" },
-    isMac ? { role: "help", submenu: [reportItem] } : { label: t("Help"), submenu: [updatesItem, settingsItem, aiItem, ...(state.devMode ? [] : [devSwitch]), { type: "separator" }, reportItem] },
+    isMac ? { role: "help", submenu: [whatsNewItem, reportItem] } : { label: t("Help"), submenu: [updatesItem, settingsItem, aiItem, ...(state.devMode ? [] : [devSwitch]), { type: "separator" }, whatsNewItem, reportItem] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

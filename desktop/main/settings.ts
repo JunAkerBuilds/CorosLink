@@ -22,7 +22,8 @@ import { isLang, msg, t, type Lang } from "@/lib/i18n";
  * the intro or, for an install from before it, a window of its own), where usage counts start on and crash reports
  * off (pages/Intro.tsx); changed after in Privacy.
  */
-interface Saved { dataMode: DataMode; blocked: Blocked[]; intro: "pending" | "seen"; privacy: "pending" | "seen"; language: Lang; usage: boolean; crashReports: boolean }
+/** `whatsNew`: the release whose What's new sheet was last shown (desktop/renderer/whatsNew.ts); "" for none yet. */
+interface Saved { dataMode: DataMode; blocked: Blocked[]; intro: "pending" | "seen"; privacy: "pending" | "seen"; language: Lang; usage: boolean; crashReports: boolean; whatsNew: string }
 
 /** What the main process lends the settings: dialogs and the file manager come from Electron. */
 export interface SettingsHost {
@@ -96,7 +97,7 @@ const problem = (message: string, code = "problem", status = 400) => json({ erro
 
 export class DesktopSettings {
   private readonly file: string;
-  private saved: Saved = { dataMode: "connected", blocked: [], intro: "seen", privacy: "pending", language: "en", usage: false, crashReports: false };
+  private saved: Saved = { dataMode: "connected", blocked: [], intro: "seen", privacy: "pending", language: "en", usage: false, crashReports: false, whatsNew: "" };
 
   readonly guard: ModeGuard = {
     localOnly: () => this.saved.dataMode === "localOnly",
@@ -120,6 +121,7 @@ export class DesktopSettings {
       if (Array.isArray(parsed.blocked)) this.saved.blocked = parsed.blocked.slice(-MAX_BLOCKED);
       if (parsed.intro === "pending") this.saved.intro = "pending";
       if (isLang(parsed.language)) this.saved.language = parsed.language;
+      if (typeof parsed.whatsNew === "string") this.saved.whatsNew = parsed.whatsNew.slice(0, 64);
       // Only an answer to the privacy question turns either on; a file from before it was asked keeps both off.
       if (parsed.privacy === "seen") {
         this.saved.privacy = "seen";
@@ -211,6 +213,12 @@ export class DesktopSettings {
         case "POST /intro": {
           if (body.intro === "seen" || body.intro === "pending") { this.saved.intro = body.intro; this.save(); }
           return json({ intro: this.saved.intro });
+        }
+        // The What's new sheet: the release it last showed, set when it opens; "" shows it again (Developer page).
+        case "GET /whats-new": return json({ shown: this.saved.whatsNew });
+        case "POST /whats-new": {
+          if (typeof body.shown === "string" && body.shown.length <= 64 && body.shown !== this.saved.whatsNew) { this.saved.whatsNew = body.shown; this.save(); }
+          return json({ shown: this.saved.whatsNew });
         }
         // The page says which language it speaks on every load (desktop/renderer/main.tsx).
         case "POST /language": {

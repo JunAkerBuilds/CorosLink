@@ -694,5 +694,6 @@
   "C-LINK couldn't reach the server. Check the connection and try again.": "C-LINK hat den Server nicht erreicht. Prüfe die Verbindung und versuche es erneut.",
   "The report wasn't taken. Check the email address.": "Der Bericht wurde nicht angenommen. Prüfe die E-Mail-Adresse.",
   "Reports can't be sent right now. Try again later.": "Berichte können gerade nicht gesendet werden. Versuche es später.",
-  "Report a Problem…": "Problem melden…"
+  "Report a Problem…": "Problem melden…",
+  "What's New…": "Neuigkeiten…"
 }

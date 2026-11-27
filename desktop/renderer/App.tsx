@@ -8,6 +8,7 @@ import { findRoute, pageTitle } from "./routes";
 import { navigate, ParamsContext, useLocation } from "./router";
 import { readDeveloper } from "./developer";
 import { INTRO_SEEN, PRIVACY_PATH, PRIVACY_SEEN, readIntro } from "./welcome";
+import { markWhatsNew, SHOW_WHATS_NEW, whatsNewDue } from "./whatsNew";
 
 // The first-run intro and the move from CorosLink: full window, before the shell, loaded only when shown.
 const Intro = lazy(() => import("./pages/Intro"));
@@ -17,6 +18,8 @@ import { SETUP_PATH } from "./setupFlow";
 
 // First-run setup fills the window, outside the shell (pages/Setup.tsx).
 const Setup = lazy(() => import("./pages/Setup"));
+// What's new, over the app once a release after an update (whatsNew.ts).
+const WhatsNew = lazy(() => import("./parts/WhatsNew"));
 
 export function App() {
   const { pathname, key } = useLocation();
@@ -50,6 +53,26 @@ export function App() {
   // Setup comes after the intro: it waits until the athlete has left the intro (setup.ts).
   const firstRun = useFirstRun(intro === "seen", pathname);
 
+  // What's new: once the app itself is up (not the intro, privacy window or setup), when this release's sheet hasn't
+  // shown yet; Help → What's New… (`?whats-new`) and the Developer page open it any time.
+  const [whatsNew, setWhatsNew] = useState(false);
+  const inApp = intro === "seen" && firstRun !== "checking" && !onWelcome && pathname !== SETUP_PATH;
+  useEffect(() => {
+    if (!inApp) return;
+    let live = true;
+    const asked = new URLSearchParams(location.search).has("whats-new");
+    if (asked) navigate(pathname, { replace: true });
+    void (asked ? Promise.resolve(true) : whatsNewDue()).then((due) => { if (live && due) { setWhatsNew(true); void markWhatsNew(); } });
+    return () => { live = false; };
+    // Asked once the app is up; later pages don't ask again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inApp]);
+  useEffect(() => {
+    const show = () => setWhatsNew(true);
+    addEventListener(SHOW_WHATS_NEW, show);
+    return () => removeEventListener(SHOW_WHATS_NEW, show);
+  }, []);
+
   useEffect(() => { document.title = found ? pageTitle(found.route) : "C-LINK"; }, [found]);
 
   if (onWelcome) return <Suspense fallback={<LoadingPage label="C-LINK" />}>{pathname === "/welcome/move" ? <Move /> : <Intro />}</Suspense>;
@@ -71,6 +94,7 @@ export function App() {
         <ParamsContext value={params}>{screen}</ParamsContext>
       </AppShell>
       {/* Never mistaken for the real thing: sample data says so on every screen. */}
+      {whatsNew ? <Suspense fallback={null}><WhatsNew onClose={() => setWhatsNew(false)} /></Suspense> : null}
       {sample ? <a className="dev-sample-pill" href="/developer" onClick={(e) => { e.preventDefault(); navigate("/developer"); }}>{t("Sample data")}</a> : null}
     </Suspense>
   );
