@@ -1,5 +1,5 @@
 /**
- * Count-up for big figures: given the text as it is written ("1,842 km", "4:46 /km", "1:42:31.05", "7h 42m"),
+ * Count-up for big figures: given the text as it is written ("1,842 km", "4:46 /km", "7:40 /mi", "1:42:31.05", "7h 42m"),
  * returns a function that writes the figure at progress p (0 to 1), keeping its format.
  * Returns null for text that should not animate: words, zero, and clock times such as 08:00.
  */
@@ -11,8 +11,8 @@ export function countUpFormat(text: string): ((p: number) => string) | null {
   const tail = raw.slice(raw.indexOf(txt) + txt.length);
   const wrap = (f: (p: number) => string) => (p: number) => (p >= 1 ? raw : lead + f(p) + tail);
 
-  const num = /^([+−-]?)(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(\s?(?:%|k|km|kg|bpm|spm|GB|ms|kcal|g|min|\/km|h|y)?)$/;
-  const clock = /^(\d{1,2}):(\d{2})(?::(\d{2}))?(\.\d+)?(\s?\/km)?$/;
+  const num = /^([+−-]?)(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(\s?(?:%|k|km|kg|bpm|spm|GB|ms|kcal|g|min|\/km|h|y|mi|lb|ft|yd|mph|\/mi)?)$/;
+  const clock = /^(\d{1,2}):(\d{2})(?::(\d{2}))?(\.\d+)?(\s?\/(?:km|mi))?$/;
   const hm = /^(\d+)h (\d+)m$/;
   const hSpace = /^(\d+) h (\d{2})$/;
   const pad = (v: number) => (v < 10 ? "0" : "") + v;

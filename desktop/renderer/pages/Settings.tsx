@@ -1,16 +1,16 @@
 // Settings (C-LINK → Settings…, ⌘,): one page with the design's section rail. Shared look-and-feel choices are kept
 // where the web code keeps them (src/lib/preferences.ts); the desktop's own (data mode, backups, storage, error logs)
 // in the main process (desktop/main/settings.ts). Settings with nothing behind them yet say so.
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Button, Card, Field, LinkButton, Segmented, Switch } from "@/components/ui";
 import { navItems } from "@/components/shell/AppShell";
 import { useStore } from "@/data/local/store";
 import { useSyncItems } from "@/data/sync";
 import { ALWAYS_SHOWN, hiddenNavStore, isHex, SPORT_COLORS, sportColorsStore, type SportColorId } from "@/lib/preferences";
-import { navigate, useRouteParams } from "../router";
+import { navigate, useLocation, useRouteParams } from "../router";
 import {
-  clearBlocked, clearLogs, exportBackup, openPlace, readLogs, readSettings, readStorage, restoreBackup, setDataMode,
+  clearBlocked, clearLogs, exportBackup, openPlace, readLogs, readSettings, readStorage, restoreBackup, sendLogs, setCrashReports, setDataMode, setUsage,
   SettingsProblem, type Place, type SettingsState,
 } from "../settings";
 import { MEDIA_TABS } from "../media";
@@ -19,6 +19,7 @@ import { TurnOnFromSettings } from "../parts/LocalMode";
 import { act, following, setAuto, statusLine, useUpdates } from "../updates";
 import { language, languageFor, LANGUAGES, locale, msg, t, type Choice } from "@/lib/i18n";
 import { chooseLanguage, languageStore } from "@/lib/i18n/load";
+import { chooseUnits, units, type Units } from "@/lib/units";
 import "./settings.css";
 
 interface Item { id?: string; href?: string; label: string; keys: string }
@@ -39,9 +40,9 @@ const RAIL: { group?: string; items: Item[] }[] = [
     { id: "ai", label: msg("External AI"), keys: "mcp codex token watch faces workouts" },
   ] },
   { group: msg("Your data"), items: [
-    { id: "privacy", label: msg("Privacy & local data"), keys: "local mode local-only connected watch pair bluetooth backup restore export passphrase blocked uploads" },
+    { id: "privacy", label: msg("Privacy & local data"), keys: "local mode local-only connected watch pair bluetooth backup restore export passphrase blocked uploads usage counts analytics telemetry tracking anonymous" },
     { id: "storage", label: msg("Storage"), keys: "disk folder size space database cache" },
-    { id: "logs", label: msg("Error logs"), keys: "errors report diagnostics copy clear" },
+    { id: "logs", label: msg("Error logs"), keys: "errors report diagnostics copy clear send developer bug crash feedback support" },
   ] },
   { items: [{ id: "about", label: msg("About C-LINK"), keys: "version updates electron chromium node build" }] },
 ];
@@ -149,6 +150,7 @@ const Problem = ({ text }: { text: string | null }) => (text ? <p className="not
 
 function General() {
   const choice = useStore(languageStore, "system");
+  const shownUnits = units();
   return (<>
     <Head title={t("Language & units")} />
     <Section title={t("App language")}>
@@ -156,11 +158,10 @@ function General() {
         options={[{ value: "system" as Choice, label: t("System"), detail: LANGUAGES.find((l) => l.id === languageFor("system", navigator.languages))?.label }, ...LANGUAGES.map((l) => ({ value: l.id as Choice, label: l.label }))]} />
     </Section>
     <Section title={t("Units")}>
-      <Choices label={t("Units")} value="metric" wide options={[
-        { value: "metric", label: t("Metric"), detail: t("Kilometres, metres, min/km, kilograms") },
-        { value: "imperial", label: t("Imperial"), detail: t("Miles, feet, min/mi, pounds, yards"), disabled: true },
+      <Choices label={t("Units")} value={shownUnits} wide onChange={(next) => { if (next !== shownUnits) chooseUnits(next); }} options={[
+        { value: "metric" as Units, label: t("Metric"), detail: t("Kilometres, metres, min/km, kilograms") },
+        { value: "imperial" as Units, label: t("Imperial"), detail: t("Miles, feet, min/mi, pounds, yards") },
       ]} />
-      <NotYet>{t("Imperial units aren't in this app yet.")}</NotYet>
     </Section>
   </>);
 }
@@ -404,6 +405,12 @@ function Privacy() {
       {done ? <p className="set-note" role="status">{done}</p> : null}
       <p className="set-note">{t("Sign-ins, AI keys and phone pairings are never included.")}</p>
     </Section>
+    <Section title={t("Usage counts")} side={<Switch label={t("Send usage counts")} checked={!!state?.usage} disabled={!state || busy} onChange={(on) => void run(async () => setState(await setUsage(on)))} />}>
+      <p className="set-note">{t("Just so I get an idea of how many people use C-LINK: a random ID, the app version and your OS. Never your data, and nothing in Local mode.")}</p>
+    </Section>
+    <Section title={t("Crash reports")} side={<Switch label={t("Send crash reports")} checked={!!state?.crashReports} disabled={!state || busy} onChange={(on) => void run(async () => setState(await setCrashReports(on)))} />}>
+      <p className="set-note">{t("When C-LINK crashes, the last hour of its error log goes to the developer, with home folders and keys taken out. Nothing is sent in Local mode.")}</p>
+    </Section>
     <Section title={t("Blocked uploads to COROS")} side={<>
       <Button disabled={busy} onClick={() => void run(async () => setState(await readSettings()))}>{t("Refresh")}</Button>
       <Button disabled={busy || !state?.blocked.length} onClick={() => void run(async () => setState(await clearBlocked()))}>{t("Clear")}</Button>
@@ -469,6 +476,7 @@ function Logs() {
       {log && !log.count ? <p className="set-empty">{t("No errors in this time.")}</p> : null}
       <details open className="set-report"><summary>{t("Preview report")}</summary><pre>{log?.report ?? ""}</pre></details>
     </Section>
+    <SendLogs hours={Number(hours)} />
   </>);
 }
 
@@ -499,6 +507,41 @@ function Updates() {
       <Row label={t("Download automatically")} detail={t("Installs when C-LINK quits.")}>
         <Switch label={t("Download updates automatically")} checked={u.auto.download} disabled={off} onChange={(download) => void setAuto({ download })} />
       </Row>
+    </Section>
+  );
+}
+
+/**
+ * Sends the report above to the developer, with what happened and an email for a reply (main/reports.ts). Help →
+ * Report a Problem… opens it with `?send`, scrolled to and ready to type in.
+ */
+function SendLogs({ hours }: { hours: number }) {
+  const asked = new URLSearchParams(useLocation().search).has("send");
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { if (asked) { box.current?.scrollIntoView({ block: "center" }); box.current?.focus(); } }, [asked]);
+  const [note, setNote] = useState("");
+  const [contact, setContact] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [reference, setReference] = useState<string | null>(null);
+  const send = async () => {
+    setBusy(true); setProblem(null);
+    try { setReference((await sendLogs({ note, contact, hours })).reference); setNote(""); } catch (e) { setProblem(said(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Section title={t("Send to the developer")}>
+      <Problem text={problem} />
+      <label className="set-label">{t("What happened? (optional)")}
+        <textarea ref={box} className="field set-textarea" rows={3} maxLength={2000} value={note} onChange={(e) => { setNote(e.target.value); setReference(null); }} />
+      </label>
+      <label className="set-label">{t("Email for a reply (optional)")}
+        <Field type="email" value={contact} maxLength={200} autoComplete="email" onChange={(e) => setContact(e.target.value)} />
+      </label>
+      <div className="set-actions">
+        <Button variant="primary" disabled={busy} onClick={() => void send()}>{busy ? t("Sending…") : t("Send report")}</Button>
+      </div>
+      {reference ? <p className="set-note" role="status">{t("Sent. Your reference is {reference}.", { reference })}</p> : null}
+      <p className="set-note">{t("Sends the report above with your version and system. Nothing else from this computer.")}</p>
     </Section>
   );
 }

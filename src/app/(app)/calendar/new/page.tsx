@@ -11,8 +11,11 @@ import { loadAddToCalendar, newStepId, scheduleLibraryWorkout, scheduleWorkout, 
 import { docShape, pacingFor, parseNumber, QUICK_DISTANCES, quickRunDoc, SPORTS } from "@/lib/builder";
 import { isDayKey, monthOf, shortDay } from "@/lib/calendar";
 import { formatClock, parseClock } from "@/lib/workout";
+import { distanceFromInput, distanceUnit, imperial, paceFromInput, paceUnitLabel } from "@/lib/units";
 import "../training.css";
 import { t, tx } from "@/lib/i18n";
+
+const distanceAria = () => (imperial() ? t("Distance in miles") : t("Distance in kilometres"));
 
 export default function AddToCalendarPage() {
   return (
@@ -93,7 +96,7 @@ function AddToCalendar({ data, origin, date }: { data: AddData; origin: Origin; 
   const paceOk = pace.trim() === "" || (paceSeconds !== null && paceSeconds >= 60 && paceSeconds <= 3600);
   const quick = () => {
     if (distance === null || !paceOk) return;
-    run("quick", () => scheduleWorkout({ doc: quickRunDoc(name, distance, paceSeconds, newStepId()), date, toCoros, saveToLibrary: keep, pacing }));
+    run("quick", () => scheduleWorkout({ doc: quickRunDoc(name, distanceFromInput(distance) / 1000, paceSeconds === null ? null : paceFromInput(paceSeconds), newStepId()), date, toCoros, saveToLibrary: keep, pacing }));
   };
 
   /* From library */
@@ -132,10 +135,10 @@ function AddToCalendar({ data, origin, date }: { data: AddData; origin: Origin; 
                 <label className="add-label">{t("Workout name")}
                   <input type="text" className="field" value={name} maxLength={80} placeholder={t("Quick Run")} onChange={(e) => setName(e.target.value)} style={{ width: 170 }} />
                 </label>
-                <div className="add-label" role="group" aria-label={t("Distance in kilometres")}>{t("Distance (km)")}
+                <div className="add-label" role="group" aria-label={distanceAria()}>{t("Distance ({unit})", { unit: distanceUnit() })}
                   <span style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {QUICK_DISTANCES.map((d) => <button key={d} type="button" className="chip" aria-pressed={distance === d} onClick={() => setKm(String(d))}>{d}</button>)}
-                    <input type="text" inputMode="decimal" className="field" aria-label={t("Distance in kilometres")} value={km} onChange={(e) => setKm(e.target.value)}
+                    <input type="text" inputMode="decimal" className="field" aria-label={distanceAria()} value={km} onChange={(e) => setKm(e.target.value)}
                       aria-invalid={km.trim() !== "" && distance === null ? true : undefined} style={{ width: 64, textAlign: "right" }} />
                   </span>
                 </div>
@@ -143,7 +146,7 @@ function AddToCalendar({ data, origin, date }: { data: AddData; origin: Origin; 
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <input type="text" className="field" aria-label={t("Target pace")} placeholder="5:30" value={pace} onChange={(e) => setPace(e.target.value)}
                       onBlur={() => { if (paceSeconds && paceOk) setPace(formatClock(paceSeconds)); }} aria-invalid={paceOk ? undefined : true} style={{ width: 68, textAlign: "center" }} />
-                    <span style={{ fontWeight: 500 }}>/km</span>
+                    <span style={{ fontWeight: 500 }}>{paceUnitLabel()}</span>
                   </span>
                 </label>
               </div>

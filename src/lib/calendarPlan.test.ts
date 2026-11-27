@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { useUnitsNow } from "./units";
 import {
-  applyDraft, canCopy, canDropOn, canMove, completion, liveOps, netChanges, pairEntries, passes, planState, tone, weekNumbers,
+  applyDraft, canCopy, canDropOn, canMove, completion, kmText, liveOps, metresText, netChanges, pairEntries, passes, planState, tone, weekNumbers,
   type DraftOp,
 } from "./calendarPlan";
 
@@ -116,5 +117,15 @@ describe("filters and weeks", () => {
       { sport: "run", load: 48, plannedLoad: 50, seconds: 1800, plannedSeconds: 2000, metres: 6100, plannedMetres: 6000 },
       { sport: "strength", load: 0, plannedLoad: 40, seconds: 0, plannedSeconds: 2700, metres: 0, plannedMetres: 0 },
     ]);
+  });
+});
+
+describe("printing in imperial", () => {
+  afterEach(() => useUnitsNow("metric"));
+  it("prints miles to one decimal and swims in whole yards", () => {
+    useUnitsNow("imperial");
+    expect(kmText(8046.72)).toBe("5.0");
+    expect(kmText(-5)).toBe("0.0");
+    expect(metresText(1500)).toBe("1,640");
   });
 });

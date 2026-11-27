@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { useUnitsNow } from "./units";
 import {
   atBest, bestPower, cogganZones, criticalSwimPace, cyclingVo2Estimate, decoupling, detectSports, efficiencyTrend, estimatedKind, ftpTrend, hoursText,
-  includesSport, intensityBalance, intensityOf, isSpike, polarizationIndex, powerCurve, powerZoneSeconds, rideClimbing, runDurability, runTypes, sharePercents,
+  includesSport, intensityBalance, intensityOf, isSpike, kmText, polarizationIndex, powerCurve, powerZoneSeconds, rideClimbing, runDurability, runTypes, sharePercents,
   shortfall, spikeCheck, sportVolume, standing, swimBands, volumeChange, wattsPerBeat, weekStart, type Family, type Recording, type SportAct,
 } from "./sports";
 
@@ -252,5 +253,13 @@ describe("words", () => {
     expect(hoursText(70 * 60)).toBe("1 h 10");
     expect(hoursText(365 * 60, true)).toBe("6 h 05 min");
     expect(hoursText(48 * 60)).toBe("48 min");
+  });
+});
+
+describe("kmText", () => {
+  it("prints kilometres, or miles in imperial, to one decimal", () => {
+    expect(kmText(30_600)).toBe("30.6 km");
+    useUnitsNow("imperial");
+    try { expect(kmText(30_600)).toBe("19.0 mi"); } finally { useUnitsNow("metric"); }
   });
 });

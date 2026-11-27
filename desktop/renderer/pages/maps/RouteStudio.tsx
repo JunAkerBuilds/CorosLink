@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as maplibregl from "maplibre-gl";
 import { msg, t, tx } from "@/lib/i18n";
+import { distanceIn, distanceUnit, heightIn, heightUnit, imperial } from "@/lib/units";
 import type {
   Elevation, LatLon, MapsWatch, Place, RouteCandidate, RouteGeometry, RouteKind, RouteSport, RouteSync, RoutingConfig, SavedRoute,
   SavedRouteSummary, Surface, TrailRoute,
@@ -40,6 +41,12 @@ const ELEVATIONS: { value: Elevation; label: string }[] = [{ value: "any", label
 const ELEVATION_LINE: Record<Elevation, string> = { any: msg("Any elevation"), flat: msg("Flatter"), hilly: msg("Hilly") };
 const translated = <T extends string>(options: { value: T; label: string }[]) => options.map((o) => ({ ...o, label: t(o.label) }));
 const PRESETS = [5, 10, 21.1, 42.2];
+/** Kilometres as the slider shows them: as they are, or in miles to a tenth. */
+const shownKm = (km: number) => (imperial() ? Number(distanceIn(km * 1000).toFixed(1)) : km);
+/** Metres as a tenth of a kilometre or mile, with the unit. */
+const tenths = (metres: number) => `${distanceIn(metres).toFixed(1)} ${distanceUnit()}`;
+/** Whole metres or feet, without the unit. */
+const heightNumber = (metres: number) => Math.round(heightIn(metres));
 const PAGE = 6;
 const START_VIEW = { center: [-122.335, 47.608] as [number, number], zoom: 12 };
 
@@ -542,8 +549,10 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
             </div>
             <div className="mp-step">
               <div className="mp-step-head"><span className="mp-step-n">3</span>{t("Distance & terrain")}</div>
-              <div className="mp-dist"><span>{distanceKm}</span>km</div>
-              <input type="range" min={1} max={sport === "road" || sport === "mtb" ? 150 : 50} step={0.5} value={distanceKm} onChange={(e) => setDistanceKm(Number(e.target.value))} aria-label={t("Distance")} />
+              <div className="mp-dist"><span>{shownKm(distanceKm)}</span>{distanceUnit()}</div>
+              {imperial()
+                ? <input type="range" min={0.5} max={sport === "road" || sport === "mtb" ? 93 : 31} step={0.5} value={Math.round(distanceIn(distanceKm * 1000) * 2) / 2} onChange={(e) => setDistanceKm(Number(e.target.value) * 1.609344)} aria-label={t("Distance")} />
+                : <input type="range" min={1} max={sport === "road" || sport === "mtb" ? 150 : 50} step={0.5} value={distanceKm} onChange={(e) => setDistanceKm(Number(e.target.value))} aria-label={t("Distance")} />}
               <div className="mp-chips" role="group" aria-label={t("Distance presets")}>
                 {PRESETS.map((p) => <button key={p} type="button" className="chip" aria-pressed={distanceKm === p} onClick={() => setDistanceKm(p)}>{p === 21.1 ? "21K" : p === 42.2 ? "42K" : `${p}K`}</button>)}
               </div>
@@ -563,7 +572,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
           <div className="mp-steps">
             <div className="mp-summary">
               <span className="mp-summary-icon"><MapsIcon name={SPORTS.find((s) => s.value === sport)!.icon} size={18} /></span>
-              <span><b>{sportName(sport)} · {kindName(kind)} · {distanceKm} km</b><small>{start?.name.split(",")[0]} · {tx("surface", SURFACES.find((s) => s.value === surface)!.label)} · {t(ELEVATION_LINE[elevation])}</small></span>
+              <span><b>{sportName(sport)} · {kindName(kind)} · {shownKm(distanceKm)} {distanceUnit()}</b><small>{start?.name.split(",")[0]} · {tx("surface", SURFACES.find((s) => s.value === surface)!.label)} · {t(ELEVATION_LINE[elevation])}</small></span>
               <button type="button" className="mp-link" onClick={() => setSettingsOpen(true)}>{t("Edit")}</button>
             </div>
             <div className="mp-pick-head"><span>{t("Pick your loop")}</span><span className="mp-grow" />
@@ -572,7 +581,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
             {candidates.map((c, i) => (
               <button key={c.id} type="button" className="mp-opt mp-cand" aria-pressed={chosen === i} onClick={() => pickCandidate(i)} onMouseEnter={() => setPeek(i)} onMouseLeave={() => setPeek(null)}>
                 <MapsIcon name={i === 0 ? "sparkle" : c.label === "Flatter" ? "minus" : "mountain"} size={18} />
-                <span><b>{candidateName(c.label)}</b><span>{km(c.distanceM)} km <small>↑ {Math.round(c.ascentM)} m</small></span><small>{t("{carFree}% car-free · {paved}% paved", { carFree: Math.round(c.carFree * 100), paved: Math.round(c.paved * 100) })}</small></span>
+                <span><b>{candidateName(c.label)}</b><span>{km(c.distanceM)} {distanceUnit()} <small>↑ {heightNumber(c.ascentM)} {heightUnit()}</small></span><small>{t("{carFree}% car-free · {paved}% paved", { carFree: Math.round(c.carFree * 100), paved: Math.round(c.paved * 100) })}</small></span>
               </button>
             ))}
             <span className="mp-note"><MapsIcon name="info" size={14} />{t("Hover a loop to see it on the map. Saved automatically.")}</span>
@@ -607,7 +616,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
             )}
             {sketchTool === "text" && <input className="field" type="text" aria-label={t("Text to draw")} maxLength={16} placeholder={t("Write something… (A–Z, 0–9)")} value={text} onChange={(e) => { const v = e.target.value.toUpperCase(); if (TEXT_CHARS.test(v)) setText(v); }} />}
             {sketchTool === "free" && <span className="mp-note">{t("Drag on the map. The stroke snaps to streets when you press Snap to streets.")}</span>}
-            <div className="mp-slider"><div><span>{t("Size")}</span><b>{(sizeM / 1000).toFixed(1)} km</b></div><input type="range" min={200} max={8000} step={100} value={sizeM} onChange={(e) => setSizeM(Number(e.target.value))} aria-label={t("Size")} /></div>
+            <div className="mp-slider"><div><span>{t("Size")}</span><b>{tenths(sizeM)}</b></div><input type="range" min={200} max={8000} step={100} value={sizeM} onChange={(e) => setSizeM(Number(e.target.value))} aria-label={t("Size")} /></div>
             <div className="mp-slider"><div><span>{t("Rotation")}</span><b>{rotation}°</b></div><input type="range" min={0} max={355} step={5} value={rotation} onChange={(e) => setRotation(Number(e.target.value))} aria-label={t("Rotation")} /></div>
             <span className="mp-label">{t("Fidelity")}</span>
             <Seg label={t("Fidelity")} value={fidelity} onChange={setFidelity} options={[{ value: "loose", label: t("Loose") }, { value: "balanced", label: tx("fidelity", "Balanced") }, { value: "strict", label: t("Strict") }]} />
@@ -644,7 +653,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
                 {trails.slice(0, 30).map((m) => (
                   <li key={m.id}>
                     <i style={{ background: overlayColor[m.kind] }} aria-hidden="true" />
-                    <span><b>{m.name}</b><small>{[m.distanceKm ? `${m.distanceKm.toFixed(1)} km` : null, m.kind === "hike" ? t("hiking") : m.kind === "cycle" ? t("cycling") : "MTB", m.network].filter(Boolean).join(" · ")}</small></span>
+                    <span><b>{m.name}</b><small>{[m.distanceKm ? tenths(m.distanceKm * 1000) : null, m.kind === "hike" ? t("hiking") : m.kind === "cycle" ? t("cycling") : "MTB", m.network].filter(Boolean).join(" · ")}</small></span>
                     <button type="button" className="mp-link" onClick={() => void follow(m)} disabled={busy === "loading"}>{t("Follow")}</button>
                   </li>
                 ))}
@@ -712,7 +721,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
                 <li key={r.id}>
                   <button type="button" className="mp-saved-open" onClick={() => void open(r.id)}>
                     <span className="mp-saved-icon"><MapsIcon name={SPORTS.find((s) => s.value === r.sport)?.icon ?? "route"} size={17} /></span>
-                    <span><b>{r.name}</b><small>{km(r.distanceM)} km · {sportName(r.sport)} · {kindName(r.kind)} · {shortDate(r.createdAt)}</small>
+                    <span><b>{r.name}</b><small>{km(r.distanceM)} {distanceUnit()} · {sportName(r.sport)} · {kindName(r.kind)} · {shortDate(r.createdAt)}</small>
                       {r.onWatch && <small className="mp-on-watch"><MapsIcon name="check" size={12} />{t("On your watch")}</small>}</span>
                   </button>
                   <span className="mp-row-actions">
@@ -757,11 +766,11 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
           <>
             <div className="mp-stats-row">
               <div className="mp-stat mp-stat-name"><span><MapsIcon name={SPORTS.find((s) => s.value === (current?.sport ?? sport))!.icon} size={14} />{routeTag}</span><b title={current?.name}>{current?.name ?? (mode === "draw" ? t("Drawn route") : t("Route"))}</b></div>
-              <Stat label={t("Distance")} value={km(shown.distanceM)} unit=" km" />
+              <Stat label={t("Distance")} value={km(shown.distanceM)} unit={` ${distanceUnit()}`} />
               <Stat label={t("Est. time")} value={est!.time} />
-              <Stat label={est!.paceUnit.includes("km/h") ? t("Speed") : t("Pace")} value={est!.pace} unit={est!.paceUnit} />
-              <Stat label={t("Ascent")} value={`↑ ${Math.round(shown.ascentM)}`} unit=" m" />
-              <Stat label={t("Descent")} value={`↓ ${Math.round(shown.descentM)}`} unit=" m" />
+              <Stat label={est!.speed ? t("Speed") : t("Pace")} value={est!.pace} unit={est!.paceUnit} />
+              <Stat label={t("Ascent")} value={`↑ ${heightNumber(shown.ascentM)}`} unit={` ${heightUnit()}`} />
+              <Stat label={t("Descent")} value={`↓ ${heightNumber(shown.descentM)}`} unit={` ${heightUnit()}`} />
               <Stat label={t("Terrain")} value={terrain(shown.makeup)} />
               {share && (
                 <div className="mp-makeup-wrap">
@@ -774,7 +783,7 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
                       {shown.makeup.ways.filter((w) => w.meters > 0).sort((a, b) => b.meters - a.meters).map((w) => <Share key={w.kind} label={t(WAY_LABEL[w.kind])} part={w.meters / share.total} />)}
                       <span className="mp-label">{t("Surfaces")}</span>
                       {shown.makeup.surfaces.filter((s) => s.meters > 0).sort((a, b) => b.meters - a.meters).map((s) => <Share key={s.kind} label={t(SURFACE_LABEL[s.kind])} part={s.meters / share.surfTotal} />)}
-                      <div className="mp-makeup-foot"><span>{shown.makeup.busyMeters < 1000 ? t("Low-traffic route") : t("Some busy roads")}</span><small>{t("{km} km on busy roads", { km: (shown.makeup.busyMeters / 1000).toFixed(1) })}</small><small>{t("{km} km out-and-back", { km: (shown.makeup.retracedMeters / 1000).toFixed(1) })}</small></div>
+                      <div className="mp-makeup-foot"><span>{shown.makeup.busyMeters < 1000 ? t("Low-traffic route") : t("Some busy roads")}</span><small>{t("{distance} on busy roads", { distance: tenths(shown.makeup.busyMeters) })}</small><small>{t("{distance} out-and-back", { distance: tenths(shown.makeup.retracedMeters) })}</small></div>
                     </div>
                   )}
                 </div>
@@ -788,8 +797,8 @@ export default function RouteStudio({ watch }: { watch: MapsWatch | null | undef
             </div>
             {prof && profilePath ? (
               <div className="mp-elev">
-                <div className="mp-elev-head"><span>{t("Elevation")}</span><small>{Math.round(prof.min)}–{Math.round(prof.max)} m</small><span className="mp-grow" />
-                  <small>{hover != null && hoverElevation != null ? `${(prof.total * (hover / Math.max(1, shown.points.length - 1)) / 1000).toFixed(1)} km · ${Math.round(hoverElevation)} m` : t("{time} at an easy effort", { time: clock(est!.seconds) })}</small></div>
+                <div className="mp-elev-head"><span>{t("Elevation")}</span><small>{heightNumber(prof.min)}–{heightNumber(prof.max)} {heightUnit()}</small><span className="mp-grow" />
+                  <small>{hover != null && hoverElevation != null ? `${tenths(prof.total * (hover / Math.max(1, shown.points.length - 1)))} · ${heightNumber(hoverElevation)} ${heightUnit()}` : t("{time} at an easy effort", { time: clock(est!.seconds) })}</small></div>
                 <div className="mp-elev-chart" onMouseLeave={() => setHover(null)}
                   onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHover(pointAt(shown.points, ((e.clientX - r.left) / r.width) * prof.total)); }}>
                   <svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">

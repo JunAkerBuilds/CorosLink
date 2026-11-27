@@ -4,8 +4,9 @@ import { Card, Segmented } from "@/components/ui";
 import type { Stroke, SwimData } from "@/data/activities";
 import { exact, SWIM_REST_S, swimNumbers, swimSets, swimSetText } from "@/lib/activityDetail";
 import { indexAt, roundedBars } from "@/lib/chart";
-import { clock, thousands } from "@/lib/format";
+import { clock } from "@/lib/format";
 import { msg, t } from "@/lib/i18n";
+import { imperial, swimDistance, swimIn, swimPaceIn, swimPaceUnitLabel, swimUnit } from "@/lib/units";
 import { StatGrid, ZoneBar, type Stat } from "./parts";
 
 const STROKE_HUE: Record<Stroke, string> = { Freestyle: "cyan", Breaststroke: "violet", Backstroke: "orange", Butterfly: "rose", Medley: "gold", Drill: "mint" };
@@ -15,27 +16,32 @@ const STROKE_WORD: Record<Stroke, string> = {
 };
 /** A stroke's name in the app's language. */
 const strokeWord = (s: Stroke) => t(STROKE_WORD[s] ?? s);
-const per100 = (seconds: number, poolM: number) => `${clock(Math.round((seconds / poolM) * 100))} /100 m`;
+const per100 = (seconds: number, poolM: number) => `${clock(Math.round(swimPaceIn((seconds / poolM) * 100)))} ${swimPaceUnitLabel()}`;
+/** The pool's length: in yards when it is a yard pool and the page shows yards, else in metres as set. */
+const poolLength = (poolM: number) => {
+  const yards = swimIn(poolM);
+  return imperial() && Math.abs(yards - Math.round(yards)) < 0.05 ? `${Math.round(yards)} ${swimUnit()}` : `${poolM} m`;
+};
 
 /** The swim's own numbers and how the distance split between strokes. */
 export function SwimCard({ data, style }: { data: SwimData; style?: React.CSSProperties }) {
   const n = swimNumbers(data);
-  const items: Stat[] = [{ label: t("Distance"), value: `${thousands(n.distanceM)} m`, note: t("{n} lengths", { n: n.lengths }) }];
-  if (n.paceS != null) items.push({ label: t("Pace"), value: `${clock(Math.round(n.paceS))} /100 m`, note: t("While swimming") });
+  const items: Stat[] = [{ label: t("Distance"), value: swimDistance(n.distanceM), note: t("{n} lengths", { n: n.lengths }) }];
+  if (n.paceS != null) items.push({ label: t("Pace"), value: `${clock(Math.round(swimPaceIn(n.paceS)))} ${swimPaceUnitLabel()}`, note: t("While swimming") });
   if (n.swolf != null) items.push({ label: "SWOLF", value: n.swolf.toFixed(1), note: t("Seconds + strokes a length") });
   if (n.strokesPerLength != null) items.push({ label: t("Strokes"), value: n.strokesPerLength.toFixed(1), note: t("Per length") });
   if (n.strokeRate != null) items.push({ label: t("Stroke rate"), value: `${Math.round(n.strokeRate)} spm` });
-  if (n.perStrokeM != null) items.push({ label: t("Per stroke"), value: `${n.perStrokeM.toFixed(2)} m` });
+  if (n.perStrokeM != null) items.push({ label: t("Per stroke"), value: `${swimIn(n.perStrokeM).toFixed(2)} ${swimUnit()}` });
   if (n.restS > 0) items.push({ label: t("Resting"), value: clock(Math.round(n.restS)), note: t("{time} swimming", { time: clock(Math.round(n.activeS)) }) });
   return (
     <Card aria-label={t("Swim")} clip style={style}>
-      <div className="ad-head"><h2 className="h2">{t("Swim")}</h2><span className="ad-sub">{t("{n} m pool", { n: data.poolM })}</span></div>
+      <div className="ad-head"><h2 className="h2">{t("Swim")}</h2><span className="ad-sub">{t("{length} pool", { length: poolLength(data.poolM) })}</span></div>
       <StatGrid items={items} fit />
       {n.mix.length > 1 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "14px 20px 16px", borderTop: "1px solid var(--line)" }}>
           <ZoneBar zones={n.mix.map((m) => ({ name: m.stroke, seconds: m.distanceM, color: strokeColor(m.stroke) }))} />
           <div className="ad-legend">
-            {n.mix.map((m) => <span key={m.stroke}><i aria-hidden="true" style={{ background: strokeColor(m.stroke) }} />{strokeWord(m.stroke)} {thousands(m.distanceM)} m · {Math.round(m.share * 100)}%</span>)}
+            {n.mix.map((m) => <span key={m.stroke}><i aria-hidden="true" style={{ background: strokeColor(m.stroke) }} />{strokeWord(m.stroke)} {swimDistance(m.distanceM)} · {Math.round(m.share * 100)}%</span>)}
           </div>
         </div>
       ) : null}

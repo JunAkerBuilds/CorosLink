@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { Activity, Lap, Streams, SwimData, SwimLength, StrengthExercise } from "@/data/activities";
 import { SAMPLE_ACTIVITIES, SAMPLE_THRESHOLDS, sampleActivityDetail } from "@/data/sample/activities";
 import {
@@ -6,7 +6,9 @@ import {
   hrZoneOf, hrZoneRange, hrZonesFromThreshold, lapsAreAutomatic, muscleLevel, muscleWork, normalizedPower, oneRepMax, pacingFinding, paceZoneOf, paceZoneRange,
   powerNumbers, powerZoneOf, powerZoneRange, relativeEffort, rowsFromLaps, sessionNumbers, showsGap, splitsFromTrack, swimNumbers, swimSets, swimSetText,
   thresholdPaceSentence, thresholdPercent, timedSets, timeInZones, topSetIndex, totalRow, trackOf, valueAt, weekShare, workoutKind, zoneShares,
+  rowPace,
 } from "./activityDetail";
+import { MILE_M, useUnitsNow } from "./units";
 
 const cs = (s: number) => Math.round(s * 100);
 const lap = (n: number, distanceM: number | null, durationS: number, more: Partial<Lap> = {}): Lap => ({ n, distanceM, durationS, avgHr: null, maxHr: null, cadence: null, elevationM: null, ...more });
@@ -359,5 +361,35 @@ describe("the sample athlete's marks", () => {
     const tempo = sampleActivityDetail(SAMPLE_ACTIVITIES[0].id)!;
     expect(Math.round(thresholdPercent(tempo.activity.avgHr, tempo.thresholds?.hr)!)).toBe(94);
     expect(tempo.zones.reduce((s, z) => s + cs(z.seconds), 0)).toBe(cs(tempo.activity.durationS));
+  });
+});
+
+describe("imperial units", () => {
+  afterEach(() => useUnitsNow("metric"));
+
+  it("says paces and zones per mile", () => {
+    useUnitsNow("imperial");
+    expect(thresholdPaceSentence(286, 275)).toBe("18 s/mi slower than your threshold pace of 7:23 /mi.");
+    expect(thresholdPaceSentence(274, 275)).toBe("Right at your threshold pace of 7:23 /mi.");
+    expect(thresholdPaceSentence(200, 275)).toBe("2:01/mi faster than your threshold pace of 7:23 /mi.");
+    expect(paceZoneRange(0, 275)).toBe("slower than 9:31 /mi");
+    expect(paceZoneRange(4, 275)).toBe("faster than 7:23 /mi");
+    expect(rowPace("Run", { distanceM: 1000, durationS: 300 })).toBe("8:03");
+    expect(rowPace("Ride", { distanceM: 10000, durationS: 1200 })).toBe("18.6");
+  });
+
+  it("cuts and labels splits by the mile", () => {
+    useUnitsNow("imperial");
+    const streams = evenRun(5300);
+    const rows = splitsFromTrack(trackOf(streams, "Run", 1590), streams, "Run", MILE_M);
+    expect(rows.map((r) => r.label)).toEqual(["1", "2", "3", "0.29"]);
+    expect(groupRows(rows, 2, MILE_M).map((r) => r.label)).toEqual(["2", "3.29"]);
+  });
+
+  it("names swim sets in yards", () => {
+    useUnitsNow("imperial");
+    const sets = swimSets(sampleActivityDetail("2026-11-14-pool-swim")!.extras!.swim!);
+    expect(swimSetText(sets[1]).title).toBe("8 × 109 yd freestyle on 2:05");
+    expect(swimSetText(sets[0]).detail).toMatch(/ \/100 yd$/);
   });
 });

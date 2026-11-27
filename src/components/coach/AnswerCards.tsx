@@ -9,6 +9,7 @@ import { addDays, dayMonth, shortDay } from "@/lib/calendar";
 import { extent, indexAt, linePath } from "@/lib/chart";
 import { averageText, lastValues, paceBars, rangeNote, shareOf } from "@/lib/coach";
 import { clock, pace, thousands } from "@/lib/format";
+import { MILE_M } from "@/lib/units";
 import { ARROW, CardShell, CROSS, hueVar, Icon, ICONS, inkVar, OUT, Outcome, Stat, TICK, tint } from "./CardShell";
 import { useThread } from "./thread";
 import { msg, t, tx } from "@/lib/i18n";
@@ -28,8 +29,11 @@ const Open = ({ href, children }: { href: string; children: string }) => (
 
 /* ───────────── Activity recap ───────────── */
 
+/** A card's splits are in the units it was drawn in, whatever the page shows now. */
+const splitWord = (unit: "mi" | undefined) => (unit === "mi" ? "mi" : "km");
+
 export function Recap({ card }: { card: RecapCard }) {
-  const n = card.heartRate.length, km = card.splits.length;
+  const n = card.heartRate.length, km = card.splits.length, miles = card.splitUnit === "mi";
   const [picked, setPicked] = useState(Math.round((n - 1) * 0.56));
   const i = Math.min(picked, n - 1);
   const [hrMin, hrMax] = extent(card.heartRate);
@@ -54,11 +58,11 @@ export function Recap({ card }: { card: RecapCard }) {
         <div className="cc-chart">
           <div className="cc-legend">
             <span>
-              <span><i aria-hidden="true" style={{ background: "var(--h-mint)" }} />{t("Pace per km")}</span>
+              <span><i aria-hidden="true" style={{ background: "var(--h-mint)" }} />{miles ? t("Pace per mile") : t("Pace per km")}</span>
               <span><i aria-hidden="true" data-line style={{ background: "var(--h-rose)" }} />{t("Heart rate")}</span>
             </span>
             <span aria-live="polite">
-              <span>km {((i / (n - 1)) * km).toFixed(1)}</span><span>{pace(card.paceSeconds[i])}</span>
+              <span>{splitWord(card.splitUnit)} {((i / (n - 1)) * km).toFixed(1)}</span><span>{miles ? `${clock((card.paceSeconds[i] * MILE_M) / 1000)} /mi` : pace(card.paceSeconds[i])}</span>
               <span style={{ color: "var(--h-rose-ink)" }}>{Math.round(card.heartRate[i])} bpm</span>
             </span>
           </div>
@@ -123,7 +127,7 @@ export function Compare({ card }: { card: CompareCard }) {
             <span>
               <span><i aria-hidden="true" style={{ background: "rgba(var(--fg-rgb), 0.18)" }} />{card.before.short}</span>
               <span><i aria-hidden="true" style={{ background: "var(--h-mint)" }} />{card.after.short}</span>
-              <span>{t("Pace per km, taller is faster")}</span>
+              <span>{card.splitUnit === "mi" ? t("Pace per mile, taller is faster") : t("Pace per km, taller is faster")}</span>
             </span>
           </div>
           <svg role="img" aria-label={card.chartLabel} width="100%" height="90" viewBox="0 0 640 90" preserveAspectRatio="none" style={{ display: "block" }}>
@@ -131,7 +135,7 @@ export function Compare({ card }: { card: CompareCard }) {
             <path d={paceBars(card.afterSeconds, scale, 90, slot, 26, 42)} style={{ fill: "var(--h-mint)" }} />
           </svg>
           <div className="cc-kms" data-plain style={{ gridTemplateColumns: `repeat(${km}, minmax(0, 1fr))` }}>
-            {card.afterSeconds.map((_, k) => <span key={k}>km {k + 1}</span>)}
+            {card.afterSeconds.map((_, k) => <span key={k}>{splitWord(card.splitUnit)} {k + 1}</span>)}
           </div>
         </div>
       </div>

@@ -63,7 +63,7 @@ export function TemplatePicture({ details, configAssetId, replacement, loadAsset
   const reference = templateImageOf(details, configAssetId);
   const template = useTemplatePicture(details, replacement ? null : reference, loadAssets);
   const url = replacement ?? template?.dataUrl;
-  return <span className="st-img-prev" data-checker="">{url ? <img src={url} alt="" /> : <Icon name="image" size={22} />}</span>;
+  return <span className="st-img-prev">{url ? <img src={url} alt="" /> : <Icon name="image" size={22} />}</span>;
 }
 
 /** Download, and the image's size, file, config key and what the watch does with it. */

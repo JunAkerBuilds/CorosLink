@@ -7,10 +7,11 @@ import { hiddenColumnsStore, listActivities, SPORTS, type Activity, type Sport }
 import { SAMPLE_TODAY, useLoaded } from "@/data/core";
 import { useStore } from "@/data/local/store";
 import {
-  DATE_RANGES, DEFAULT_FILTERS, DISTANCE_BANDS, dayStrip, filterActivities, filtersToQuery, formatDay, formatDistance, formatElevation, formatPace,
+  DATE_RANGES, DEFAULT_FILTERS, dayStrip, distanceBands, filterActivities, filtersToQuery, formatDay, formatDistance, formatElevation, formatPace,
   formatTime, formatTotals, groupByWeek, nextSort, parseFilters, sortActivities, toCsv, totals, weekTitle, type DateRange, type DistanceBand, type Filters, type SortKey,
 } from "@/lib/activities";
 import { dayKey, thousands } from "@/lib/format";
+import { distanceIn, distanceUnit } from "@/lib/units";
 import { locale, msg, t } from "@/lib/i18n";
 import { sportWord } from "./parts";
 import "@/app/(app)/activities/activities.css";
@@ -149,7 +150,7 @@ export function ActivitiesScreen() {
         <Card aria-label={t("Last 30 days")} className="act-summary-card" onMouseLeave={() => setHover(null)}>
           <div className="act-tiles">
             <div><span>{t("Activities")}</span><CountUp className="num" text={String(sum.count)} /></div>
-            <div><span>{t("Distance")}</span><span><CountUp className="num" text={(sum.distanceM / 1000).toFixed(1)} /> <small>km</small></span></div>
+            <div><span>{t("Distance")}</span><span><CountUp className="num" text={distanceIn(sum.distanceM).toFixed(1)} /> <small>{distanceUnit()}</small></span></div>
             <div><span>{t("Time")}</span><CountUp className="num" text={formatTime(sum.durationS)} /></div>
             <div><span>{t("Load")}</span><CountUp className="num" text={thousands(sum.load)} /></div>
           </div>
@@ -198,7 +199,7 @@ export function ActivitiesScreen() {
           {DATE_RANGES.map((r) => <option key={r.value} value={r.value}>{t(r.label)}</option>)}
         </Select>
         <Select aria-label={t("Distance")} value={filters.distance} onChange={(e) => update({ distance: e.target.value as DistanceBand })}>
-          {DISTANCE_BANDS.map((b) => <option key={b.value} value={b.value}>{t(b.label)}</option>)}
+          {distanceBands().map((b) => <option key={b.value} value={b.value}>{t(b.label)}</option>)}
         </Select>
         <div ref={menuRef} className="act-columns" style={{ position: "relative" }}>
           <Button aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>{t("Columns")}</Button>

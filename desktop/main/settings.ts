@@ -16,7 +16,13 @@ import { isLang, msg, t, type Lang } from "@/lib/i18n";
  * file yet, as when CorosLink's users first open C-LINK) until the athlete leaves it for the app; a settings file
  * from before the intro existed counts as "seen".
  */
-interface Saved { dataMode: DataMode; blocked: Blocked[]; intro: "pending" | "seen"; language: Lang }
+/**
+ * `usage`: whether the daily anonymous check-in goes out (usage.ts). `crashReports`: whether crashes are sent to the
+ * developer on their own (reports.ts). Nothing is sent until the athlete answers the privacy question (`privacy`, in
+ * the intro or, for an install from before it, a window of its own), where usage counts start on and crash reports
+ * off (pages/Intro.tsx); changed after in Privacy.
+ */
+interface Saved { dataMode: DataMode; blocked: Blocked[]; intro: "pending" | "seen"; privacy: "pending" | "seen"; language: Lang; usage: boolean; crashReports: boolean }
 
 /** What the main process lends the settings: dialogs and the file manager come from Electron. */
 export interface SettingsHost {
@@ -36,6 +42,10 @@ export interface SettingsHost {
   modeChanged: (mode: DataMode) => void;
   /** The page's language changed (or was first told): the menu and the main process's own lines follow it. */
   languageChanged: (lang: Lang) => void;
+  /** Usage counts turned on or off in Privacy. */
+  usageChanged: (on: boolean) => void;
+  /** Sends the error log to the developer (reports.ts). */
+  sendReport: (input: { note: string; contact: string; hours: number }) => Promise<{ reference: string } | { failed: "offline" | "refused" | "unavailable" }>;
 }
 
 /** What the guard stops, for the Electron sessions too (main.ts). */
@@ -86,7 +96,7 @@ const problem = (message: string, code = "problem", status = 400) => json({ erro
 
 export class DesktopSettings {
   private readonly file: string;
-  private saved: Saved = { dataMode: "connected", blocked: [], intro: "seen", language: "en" };
+  private saved: Saved = { dataMode: "connected", blocked: [], intro: "seen", privacy: "pending", language: "en", usage: false, crashReports: false };
 
   readonly guard: ModeGuard = {
     localOnly: () => this.saved.dataMode === "localOnly",
@@ -110,14 +120,26 @@ export class DesktopSettings {
       if (Array.isArray(parsed.blocked)) this.saved.blocked = parsed.blocked.slice(-MAX_BLOCKED);
       if (parsed.intro === "pending") this.saved.intro = "pending";
       if (isLang(parsed.language)) this.saved.language = parsed.language;
+      // Only an answer to the privacy question turns either on; a file from before it was asked keeps both off.
+      if (parsed.privacy === "seen") {
+        this.saved.privacy = "seen";
+        this.saved.usage = parsed.usage === true;
+        this.saved.crashReports = parsed.crashReports === true;
+      }
     }
     if (options.replayIntro) this.saved.intro = "pending";
-    else if (options.skipIntro) this.saved.intro = "seen";
+    else if (options.skipIntro) { this.saved.intro = "seen"; this.saved.privacy = "seen"; }
     guardFetch(this.guard.localOnly, this.guard.blocked);
   }
 
   /** The language the page last said it speaks, so the menu starts in it before the page loads. */
   get language(): Lang { return this.saved.language; }
+
+  /** Whether the daily usage check-in may go out: turned on, and not in Local mode. */
+  get usageAllowed(): boolean { return this.saved.privacy === "seen" && this.saved.usage && this.saved.dataMode !== "localOnly"; }
+
+  /** Whether crashes are sent on their own: turned on, and not in Local mode. */
+  get crashesAllowed(): boolean { return this.saved.privacy === "seen" && this.saved.crashReports && this.saved.dataMode !== "localOnly"; }
 
   /** Whether the first-run intro still shows before the app. */
   get introPending(): boolean { return this.saved.intro === "pending"; }
@@ -137,7 +159,7 @@ export class DesktopSettings {
   }
 
   private state() {
-    return { dataMode: this.saved.dataMode, blocked: this.saved.blocked.slice().reverse(), about: this.about, local: this.local(), intro: this.saved.intro };
+    return { dataMode: this.saved.dataMode, blocked: this.saved.blocked.slice().reverse(), about: this.about, local: this.local(), intro: this.saved.intro, privacy: this.saved.privacy, usage: this.saved.usage, crashReports: this.saved.crashReports };
   }
 
   /** What Privacy → Local data counts: what phones have synced here. */
@@ -175,10 +197,17 @@ export class DesktopSettings {
         case "GET /": return json(this.state());
         case "POST /": {
           if (body.dataMode === "connected" || body.dataMode === "localOnly") await this.setMode(body.dataMode);
+          this.choose(body);
+          return json(this.state());
+        }
+        // The privacy question's answer (the intro, or its own window): both switches at once, and it isn't asked again.
+        case "POST /privacy": {
+          this.saved.privacy = "seen";
+          this.choose({ usage: body.usage === true, crashReports: body.crashReports === true }, true);
           return json(this.state());
         }
         // The intro: "seen" once the athlete goes on to the app; "pending" shows it again (Developer page).
-        case "GET /intro": return json({ intro: this.saved.intro });
+        case "GET /intro": return json({ intro: this.saved.intro, privacy: this.saved.privacy });
         case "POST /intro": {
           if (body.intro === "seen" || body.intro === "pending") { this.saved.intro = body.intro; this.save(); }
           return json({ intro: this.saved.intro });
@@ -199,6 +228,14 @@ export class DesktopSettings {
           const a = this.about;
           return json({ count: this.log.since(hours).length, report: this.log.report(hours, `C-LINK ${a.version} · ${a.platform} · Electron ${a.electron}`) });
         }
+        case "POST /logs/send": {
+          const hours = Math.min(168, Math.max(1, Number(body.hours) || 24));
+          const sent = await this.host.sendReport({ note: String(body.note ?? ""), contact: String(body.contact ?? ""), hours });
+          if ("reference" in sent) return json(sent);
+          return problem(sent.failed === "offline" ? t("C-LINK couldn't reach the server. Check the connection and try again.")
+            : sent.failed === "refused" ? t("The report wasn't taken. Check the email address.")
+            : t("Reports can't be sent right now. Try again later."), sent.failed, 502);
+        }
         case "POST /logs/clear": this.log.clear(); return json({ count: 0 });
         case "POST /backup/export": return await this.exportBackup(typeof body.passphrase === "string" ? body.passphrase : "");
         case "POST /backup/restore": return await this.restoreBackup(typeof body.passphrase === "string" ? body.passphrase : "");
@@ -209,6 +246,15 @@ export class DesktopSettings {
       this.log.add("app", `Settings ${route} failed: ${String(error)}`);
       return problem(t("That didn't work."), "internal", 500);
     }
+  }
+
+  /** Usage counts and crash reports turned on or off; the check-in starts or forgets its ID when usage changes. */
+  private choose(body: Record<string, unknown>, answered = false): void {
+    const usage = typeof body.usage === "boolean" && body.usage !== this.saved.usage ? body.usage : null;
+    if (usage !== null) this.saved.usage = usage;
+    if (typeof body.crashReports === "boolean") this.saved.crashReports = body.crashReports;
+    if (usage !== null || typeof body.crashReports === "boolean" || answered) this.save();
+    if (usage !== null || (answered && this.saved.usage)) this.host.usageChanged(this.saved.usage);
   }
 
   private async places() {

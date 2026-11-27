@@ -18,6 +18,10 @@ import { clock, thousands } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import { tr } from "@/lib/i18n/react";
 import {
+  bodyHeightIn, bodyHeightUnit, distanceIn, distanceStep, distanceUnit, height, heightIn, heightUnit, imperial, paceGap, paceIn, paceUnitLabel, speedIn, speedText, speedUnit,
+  swimIn, swimPaceIn, swimPaceUnitLabel, swimUnit, weightTotal,
+} from "@/lib/units";
+import {
   EffortCard, FindingsCard, GearCard, JournalCard, MissingCard, RecordsCard, RelativeEffortCard, StatGrid, SummaryCard, ThresholdMeter, TimeCard, WeatherCard, WeekCard,
   sportWord, ZoneBar, ZoneCard, ZoneRows, type Stat, type ZoneLine,
 } from "./parts";
@@ -205,7 +209,7 @@ function paceItems(m: Model): { label: string; value: ReactNode; text?: string }
   const pace = paceOver(a.sport, a.distanceM, a.durationS);
   if (unit && pace != null) {
     items.push(unit === "min/100m"
-      ? { label: t("Avg pace"), value: <>{clock(Math.round(pace))} <small>/100 m</small></> }
+      ? { label: t("Avg pace"), value: <>{clock(Math.round(swimPaceIn(pace)))} <small>{swimPaceUnitLabel()}</small></> }
       : { label: unit === "km/h" ? t("Avg speed") : t("Avg pace"), value: null, text: formatPaceValue(a.sport, pace) });
   }
   if (a.calories != null) items.push({ label: t("Calories"), value: null, text: `${thousands(a.calories)} kcal` });
@@ -256,10 +260,13 @@ function lapMarks(laps: readonly Lap[] | null, streams: Streams): number[] {
   return laps.slice(0, -1).map((l) => { at += byDistance ? l.distanceM ?? 0 : l.durationS; return at / total; });
 }
 
+/** Metres along the activity as shown: 4.52 km, 750 m (or mi and yd). */
+const placeText = (sport: Sport, metres: number) => (sport === "Swim" ? `${thousands(swimIn(metres))} ${swimUnit()}` : `${distanceIn(metres).toFixed(2)} ${distanceUnit()}`);
+
 function positionText(m: Model): string {
   const { activity: a } = m.detail;
   const parts: string[] = [];
-  if (m.atM != null) parts.push(a.sport === "Swim" ? `${thousands(m.atM)} m` : `${(m.atM / 1000).toFixed(2)} km`);
+  if (m.atM != null) parts.push(placeText(a.sport, m.atM));
   if (m.atS != null) parts.push(clock(Math.round(m.atS)));
   return parts.join(" · ");
 }
@@ -272,16 +279,17 @@ function chartRows(m: Model): ChartRow[] {
   const ends = (label: string, v: readonly number[], text: (x: number) => string, u: string) => t("{what} from {low} to {high} {unit}", { what: label, low: text(Math.min(...v)), high: text(Math.max(...v)), unit: u });
   if (enough(streams.pace) && scales.pace && unit) {
     const avg = paceOver(a.sport, a.distanceM, a.durationS);
+    // The drawn values stay metric (the scale is linear either way); the text turns them into the shown unit.
     if (unit === "km/h") {
-      const text = (v: number) => v.toFixed(1);
+      const text = (v: number) => speedIn(v).toFixed(1);
       rows.push({
-        key: "speed", label: t("Speed"), sub: `${avg != null ? `${t("Avg {value}", { value: `${avg.toFixed(1)} km/h` })} · ` : ""}${t("Max {value}", { value: `${Math.max(...streams.pace).toFixed(1)} km/h` })}`, height: 110,
-        values: streams.pace, low: scales.pace[0], high: scales.pace[1], text, unit: "km/h", describe: labels?.pace ?? ends(t("Speed"), streams.pace, text, "km/h"),
+        key: "speed", label: t("Speed"), sub: `${avg != null ? `${t("Avg {value}", { value: speedText(avg) })} · ` : ""}${t("Max {value}", { value: speedText(Math.max(...streams.pace)) })}`, height: 110,
+        values: streams.pace, low: scales.pace[0], high: scales.pace[1], text, unit: speedUnit(), describe: labels?.pace ?? ends(t("Speed"), streams.pace, text, speedUnit()),
         draw: { kind: "line", color: "var(--h-mint)", area: true },
       });
     } else {
-      const u = unit === "min/km" ? "/km" : "/100 m";
-      const text = (v: number) => clock(Math.round(v));
+      const u = unit === "min/km" ? paceUnitLabel() : swimPaceUnitLabel();
+      const text = (v: number) => clock(Math.round(unit === "min/km" ? paceIn(v) : swimPaceIn(v)));
       const thr = a.sport === "Run" && unit === "min/km" ? thresholds?.paceSPerKm : undefined;
       rows.push({
         key: "pace", label: t("Pace"), sub: `${avg != null ? `${t("Avg {value}", { value: `${text(avg)} ${u}` })} · ` : ""}${t("Best {value}", { value: `${text(Math.min(...streams.pace))} ${u}` })}`, height: 120,
@@ -311,11 +319,12 @@ function chartRows(m: Model): ChartRow[] {
   if (enough(streams.cadence)) plain("cadence", t("Cadence"), streams.cadence, a.sport === "Ride" ? "rpm" : "spm", "var(--h-blue)", a.cadence);
   if (enough(streams.elevation) && scales.elevation) {
     const whole = m.track?.dist ? totalClimb(m, streams) : null;
-    const lo = Math.min(...streams.elevation), hi = Math.max(...streams.elevation);
+    const lo = heightIn(Math.min(...streams.elevation)), hi = heightIn(Math.max(...streams.elevation));
+    const text = (v: number) => round(heightIn(v));
     rows.push({
-      key: "elevation", label: t("Elevation"), sub: `${whole ? `↑${Math.round(whole.up)} ↓${Math.round(whole.down)} · ` : ""}${Math.round(lo)}–${Math.round(hi)} m`, height: 80,
-      values: streams.elevation, low: scales.elevation[0], high: scales.elevation[1], text: round, unit: "m",
-      describe: labels?.elevation ?? ends(t("Elevation"), streams.elevation, round, "m"), draw: { kind: "area" },
+      key: "elevation", label: t("Elevation"), sub: `${whole ? `↑${Math.round(heightIn(whole.up))} ↓${Math.round(heightIn(whole.down))} · ` : ""}${Math.round(lo)}–${Math.round(hi)} ${heightUnit()}`, height: 80,
+      values: streams.elevation, low: scales.elevation[0], high: scales.elevation[1], text, unit: heightUnit(),
+      describe: labels?.elevation ?? ends(t("Elevation"), streams.elevation, text, heightUnit()), draw: { kind: "area" },
     });
   }
   return rows;
@@ -356,7 +365,7 @@ function MapCard({ m }: { m: Model }) {
   if (!route || !streams) return m.detail.streams || a.distanceM == null ? null : m.miss(t("Map"), "1.5 1 560px", 420);
   const hr = streams.hr?.[m.index];
   const readout: { label: string; value: ReactNode; color?: string }[] = [];
-  if (m.atM != null) readout.push({ label: t("Distance"), value: a.sport === "Swim" ? `${thousands(m.atM)} m` : `${(m.atM / 1000).toFixed(2)} km` });
+  if (m.atM != null) readout.push({ label: t("Distance"), value: placeText(a.sport, m.atM) });
   if (m.atS != null) readout.push({ label: t("Time"), value: clock(Math.round(m.atS)) });
   if (hr != null) readout.push({ label: t("Heart rate"), value: `${Math.round(hr)} bpm`, color: "var(--h-rose-ink)" });
   return (
@@ -408,11 +417,14 @@ function PaceLayout({ m }: { m: Model }) {
   const laps = watchLaps(detail);
 
   const view = useMemo(() => {
-    const auto = detail.laps.length > 0 && lapsAreAutomatic(detail.laps);
+    const step = distanceStep();
+    // The watch's automatic laps stand in for splits when they are in the shown unit (or nothing else is recorded).
+    const auto = detail.laps.length > 0 && lapsAreAutomatic(detail.laps)
+      && (!imperial() || !track?.dist || Math.abs((detail.laps[0].distanceM ?? 0) - step) <= 30 || detail.laps.length === 1);
     const base: SplitRow[] = !paceUnit(a.sport) ? []
-      : auto ? rowsFromLaps(detail.laps, track, streams, a.sport, 1000)
-      : track?.dist && streams ? splitsFromTrack(track, streams, a.sport, 1000) : [];
-    const lapRows = laps ? rowsFromLaps(laps, track, streams, a.sport, 1000) : null;
+      : auto ? rowsFromLaps(detail.laps, track, streams, a.sport, step)
+      : track?.dist && streams ? splitsFromTrack(track, streams, a.sport, step) : [];
+    const lapRows = laps ? rowsFromLaps(laps, track, streams, a.sport, step) : null;
     const whole = base.length ? totalRow(base, "Total") : null;
     const climbs = ride && track && streams ? findClimbs(track, streams) : [];
     // FTP is a cycling mark: a run's power is charted, never scored against it.
@@ -426,17 +438,17 @@ function PaceLayout({ m }: { m: Model }) {
   const climb = streams && track ? totalClimb(m, streams) : null;
 
   const details: Stat[] = [];
-  if (gap != null) details.push({ label: t("Avg grade-adjusted pace"), value: `${clock(Math.round(gap))} /km` });
-  if (a.elevationGainM != null) details.push({ label: t("Elevation gain"), value: `${thousands(a.elevationGainM)} m`, note: climb ? t("Loss {n} m", { n: thousands(climb.down) }) : "" });
+  if (gap != null) details.push({ label: t("Avg grade-adjusted pace"), value: `${clock(Math.round(paceIn(gap)))} ${paceUnitLabel()}` });
+  if (a.elevationGainM != null) details.push({ label: t("Elevation gain"), value: height(a.elevationGainM), note: climb ? t("Loss {height}", { height: height(climb.down) }) : "" });
   if (a.avgHr != null) details.push({ label: t("Avg heart rate"), value: `${a.avgHr} bpm`, note: thr?.maxHr ? t("{pct}% of the max", { pct: Math.floor((a.avgHr / thr.maxHr) * 100) }) : "" });
   if (a.maxHr != null) details.push({ label: t("Max heart rate"), value: `${a.maxHr} bpm` });
-  if (ride && enough(streams?.pace)) details.push({ label: t("Max speed"), value: `${Math.max(...streams.pace).toFixed(1)} km/h` });
+  if (ride && enough(streams?.pace)) details.push({ label: t("Max speed"), value: speedText(Math.max(...streams.pace)) });
   if (a.calories != null) details.push({ label: t("Calories"), value: `${thousands(a.calories)} kcal` });
   if (a.load != null) details.push({ label: t("Training load"), value: String(a.load), note: t("From time and heart rate") });
   if (a.cadence != null) details.push({ label: t("Avg cadence"), value: `${a.cadence} ${ride ? "rpm" : "spm"}`, note: enough(streams?.cadence) ? t("Max {value}", { value: Math.round(Math.max(...streams.cadence)) }) : "" });
   const avgPower = a.avgPowerW ?? power?.avg ?? null;
   if (avgPower != null) details.push({ label: t("Avg power"), value: `${Math.round(avgPower)} W`, note: power ? t("Max {value}", { value: Math.round(power.max) }) : "" });
-  if (run && whole?.strideM != null) details.push({ label: t("Avg stride length"), value: `${whole.strideM.toFixed(2)} m` });
+  if (run && whole?.strideM != null) details.push({ label: t("Avg stride length"), value: `${heightIn(whole.strideM).toFixed(2)} ${heightUnit()}` });
   if (whole?.groundContactMs != null) details.push({ label: t("Avg ground contact"), value: `${Math.round(whole.groundContactMs)} ms` });
 
   // Analysis rows, in the phone's order.
@@ -450,10 +462,10 @@ function PaceLayout({ m }: { m: Model }) {
     if (split != null) findings.push(pacingFinding(split));
   }
   if (gap != null && pace != null && Math.abs(pace - gap) >= 3) {
-    findings.push({ title: t("Grade-adjusted pace {pace} /km", { pace: clock(Math.round(gap)) }), note: pace > gap ? t("{n} s/km of climbing", { n: Math.round(pace - gap) }) : t("{n} s/km from the descents", { n: Math.round(gap - pace) }) });
+    findings.push({ title: t("Grade-adjusted pace {pace}", { pace: `${clock(Math.round(paceIn(gap)))} ${paceUnitLabel()}` }), note: pace > gap ? t("{amount} of climbing", { amount: paceGap(pace - gap) }) : t("{amount} from the descents", { amount: paceGap(gap - pace) }) });
   }
   if (run && a.distanceM != null && a.distanceM >= 3000 && a.durationS >= 1200 && a.avgHr) {
-    findings.push({ title: t("{n} m per heartbeat", { n: (((a.distanceM / a.durationS) * 60) / a.avgHr).toFixed(2) }), note: t("Efficiency") });
+    findings.push({ title: t("{distance} per heartbeat", { distance: `${heightIn(((a.distanceM / a.durationS) * 60) / a.avgHr).toFixed(2)} ${heightUnit()}` }), note: t("Efficiency") });
   }
   if (ride && power?.intensity != null) findings.push({ title: intensityLabel(power.intensity), note: t("Intensity factor {n}", { n: power.intensity.toFixed(2) }) });
   if (ride && power?.variability != null && a.durationS >= 1200) findings.push({ title: variabilityLabel(power.variability), note: t("Variability {n}", { n: power.variability.toFixed(2) }) });
@@ -488,20 +500,20 @@ function PaceLayout({ m }: { m: Model }) {
   const climbTime = climbs.reduce((s, c) => s + c.seconds, 0);
   const climbPower = climbs.every((c) => c.powerW != null) && climbTime > 0 ? climbs.reduce((s, c) => s + (c.powerW as number) * c.seconds, 0) / climbTime : null;
 
-  // A longer split is offered once it gives at least two rows.
+  // A longer split (in km or mi) is offered once it gives at least two rows.
   const lengths = [1, 5, 10].filter((k) => k === 1 || base.length > k);
   const dynamics: ChartRow[] = [];
   if (run && streams) {
-    const dyn = (key: string, label: string, values: number[] | null | undefined, unit: string, color: string, digits: number) => {
+    const dyn = (key: string, label: string, values: number[] | null | undefined, unit: string, color: string, digits: number, shown: (v: number) => number = (v) => v) => {
       if (!enough(values)) return;
       const [lo, hi] = extent(values, (Math.max(...values) - Math.min(...values)) * 0.15 || 1);
       const avg = values.reduce((s, v) => s + v, 0) / values.length;
-      const text = (v: number) => v.toFixed(digits);
+      const text = (v: number) => shown(v).toFixed(digits);
       dynamics.push({ key, label, sub: t("Avg {value}", { value: `${text(avg)} ${unit}` }), height: 80, values, low: lo, high: hi, text, unit, describe: t("{what} from {low} to {high} {unit}", { what: label, low: text(Math.min(...values)), high: text(Math.max(...values)), unit }), draw: { kind: "line", color } });
     };
     dyn("gct", t("Ground contact"), streams.groundContact, "ms", "var(--h-cyan)", 0);
-    dyn("vo", t("Vertical oscillation"), streams.verticalOsc, "cm", "var(--h-sky)", 1);
-    dyn("stride", t("Stride length"), streams.stride, "m", "var(--h-orange)", 2);
+    dyn("vo", t("Vertical oscillation"), streams.verticalOsc, bodyHeightUnit(), "var(--h-sky)", 1, bodyHeightIn);
+    dyn("stride", t("Stride length"), streams.stride, heightUnit(), "var(--h-orange)", 2, heightIn);
   }
 
   const lapSpeeds = (laps ?? []).map((l) => (l.distanceM && l.durationS > 0 ? l.distanceM / l.durationS : 0));
@@ -575,7 +587,7 @@ function PaceLayout({ m }: { m: Model }) {
             <HrZones m={m} missing />
             {paceLines.length > 0 ? (
               <ZoneCard
-                title={t("Pace zones")} aside={t("Threshold {pace} /km", { pace: clock(Math.round(thrPace as number)) })} zones={paceLines}
+                title={t("Pace zones")} aside={t("Threshold {pace}", { pace: `${clock(Math.round(paceIn(thrPace as number)))} ${paceUnitLabel()}` })} zones={paceLines}
                 sentence={mostly(paceLines, EFFORT_LEVELS.map((l) => l.title), EFFORT_LEVELS.map((l) => l.meaning))}
               />
             ) : run ? m.miss(t("Pace zones"), undefined, 220) : null}
@@ -611,7 +623,7 @@ function PaceLayout({ m }: { m: Model }) {
               {laps.map((l, k) => (
                 <div key={k} className="ad-tr" title={l.name} style={{ gridTemplateColumns: "30px repeat(4, minmax(0, 1fr))", minHeight: 40, whiteSpace: "nowrap" }}>
                   <span className="ad-dimcell">{l.n}</span>
-                  <span className="ad-r">{l.distanceM != null ? `${(l.distanceM / 1000).toFixed(2)} km` : "—"}</span>
+                  <span className="ad-r">{l.distanceM != null ? `${distanceIn(l.distanceM).toFixed(2)} ${distanceUnit()}` : "—"}</span>
                   <span className="ad-r ad-b">{exact(l.durationS)}</span>
                   <span className="ad-r" style={k === quickest ? { color: "var(--h-rose-ink)", fontWeight: 700 } : undefined}>{formatPaceValue(a.sport, paceOver(a.sport, l.distanceM, l.durationS))}</span>
                   <span className="ad-r">{l.avgHr ?? "—"}</span>
@@ -642,13 +654,13 @@ function ClimbsCard({ climbs, gainM }: { climbs: readonly Climb[]; gainM: number
   const total = climbs.reduce((s, c) => s + c.gainM, 0);
   return (
     <Card aria-label={t("Climbs")} clip style={{ flex: "1 1 320px" }}>
-      <div className="ad-head"><h2 className="h2">{t("Climbs")}</h2><span className="ad-sub">{gainM != null ? t("{n} of {total} m", { n: Math.round(total), total: thousands(gainM) }) : `${Math.round(total)} m`}</span></div>
+      <div className="ad-head"><h2 className="h2">{t("Climbs")}</h2><span className="ad-sub">{gainM != null ? t("{n} of {total}", { n: Math.round(heightIn(total)), total: height(gainM) }) : `${Math.round(heightIn(total))} ${heightUnit()}`}</span></div>
       {climbs.map((c, k) => (
         <div key={k} className="ad-item" data-n>
           <i>{k + 1}</i>
           <span>
-            <b>{t("{km} km at {grade}%", { km: ((c.toM - c.fromM) / 1000).toFixed(2), grade: (c.grade * 100).toFixed(1) })}</b>
-            <span className="ad-sub">{[`+${Math.round(c.gainM)} m`, c.powerW != null ? `${Math.round(c.powerW)} W` : "", c.hr != null ? `${Math.round(c.hr)} bpm` : ""].filter(Boolean).join(" · ")}</span>
+            <b>{t("{distance} at {grade}%", { distance: `${distanceIn(c.toM - c.fromM).toFixed(2)} ${distanceUnit()}`, grade: (c.grade * 100).toFixed(1) })}</b>
+            <span className="ad-sub">{[`+${Math.round(heightIn(c.gainM))} ${heightUnit()}`, c.powerW != null ? `${Math.round(c.powerW)} W` : "", c.hr != null ? `${Math.round(c.hr)} bpm` : ""].filter(Boolean).join(" · ")}</span>
           </span>
           <span className="num">{clock(Math.round(c.seconds))}</span>
         </div>
@@ -752,7 +764,7 @@ function StrengthLayout({ m }: { m: Model }) {
   const items: { label: string; value: ReactNode; text?: string }[] = [{ label: t("Time"), value: null, text: exact(a.durationS) }];
   if (numbers) {
     items.push({ label: t("Sets"), value: null, text: String(numbers.sets) });
-    if (numbers.volumeKg > 0) items.push({ label: t("Volume"), value: null, text: `${thousands(numbers.volumeKg)} kg` });
+    if (numbers.volumeKg > 0) items.push({ label: t("Volume"), value: null, text: weightTotal(numbers.volumeKg) });
     else items.push({ label: t("Reps"), value: null, text: thousands(numbers.reps) });
   }
   if (a.avgHr != null) items.push({ label: t("Avg heart rate"), value: null, text: `${a.avgHr} bpm` });

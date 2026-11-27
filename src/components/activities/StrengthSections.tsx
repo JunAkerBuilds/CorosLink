@@ -9,11 +9,13 @@ import {
 import { linePath, roundedBars } from "@/lib/chart";
 import { clock, thousands } from "@/lib/format";
 import { t, tx } from "@/lib/i18n";
+import { weightIn, weightTotal, weightUnit } from "@/lib/units";
 import { StatGrid, type Stat } from "./parts";
 
 const EX_HUES = ["ember", "blue", "mint", "violet", "rose", "cyan"];
 export const exerciseColor = (k: number) => `var(--h-${EX_HUES[k % EX_HUES.length]})`;
-const kg = (v: number) => `${Number(v.toFixed(2))} kg`;
+/** A set's weight as shown, to the hundredth: 77.5 kg or 170.86 lb. */
+const kg = (v: number) => `${Number(weightIn(v).toFixed(2))} ${weightUnit()}`;
 
 /**
  * Which muscles the session worked. The turning figure is only shown when it was drawn for exactly this
@@ -57,7 +59,7 @@ export function SessionCard({ session, load }: { session: StrengthSession; load:
     { label: t("Working sets"), value: String(n.sets), note: n.exercises === 1 ? t("1 exercise") : t("{n} exercises", { n: n.exercises }) },
     { label: t("Total reps"), value: thousands(n.reps) },
   ];
-  if (n.volumeKg > 0) items.push({ label: t("Volume"), value: `${thousands(n.volumeKg)} kg`, note: t("Reps × weight, every set") });
+  if (n.volumeKg > 0) items.push({ label: t("Volume"), value: weightTotal(n.volumeKg), note: t("Reps × weight, every set") });
   if (n.workS != null) items.push({ label: t("Under load"), value: clock(Math.round(n.workS)) });
   if (n.restS != null) items.push({ label: t("Resting"), value: clock(Math.round(n.restS)) });
   if (n.density != null) items.push({ label: t("Density"), value: `${Math.round(n.density * 100)}%`, note: t("Of the session under load") });
@@ -115,7 +117,7 @@ export function VolumeCard({ session }: { session: StrengthSession }) {
       </div>
       <svg
         role="img" width="100%" height={H} viewBox={`0 0 ${VW} ${H}`} preserveAspectRatio="none"
-        aria-label={t("{what} of each of the {n} sets, coloured by exercise: the largest is {top}, in {exercise}", { what: m === "volume" ? t("Volume") : t("Reps"), n: sets.length, top: m === "volume" ? `${thousands(top)} kg` : t("{n} reps", { n: top }), exercise: session.exercises[sets[best]?.exercise ?? 0]?.name ?? t("the session") })}
+        aria-label={t("{what} of each of the {n} sets, coloured by exercise: the largest is {top}, in {exercise}", { what: m === "volume" ? t("Volume") : t("Reps"), n: sets.length, top: m === "volume" ? weightTotal(top) : t("{n} reps", { n: top }), exercise: session.exercises[sets[best]?.exercise ?? 0]?.name ?? t("the session") })}
       >
         <path d={`M0 ${H / 3}H${VW}M0 ${(H * 2) / 3}H${VW}`} fill="none" style={{ stroke: "rgba(var(--fg-rgb), 0.07)", vectorEffect: "non-scaling-stroke" }} />
         <g transform="translate(0 4)">{paths.map((d, e) => (d ? <path key={e} d={d} style={{ fill: exerciseColor(e) }} /> : null))}</g>

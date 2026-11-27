@@ -78,7 +78,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   const hubNote = hubDays ? null
     : hubTrouble ? "COROS Training Hub is connected but its calendar couldn't be read just now, so COROS's planned workouts are missing from this list."
     : "COROS Training Hub is not connected, so the COROS calendar isn't in this list and approved workouts are saved on this computer instead of on COROS. The athlete connects it on the Connections page.";
-  const tools: ToolContext = { items, clock: asked.clock, entries, hubNote, hub: session ? hubLoaders(session) : null, browser: asked.browser, zones, newId: () => crypto.randomUUID().toUpperCase(), asked: false, plans: asked.plans };
+  const tools: ToolContext = { items, clock: asked.clock, entries, hubNote, hub: session ? hubLoaders(session) : null, browser: asked.browser, zones, newId: () => crypto.randomUUID().toUpperCase(), asked: false, plans: asked.plans, units: asked.units };
   // The host app's own tools (the desktop's MCP servers), when the athlete turned some on.
   const extra = host && hostAI.current?.tools ? await hostAI.current.tools().catch(() => null) : null;
   const history = historyTurns([...asked.history, { id: "now", from: "you", text: asked.text }]);
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       const send = (event: CoachEvent) => { if (open) { try { controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`)); } catch { open = false; } } };
       try {
         await runCoach({
-          model, files: asked.files, rules: RULES, context: contextText(items, asked.clock, entries, hubNote, zones, asked.page), history, tools, extra, signal: request.signal,
+          model, files: asked.files, rules: RULES, context: contextText(items, asked.clock, entries, hubNote, zones, asked.page, asked.units), history, tools, extra, signal: request.signal,
           tokenCap: 400_000, emit: send,
         });
       } catch (error) {

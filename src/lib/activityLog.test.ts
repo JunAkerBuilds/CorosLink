@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { ALL_LOG_SPORTS, inferDistanceUnit, inferIcon, inferUploadSport, logActivityInput, logDuration, logSport, logStart, SUGGESTED_LOG_SPORTS, visibleLogSports, type LogForm } from "./activityLog";
+import { afterEach, describe, expect, it } from "vitest";
+import { ALL_LOG_SPORTS, inferDistanceUnit, inferIcon, inferUploadSport, logActivityInput, logDistanceLabel, logDuration, logSport, logStart, SUGGESTED_LOG_SPORTS, visibleLogSports, type LogForm } from "./activityLog";
+import { useUnitsNow } from "./units";
 
 const form = (patch: Partial<LogForm> = {}): LogForm => ({ sportId: "suggested-run", date: "2026-11-18", time: "06:40", hours: "0", minutes: "42", distance: "8.20", calories: "571", avgHr: "148", ...patch });
 
@@ -69,5 +70,23 @@ describe("the form as an activity", () => {
     expect(logActivityInput(form({ time: "25:00" }))).toBeNull();
     expect(logDuration({ hours: "1", minutes: "5" })).toBe(3900);
     expect(logStart({ date: "2026-11-18", time: "23:59" })?.getHours()).toBe(23);
+  });
+});
+
+describe("the form in imperial units", () => {
+  afterEach(() => useUnitsNow("metric"));
+
+  it("takes miles and yards and labels the field with them", () => {
+    useUnitsNow("imperial");
+    expect(logDistanceLabel("km")).toBe("mi");
+    expect(logDistanceLabel("m")).toBe("yd");
+    expect(logDistanceLabel("none")).toBe("");
+    expect(logActivityInput(form({ distance: "5" }))).toMatchObject({ distanceM: 8047 });
+    expect(logActivityInput(form({ sportId: "suggested-swim", distance: "1000" }))).toMatchObject({ distanceM: 914 });
+  });
+
+  it("labels metric as km and m", () => {
+    expect(logDistanceLabel("km")).toBe("km");
+    expect(logDistanceLabel("m")).toBe("m");
   });
 });

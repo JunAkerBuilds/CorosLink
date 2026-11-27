@@ -9,6 +9,7 @@ import { finite, isDay, quoted, type Clock } from "./items";
 import { quotedLong } from "./prompt";
 import { parseFiles, type CoachFile } from "./files";
 import { parsePlans, type PlanBrief } from "./plans";
+import { isUnits, type Units } from "@/lib/units";
 
 export interface CoachRequest {
   text: string;
@@ -23,6 +24,8 @@ export interface CoachRequest {
   plans: PlanBrief[];
   /** The page the athlete asked from (the side Coach): its name and what it shows, as plain text. */
   page: { title: string; text: string } | null;
+  /** The units the athlete reads: cards are drawn in them and Coach writes in them. */
+  units: Units;
 }
 
 /** Most of a page Coach is told about. */
@@ -116,5 +119,5 @@ export function parseRequest(raw: unknown, nowMs: number, checkWorkout: (value: 
   }
   const page = isBag(raw.page) && typeof raw.page.text === "string" && raw.page.text.trim()
     ? { title: quoted(raw.page.title, 80) || "This page", text: quotedLong(raw.page.text, MAX_PAGE_TEXT) } : null;
-  return { text, history, clock: { nowMs, offsetMin: offset }, browser, hubDays, files: parseFiles(raw.files), page, plans: parsePlans(raw.plans) };
+  return { text, history, clock: { nowMs, offsetMin: offset }, browser, hubDays, files: parseFiles(raw.files), page, plans: parsePlans(raw.plans), units: isUnits(raw.units) ? raw.units : "metric" };
 }

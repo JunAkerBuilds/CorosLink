@@ -13,7 +13,8 @@ import { addDays, dayMonth, longDay, shortDay } from "@/lib/calendar";
 import { linePath, sparkPath } from "@/lib/chart";
 import { columnBars, dayTime, HEAT_STEP, heatCell, heatIndexAt, heatPaths, hMin, hoursClock, monthCells, openingLine } from "@/lib/dashboard";
 import { FEEL_LEVELS, FEEL_TAGS, feelAdjustment, loadHue } from "@/lib/feel";
-import { clock, pace, thousands } from "@/lib/format";
+import { clock, thousands } from "@/lib/format";
+import { distanceIn, distanceUnit, paceText } from "@/lib/units";
 import { sky, type WeatherNow } from "@/lib/openMeteo";
 import { loadWeatherNow } from "@/data/weatherNow";
 import { locale, msg, t, tx } from "@/lib/i18n";
@@ -530,12 +531,12 @@ function Year({ y }: { y: Dashboard["year"] }) {
   return (
     <Card aria-label={t("Year to date")} className="db-card db-w4">
       <Head title={t("Year to date")}><Status text={y.status} /></Head>
-      <Big value={thousands(y.km)} unit="km" unitColor="var(--h-mint-ink)" />
+      <Big value={thousands(distanceIn(y.km * 1000))} unit={distanceUnit()} unitColor="var(--h-mint-ink)" />
       <svg role="img" aria-label={y.label} width="100%" height="90" viewBox="0 0 300 90" preserveAspectRatio="none" className="db-foot">
         <path d={line(y.lastYear)} fill="none" style={{ stroke: "var(--db-ghost-line)", strokeDasharray: "4 4", strokeWidth: 1.5, vectorEffect: "non-scaling-stroke" }} />
         <path d={line(y.thisYear)} fill="none" style={{ stroke: "var(--h-mint)", strokeWidth: 2.5, strokeLinejoin: "round", vectorEffect: "non-scaling-stroke" }} />
       </svg>
-      <div className="db-legend"><span>{monthName(0, "short")}</span>{y.lastYearByNowKm != null ? <span>{t("Last year {km} km by now", { km: thousands(y.lastYearByNowKm) })}</span> : null}<span>{monthName(11, "short")}</span></div>
+      <div className="db-legend"><span>{monthName(0, "short")}</span>{y.lastYearByNowKm != null ? <span>{t("Last year {distance} by now", { distance: `${thousands(distanceIn(y.lastYearByNowKm * 1000))} ${distanceUnit()}` })}</span> : null}<span>{monthName(11, "short")}</span></div>
     </Card>
   );
 }
@@ -625,7 +626,7 @@ function Thresholds({ t: th }: { t: Dashboard["thresholds"] }) {
         </div>
       ) : null}
       <div className="db-pair">
-        <div className="db-stat"><span>{t("Threshold pace")}</span><span>{th.paceSecPerKm != null ? pace(th.paceSecPerKm) : "—"}</span></div>
+        <div className="db-stat"><span>{t("Threshold pace")}</span><span>{th.paceSecPerKm != null ? paceText(th.paceSecPerKm) : "—"}</span></div>
         <div className="db-stat"><span>{t("Threshold heart rate")}</span><span>{th.heartRate != null ? `${th.heartRate} bpm` : "—"}</span></div>
       </div>
       <div className="db-rows db-foot" style={{ display: "flex", flexDirection: "column" }}>
@@ -633,7 +634,7 @@ function Thresholds({ t: th }: { t: Dashboard["thresholds"] }) {
           <div key={r.name} className="row" style={{ gridTemplateColumns: RACE_COLS, minHeight: 36 }}>
             <span style={{ fontWeight: 500 }}>{r.name}</span>
             <span style={{ textAlign: "right", fontWeight: 700, color: "var(--h-gold-ink)" }}>{clock(r.seconds)}</span>
-            <span className="soft" style={{ textAlign: "right" }}>{pace(r.paceSecPerKm)}</span>
+            <span className="soft" style={{ textAlign: "right" }}>{paceText(r.paceSecPerKm)}</span>
             {r.deltaSeconds != null
               ? <span style={{ textAlign: "right", color: r.deltaSeconds <= 0 ? "var(--h-mint-ink)" : "var(--muted)" }}>{r.deltaSeconds > 0 ? "+" : ""}{clock(r.deltaSeconds)}</span>
               : <span />}

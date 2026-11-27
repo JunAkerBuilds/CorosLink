@@ -1,6 +1,8 @@
-// The first-run intro: the language, then five scenes before anything else on the first launch (main/settings.ts keeps the flag), then
-// "Bring over my CorosLink data" when CorosLink's data is on this computer, or "Set up C-LINK" when it isn't.
-// Full window, in the app's own grounds and buttons. `?scene=0…5` opens a scene (smoke screenshots).
+// The first-run intro: the language, then six scenes before anything else on the first launch (main/settings.ts keeps the flag): four
+// about the app, the privacy question (usage counts and crash reports, both opt-in, and how to send a problem straight to the developer),
+// then "Bring over my CorosLink data" when CorosLink's data is on this computer, or "Set up C-LINK" when it isn't.
+// An install from before the privacy question gets that scene alone, once, at /welcome/privacy.
+// Full window, in the app's own grounds and buttons. `?scene=0…6` opens a scene (smoke screenshots).
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { BrandMark } from "@/components/shell/BrandMark";
 import { Button } from "@/components/ui";
@@ -10,11 +12,14 @@ import { useStore } from "@/data/local/store";
 import { computerWord } from "../computer";
 import { IntroWatch } from "../parts/IntroWatch";
 import { navigate, useLocation } from "../router";
-import { leaveIntro, readMove } from "../welcome";
+import { readSettings } from "../settings";
+import { answerPrivacy, leaveIntro, PRIVACY_PATH, readMove, type PrivacyChoice } from "../welcome";
 import "./intro.css";
 
 // English, with {computer} for "Mac" / "PC" / "computer"; translated where shown.
-const SCENES = [msg("Language"), msg("The new C-LINK"), msg("One window"), msg("Phone to {computer}"), msg("Coach"), msg("Welcome")] as const;
+const SCENES = [msg("Language"), msg("The new C-LINK"), msg("One window"), msg("Phone to {computer}"), msg("Coach"), msg("Your privacy"), msg("Welcome")] as const;
+const PRIVACY = 5;
+const LAST = SCENES.length - 1;
 const FEATURES = [msg("Activities"), msg("Sleep"), msg("Energy"), msg("Strength"), msg("Fuel"), msg("Body"), msg("Watch Studio"), msg("Routes"), msg("Coach"), msg("Calendar"), msg("Media"), msg("Phone sync")];
 const AUTO_MS = 4500;
 
@@ -36,6 +41,9 @@ const ICON = {
   back: "M15 6l-6 6 6 6",
   arrow: "M5 12h14M13 6l6 6-6 6",
   tick: "M5 12.5l4.5 4.5L19 7.5",
+  chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  bug: "M8 8a4 4 0 0 1 8 0v1H8zM6 10h12v4a6 6 0 0 1-12 0zM12 10v10M3 13h3M18 13h3M4 7l2.5 2M20 7l-2.5 2M4 20l2.5-2.5M20 20l-2.5-2.5",
+  mail: "M4 5h16v14H4zM4 6l8 7 8-7",
 };
 
 /** The real dashboard, in the look the app is in. */
@@ -132,7 +140,7 @@ function Scene4() {
   );
 }
 
-function Scene5({ fromCorosLink }: { fromCorosLink: boolean | null }) {
+function SceneWelcome({ fromCorosLink }: { fromCorosLink: boolean | null }) {
   return (<>
     <span className="ix-ring" aria-hidden="true" /><span className="ix-ring" data-b="" aria-hidden="true" />
     <Stage>
@@ -151,6 +159,50 @@ function Scene5({ fromCorosLink }: { fromCorosLink: boolean | null }) {
             <Button variant="primary" className="ix-cta" onClick={() => void leaveIntro("/setup")}>{t("Set up C-LINK")}<Icon d={ICON.arrow} size={22} width={2.6} /></Button>
           </div>
         </>)}
+      </div>
+    </Stage>
+  </>);
+}
+
+/** One opt-in, as a card the whole of which is the switch. */
+function OptIn({ on, onChange, icon, title, detail }: { on: boolean; onChange: (on: boolean) => void; icon: string; title: string; detail: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} className="ix-opt" data-on={on ? "" : undefined} onClick={() => onChange(!on)}>
+      <span className="ix-opt-head"><span className="ix-opt-icon" aria-hidden="true"><Icon d={icon} size={22} /></span><span className="ix-opt-pill" aria-hidden="true" /></span>
+      <b>{title}</b><small>{detail}</small>
+    </button>
+  );
+}
+
+/**
+ * The privacy question: usage counts and crash reports, each off until chosen (main/settings.ts), and where to send a
+ * problem with a message straight to the developer. `update`: shown alone to an install from before it was asked.
+ */
+function ScenePrivacy({ choice, onChoice, onGo, update }: { choice: PrivacyChoice | null; onChoice: (c: PrivacyChoice) => void; onGo: () => void; update?: boolean }) {
+  return (<>
+    <span className="ix-ring" aria-hidden="true" /><span className="ix-ring" data-b="" aria-hidden="true" />
+    <Stage>
+      <div className="ix-pv-copy" data-fit="">
+        <div className="ix-pv-head ix-in">
+          {update ? <span className="ix-eyebrow">{t("New in this update")}</span> : null}
+          <h2 className="ix-h" data-lines="1">{t("Your data,")} <span className="ix-mint">{t("your call.")}</span></h2>
+          <p className="ix-sub">{t("Your training stays on this {computer}. Usage counts help me see how many people use C-LINK; crash reports only go out if you turn them on.", { computer: computerWord() })}</p>
+        </div>
+        <div className="ix-opts ix-in" data-d="1">
+          <OptIn on={!!choice?.usage} onChange={(usage) => choice && onChoice({ ...choice, usage })} icon={ICON.chart} title={t("Usage counts")}
+            detail={t("Just so I get an idea of how many people use C-LINK: a random ID, the app version and your OS. Nothing more.")} />
+          <OptIn on={!!choice?.crashReports} onChange={(crashReports) => choice && onChoice({ ...choice, crashReports })} icon={ICON.bug} title={t("Crash reports")}
+            detail={t("When C-LINK crashes, the last hour of its error log, with home folders and keys taken out.")} />
+          <div className="ix-opt" data-info="">
+            <span className="ix-opt-head"><span className="ix-opt-icon" aria-hidden="true"><Icon d={ICON.mail} size={22} /></span></span>
+            <b>{t("Something wrong?")}</b>
+            <small>{t("From {place}, send the error log and a message straight to the developer. You get a reference back.", { place: t("Help → Report a Problem…") })}</small>
+          </div>
+        </div>
+        <div className="ix-ctas ix-in" data-d="2">
+          <Button variant="primary" className="ix-cta" disabled={!choice} onClick={onGo}>{t("Continue")}<Icon d={ICON.arrow} size={22} width={2.6} /></Button>
+        </div>
+        <span className="ix-fine ix-in" data-d="3">{t("Never your activities, health or account. Nothing is sent in Local mode. Change it any time in Settings → Privacy.")}</span>
       </div>
     </Stage>
   </>);
@@ -257,10 +309,19 @@ function Stage({ children }: { children: ReactNode }) {
 }
 
 export default function Intro() {
-  const { search } = useLocation();
+  const { pathname, search } = useLocation();
   const askedText = new URLSearchParams(search).get("scene");
   const asked = askedText === null ? 0 : Number(askedText);
-  const [scene, setScene] = useState(asked >= 0 && asked <= 5 ? asked : 0);
+  const alone = pathname === PRIVACY_PATH;
+  const [scene, setScene] = useState(alone ? PRIVACY : asked >= 0 && asked <= LAST ? asked : 0);
+  // Not yet answered: usage counts start on (an anonymous count, switched off right here if not wanted) and crash
+  // reports off. Answered before, as when the intro is shown again: as chosen. Nothing is sent until Continue.
+  const [choice, setChoice] = useState<PrivacyChoice | null>(null);
+  useEffect(() => {
+    void readSettings()
+      .then((s) => setChoice(s.privacy === "pending" ? { usage: true, crashReports: false } : { usage: s.usage, crashReports: s.crashReports }))
+      .catch(() => setChoice({ usage: true, crashReports: false }));
+  }, []);
   const saved = useStore(languageStore, "system");
   const [pick, setPick] = useState<Choice>(saved);
   const [playing, setPlaying] = useState(false);
@@ -278,24 +339,27 @@ export default function Intro() {
     void document.fonts.ready.then(() => { if (live) fitHeadlines(el); });
     return () => { live = false; };
   }, [frame, scene, scale, fromCorosLink]);
-  useEffect(() => { document.title = `${t("Welcome")} · C-LINK`; }, []);
+  useEffect(() => { document.title = `${t(alone ? "Your privacy" : "Welcome")} · C-LINK`; }, [alone]);
 
   // Leaving the language scene puts the pick in place. A new language starts the page over, on the scene asked for.
+  // Going on from the privacy scene saves its answer.
   const go = useCallback((n: number) => {
     setPlaying(false);
-    const next = Math.min(5, Math.max(0, n));
+    const next = Math.min(LAST, Math.max(0, n));
+    // The privacy step is left forward only with its answer (the switches load first).
+    if (scene === PRIVACY && next > PRIVACY) { if (!choice) return; void answerPrivacy(choice); }
     if (scene === 0 && next > 0 && pick !== saved) {
       navigate(`${location.pathname}?scene=${next}`, { replace: true });
       chooseLanguage(pick);
       return;
     }
     setScene(next);
-  }, [scene, pick, saved]);
+  }, [scene, pick, saved, choice]);
 
   useEffect(() => {
     if (!playing) return;
     const timer = setInterval(() => setScene((n) => {
-      if (n >= 4) { setPlaying(false); return 5; }
+      if (n >= PRIVACY - 1) { setPlaying(false); return PRIVACY; }
       return n + 1;
     }), AUTO_MS);
     return () => clearInterval(timer);
@@ -303,45 +367,59 @@ export default function Intro() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [role=radiogroup]")) return;
+      if (alone || (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [role=radiogroup]"))) return;
       if (e.key === "ArrowRight") go(scene + 1);
       else if (e.key === "ArrowLeft") go(scene - 1);
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [go, scene]);
+  }, [go, scene, alone]);
 
   // A click anywhere on the intro moves on a scene, unless it lands on a button or link.
   const onTap = (e: React.MouseEvent) => {
-    if (scene === 0 || scene >= 5 || (e.target instanceof Element && e.target.closest("button, a, input, textarea, select, label, .ix-nav"))) return;
+    if (scene === 0 || scene >= PRIVACY || (e.target instanceof Element && e.target.closest("button, a, input, textarea, select, label, .ix-nav"))) return;
     go(scene + 1);
   };
 
   const play = () => {
     if (playing) { setPlaying(false); return; }
     if (scene === 0) { go(1); if (pick !== saved) return; }
-    else if (scene >= 5) setScene(1);
+    else if (scene >= PRIVACY) setScene(1);
     setPlaying(true);
   };
+
+  // An install from before the privacy question: that scene alone, then the app.
+  if (alone) {
+    const done = async () => { if (choice) await answerPrivacy(choice); navigate("/", { replace: true }); };
+    return (
+      <div className="ix" data-scene={PRIVACY}>
+        <section className="ix-scene" aria-label={t("Your privacy")} ref={frame} style={{ "--ix-k": scale } as React.CSSProperties}>
+          <ScenePrivacy choice={choice} onChoice={setChoice} onGo={() => void done()} update />
+        </section>
+        <header className="ix-top"><span className="ix-word"><BrandMark />C-LINK</span></header>
+      </div>
+    );
+  }
 
   return (
     <div className="ix" data-scene={scene} onClick={onTap}>
       <section className="ix-scene" aria-label={t(SCENES[scene], { computer: computerWord() })} ref={frame} style={{ "--ix-k": scale } as React.CSSProperties}>
         {/* Keyed, so each scene's entrance plays again when it comes back. */}
         <Fragment key={scene}>
-          {scene === 0 ? <Scene0 pick={pick} onPick={setPick} onGo={() => go(1)} /> : scene === 1 ? <Scene1 /> : scene === 2 ? <Scene2 /> : scene === 3 ? <Scene3 /> : scene === 4 ? <Scene4 /> : <Scene5 fromCorosLink={fromCorosLink} />}
+          {scene === 0 ? <Scene0 pick={pick} onPick={setPick} onGo={() => go(1)} /> : scene === 1 ? <Scene1 /> : scene === 2 ? <Scene2 /> : scene === 3 ? <Scene3 /> : scene === 4 ? <Scene4 />
+            : scene === PRIVACY ? <ScenePrivacy choice={choice} onChoice={setChoice} onGo={() => go(PRIVACY + 1)} /> : <SceneWelcome fromCorosLink={fromCorosLink} />}
         </Fragment>
       </section>
       <header className="ix-top">
         <span className="ix-word"><BrandMark />C-LINK</span>
-        <span className="ix-count">{String(scene).padStart(2, "0")} / 05</span>
-        {scene < 5 ? <Button className="ix-btn" onClick={() => go(5)}>{t("Skip intro")}</Button> : null}
+        <span className="ix-count">{String(scene).padStart(2, "0")} / {String(LAST).padStart(2, "0")}</span>
+        {scene < PRIVACY ? <Button className="ix-btn" onClick={() => go(PRIVACY)}>{t("Skip intro")}</Button> : null}
       </header>
       <footer className="ix-bottom">
         <div className="ix-nav">
           <Button className="ix-btn" onClick={play}>{playing ? t("Pause") : t("Play")}</Button>
           <Button className="ix-btn ix-icon" aria-label={t("Back")} disabled={scene === 0} onClick={() => go(scene - 1)}><Icon d={ICON.back} /></Button>
-          <Button variant="primary" className="ix-btn ix-icon" aria-label={t("Next")} disabled={scene === 5} onClick={() => go(scene + 1)}><Icon d={ICON.next} /></Button>
+          <Button variant="primary" className="ix-btn ix-icon" aria-label={t("Next")} disabled={scene === LAST || (scene === PRIVACY && !choice)} onClick={() => go(scene + 1)}><Icon d={ICON.next} /></Button>
         </div>
       </footer>
     </div>

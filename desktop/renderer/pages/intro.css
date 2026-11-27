@@ -1,4 +1,4 @@
-/* The first-run intro (Intro.tsx): five full-window scenes on the app's own grounds, cards and buttons. Each scene's
+/* The first-run intro (Intro.tsx): six full-window scenes on the app's own grounds, cards and buttons. Each scene's
    art is drawn for 1440 × 900 inside .ix-stage, scaled by --ix-k to fit the window; the chrome stays full size. */
 .ix { cursor: pointer; --mint: var(--h-mint); --blue: #2aa8f0; position: fixed; inset: 0; overflow: hidden; isolation: isolate; color: var(--fg); background: var(--ground); font-family: Inter, system-ui, sans-serif; }
 .ix[data-scene="4"] { background: var(--ground-health); }
@@ -13,7 +13,7 @@
 .ix-count { margin-left: auto; font-size: 13px; font-weight: 800; letter-spacing: 0.14em; font-variant-numeric: tabular-nums; color: var(--muted); }
 .ix-bottom { position: absolute; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; align-items: center; justify-content: flex-end; gap: 24px; height: 88px; padding: 0 28px; pointer-events: none; }
 .ix-bottom > * { pointer-events: auto; }
-.ix[data-scene="5"] { cursor: default; }
+.ix[data-scene="5"], .ix[data-scene="6"] { cursor: default; }
 .ix-nav { display: flex; gap: 8px; }
 .ix .btn.ix-btn { height: 44px; padding: 0 18px; font-size: 14px; }
 .ix .btn.ix-icon { width: 44px; padding: 0; justify-content: center; }
@@ -116,13 +116,13 @@
 .ix-bub[data-me] { align-self: flex-end; border-radius: 26px 26px 8px 26px; background: var(--primary-bg); box-shadow: var(--primary-shadow); color: var(--on-accent); border: 0; }
 .ix-bub small { display: block; margin-top: 6px; font-size: 13px; font-weight: 700; opacity: 0.6; letter-spacing: 0.02em; }
 
-/* ---- 5: welcome ---- */
-.ix[data-scene="5"] .ix-ring { width: 1100px; height: 1100px; left: 50%; top: 50%; margin: -550px 0 0 -550px; opacity: 0.8; }
-.ix[data-scene="5"] .ix-ring[data-b] { width: 820px; height: 820px; margin: -410px 0 0 -410px; animation-duration: 16s; animation-direction: reverse; opacity: 0.5; }
+/* ---- 6: welcome ---- */
+.ix[data-scene="6"] .ix-ring { width: 1100px; height: 1100px; left: 50%; top: 50%; margin: -550px 0 0 -550px; opacity: 0.8; }
+.ix[data-scene="6"] .ix-ring[data-b] { width: 820px; height: 820px; margin: -410px 0 0 -410px; animation-duration: 16s; animation-direction: reverse; opacity: 0.5; }
 .ix-s5-copy { position: absolute; inset: 64px 64px 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 28px; }
 .ix-mark5 { position: relative; height: 96px; }
 .ix-mark5::before { inset: -24px -30px -44px; }
-.ix[data-scene="5"] .ix-h { font-size: calc(170px * var(--fit, 1)); }
+.ix[data-scene="6"] .ix-h { font-size: calc(170px * var(--fit, 1)); }
 .ix-ctas { display: flex; gap: 14px; align-items: center; }
 .ix-fine { font-size: 15px; font-weight: 600; color: var(--soft); }
 
@@ -153,3 +153,33 @@
 .ix .ix-lang[data-on] { border-color: transparent; background: var(--primary-bg); box-shadow: var(--primary-shadow); color: var(--on-accent); }
 .ix-lang-tick { position: absolute; right: 16px; top: 16px; width: 26px; height: 26px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: var(--on-accent); color: var(--h-mint-ink); }
 [data-theme="dark"] .ix-lang-tick { background: #0d1110; color: #74dfba; }
+
+/* ---- 5: privacy (also alone, at /welcome/privacy) ---- */
+.ix[data-scene="5"] .ix-ring { width: 1100px; height: 1100px; left: 50%; top: 50%; margin: -550px 0 0 -550px; opacity: 0.5; }
+.ix[data-scene="5"] .ix-ring[data-b] { width: 820px; height: 820px; margin: -410px 0 0 -410px; animation-duration: 16s; animation-direction: reverse; opacity: 0.3; }
+.ix-pv-copy { position: absolute; inset: 64px 64px 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 34px; }
+.ix-pv-head { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.ix-eyebrow { font-size: 14px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--h-mint-ink); }
+.ix[data-scene="5"] .ix-h { font-size: calc(104px * var(--fit, 1)); }
+.ix[data-scene="5"] .ix-sub { max-width: 820px; }
+.ix[data-scene="5"] .ix-fine { margin-top: -14px; }
+.ix-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; width: 1100px; }
+.ix-opt { position: relative; min-height: 220px; padding: 22px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left; border-radius: 22px;
+  font: inherit; color: var(--fg); background: var(--card-bg); border: 1px solid var(--line); box-shadow: var(--card-shadow); transition: transform 200ms ease, box-shadow 200ms ease, background 200ms ease; }
+:root:not([data-theme="dark"]) .ix-opt { background: #ffffff; }
+button.ix-opt { cursor: pointer; }
+button.ix-opt:hover { transform: translateY(-3px); }
+.ix-opt:focus-visible { outline: 3px solid var(--h-mint); outline-offset: 3px; }
+/* A fixed head, so the three titles line up whatever the length of the text under them. */
+.ix-opt-head { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 44px; margin-bottom: 26px; }
+.ix-opt-icon { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--h-mint) 18%, transparent); color: var(--h-mint-ink); }
+.ix-opt b { font-size: 26px; line-height: 1.1; font-weight: 900; letter-spacing: -0.03em; }
+.ix-opt small { font-size: 15px; line-height: 1.4; font-weight: 600; opacity: 0.72; }
+/* The switch: a pill with its knob, drawn in the card's corner. */
+.ix-opt-pill { position: relative; width: 52px; height: 30px; border-radius: 999px; background: var(--line); transition: background 200ms ease; }
+.ix-opt-pill::after { content: ""; position: absolute; left: 3px; top: 3px; width: 24px; height: 24px; border-radius: 999px; background: #ffffff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); transition: transform 200ms ease; }
+.ix .ix-opt[data-on] { border-color: transparent; background: var(--primary-bg); box-shadow: var(--primary-shadow); color: var(--on-accent); }
+.ix-opt[data-on] .ix-opt-icon { background: rgba(255, 255, 255, 0.22); color: inherit; }
+.ix-opt[data-on] .ix-opt-pill { background: rgba(0, 0, 0, 0.25); }
+.ix-opt[data-on] .ix-opt-pill::after { transform: translateX(22px); }
+.ix-opt[data-info] { background: transparent; box-shadow: none; border-style: dashed; }

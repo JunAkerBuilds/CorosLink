@@ -8,7 +8,7 @@ import { loadActivityLog, logActivity, type LogDay } from "@/data/activityLog";
 import { useLoaded, type Origin } from "@/data/core";
 import { useHubSession } from "@/data/hub";
 import type { CalendarEntry } from "@/data/training";
-import { logActivityInput, logSport, visibleLogSports, type LogForm, type LogIcon } from "@/lib/activityLog";
+import { logActivityInput, logDistanceLabel, logSport, visibleLogSports, type LogForm, type LogIcon } from "@/lib/activityLog";
 import { monthOf, shortDay } from "@/lib/calendar";
 import "../training.css";
 import { t } from "@/lib/i18n";
@@ -179,7 +179,7 @@ function LogActivity({ day, origin }: { day: LogDay; origin: Origin }) {
                   <label className="add-label">{t("Distance")}
                     <span style={UNIT}>
                       <input type="text" inputMode="decimal" className="field log-field" placeholder="—" maxLength={8} value={form.distance} onChange={(e) => set({ distance: e.target.value })}
-                        disabled={busy} style={{ width: 96, textAlign: "right" }} />{sport.distanceUnit}
+                        disabled={busy} style={{ width: 96, textAlign: "right" }} />{logDistanceLabel(sport.distanceUnit)}
                     </span>
                   </label>
                 ) : null}

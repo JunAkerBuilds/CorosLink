@@ -6,6 +6,7 @@ import { restingKcal } from "@/data/sync/fuelTargets";
 import { calendarDayKey, type ActivityDetailBody, type NativeActivity } from "@/data/sync/native";
 import { clock as clockText, signed } from "@/lib/format";
 import { msg, t, tx } from "@/lib/i18n";
+import { distanceIn, distanceStep, distanceUnit, imperial, paceIn, paceUnitLabel } from "@/lib/units";
 import {
   dayLabel, dayOfRef, familyOf, finite, localParts, mondayOfDay, quoted, refMs, shiftDay, shownDay, shownDayMonth, shownSport, shownWeekday, timeLabel, today,
   type AthleteItems, type Clock,
@@ -26,12 +27,15 @@ function thin(values: readonly (number | null)[], count = SAMPLES): number[] {
   return Array.from({ length: count }, (_, i) => clean[Math.round((i / (count - 1)) * (clean.length - 1))]);
 }
 
-/** Seconds for each whole kilometre, from kilometre laps when the watch cut them, else from the speed stream. */
-export function kmSplits(a: NativeActivity, d: ActivityDetailBody | undefined): number[] {
+/**
+ * Seconds for each whole kilometre (or each `step` metres: a mile in imperial), from laps of that length when the
+ * watch cut them, else from the speed stream.
+ */
+export function kmSplits(a: NativeActivity, d: ActivityDetailBody | undefined, step = 1000): number[] {
   const laps = d?.laps ?? [];
-  if (laps.length >= 2 && laps.slice(0, -1).every((l) => finite(l.distanceM) && Math.abs(l.distanceM - 1000) <= 50)) {
+  if (laps.length >= 2 && laps.slice(0, -1).every((l) => finite(l.distanceM) && Math.abs(l.distanceM - step) <= 50)) {
     const last = laps[laps.length - 1];
-    const whole = finite(last.distanceM) && Math.abs(last.distanceM - 1000) <= 50 ? laps : laps.slice(0, -1);
+    const whole = finite(last.distanceM) && Math.abs(last.distanceM - step) <= 50 ? laps : laps.slice(0, -1);
     return whole.map((l) => l.durationS);
   }
   const s = d?.streams;
@@ -45,8 +49,8 @@ export function kmSplits(a: NativeActivity, d: ActivityDetailBody | undefined): 
     const dt = s.axis === "distance" ? dx / v : s.x[i] - s.x[i - 1];
     if (!(dx > 0) || !(dt > 0)) continue;
     let left = dx, used = 0;
-    while (dist + left >= (out.length + 1) * 1000) {
-      const need = (out.length + 1) * 1000 - dist, part = (need / dx) * dt;
+    while (dist + left >= (out.length + 1) * step) {
+      const need = (out.length + 1) * step - dist, part = (need / dx) * dt;
       out.push(Math.round((time + used + part - mark) * 100) / 100);
       mark = time + used + part;
       dist += need; left -= need; used += part;
@@ -78,19 +82,23 @@ export function recapCard(items: AthleteItems, clock: Clock, id: string, input: 
   const a = findActivity(items, input.activity_id);
   if (!a) return { error: "no activity with that id. Use an id from read_activities." };
   const d = items.details[a.id];
-  const splits = kmSplits(a, d), heart = thin(d?.streams?.hr ?? []);
+  const step = distanceStep(), miles = imperial();
+  const splits = kmSplits(a, d, step), heart = thin(d?.streams?.hr ?? []);
   if (splits.length < 2 || heart.length < 2) return { error: "the phone hasn't sent kilometre splits and heart rate for this activity, so the recap card can't be drawn. Answer in words from read_training activity." };
-  const from = finite(input.block_from_km) ? Math.max(1, Math.round(input.block_from_km)) : 0;
-  const to = finite(input.block_to_km) ? Math.min(splits.length, Math.round(input.block_to_km)) : 0;
+  // The model names the block in kilometres; in miles it covers the splits nearest those kilometres.
+  const perKm = (seconds: number) => (miles ? (seconds * 1000) / step : seconds);
+  const inSplits = (km: number) => Math.round((km * 1000) / step);
+  const from = finite(input.block_from_km) ? Math.max(1, inSplits(input.block_from_km)) : 0;
+  const to = finite(input.block_to_km) ? Math.min(splits.length, inSplits(input.block_to_km)) : 0;
   const inBlock = (k: number) => from > 0 && to >= from && k + 1 >= from && k + 1 <= to;
   const speed = thin((d?.streams?.speedMps ?? []).map((v) => (finite(v) && v > 0.5 ? Math.min(1200, 1000 / v) : null)), heart.length);
-  const paceSeconds = speed.length === heart.length ? speed : heart.map((_, i) => splits[Math.min(splits.length - 1, Math.floor((i / heart.length) * splits.length))]);
+  const paceSeconds = speed.length === heart.length ? speed : heart.map((_, i) => perKm(splits[Math.min(splits.length - 1, Math.floor((i / heart.length) * splits.length))]));
   const stats: CardStat[] = [];
-  if (finite(a.distanceMeters)) stats.push({ label: t("Distance"), value: (a.distanceMeters / 1000).toFixed(2), unit: "km" });
+  if (finite(a.distanceMeters)) stats.push({ label: t("Distance"), value: distanceIn(a.distanceMeters).toFixed(2), unit: distanceUnit() });
   if (finite(a.durationSeconds)) stats.push({ label: t("Time"), value: clockText(a.durationSeconds, 2) });
   const p = paceOf(a);
-  if (p !== null) stats.push({ label: t("Avg pace"), value: clockText(p, 2), unit: "/km" });
-  if (from > 0 && to >= from) stats.push({ label: t("Km {from} to {to}", { from, to }), value: clockText(splits.slice(from - 1, to).reduce((sum, s) => sum + s, 0), 2), hue: "mint" });
+  if (p !== null) stats.push({ label: t("Avg pace"), value: clockText(paceIn(p), 2), unit: paceUnitLabel() });
+  if (from > 0 && to >= from) stats.push({ label: miles ? t("Mile {from} to {to}", { from, to }) : t("Km {from} to {to}", { from, to }), value: clockText(splits.slice(from - 1, to).reduce((sum, s) => sum + s, 0), 2), hue: "mint" });
   if (finite(a.averageHR)) stats.push({ label: t("Avg heart rate"), value: String(a.averageHR), unit: "bpm", hue: "rose" });
   if (finite(a.trainingLoad)) stats.push({ label: t("Load"), value: String(a.trainingLoad), hue: "pink" });
   const path = routePath(d?.route);
@@ -98,8 +106,10 @@ export function recapCard(items: AthleteItems, clock: Clock, id: string, input: 
     card: {
       kind: "recap", id, activityId: a.id, eyebrow: `${shownSport(a.sport)} · ${startText(a, clock)}`, title: titleOf(a),
       routePath: path, routeLabel: path ? t("The route as recorded") : t("No route was recorded"),
-      stats, splits: splits.map((seconds, k) => (inBlock(k) ? { seconds, block: true } : { seconds })), heartRate: heart, paceSeconds,
-      chartLabel: t("Pace for each of {n} kilometres as bars, with heart rate from {low} to {high} bpm over them", { n: splits.length, low: Math.round(Math.min(...heart)), high: Math.round(Math.max(...heart)) }),
+      stats, splits: splits.map((seconds, k) => (inBlock(k) ? { seconds, block: true } : { seconds })), heartRate: heart, paceSeconds, ...(miles ? { splitUnit: "mi" as const } : {}),
+      chartLabel: miles
+        ? t("Pace for each of {n} miles as bars, with heart rate from {low} to {high} bpm over them", { n: splits.length, low: Math.round(Math.min(...heart)), high: Math.round(Math.max(...heart)) })
+        : t("Pace for each of {n} kilometres as bars, with heart rate from {low} to {high} bpm over them", { n: splits.length, low: Math.round(Math.min(...heart)), high: Math.round(Math.max(...heart)) }),
       read: quoted(input.read, 240) || undefined,
     },
   };
@@ -116,15 +126,16 @@ export function compareCard(items: AthleteItems, clock: Clock, id: string, input
     const diff = y - x;
     rows.push({ label, before: text(x), after: text(y), change: change(diff), better: lowerIsBetter === undefined || diff === 0 ? undefined : lowerIsBetter ? diff < 0 : diff > 0 });
   };
-  row(t("Distance"), first.distanceMeters, second.distanceMeters, (v) => `${(v / 1000).toFixed(2)} km`, (d) => `${signed(d / 1000, 2)} km`);
+  row(t("Distance"), first.distanceMeters, second.distanceMeters, (v) => `${distanceIn(v).toFixed(2)} ${distanceUnit()}`, (d) => `${signed(distanceIn(d), 2)} ${distanceUnit()}`);
   row(t("Time"), first.durationSeconds, second.durationSeconds, (v) => clockText(v, 2), (d) => `${signed(d, 2)} s`);
-  row(t("Avg pace"), paceOf(first), paceOf(second), (v) => `${clockText(v, 2)} /km`, (d) => `${signed(d, 2)} s`, true);
+  row(t("Avg pace"), paceOf(first), paceOf(second), (v) => `${clockText(paceIn(v), 2)} ${paceUnitLabel()}`, (d) => `${signed(paceIn(d), 2)} s`, true);
   row(t("Avg heart rate"), first.averageHR, second.averageHR, (v) => `${v} bpm`, (d) => `${signed(d)} bpm`);
   row(t("Max heart rate"), first.maxHR, second.maxHR, (v) => `${v} bpm`, (d) => `${signed(d)} bpm`);
   row(t("Cadence"), first.averageCadence, second.averageCadence, (v) => `${v} spm`, (d) => `${signed(d)} spm`);
   row(t("Load"), first.trainingLoad, second.trainingLoad, (v) => String(v), (d) => signed(d));
   if (!rows.length) return { error: "these two activities share no numbers to compare." };
-  const s1 = kmSplits(first, items.details[first.id]), s2 = kmSplits(second, items.details[second.id]), n = Math.min(s1.length, s2.length, 30);
+  const step = distanceStep(), miles = imperial();
+  const s1 = kmSplits(first, items.details[first.id], step), s2 = kmSplits(second, items.details[second.id], step), n = Math.min(s1.length, s2.length, 30);
   if (n < 1) return { error: "the phone hasn't sent kilometre splits for both activities, so the comparison card can't be drawn. Compare them in words." };
   const day = (x: NativeActivity) => shownDay(dayOfRef(x.start ?? 0, clock));
   const short = (x: NativeActivity) => shownDayMonth(dayOfRef(x.start ?? 0, clock));
@@ -135,8 +146,8 @@ export function compareCard(items: AthleteItems, clock: Clock, id: string, input
       title: t("{name}, {after} against {before}", { name: titleOf(second), after: short(second), before: short(first) }),
       before: { label: day(first), short: short(first), href: `/activities/${encodeURIComponent(first.id)}` },
       after: { label: day(second), short: short(second), href: `/activities/${encodeURIComponent(second.id)}` },
-      rows, beforeSeconds: s1.slice(0, n), afterSeconds: s2.slice(0, n),
-      chartLabel: t("Pace per kilometre for both, the first {n} kilometres", { n }), read: quoted(input.read, 240) || undefined,
+      rows, beforeSeconds: s1.slice(0, n), afterSeconds: s2.slice(0, n), ...(miles ? { splitUnit: "mi" as const } : {}),
+      chartLabel: miles ? t("Pace per mile for both, the first {n} miles", { n }) : t("Pace per kilometre for both, the first {n} kilometres", { n }), read: quoted(input.read, 240) || undefined,
     },
   };
 }

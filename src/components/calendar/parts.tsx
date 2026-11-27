@@ -8,6 +8,7 @@ import { destination } from "@/data/calendarEdits";
 import type { CalendarEntry, CalendarSport } from "@/data/training";
 import { longDay, shortDay } from "@/lib/calendar";
 import { clock } from "@/lib/format";
+import { distanceUnit, heightIn, heightUnit, swimUnit } from "@/lib/units";
 import { doneOfPlanned, kmText, metresText, tone, type Drafted, type Filter, type NetChange, type PlanState, type Show, type WeekNumbers } from "@/lib/calendarPlan";
 import { msg, t, tx } from "@/lib/i18n";
 
@@ -152,14 +153,14 @@ export function WeekColumn({ n, now, weekLabel }: { n: WeekNumbers; now?: { base
       {now?.loadRatio != null ? <WRow k={t("Load Ratio")} v={now.loadRatio.toFixed(2)} tone="warn" /> : null}
       <WRow k={t("Training Load")} v={n.plannedLoad > 0 ? `${n.load} / ${n.plannedLoad} TL` : `${n.load} TL`} />
       <WRow k={t("Activity Time")} v={pair(n.seconds, n.plannedSeconds, (s) => clock(s))} />
-      <WRow k={t("Distance")} v={pair(n.metres, n.plannedMetres, kmText, " km")} />
-      <WRow k={t("Elev. Gain")} v={n.elevation > 0 ? `${n.elevation} m` : "--"} />
+      <WRow k={t("Distance")} v={pair(n.metres, n.plannedMetres, kmText, ` ${distanceUnit()}`)} />
+      <WRow k={t("Elev. Gain")} v={n.elevation > 0 ? `${Math.round(heightIn(n.elevation))} ${heightUnit()}` : "--"} />
       {n.sports.length ? (
         <ul className="cal-wsports" aria-label={t("By sport")}>
           {n.sports.map((s) => {
             const sport = s.sport as CalendarSport;
             const swim = sport === "swim";
-            const dist = s.plannedMetres > 0 || s.metres > 0 ? pair(s.metres, s.plannedMetres, swim ? metresText : kmText, swim ? " m" : " km") : null;
+            const dist = s.plannedMetres > 0 || s.metres > 0 ? pair(s.metres, s.plannedMetres, swim ? metresText : kmText, ` ${swim ? swimUnit() : distanceUnit()}`) : null;
             return (
               <li key={s.sport}>
                 <div className="cal-wrow">

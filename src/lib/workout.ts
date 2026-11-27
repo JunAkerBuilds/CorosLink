@@ -3,6 +3,7 @@
  * into a time (and back) from the step's target, the intensity "shape" drawing, and the edits
  * the builder makes (add, remove, reorder, group). Nothing here touches the browser.
  */
+import { distanceIn, distanceUnit } from "@/lib/units";
 
 export type Sport = "run" | "ride" | "swim" | "strength";
 export type StepKind = "warmup" | "work" | "recovery" | "rest" | "cooldown";
@@ -149,11 +150,11 @@ export function totals(items: readonly WorkoutItem[], pacing: Pacing): Totals {
   return { seconds, metres, load: Math.round((effort / 3600) * LOAD_PER_HOUR) };
 }
 
-/** Second line for a calendar entry: "9.60 km · 49:56", or the time alone when nothing is covered. */
+/** Second line for a calendar entry: "9.60 km · 49:56" (or miles), or the time alone when nothing is covered. */
 export function describe(items: readonly WorkoutItem[], pacing: Pacing): string {
   const t = totals(items, pacing);
   const time = formatClock(t.seconds);
-  return t.metres >= 1 ? `${(t.metres / 1000).toFixed(2)} km · ${time}` : time;
+  return t.metres >= 1 ? `${distanceIn(t.metres).toFixed(2)} ${distanceUnit()} · ${time}` : time;
 }
 
 /* ───────────── Shape ───────────── */

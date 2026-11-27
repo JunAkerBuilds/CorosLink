@@ -690,5 +690,9 @@
   "{name} doesn't run a program.": "{name} 不使用程序。",
   "Give the full path to {files}.": "请填写 {files} 的完整路径。",
   "There's no {file} there.": "那里没有 {file}。",
-  "Finish signing in in your browser.": "请在浏览器中完成登录。"
+  "Finish signing in in your browser.": "请在浏览器中完成登录。",
+  "C-LINK couldn't reach the server. Check the connection and try again.": "C-LINK 无法连接服务器。请检查网络后重试。",
+  "The report wasn't taken. Check the email address.": "报告未被接收。请检查邮箱地址。",
+  "Reports can't be sent right now. Try again later.": "现在无法发送报告。请稍后再试。",
+  "Report a Problem…": "报告问题…"
 }

@@ -2,6 +2,7 @@
 // The workout maths follows CorosKit's GymLog.swift: a set is done when `doneAt` is there, working sets are the
 // done ones that are not warm-ups, volume is Σ weight × reps over working sets (a missing weight or reps counts 0).
 import { language, locale, msg, t } from "@/lib/i18n";
+import { weightIn, weightUnit } from "@/lib/units";
 import type { GymWorkout, Lift, LiftedRange, Muscle, Strength, Suggestion } from "../strength";
 import { refToDate, refToMs, type NativeGymSet, type NativeGymWorkout, type ViewStrengthBody } from "./native";
 
@@ -34,8 +35,10 @@ export function durationSeconds(workout: NativeGymWorkout): number {
   return workout.end == null ? 0 : Math.max(0, workout.end - workout.start);
 }
 
-/** A weight as typed: 77.5, 100, 12.25. */
-const kg = (v: number): string => String(Math.round(v * 100) / 100);
+/** A weight in kg as typed, in the shown unit: 77.5, 100, 12.25 (kg) or 170.86 (lb). */
+export const liftNumber = (kg: number): string => String(Math.round(weightIn(kg) * 100) / 100);
+/** The same with its unit: 77.5 kg or 170.86 lb. */
+export const liftWeight = (kg: number): string => `${liftNumber(kg)} ${weightUnit()}`;
 
 /** "Tue 17 Nov". */
 export function dateText(d: Date): string {
@@ -55,8 +58,8 @@ export function topLine(workout: NativeGymWorkout, names: Record<string, string>
       return wb > wa || (wb === wa && (b.reps ?? 0) > (a.reps ?? 0)) ? b : a;
     });
     const name = names[entry.exerciseID] ?? entry.exerciseID;
-    if ((best.weightKg ?? 0) > 0 && best.reps != null) parts.push(`${name} ${kg(best.weightKg!)} kg × ${best.reps}`);
-    else if ((best.weightKg ?? 0) > 0) parts.push(`${name} ${kg(best.weightKg!)} kg`);
+    if ((best.weightKg ?? 0) > 0 && best.reps != null) parts.push(`${name} ${liftWeight(best.weightKg!)} × ${best.reps}`);
+    else if ((best.weightKg ?? 0) > 0) parts.push(`${name} ${liftWeight(best.weightKg!)}`);
     else if (best.reps != null) parts.push(`${name} × ${best.reps}`);
     else if (best.seconds != null) parts.push(`${name} ${best.seconds} s`);
     else parts.push(name);
@@ -147,14 +150,14 @@ export function liftNote(weekly: readonly (number | null)[], bestBefore: number 
   const at = weekly.map((v, i) => (v == null ? -1 : i)).filter((i) => i >= 0);
   if (!at.length) return "";
   const lastAt = at[at.length - 1], last = weekly[lastAt]!;
-  if (lastAt >= weekly.length - 2 && bestBefore != null && last > bestBefore) return t("New best, +{kg} kg", { kg: kg(last - bestBefore) });
+  if (lastAt >= weekly.length - 2 && bestBefore != null && last > bestBefore) return t("New best, +{weight}", { weight: liftWeight(last - bestBefore) });
   let runStart = lastAt;
   for (let k = at.length - 2; k >= 0 && weekly[at[k]] === last; k--) runStart = at[k];
   const held = lastAt - runStart + 1;
   if (held >= 3) return t("Holding for {n} weeks", { n: held });
   const firstAt = at[0], diff = last - weekly[firstAt]!;
   if (firstAt === lastAt || diff === 0) return "";
-  return t("{change} kg in {n} weeks", { change: `${diff > 0 ? "+" : "−"}${kg(Math.abs(diff))}`, n: lastAt - firstAt + 1 });
+  return t("{change} in {n} weeks", { change: `${diff > 0 ? "+" : "−"}${liftWeight(Math.abs(diff))}`, n: lastAt - firstAt + 1 });
 }
 
 /**

@@ -3,7 +3,8 @@
 import type { Dashboard, FitnessSeries, HueName, Scale, TimeShare } from "@/data/training";
 import { addDays, mondayOf, shortDay } from "@/lib/calendar";
 import { loadHue, readinessHue, sleepHue } from "@/lib/feel";
-import { clock, dayKey, km, pace, signed, thousands } from "@/lib/format";
+import { clock, dayKey, signed, thousands } from "@/lib/format";
+import { distance, distanceIn, distanceUnit, paceText, speedText, swimDistance, swimPaceText } from "@/lib/units";
 import { language, locale, msg, t, tx } from "@/lib/i18n";
 import { SPORT_FAMILY } from "./activities";
 import { projectRoute, SPORT_TITLE } from "./geo";
@@ -64,16 +65,16 @@ export function timeText(seconds: number): string {
 /** Distance as the sport reads it: metres in the water, km elsewhere. */
 export function distanceText(a: NativeActivity): string | null {
   if (!a.distanceMeters || a.distanceMeters <= 0) return null;
-  return SWIMMING.includes(a.sport) ? `${thousands(a.distanceMeters)} m` : km(a.distanceMeters);
+  return SWIMMING.includes(a.sport) ? swimDistance(a.distanceMeters) : distance(a.distanceMeters);
 }
 
 /** Average pace or speed, by sport. Null when the sport has neither or a number is missing. */
 export function paceStat(a: NativeActivity): { label: string; value: string } | null {
   const m = a.distanceMeters, s = a.durationSeconds;
   if (!m || !s || m <= 0 || s <= 0) return null;
-  if (ON_FOOT.includes(a.sport)) return { label: msg("Pace"), value: pace(s / (m / 1000)) };
-  if (RIDING.includes(a.sport) || a.sport === "ski") return { label: msg("Speed"), value: `${(m / 1000 / (s / 3600)).toFixed(1)} km/h` };
-  if (SWIMMING.includes(a.sport)) return { label: msg("Pace"), value: `${clock(s / (m / 100))} /100 m` };
+  if (ON_FOOT.includes(a.sport)) return { label: msg("Pace"), value: paceText(s / (m / 1000)) };
+  if (RIDING.includes(a.sport) || a.sport === "ski") return { label: msg("Speed"), value: speedText(m / 1000 / (s / 3600)) };
+  if (SWIMMING.includes(a.sport)) return { label: msg("Pace"), value: swimPaceText(s / (m / 100)) };
   if (a.sport === "row") return { label: msg("Pace"), value: `${clock(s / (m / 500))} /500 m` };
   return null;
 }
@@ -478,7 +479,10 @@ export function buildDashboard(items: DashboardItems, now: Date): Dashboard {
   const hours = weeklyHours(totals, today);
   const pastHours = hours.slice(0, -1);
   const year = yearToDate(placed, now);
-  const ahead = year.lastYearByNowKm != null ? Math.round(year.km) - Math.round(year.lastYearByNowKm) : null;
+  // In the shown unit (km or mi); the series stay in km.
+  const shown = (km: number) => distanceIn(km * 1000);
+  const ahead = year.lastYearByNowKm != null ? Math.round(shown(year.km)) - Math.round(shown(year.lastYearByNowKm)) : null;
+  const yearText = (km: number) => `${thousands(shown(km))} ${distanceUnit()}`;
   const dayWords = shortDay(today).split(" ").slice(1).join(" ");
 
   /* Thresholds and bests. */
@@ -520,11 +524,11 @@ export function buildDashboard(items: DashboardItems, now: Date): Dashboard {
     goal: goalMinutes != null && goalMinutes > 0 ? { doneMinutes: weekMinutes(totals, today), goalMinutes } : null,
     volume: { hours, averageHours: pastHours.length ? Math.round(mean(pastHours) * 100) / 100 : 0 },
     year: {
-      status: ahead != null ? `${signed(ahead)} km` : undefined,
+      status: ahead != null ? `${signed(ahead)} ${distanceUnit()}` : undefined,
       km: year.km, thisYear: year.thisYear, lastYear: year.lastYear, lastYearByNowKm: year.lastYearByNowKm,
-      label: ahead == null ? t("Running distance this year: {km} km by {day}", { km: thousands(year.km), day: dayWords })
-        : ahead < 0 ? t("Running distance this year against last year: {km} km by {day}, {by} km behind", { km: thousands(year.km), day: dayWords, by: thousands(Math.abs(ahead)) })
-        : t("Running distance this year against last year: {km} km by {day}, {by} km ahead", { km: thousands(year.km), day: dayWords, by: thousands(Math.abs(ahead)) }),
+      label: ahead == null ? t("Running distance this year: {distance} by {day}", { distance: yearText(year.km), day: dayWords })
+        : ahead < 0 ? t("Running distance this year against last year: {distance} by {day}, {by} behind", { distance: yearText(year.km), day: dayWords, by: `${thousands(Math.abs(ahead))} ${distanceUnit()}` })
+        : t("Running distance this year against last year: {distance} by {day}, {by} ahead", { distance: yearText(year.km), day: dayWords, by: `${thousands(Math.abs(ahead))} ${distanceUnit()}` }),
     },
     intensity: { parts: [] },
     sleep: nights.length ? { nights, averageHours: mean(nights) } : null,

@@ -17,7 +17,7 @@ import {
   type WatchfaceSimulation,
 } from "../../watchface/engine/watchfaceSimulation";
 import {
-  allLayersOf, buildInput, colour, colourOf, detailsOf, editMode, grouped, initialDesign, isChartPart, LAYER_GROUPS, layersOf, masterSize, moveTo,
+  allLayersOf, buildInput, clickOrder, colour, colourOf, detailsOf, editMode, grouped, initialDesign, isChartPart, LAYER_GROUPS, layersOf, masterSize, moveTo,
   openFaceSource, renderFace, resolutionOf, rowOf, rowsOf, separateTime, setVisible, sourceDetailsOf, spotActive, spotKeyOf, spotsOf, supportsAlwaysOn,
   type Design, type EditorLayer, type FaceSource, type Mode, type SpotChoice,
 } from "../studioFace";
@@ -435,6 +435,7 @@ export default function StudioEditor() {
   const hasChart = layers.some((l) => l.nativeDataId === "chart");
   // The chart's template pictures are picked through the Chart layer, not one by one.
   const shown = layers.filter((l) => l.visible && l.bounds && l.kind !== "background" && !(hasChart && isChartPart(l)));
+  const hits = clickOrder(shown);
   const items = library ? searchLibrary(library.items, query) : [];
   /** The "From COROS faces" tile sits with the other artwork; search finds it by these words. */
   const officialShown = !query.trim() || ["coros", "official", "artwork", "image", "faces", "digits", "icons", "background"].some((w) => w.startsWith(query.trim().toLowerCase()) || query.trim().toLowerCase().includes(w));
@@ -827,13 +828,22 @@ export default function StudioEditor() {
         <div className="st-menu-wrap">
           <Button disabled={!!busy} aria-expanded={menu} onClick={() => setMenu((m) => !m)}><Icon name="download" size={16} />{busy ?? t("Download")}</Button>
           {menu ? (
-            <div className="st-menu st-menu-down" role="menu">
-              <button type="button" role="menuitem" onClick={() => void downloads.bin()}><Icon name="watch" size={16} /><span><b>{t("Save BIN")}</b><small>{t("Compiled for {watch}, ready to install", { watch: watch.label })}</small></span></button>
-              <button type="button" role="menuitem" onClick={() => void downloads.final()}><Icon name="download" size={16} /><span><b>{t("Final watch ZIP")}</b><small>{t("The face as the COROS app takes it")}</small></span></button>
-              <button type="button" role="menuitem" onClick={() => void downloads.editable()}><Icon name="folder" size={16} /><span><b>{t("Editable project ZIP")}</b><small>{t("Opens in Studio and CorosLink")}</small></span></button>
-              <button type="button" role="menuitem" onClick={() => { setMenu(false); setSendTab("file"); }}><Icon name="watch" size={16} /><span><b>{t("All watches")}</b><small>{t("Final ZIPs for every model, one folder")}</small></span></button>
-              <button type="button" role="menuitem" onClick={() => { setMenu(false); setConverting(true); }}><Icon name="convert" size={16} /><span><b>{t("Convert for another watch…")}</b><small>{t("APEX 4, VERTIX 2S, NOMAD and more")}</small></span></button>
-              <button type="button" role="menuitem" onClick={() => { setMenu(false); setSendTab("file"); }}><Icon name="code" size={16} /><span><b>{t("Development export")}</b><small>{t("Config and images, unpacked")}</small></span></button>
+            // The released app offers only the project ZIP, the file Community takes; dev builds keep every export.
+            <div className="st-menu st-menu-down dd-menu" role="menu">
+              {import.meta.env.DEV ? (
+                <>
+                  <button type="button" role="menuitem" onClick={() => void downloads.bin()}><Icon name="watch" size={16} /><span><b>{t("Save BIN")}</b><small>{t("Compiled for {watch}, ready to install", { watch: watch.label })}</small></span></button>
+                  <button type="button" role="menuitem" onClick={() => void downloads.final()}><Icon name="download" size={16} /><span><b>{t("Final watch ZIP")}</b><small>{t("The face as the COROS app takes it")}</small></span></button>
+                </>
+              ) : null}
+              <button type="button" role="menuitem" onClick={() => void downloads.editable()}><Icon name="folder" size={16} /><span><b>{t("Editable project ZIP")}</b><small>{import.meta.env.DEV ? t("Opens in Studio and CorosLink") : t("Upload it to Community to share it")}</small></span></button>
+              {import.meta.env.DEV ? (
+                <>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); setSendTab("file"); }}><Icon name="watch" size={16} /><span><b>{t("All watches")}</b><small>{t("Final ZIPs for every model, one folder")}</small></span></button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); setConverting(true); }}><Icon name="convert" size={16} /><span><b>{t("Convert for another watch…")}</b><small>{t("APEX 4, VERTIX 2S, NOMAD and more")}</small></span></button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); setSendTab("file"); }}><Icon name="code" size={16} /><span><b>{t("Development export")}</b><small>{t("Config and images, unpacked")}</small></span></button>
+                </>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -1008,7 +1018,7 @@ export default function StudioEditor() {
                     <button key={i.key} type="button" className="st-spot" aria-label={t("Add {name} here", { name: t(i.label) })} title={t(i.label)} style={spot(i.bounds!)} onClick={() => void add(i)}>
                       <Icon name="plus" size={14} width={2.6} />
                     </button>
-                  )) : shown.map((l) => (
+                  )) : hits.map((l) => (
                     <button key={l.spot?.id ?? l.id} type="button" className="st-hit" data-fixed={!canMove(l) || isLocked(active, l) || undefined} aria-label={t("Select {name}", { name: t(l.label) })} style={box(l)}
                       draggable={false} onPointerEnter={(e) => { if (!e.buttons) setHover(l.id); }} onPointerDown={startDrag(l)} />
                   ))}

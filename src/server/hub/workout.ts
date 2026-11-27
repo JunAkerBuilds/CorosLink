@@ -140,10 +140,11 @@ export function buildProgram(workout: SourcedWorkout, source: JsonObject | null 
   }
   program.referExercise = referExercise;
   if (sport === "swim" && workout.poolLength !== undefined) {
-    // Centimetres of the length in metres, as CorosLink's builder writes a pool the athlete typed.
+    // Centimetres of the length in metres, as CorosLink's builder writes a pool the athlete typed, labelled in the
+    // athlete's units: yards (4) in imperial, so a 25 yd pool reads 25 yd on the watch, not 22.86 m.
     program.poolLengthId = 0;
     program.poolLength = round(workout.poolLength * 100);
-    program.poolLengthUnit = num(program.poolLengthUnit) ?? 2;
+    program.poolLengthUnit = imperial ? 4 : 2;
   } else if (sport === "swim" && (!source || program.poolLength === undefined)) {
     program.poolLengthId = 0;
     program.poolLength = imperial ? 2286 : 2500;

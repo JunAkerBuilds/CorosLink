@@ -10,6 +10,7 @@ import {
   type FoundPlace, type SleepTimes, type WatchFaces, type WatchOwnSettings, type WatchProfile, type WatchStatus, type WatchSwitch, type ZoneType,
 } from "../watchLink";
 import { msg, t, tx } from "@/lib/i18n";
+import { imperial, paceFromInput, paceIn, paceUnitLabel } from "@/lib/units";
 import "./localWatchSettings.css";
 
 const said = (e: unknown) => (e instanceof Error ? e.message : t("That didn't work."));
@@ -50,8 +51,9 @@ const valueName = (s: WatchSwitch, v = s.value) => s.values[String(v)] ?? String
 
 const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 const minutesOf = (text: string) => { const [h, m] = text.split(":").map(Number); return Number.isInteger(h) && Number.isInteger(m) ? h * 60 + m : null; };
-const pace = (ms: number) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
-const paceMs = (text: string) => { const m = /^(\d{1,2}):([0-5]\d)$/.exec(text.trim()); return m ? (Number(m[1]) * 60 + Number(m[2])) * 1000 : null; };
+/** Milliseconds per km as minutes:seconds per km or mile; typed back the same way. */
+const pace = (ms: number) => { const s = Math.round(paceIn(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const paceMs = (text: string) => { const m = /^(\d{1,2}):([0-5]\d)$/.exec(text.trim()); return m ? Math.round(paceFromInput(Number(m[1]) * 60 + Number(m[2])) * 1000) : null; };
 
 /** Reads the settings once the card shows (connecting to the watch if needed), and again on Try again. */
 function useWatchSettings() {
@@ -222,7 +224,7 @@ function ProfileCard({ profile, onProfile }: { profile: WatchProfile; onProfile:
     }
     if (draft.pace !== was.pace) {
       const ms = paceMs(draft.pace);
-      if (ms === null) { setProblem(t("Type threshold pace as minutes:seconds per km, like 4:30.")); return; }
+      if (ms === null) { setProblem(imperial() ? t("Type threshold pace as minutes:seconds per mile, like 7:15.") : t("Type threshold pace as minutes:seconds per km, like 4:30.")); return; }
       edits.thresholdPace = ms;
     }
     if (draft.zoneType !== was.zoneType) edits.zoneType = draft.zoneType;
@@ -242,7 +244,7 @@ function ProfileCard({ profile, onProfile }: { profile: WatchProfile; onProfile:
         {field("restingHR", t("Resting heart rate"))}
         {field("thresholdHR", t("Threshold heart rate"))}
         <label className="ws-num"><span>{t("Threshold pace")}</span>
-          <span className="ws-num-box"><Field inputMode="numeric" placeholder="4:30" value={draft.pace} onChange={(e) => setDraft({ ...draft, pace: e.target.value.slice(0, 5) })} /><small>/km</small></span>
+          <span className="ws-num-box"><Field inputMode="numeric" placeholder={imperial() ? "7:15" : "4:30"} value={draft.pace} onChange={(e) => setDraft({ ...draft, pace: e.target.value.slice(0, 5) })} /><small>{paceUnitLabel()}</small></span>
         </label>
       </div>
       <div className="ws-row">

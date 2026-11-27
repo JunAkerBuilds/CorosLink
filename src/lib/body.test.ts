@@ -1,11 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { Measurement, OwnMeasurement } from "@/data/body";
 import { BODY_SAMPLE } from "@/data/sample/body";
 import {
   ageDifference, arcPoint, bmi, bmiBand, bodyAgeAngle, daysBetween, deleteMeasurement, goalProgress, isDay, leanMass,
   mergeMeasurements, monthlyAverages, nearestIndex, oneOrTwo, rangeStart, resample, saveMeasurement, series, shiftDay,
-  spark, trend, weeksToGoal, weightDomain, within, xAt, yAt,
+  scaleWeight, spark, trend, weeksToGoal, weightDomain, within, xAt, yAt,
 } from "./body";
+import { useUnitsNow } from "./units";
+
+afterEach(() => useUnitsNow("metric"));
 
 const sample: Measurement[] = [
   { day: "2026-11-17", weightKg: 72.6 },
@@ -216,5 +219,11 @@ describe("chart geometry", () => {
     expect(oneOrTwo(72.4)).toBe("72.4");
     expect(oneOrTwo(72.45)).toBe("72.45");
     expect(oneOrTwo(71)).toBe("71.0");
+  });
+  it("prints a weight in the shown unit", () => {
+    expect(scaleWeight(72.4)).toBe("72.4 kg");
+    useUnitsNow("imperial");
+    expect(scaleWeight(72.4)).toBe("159.61 lb");
+    expect(scaleWeight(100)).toBe("220.46 lb");
   });
 });

@@ -1,6 +1,6 @@
 import { t } from "@/lib/i18n";
 import type { Muscle, MuscleState, Strength } from "../strength";
-import { dateText } from "../sync/strength";
+import { dateText, liftWeight } from "../sync/strength";
 
 const m = (name: string, note: string, fatigue: number, state: MuscleState): Muscle => ({ name, note, fatigue, state });
 
@@ -46,15 +46,15 @@ export const SAMPLE_STRENGTH: Strength = {
   ],
 };
 
-/** The sample in the app's language: its notes, ranges and suggestion translated now (exercise and muscle names stay). */
+/** The sample in the app's language and units: its notes, ranges and suggestion translated now (exercise and muscle names stay). */
 export function sampleStrength(): Strength {
   const s = SAMPLE_STRENGTH;
   const note = (text: string): string => {
-    const days = /^Not trained in (\d+) days$/.exec(text), held = /^Holding for (\d+) weeks$/.exec(text), gain = /^([+−]\S+) kg in (\d+) weeks$/.exec(text), best = /^New best, \+(\S+) kg$/.exec(text);
+    const days = /^Not trained in (\d+) days$/.exec(text), held = /^Holding for (\d+) weeks$/.exec(text), gain = /^([+−])(\S+) kg in (\d+) weeks$/.exec(text), best = /^New best, \+(\S+) kg$/.exec(text);
     if (days) return t("Not trained in {n} days", { n: days[1] });
     if (held) return t("Holding for {n} weeks", { n: held[1] });
-    if (gain) return t("{change} kg in {n} weeks", { change: gain[1], n: gain[2] });
-    if (best) return t("New best, +{kg} kg", { kg: best[1] });
+    if (gain) return t("{change} in {n} weeks", { change: `${gain[1]}${liftWeight(Number(gain[2]))}`, n: gain[3] });
+    if (best) return t("New best, +{weight}", { weight: liftWeight(Number(best[1])) });
     return t(text);
   };
   return {
@@ -70,7 +70,8 @@ export function sampleStrength(): Strength {
     workouts: s.workouts.map((w) => {
       const [, day, month] = /^\S+ (\d+) (\S+)$/.exec(w.date) ?? [];
       const at = new Date(2026, ["Oct", "Nov"].indexOf(month) + 9, Number(day));
-      return day ? { ...w, date: dateText(at) } : w;
+      const top = w.top.replace(/(\d+(?:\.\d+)?) kg/g, (_, kg: string) => liftWeight(Number(kg)));
+      return day ? { ...w, top, date: dateText(at) } : { ...w, top };
     }),
   };
 }

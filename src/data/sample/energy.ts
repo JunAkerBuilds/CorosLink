@@ -3,6 +3,7 @@ import { SAMPLE_TODAY } from "../core";
 import { dayKey } from "@/lib/format";
 import { addDays, clockOfDay, scatter } from "@/lib/health";
 import { msg } from "@/lib/i18n";
+import { distance } from "@/lib/units";
 
 const MONTH = 30;
 const BEDTIME = 22 * 60 + 45;
@@ -26,7 +27,7 @@ const today: EnergyDay = {
   ],
   events: [
     { kind: "sleep", name: msg("Sleep"), detail: "22:58 – 06:54 · Score 84", delta: 52, when: "22:58 – 06:54" },
-    { kind: "workout", name: "Morning tempo", detail: "07:42 – 08:20 · 8.02 km", delta: -22 },
+    { kind: "workout", name: "Morning tempo", detail: `07:42 – 08:20 · ${distance(8020)}`, delta: -22 },
     { kind: "rest", name: msg("Rest"), detail: "09:30 – 11:00", delta: 11 },
     { kind: "stress", name: msg("Stress"), detail: "11:30 – 12:15", delta: -4 },
     { kind: "rest", name: msg("Rest"), detail: "12:40 – 13:40", delta: 5 },

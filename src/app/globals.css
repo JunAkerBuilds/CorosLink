@@ -411,23 +411,30 @@ textarea.field { height: auto; padding: 10px; font-weight: 500; resize: vertical
 .dd:disabled { cursor: default; }
 .select.dd-small, [data-theme="dark"] .select.dd-small { height: 28px; padding: 0 24px 0 11px; font-weight: 500; background-position: right 9px center; background-size: 10px 10px; }
 
-.dd-menu {
+.dd-menu, .popover {
   /* Opaque: over busy pages (Studio faces, maps) any see-through fill lets the text underneath show through the list. */
   --dd-fill: linear-gradient(180deg, #ffffff, #f7f9f8);
   --dd-rim: linear-gradient(150deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.25) 40%, rgba(255, 255, 255, 0.1) 60%, rgba(255, 255, 255, 0.6));
   --dd-sheen: rgba(255, 255, 255, 0.55);
   --dd-row: rgba(var(--fg-rgb), 0.06);
+  /* The same glass on a solid base, for menus inside a blurred bar: a blur there only sees the bar, so it would show through. */
+  --dd-solid: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.42)), var(--tip-bg);
+}
+.dd-menu {
   position: fixed; z-index: 1000; box-sizing: border-box; border-radius: 18px; isolation: isolate;
   background: var(--dd-fill);
   backdrop-filter: blur(28px) saturate(1.9) brightness(1.04); -webkit-backdrop-filter: blur(28px) saturate(1.9) brightness(1.04);
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.7), inset 0 -1px 1px rgba(0, 0, 0, 0.04), 0 18px 40px rgba(16, 24, 40, 0.16), 0 3px 10px rgba(16, 24, 40, 0.08);
   transform-origin: top left; animation: dd-in 0.28s cubic-bezier(0.25, 1.35, 0.45, 1);
 }
-[data-theme="dark"] .dd-menu {
+[data-theme="dark"] .dd-menu, [data-theme="dark"] .popover {
   --dd-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)), rgb(22, 30, 29);
   --dd-rim: linear-gradient(150deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08) 40%, rgba(255, 255, 255, 0.03) 60%, rgba(255, 255, 255, 0.22));
   --dd-sheen: rgba(255, 255, 255, 0.12);
   --dd-row: rgba(255, 255, 255, 0.08);
+  --dd-solid: linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.05)), var(--tip-bg);
+}
+[data-theme="dark"] .dd-menu {
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.18), inset 0 -1px 1px rgba(0, 0, 0, 0.25), 0 22px 48px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 /* The rim: a 1px gradient ring cut out with a mask, brighter where the light hits. */
@@ -579,15 +586,23 @@ textarea.field { height: auto; padding: 10px; font-weight: 500; resize: vertical
 .kbd { padding: 2px 6px; border-radius: 5px; background: rgba(var(--fg-rgb), 0.1); font-size: 11px; font-weight: 600; }
 .menu-btn { display: none; }
 
+/* Popovers wear the drop-down glass (.dd-menu above) on a solid base: they open inside the blurred rail and bars. */
 .popover {
-  position: absolute; right: 0; top: calc(100% + 8px); z-index: 50; min-width: 220px; padding: 8px;
-  border-radius: 16px; background: var(--tip-bg); border: 1px solid var(--tip-border); box-shadow: var(--tip-shadow);
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 50; min-width: 220px; padding: 8px; box-sizing: border-box;
+  border-radius: 18px; background: var(--dd-solid); border: 1px solid rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(28px) saturate(1.9) brightness(1.04); -webkit-backdrop-filter: blur(28px) saturate(1.9) brightness(1.04);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.7), inset 0 -1px 1px rgba(0, 0, 0, 0.04), 0 18px 40px rgba(16, 24, 40, 0.16), 0 3px 10px rgba(16, 24, 40, 0.08);
+}
+[data-theme="dark"] .popover {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.18), inset 0 -1px 1px rgba(0, 0, 0, 0.25), 0 22px 48px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 .popover button, .popover a {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 36px; padding: 0 10px;
-  border: 0; border-radius: 10px; background: transparent; color: var(--fg); font-size: 13px; font-weight: 600; text-decoration: none; text-align: left;
+  border: 0; border-radius: 11px; background: transparent; color: var(--fg); font-size: 13px; font-weight: 600; text-decoration: none; text-align: left;
+  transition: background 0.12s ease;
 }
-.popover button:hover, .popover a:hover { background: var(--hover); }
+.popover button:hover, .popover a:hover { background: var(--dd-row); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08); }
 
 .palette-scrim {
   position: fixed; inset: 0; z-index: 80; background: var(--scrim); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -779,7 +794,7 @@ main .card:hover { transform: translateY(-3px); }
 .acct-rows .acct-chev { color: var(--dim, var(--muted)); }
 .acct-head + .acct-rows { border-top: 1px solid var(--line); margin-top: 0; }
 .acct-sub { position: relative; }
-.acct-sub[data-open="true"] > button { background: var(--hover); }
+.acct-sub[data-open="true"] > button { background: var(--dd-row); }
 /* The flyout sits to the right of the row; a transparent strip bridges the gap so the hover isn't lost. */
 .popover.acct-flyout { left: calc(100% + 6px); right: auto; top: -6px; bottom: auto; width: 200px; min-width: 0; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
 .popover.acct-flyout::before { content: ""; position: absolute; left: -10px; top: 0; bottom: 0; width: 10px; }

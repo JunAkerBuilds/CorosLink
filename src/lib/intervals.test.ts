@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { useUnitsNow } from "./units";
 import {
   filterRecentIds, importDistance, importSummary, importWindow, isAlreadyOnCoros, isImportDays, parseIntervalsActivities, RECENT_IMPORT_WINDOW_MS, withStatus,
   type IntervalsRow, type MatchableActivity,
@@ -97,6 +98,11 @@ describe("a row's words", () => {
     expect(importDistance({ distanceM: 1500, type: "Swim" })).toBe("1,500 m");
     expect(importDistance({ distanceM: 1500, type: "OpenWaterSwim" })).toBe("1,500 m");
     expect(importDistance({ distanceM: 0, type: "Yoga" })).toBe("—");
+    useUnitsNow("imperial");
+    try {
+      expect(importDistance({ distanceM: 12_040, type: "Run" })).toBe("7.48 mi");
+      expect(importDistance({ distanceM: 1500, type: "Swim" })).toBe("1,640 yd");
+    } finally { useUnitsNow("metric"); }
   });
 
   it("sums up the table", () => {

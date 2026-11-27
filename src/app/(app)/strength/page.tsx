@@ -9,6 +9,8 @@ import { openHevy, useHevy } from "@/data/hevy";
 import { loadStrength, strengthAction, type MuscleState, type RangeKey, type Strength, type StrengthAction } from "@/data/strength";
 import { clock, thousands } from "@/lib/format";
 import { msg, t } from "@/lib/i18n";
+import { weightIn, weightTotal, weightUnit } from "@/lib/units";
+import { liftNumber } from "@/data/sync/strength";
 import "./strength.css";
 
 const STATE_INK: Record<MuscleState, string> = {
@@ -38,13 +40,16 @@ function StrengthScreen({ data, origin }: { data: Strength; origin: Origin }) {
   const count = (s: MuscleState) => data.muscles.filter((m) => m.state === s).length;
   const most = data.muscles.length ? data.muscles.reduce((a, b) => (b.fatigue > a.fatigue ? b : a)) : null;
   const range = data.ranges.find((r) => r.key === rangeKey) ?? data.ranges[0];
-  const total = range.totals.reduce((a, b) => a + b, 0);
+  // Totals are thousands of kg; shown in thousands of the shown unit.
+  const unit = weightUnit();
+  const totals = range.totals.map(weightIn);
+  const total = totals.reduce((a, b) => a + b, 0);
   const bars = pillBars(range.totals);
-  const first = range.totals[0], last = range.totals[range.totals.length - 1];
-  const barsVars = { n: range.totals.length, first: first.toFixed(1), last: last.toFixed(1) };
+  const first = totals[0], last = totals[totals.length - 1];
+  const barsVars = { n: totals.length, first: first.toFixed(1), last: last.toFixed(1), unit };
   const barsLabel = range.per === "month"
-    ? (last > first ? t("Weight lifted each month for {n} months, rising from {first} to {last} thousand kg", barsVars) : t("Weight lifted each month for {n} months, from {first} to {last} thousand kg", barsVars))
-    : (last > first ? t("Weight lifted each week for {n} weeks, rising from {first} to {last} thousand kg", barsVars) : t("Weight lifted each week for {n} weeks, from {first} to {last} thousand kg", barsVars));
+    ? (last > first ? t("Weight lifted each month for {n} months, rising from {first} to {last} thousand {unit}", barsVars) : t("Weight lifted each month for {n} months, from {first} to {last} thousand {unit}", barsVars))
+    : (last > first ? t("Weight lifted each week for {n} weeks, rising from {first} to {last} thousand {unit}", barsVars) : t("Weight lifted each week for {n} weeks, from {first} to {last} thousand {unit}", barsVars));
 
   return (
     <main className="page st-page">
@@ -121,13 +126,13 @@ function StrengthScreen({ data, origin }: { data: Strength; origin: Origin }) {
             />
           </div>
           <div className="st-total">
-            <span className="num"><CountUp text={`${total.toFixed(1)}k`} /> <small>kg</small></span>
+            <span className="num"><CountUp text={`${total.toFixed(1)}k`} /> <small>{unit}</small></span>
             <span>{range.change}</span>
           </div>
           <svg role="img" aria-label={barsLabel} className="st-bars" width="100%" height={BARS_H} viewBox={`0 0 ${BARS_W} ${BARS_H}`} preserveAspectRatio="none">
             {bars.map((d, k) => (
               <path key={k} d={d} data-last={k === bars.length - 1 ? "" : undefined}>
-                <title>{`${range.totals[k].toFixed(1)}k kg`}</title>
+                <title>{`${totals[k].toFixed(1)}k ${unit}`}</title>
               </path>
             ))}
           </svg>
@@ -144,7 +149,7 @@ function StrengthScreen({ data, origin }: { data: Strength; origin: Origin }) {
             return (
               <article key={l.name} className="st-card st-lift">
                 <h3>{l.name}</h3>
-                <span className="num st-lift-best"><CountUp text={String(l.bestKg)} /> <small>kg</small></span>
+                <span className="num st-lift-best"><CountUp text={liftNumber(l.bestKg)} /> <small>{unit}</small></span>
                 <span className="st-lift-note">{l.note}</span>
                 <svg aria-hidden="true" height="84" viewBox="0 0 250 84" preserveAspectRatio="none">
                   <path d={c.area} style={{ fill: "rgba(239, 145, 80, 0.2)" }} />
@@ -183,7 +188,7 @@ function StrengthScreen({ data, origin }: { data: Strength; origin: Origin }) {
                 <span role="cell" className="st-name"><b>{w.name}</b>{w.source === "hevy" ? <span className="st-src">Hevy</span> : null}</span>
                 <span role="cell" className="soft st-clip" title={w.top}>{w.top}</span>
                 <span role="cell" className="st-right">{w.sets}</span>
-                <span role="cell" className="st-right" style={{ fontWeight: 700 }}>{thousands(w.liftedKg)} kg</span>
+                <span role="cell" className="st-right" style={{ fontWeight: 700 }}>{weightTotal(w.liftedKg)}</span>
                 <span role="cell" className="st-right soft">{clock(w.seconds)}</span>
               </div>
             ))}

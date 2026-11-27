@@ -690,5 +690,9 @@
   "{name} doesn't run a program.": "{name} não usa nenhum programa.",
   "Give the full path to {files}.": "Informe o caminho completo para {files}.",
   "There's no {file} there.": "Não há nenhum {file} aí.",
-  "Finish signing in in your browser.": "Termine o login no navegador."
+  "Finish signing in in your browser.": "Termine o login no navegador.",
+  "C-LINK couldn't reach the server. Check the connection and try again.": "O C-LINK não conseguiu falar com o servidor. Verifique a conexão e tente de novo.",
+  "The report wasn't taken. Check the email address.": "O relatório não foi aceito. Verifique o e-mail.",
+  "Reports can't be sent right now. Try again later.": "Não dá para enviar relatórios agora. Tente mais tarde.",
+  "Report a Problem…": "Relatar um problema…"
 }

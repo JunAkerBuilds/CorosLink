@@ -10,7 +10,8 @@ import c6 from "../zh-Hans/release.json";
 import c7 from "../zh-Hans/server.json";
 import c8 from "../zh-Hans/studio.json";
 import c9 from "../zh-Hans/training.json";
-import c10 from "../zh-Hans/wellness-shell.json";
+import c10 from "../zh-Hans/units.json";
+import c11 from "../zh-Hans/wellness-shell.json";
 
-const words: Catalog = { ...c0, ...c1, ...c2, ...c3, ...c4, ...c5, ...c6, ...c7, ...c8, ...c9, ...c10 };
+const words: Catalog = { ...c0, ...c1, ...c2, ...c3, ...c4, ...c5, ...c6, ...c7, ...c8, ...c9, ...c10, ...c11 };
 export default words;

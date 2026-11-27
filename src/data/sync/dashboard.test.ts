@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { useUnitsNow } from "@/lib/units";
 import { seedItems } from "@/data/sampleSeed";
 import {
   buildDashboard, dayTotals, fitnessSeries, formScale, heatOf, hrvOf, latestActivity, latestStats, placeActivities, routeInBox, sportMix,
@@ -29,6 +30,7 @@ function seeded(): DashboardItems {
 }
 
 describe("latest activity stats", () => {
+  afterEach(() => useUnitsNow("metric"));
   it("keeps the hundredths of a recorded time and reads pace per km for a run", () => {
     const run = act(TODAY, "run", 0, { distanceMeters: 8020, durationSeconds: 2293.75, averageHR: 158 });
     expect(latestStats(run)).toEqual([
@@ -44,6 +46,18 @@ describe("latest activity stats", () => {
     ]);
     expect(latestStats(act(TODAY, "poolSwim", 0, { distanceMeters: 1500, durationSeconds: 1875 }))).toEqual([
       { label: "Distance", value: "1,500 m" }, { label: "Time", value: "31:15" }, { label: "Pace", value: "2:05 /100 m" },
+    ]);
+  });
+  it("reads miles, /mi, mph, yards and /100 yd in imperial", () => {
+    useUnitsNow("imperial");
+    expect(latestStats(act(TODAY, "run", 0, { distanceMeters: 8020, durationSeconds: 2293.75 }))).toEqual([
+      { label: "Distance", value: "4.98 mi" }, { label: "Time", value: "38:13.75" }, { label: "Pace", value: "7:40 /mi" },
+    ]);
+    expect(latestStats(act(TODAY, "bike", 60, { distanceMeters: 24600 }))).toEqual([
+      { label: "Distance", value: "15.29 mi" }, { label: "Time", value: "1:00:00" }, { label: "Speed", value: "15.3 mph" },
+    ]);
+    expect(latestStats(act(TODAY, "poolSwim", 0, { distanceMeters: 1500, durationSeconds: 1875 }))).toEqual([
+      { label: "Distance", value: "1,640 yd" }, { label: "Time", value: "31:15" }, { label: "Pace", value: "1:54 /100 yd" },
     ]);
   });
   it("lists only what the activity holds", () => {

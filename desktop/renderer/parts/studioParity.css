@@ -36,7 +36,6 @@
 .st-note[data-warn] { color: var(--h-orange, #e8590c); }
 
 /* Template image facts: Download, size, file and key */
-.st-img-prev[data-checker] { background: repeating-conic-gradient(var(--line) 0% 25%, transparent 0% 50%) 50% / 12px 12px; }
 .st-img-prev img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .st-tpl-facts { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .st-tpl-facts dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; font-size: 12px; }

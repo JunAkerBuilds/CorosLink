@@ -9,6 +9,7 @@ import type { PlanDraft, PlanEditOp, PlanEditRow } from "@/lib/coach/plans";
 import type { CoachEvent } from "@/lib/coach/loop";
 import { plannedBody } from "@/lib/coach/plan";
 import { msg, t, tx } from "@/lib/i18n";
+import { units } from "@/lib/units";
 import { fromSample, fromSynced, NotWiredError, type Loaded } from "./core";
 import { hubCalendar, hubDeleteWorkout, hubMoveScheduled, hubRemoveScheduled, hubSaveWorkout, hubScheduleWorkout, hubSession, hubUpdateScheduled, type HubCalendarDay, type HubSport, type HubWorkout } from "./hub";
 import { titleFrom } from "./local/coach";
@@ -45,10 +46,13 @@ export interface RecapCard extends CardBase {
   routePath: string;
   routeLabel: string;
   stats: CardStat[];
-  /** One per kilometre. `block` marks the kilometres the read is about. */
+  /** One per kilometre, or per mile when `splitUnit` says so. `block` marks the splits the read is about. */
   splits: { seconds: number; block?: boolean }[];
+  /** "mi" when the card was drawn in imperial units; absent for kilometres. */
+  splitUnit?: "mi";
   /** Evenly spaced samples from start to finish. */
   heartRate: number[];
+  /** Seconds per kilometre, whatever the split unit. */
   paceSeconds: number[];
   chartLabel: string;
 }
@@ -59,9 +63,10 @@ export interface CompareCard extends CardBase {
   before: { label: string; short: string; href: string };
   after: { label: string; short: string; href: string };
   rows: { label: string; before: string; after: string; change: string; better?: boolean }[];
-  /** Pace per kilometre in seconds, the same kilometres in both. */
+  /** Pace per kilometre in seconds (per mile when `splitUnit` says so), the same splits in both. */
   beforeSeconds: number[];
   afterSeconds: number[];
+  splitUnit?: "mi";
   chartLabel: string;
 }
 
@@ -567,7 +572,7 @@ export async function sendToCoach(conversationId: string, text: string, options:
       method: "POST", credentials: "same-origin", cache: "no-store", signal: options.signal,
       headers: { Accept: "application/x-ndjson", "Content-Type": "application/json", "X-Clink-Hub": "1" },
       body: JSON.stringify({
-        text: question, files, history: thread.map((m) => lightForHistory(m.message)), ...(options.page ? { page: options.page } : {}), plans: plansForCoach(options.openPlan), offsetMin: new Date().getTimezoneOffset(), hubDays: await hubDays(),
+        text: question, files, history: thread.map((m) => lightForHistory(m.message)), ...(options.page ? { page: options.page } : {}), plans: plansForCoach(options.openPlan), offsetMin: new Date().getTimezoneOffset(), units: units(), hubDays: await hubDays(),
         browserWorkouts: savedWorkouts().map((w) => ({ id: w.id, name: w.name, sport: w.sport, date: w.date, summary: w.summary, items: w.items })),
       }),
     });

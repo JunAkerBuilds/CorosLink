@@ -117,6 +117,7 @@ describe("settings file", () => {
   const host = (store: LocalStore | null = null) => ({
     version: "1", store: () => store, saveDialog: async () => null, openDialog: async () => null, reveal: () => undefined,
     restored: () => undefined, confirm: async () => false, lastPhoneSync: () => null, modeChanged: () => undefined, languageChanged: () => undefined,
+    usageChanged: () => undefined, sendReport: async () => ({ reference: "R" }),
   });
   const ask = (s: DesktopSettings, body?: object) => s.answer(new Request("clink://app/api/desktop/settings", body
     ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {})).then((r) => r.json() as Promise<{ dataMode: string; local: unknown }>);
@@ -133,6 +134,40 @@ describe("settings file", () => {
     const yes = new DesktopSettings(dir, new ErrorLog(dir), { ...host(), confirm: async () => true });
     expect((await ask(yes, { dataMode: "connected" })).dataMode).toBe("connected");
     expect((await ask(new DesktopSettings(dir, new ErrorLog(dir), host()))).dataMode).toBe("connected");
+  });
+
+  it("sends nothing until the privacy question is answered, then only what was chosen, and never in Local mode", async () => {
+    const answer = (s: DesktopSettings, body: object) => s.answer(new Request("clink://app/api/desktop/settings/privacy",
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).then((r) => r.json() as Promise<{ privacy: string; usage: boolean; crashReports: boolean }>);
+    const dir = folder();
+    const changes: boolean[] = [];
+    const s = new DesktopSettings(dir, new ErrorLog(dir), { ...host(), usageChanged: (on) => changes.push(on) });
+    // A new install: both off and the question still to answer.
+    expect(s.usageAllowed).toBe(false);
+    expect(s.crashesAllowed).toBe(false);
+    expect((await ask(s)) as unknown).toMatchObject({ privacy: "pending", usage: false, crashReports: false });
+    // Turning a switch on in Settings before answering still sends nothing.
+    await ask(s, { usage: true });
+    expect(s.usageAllowed).toBe(false);
+    // Answered: usage counts yes, crash reports no.
+    expect(await answer(s, { usage: true, crashReports: false })).toMatchObject({ privacy: "seen", usage: true, crashReports: false });
+    expect(s.usageAllowed).toBe(true);
+    expect(s.crashesAllowed).toBe(false);
+    const again = new DesktopSettings(dir, new ErrorLog(dir), host());
+    expect([again.usageAllowed, again.crashesAllowed]).toEqual([true, false]);
+    expect(((await ask(s, { usage: false })) as unknown as { usage: boolean }).usage).toBe(false);
+    expect(changes.at(-1)).toBe(false);
+    expect(new DesktopSettings(dir, new ErrorLog(dir), host()).usageAllowed).toBe(false);
+    // An install from before the question, with both saved on: off until it's answered.
+    const old = folder();
+    writeFileSync(path.join(old, "settings.json"), JSON.stringify({ dataMode: "connected", blocked: [], intro: "seen", usage: true, crashReports: true }));
+    const before = new DesktopSettings(old, new ErrorLog(old), host());
+    expect([before.introPending, before.usageAllowed, before.crashesAllowed]).toEqual([false, false, false]);
+    expect(await before.answer(new Request("clink://app/api/desktop/settings/intro")).then((r) => r.json())).toEqual({ intro: "seen", privacy: "pending" });
+    const local = folder();
+    writeFileSync(path.join(local, "settings.json"), JSON.stringify({ dataMode: "localOnly", blocked: [], privacy: "seen", usage: true, crashReports: true }));
+    const l = new DesktopSettings(local, new ErrorLog(local), host());
+    expect([l.usageAllowed, l.crashesAllowed]).toEqual([false, false]);
   });
 
   it("counts what phones synced here", async () => {

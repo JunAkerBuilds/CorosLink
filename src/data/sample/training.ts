@@ -1,6 +1,20 @@
 import { locale, msg, t, tx } from "@/lib/i18n";
 import { dayLetter } from "@/data/sync/dashboard";
+import { signed, thousands } from "@/lib/format";
+import { distance, distanceIn, distanceUnit, imperial, paceText, swimDistance } from "@/lib/units";
 import type { CalendarData, CalendarEntry, Dashboard, FitnessSeries, Sport, WeekTotals } from "@/data/training";
+
+/**
+ * A sample line written in metric ("8.02 km · 38:14", "5:30 /km", "1,500 m"), in the shown units. Metric comes back
+ * as it is; imperial keeps the written number of decimals. Bare metres are a swim's.
+ */
+export function sampleUnits(text: string): string {
+  if (!imperial()) return text;
+  return text
+    .replace(/(\d+):(\d\d) \/km\b/g, (_, m: string, s: string) => paceText(Number(m) * 60 + Number(s)))
+    .replace(/(\d+(?:\.(\d+))?) km\b/g, (_, n: string, dec: string | undefined) => distance(Number(n) * 1000, dec?.length ?? 0))
+    .replace(/(\d[\d,]*) m\b/g, (_, n: string) => swimDistance(Number(n.replace(/,/g, ""))));
+}
 
 /* ───────────── Dashboard ───────────── */
 
@@ -248,11 +262,11 @@ export const sampleDashboard: Dashboard = {
 
 /** A recorded day. `activityId` is its page under Activities, for the days that list reaches back to. */
 const done = (date: string, sport: Sport, name: string, detail: string, activityId?: string): CalendarEntry =>
-  ({ id: `done-${date}`, date, sport, name, detail, status: "done", source: "sample", activityId });
+  ({ id: `done-${date}`, date, sport, name, detail: sampleUnits(detail), status: "done", source: "sample", activityId });
 
 /** A planned day. Its id doubles as the id of the sample workout it opens in the builder. */
 const plan = (date: string, sport: Sport, name: string, detail: string, metres: number, load: number): CalendarEntry =>
-  ({ id: `plan-${date}`, workoutId: `plan-${date}`, date, sport, name, detail, status: "planned", source: "sample", metres, load });
+  ({ id: `plan-${date}`, workoutId: `plan-${date}`, date, sport, name, detail: sampleUnits(detail), status: "planned", source: "sample", metres, load });
 
 /** Six weeks from Mon 26 Oct 2026. Today is Thu 19 Nov; everything after it is planned. */
 const ENTRIES: CalendarEntry[] = [
@@ -318,11 +332,13 @@ export function sampleDashboardNow(): Dashboard {
   const what: Record<string, string> = { Ride: tx("sport", "Ride"), Gym: t("Gym"), Easy: t("Easy"), Tempo: t("Tempo"), Long: t("Long") };
   const intensity: Record<string, string> = { Easy: t("Easy"), Moderate: t("Moderate"), Hard: t("Hard") };
   const yearDay = new Intl.DateTimeFormat(locale("en-GB"), { day: "numeric", month: "long" }).format(new Date(2026, 10, 19));
+  const shown = (km: number) => Math.round(distanceIn(km * 1000));
+  const ahead = shown(d.year.km) - shown(d.year.lastYearByNowKm ?? 0);
   return {
     ...d,
     coach: d.coach && {
       text: t("Legs are fresh and HRV is up. A good day for the tempo you finished this morning; keep tomorrow easy."),
-      nextLabel: t("Tomorrow: {workout}, {distance}", { workout: t("Easy run"), distance: "6.0 km" }),
+      nextLabel: t("Tomorrow: {workout}, {distance}", { workout: t("Easy run"), distance: sampleUnits("6.0 km") }),
     },
     morning: d.morning && {
       ...d.morning,
@@ -331,18 +347,22 @@ export function sampleDashboardNow(): Dashboard {
     },
     todayWorkout: {
       ...d.todayWorkout, detail: today("06:42"),
-      stats: d.todayWorkout.stats.map((s) => ({ ...s, label: t(s.label) })),
+      stats: d.todayWorkout.stats.map((s) => ({ ...s, label: t(s.label), value: sampleUnits(s.value) })),
       week: d.todayWorkout.week.map((w, k) => ({ ...w, day: dayLetter(k), what: what[w.what] ?? w.what })),
     },
     latest: d.latest && {
       ...d.latest, when: today("06:42"), sport: tx("sport", d.latest.sport),
       routeLabel: t("Route of this morning's tempo run, an out-and-back along the river"),
       heart: d.latest.heart && { ...d.latest.heart, label: t("Heart rate over the activity, {low} to {high} bpm", { low: 117, high: 169 }) },
+      stats: d.latest.stats.map((s) => ({ ...s, value: sampleUnits(s.value) })),
     },
     fitness: d.fitness && { ...d.fitness, scale: { ...d.fitness.scale, labels: [t("Fresh"), t("Form {value}", { value: "−7" }), t("Strained")] } },
     goal: d.goal && { ...d.goal, status: t("On track") },
     volume: { ...d.volume, status: d.volume.status && t("Building") },
-    year: { ...d.year, label: t("Running distance this year against last year: {km} km by {day}, {by} km ahead", { km: "1,842", day: yearDay, by: 212 }) },
+    year: {
+      ...d.year, status: `${signed(ahead)} ${distanceUnit()}`,
+      label: t("Running distance this year against last year: {distance} by {day}, {by} ahead", { distance: `${thousands(shown(d.year.km))} ${distanceUnit()}`, day: yearDay, by: `${ahead} ${distanceUnit()}` }),
+    },
     intensity: { ...d.intensity, status: d.intensity.status && t("Well balanced"), parts: d.intensity.parts.map((p) => ({ ...p, label: intensity[p.label] ?? p.label })) },
     hrv: d.hrv && { ...d.hrv, status: t("In range") },
     mix: { ...d.mix, parts: d.mix.parts.map((p) => ({ ...p, label: tx("sport", p.label) })) },

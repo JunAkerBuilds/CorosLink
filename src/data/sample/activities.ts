@@ -1,7 +1,13 @@
 /** The sample athlete's activities, copied from the C-LINK redesign canvas (Activities and Activity screens). */
 import type { Activity, ActivityDetail, ActivityExtras, Lap, RoutePoint, Sport, Stroke, StrengthExercise, SwimLength, Thresholds } from "@/data/activities";
-import { generateDetail, mergeLaps, routeFromCubics, zonesFromBounds } from "@/lib/activities";
+import { generateDetail, mergeLaps, recordPace, routeFromCubics, zonesFromBounds } from "@/lib/activities";
 import { hrZonesFromThreshold, maxHrFor, relativeEffort, weekShare } from "@/lib/activityDetail";
+import { distanceIn, distanceUnit, height, weightIn, weightUnit } from "@/lib/units";
+
+/** A gear odometer as shown: 412.60 km or 256.38 mi. */
+const odometer = (metres: number) => `${distanceIn(metres).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${distanceUnit()}`;
+/** A lift as shown: 77.5 kg × 5 or 170.86 lb × 5. */
+const lift = (kg: number, reps: number) => `${Number(weightIn(kg).toFixed(2))} ${weightUnit()} × ${reps}`;
 
 type Row = [id: string, start: string, name: string, sport: Sport, distanceM: number | null, durationS: number, avgHr: number, maxHr: number, elevationGainM: number | null, cadence: number | null, load: number];
 
@@ -118,12 +124,12 @@ function morningTempo(activity: Activity): ActivityDetail {
       summary: "A controlled tempo. You held the four middle kilometres within 3.42 s of each other at 4:34, right on threshold pace, and your heart rate rose only 9 bpm across them. The second half was 0.4% faster than the first for the same effort. Keep tomorrow easy.",
       weather: { tempC: 9, feelsC: 7, humidityPct: 81, dewPointC: 6, windKmh: 11, windFrom: "NW", gustKmh: 19, finishTempC: 10, sky: "Clear", note: "Cool and dry enough that heat cost you nothing on pace." },
       journal: { felt: 4, tags: ["One gel at 5 km", "Fuel sat well"], note: "Legs came round after the second kilometre. Held back on the last rep." },
-      gear: { name: "Tempo shoes, blue pair", note: "412.60 km · learned from your workouts" },
+      gear: { name: "Tempo shoes, blue pair", note: `${odometer(412_600)} · learned from your workouts` },
       records: [
-        { what: "1 km", rank: "Best this year", value: "4:28.90", pace: "4:29 /km", best: true },
-        { what: "1 mile", rank: "3rd best", value: "7:17.44", pace: "4:32 /km" },
-        { what: "2 mile", rank: "2nd best", value: "14:39.20", pace: "4:33 /km" },
-        { what: "5 km", rank: "4th best", value: "23:11.80", pace: "4:38 /km" },
+        { what: "1 km", rank: "Best this year", value: "4:28.90", pace: recordPace(268.9, 1000), best: true },
+        { what: "1 mile", rank: "3rd best", value: "7:17.44", pace: recordPace(437.44, 1609.344) },
+        { what: "2 mile", rank: "2nd best", value: "14:39.20", pace: recordPace(879.2, 3218.688) },
+        { what: "5 km", rank: "4th best", value: "23:11.80", pace: recordPace(1391.8, 5000) },
       ],
       relativeEffort: { score: 74, harderThanPct: 82, basis: "From average heart rate" },
     },
@@ -168,11 +174,11 @@ function hillRide(activity: Activity): ActivityDetail {
       summary: "A steady hill session. You rode all three climbs within 13 W of each other, the last one the strongest, and spent 16% of the ride at threshold.",
       weather: { tempC: 12, feelsC: 10, humidityPct: 68, dewPointC: 6, windKmh: 14, windFrom: "W", gustKmh: 26, finishTempC: 11, sky: "Partly cloudy" },
       journal: { felt: 4, note: "Good legs on the second climb. Cold on the last descent." },
-      gear: { name: "Road bike", note: "1,284.30 km · learned from your workouts" },
+      gear: { name: "Road bike", note: `${odometer(1_284_300)} · learned from your workouts` },
       records: [
         { what: "20 min power", rank: "Best this year", value: "226 W", best: true },
         { what: "5 min power", rank: "3rd best", value: "268 W" },
-        { what: "Longest climb", rank: "2nd best", value: "201 m" },
+        { what: "Longest climb", rank: "2nd best", value: height(201) },
       ],
       relativeEffort: { score: 132, harderThanPct: 71, basis: "" },
     },
@@ -282,9 +288,9 @@ function strengthUpper(activity: Activity): ActivityDetail {
     extras: {
       device: "PACE Pro",
       records: [
-        { what: "Bench press", rank: "Best 5 reps", value: "77.5 kg × 5", best: true },
-        { what: "Barbell row", rank: "Matches your best", value: "70 kg × 8" },
-        { what: "Overhead press", rank: "2nd best 5 reps", value: "50 kg × 5" },
+        { what: "Bench press", rank: "Best 5 reps", value: lift(77.5, 5), best: true },
+        { what: "Barbell row", rank: "Matches your best", value: lift(70, 8) },
+        { what: "Overhead press", rank: "2nd best 5 reps", value: lift(50, 5) },
       ],
       relativeEffort: { score: 58, harderThanPct: 64, basis: "From your sets" },
       strength: {

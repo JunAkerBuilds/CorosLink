@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { useUnitsNow } from "./units";
 import type { HubWorkout } from "@/data/hub";
 import { sampleLibrary } from "@/data/sample/workoutLibrary";
 import { sampleNumbers, sampleProfile, starterWorkout } from "@/data/sample/workouts";
@@ -308,6 +309,7 @@ describe("workouts from the first builder", () => {
 });
 
 describe("text boxes", () => {
+  afterEach(() => useUnitsNow("metric"));
   it("reads and writes a pace range", () => {
     expect(formatPaceRange(270, 280)).toBe("4:30-4:40/km");
     expect(parsePaceRange("4:30-4:40/km")).toEqual({ low: 270, high: 280 });
@@ -317,6 +319,21 @@ describe("text boxes", () => {
     expect(parsePaceRange("0:30-4:30")).toBeNull();
     expect(parsePaceRange("5")).toBeNull();
     expect(parsePaceRange("")).toBeNull();
+  });
+
+  it("reads and writes a pace range per mile, and totals in miles and yards, in imperial", () => {
+    useUnitsNow("imperial");
+    expect(formatPaceRange(270, 280)).toBe("7:15-7:31/mi");
+    const r = parsePaceRange("8:00-8:30/mi")!;
+    expect(formatPaceRange(r.low, r.high)).toBe("8:00-8:30/mi");
+    expect(r.low).toBeCloseTo(480 / 1.609344, 6);
+    expect(parsePaceRange("0:30/mi")).toBeNull();
+    // A typed "/km" means per km whatever the page's units.
+    expect(parsePaceRange("4:30-4:40/km")).toEqual({ low: 270, high: 280 });
+    // A 25 yd pool for a new swim.
+    expect(newDoc("swim", three()).poolLength).toBe(22.86);
+    expect(docSummary(lib("sample-lib-long"), null)).toBe("2:06:00 · 14.91 mi");
+    expect(setsText(step({ target: "distance", meters: 250, sets: 4 }))).toBe("1,000 m in total");
   });
 
   it("reads numbers inside their limits", () => {

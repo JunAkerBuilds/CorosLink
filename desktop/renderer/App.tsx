@@ -7,7 +7,7 @@ import { t } from "@/lib/i18n";
 import { findRoute, pageTitle } from "./routes";
 import { navigate, ParamsContext, useLocation } from "./router";
 import { readDeveloper } from "./developer";
-import { INTRO_SEEN, introPending } from "./welcome";
+import { INTRO_SEEN, PRIVACY_PATH, PRIVACY_SEEN, readIntro } from "./welcome";
 
 // The first-run intro and the move from CorosLink: full window, before the shell, loaded only when shown.
 const Intro = lazy(() => import("./pages/Intro"));
@@ -30,16 +30,23 @@ export function App() {
   }, []);
   const found = findRoute(pathname);
   const onWelcome = pathname === "/welcome" || pathname.startsWith("/welcome/");
-  const [intro, setIntro] = useState<"checking" | "pending" | "seen">("checking");
+  const [intro, setIntro] = useState<"checking" | "pending" | "privacy" | "seen">("checking");
 
-  // First launch: the intro comes before anything else, until the athlete goes on to the app (main/settings.ts).
+  // First launch: the intro comes before anything else, until the athlete goes on to the app (main/settings.ts). An
+  // install from before the privacy question gets that question alone, once.
   useEffect(() => {
-    void introPending().then((pending) => setIntro((now) => (now === "checking" ? (pending ? "pending" : "seen") : now)));
+    void readIntro().then((s) => setIntro((now) => (now === "checking" ? (s.intro ? "pending" : s.privacy ? "privacy" : "seen") : now)));
     const seen = () => setIntro("seen");
+    // Answered inside the intro, the intro still has to be left; answered in its own window, that's all there was.
+    const answered = () => setIntro((now) => (now === "privacy" ? "seen" : now));
     addEventListener(INTRO_SEEN, seen);
-    return () => removeEventListener(INTRO_SEEN, seen);
+    addEventListener(PRIVACY_SEEN, answered);
+    return () => { removeEventListener(INTRO_SEEN, seen); removeEventListener(PRIVACY_SEEN, answered); };
   }, []);
-  useEffect(() => { if (intro === "pending" && !onWelcome) navigate("/welcome", { replace: true }); }, [intro, onWelcome]);
+  useEffect(() => {
+    if (intro === "pending" && !onWelcome) navigate("/welcome", { replace: true });
+    if (intro === "privacy" && !onWelcome) navigate(PRIVACY_PATH, { replace: true });
+  }, [intro, onWelcome]);
   // Setup comes after the intro: it waits until the athlete has left the intro (setup.ts).
   const firstRun = useFirstRun(intro === "seen", pathname);
 

@@ -6,6 +6,7 @@ import type { ActivityExtras, RecordRow, Sport, WeekShare } from "@/data/activit
 import { EFFORT_LEVELS, type Finding, type RelativeEffort } from "@/lib/activityDetail";
 import { clock } from "@/lib/format";
 import { t, tx } from "@/lib/i18n";
+import { speedIn, speedUnit } from "@/lib/units";
 
 /** A sport's name in the app's language. */
 export function sportWord(sport: Sport): string {
@@ -215,7 +216,7 @@ const deg = (v: number) => `${Math.round(v)}°`;
 export function WeatherCard({ weather: w, style }: { weather: NonNullable<ActivityExtras["weather"]>; style?: React.CSSProperties }) {
   const items: Stat[] = [{ label: t("Temperature"), value: deg(w.tempC), note: w.feelsC != null ? t("Feels like {temp}", { temp: deg(w.feelsC) }) : "" }];
   if (w.humidityPct != null) items.push({ label: t("Humidity"), value: `${Math.round(w.humidityPct)}%`, note: w.dewPointC != null ? t("Dew point {temp}", { temp: deg(w.dewPointC) }) : "" });
-  if (w.windKmh != null) items.push({ label: t("Wind"), value: `${Math.round(w.windKmh)} km/h`, note: [w.windFrom ? t("From {dir}", { dir: w.windFrom }) : "", w.gustKmh != null ? t("gusts {n}", { n: Math.round(w.gustKmh) }) : ""].filter(Boolean).join(", ") });
+  if (w.windKmh != null) items.push({ label: t("Wind"), value: `${Math.round(speedIn(w.windKmh))} ${speedUnit()}`, note: [w.windFrom ? t("From {dir}", { dir: w.windFrom }) : "", w.gustKmh != null ? t("gusts {n}", { n: Math.round(speedIn(w.gustKmh)) }) : ""].filter(Boolean).join(", ") });
   if (w.finishTempC != null) items.push({ label: t("At the finish"), value: deg(w.finishTempC), note: w.sky ?? "" });
   else if (w.sky) items.push({ label: t("Sky"), value: w.sky, note: "" });
   return (

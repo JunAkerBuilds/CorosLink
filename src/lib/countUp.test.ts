@@ -28,6 +28,12 @@ describe("countUpFormat", () => {
     expect(at("21:58.13", 0.5)).toMatch(/^10:59\.\d{2}$/);
   });
 
+  it("counts imperial units too", () => {
+    for (const t of ["7:40 /mi", "4.98 mi", "1,640 yd", "210 ft", "15.8 mph", "170 lb"]) expect(at(t, 1)).toBe(t);
+    expect(at("7:40 /mi", 0)).toBe("0:00 /mi");
+    expect(at("4.98 mi", 0)).toBe("0.00 mi");
+  });
+
   it("leaves words, zero and times of day alone", () => {
     expect(countUpFormat("Tempo run")).toBeNull();
     expect(countUpFormat("0")).toBeNull();

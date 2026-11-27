@@ -2,6 +2,9 @@
 import type { Activity, ActivityDetail, ChartScales, Lap, PlacedPoint, RoutePoint, Sport, Streams, ZoneTime } from "@/data/activities";
 import { clock, thousands } from "@/lib/format";
 import { language, locale, msg, t } from "@/lib/i18n";
+import {
+  distanceIn, distanceStep, distanceUnit, heightIn, heightUnit, imperial, MILE_M, paceIn, paceUnitLabel, speedIn, speedUnit, swimIn, swimPaceIn, swimPaceUnitLabel, swimUnit,
+} from "@/lib/units";
 
 // ---------------------------------------------------------------- formatting
 
@@ -44,23 +47,28 @@ export function paceOver(sport: Sport, distanceM: number | null, durationS: numb
   return durationS / (distanceM / (unit === "min/km" ? 1000 : 100));
 }
 
-/** A pace or speed value with its unit: 4:46 /km, 25.4 km/h, 2:05 /100 m. */
+/** A pace or speed value (in the sport's own metric unit) as shown: 4:46 /km, 25.4 km/h, 2:05 /100 m, or 7:40 /mi, 15.8 mph, 1:54 /100 yd. */
 export function formatPaceValue(sport: Sport, value: number | null, decimals = 0): string {
   const unit = paceUnit(sport);
   if (value == null || !unit) return "—";
-  if (unit === "km/h") return `${value.toFixed(decimals || 1)} km/h`;
-  return `${clock(value, decimals)} ${unit === "min/km" ? "/km" : "/100 m"}`;
+  if (unit === "km/h") return `${speedIn(value).toFixed(decimals || 1)} ${speedUnit()}`;
+  return unit === "min/km" ? `${clock(paceIn(value), decimals)} ${paceUnitLabel()}` : `${clock(swimPaceIn(value), decimals)} ${swimPaceUnitLabel()}`;
+}
+
+/** A record's average pace over its distance, whole seconds: 4:29 /km or 7:13 /mi. */
+export function recordPace(seconds: number, metres: number): string {
+  return `${clock(Math.round(paceIn((seconds / metres) * 1000)))} ${paceUnitLabel()}`;
 }
 
 export function formatPace(a: Activity): string {
   return formatPaceValue(a.sport, paceOver(a.sport, a.distanceM, a.durationS));
 }
 
-/** 8.02 km for runs, 24.6 km for rides, 1,500 m for swims. */
+/** 8.02 km for runs, 24.6 km for rides, 1,500 m for swims (or mi and yd). */
 export function formatDistance(a: Pick<Activity, "sport" | "distanceM">): string {
   if (a.distanceM == null) return "—";
-  if (a.sport === "Swim") return `${thousands(a.distanceM)} m`;
-  return `${(a.distanceM / 1000).toFixed(a.sport === "Ride" ? 1 : 2)} km`;
+  if (a.sport === "Swim") return `${thousands(swimIn(a.distanceM))} ${swimUnit()}`;
+  return `${distanceIn(a.distanceM).toFixed(a.sport === "Ride" ? 1 : 2)} ${distanceUnit()}`;
 }
 
 /** Table time: whole seconds as the watch shows them, cut rather than rounded up. */
@@ -69,7 +77,9 @@ export function formatTime(seconds: number): string {
 }
 
 export function formatElevation(m: number | null): string {
-  return m == null ? "—" : `${m > 0 ? "+" : m < 0 ? "−" : ""}${Math.abs(m)} m`;
+  if (m == null) return "—";
+  const size = imperial() ? Math.round(heightIn(Math.abs(m))) : Math.abs(m);
+  return `${m > 0 ? "+" : m < 0 ? "−" : ""}${size} ${heightUnit()}`;
 }
 
 // ------------------------------------------------------- filters and sorting
@@ -98,12 +108,12 @@ export const DATE_RANGES: readonly { value: DateRange; label: string; tail: stri
   { value: "all", label: msg("All time"), tail: "" },
 ];
 
-export const DISTANCE_BANDS: readonly { value: DistanceBand; label: string }[] = [
-  { value: "any", label: msg("Any distance") },
-  { value: "under5", label: msg("Under 5 km") },
-  { value: "5to10", label: msg("5 to 10 km") },
-  { value: "over10", label: msg("Over 10 km") },
-];
+/** The distance filter's choices. Imperial bands are 3 and 6 miles; the values stay the same in the URL. */
+export function distanceBands(): readonly { value: DistanceBand; label: string }[] {
+  return imperial()
+    ? [{ value: "any", label: msg("Any distance") }, { value: "under5", label: msg("Under 3 mi") }, { value: "5to10", label: msg("3 to 6 mi") }, { value: "over10", label: msg("Over 6 mi") }]
+    : [{ value: "any", label: msg("Any distance") }, { value: "under5", label: msg("Under 5 km") }, { value: "5to10", label: msg("5 to 10 km") }, { value: "over10", label: msg("Over 10 km") }];
+}
 
 const SORT_KEYS: readonly SortKey[] = ["date", "name", "sport", "distance", "time", "pace", "hr", "elevation", "cadence", "load"];
 const SPORT_VALUES: readonly Sport[] = ["Run", "Ride", "Strength", "Swim", "Other"];
@@ -130,9 +140,10 @@ export function inDateRange(a: Pick<Activity, "start">, range: DateRange, today:
 export function inDistanceBand(a: Pick<Activity, "distanceM">, band: DistanceBand): boolean {
   if (band === "any") return true;
   if (a.distanceM == null) return false;
-  if (band === "under5") return a.distanceM < 5000;
-  if (band === "5to10") return a.distanceM >= 5000 && a.distanceM <= 10000;
-  return a.distanceM > 10000;
+  const [low, high] = imperial() ? [3 * MILE_M, 6 * MILE_M] : [5000, 10000];
+  if (band === "under5") return a.distanceM < low;
+  if (band === "5to10") return a.distanceM >= low && a.distanceM <= high;
+  return a.distanceM > high;
 }
 
 export function filterActivities(list: readonly Activity[], f: Pick<Filters, "q" | "sport" | "dates" | "distance">, today: Date): Activity[] {
@@ -189,8 +200,8 @@ export function totals(list: readonly Activity[]): Totals {
 
 /** 15 activities · 140.9 km · 12:49:47 · Load 1,047 */
 export function formatTotals(tm: Totals): string {
-  const vars = { n: tm.count, km: (tm.distanceM / 1000).toFixed(1), time: formatTime(tm.durationS), load: thousands(tm.load) };
-  return tm.count === 1 ? t("1 activity · {km} km · {time} · Load {load}", vars) : t("{n} activities · {km} km · {time} · Load {load}", vars);
+  const vars = { n: tm.count, distance: `${distanceIn(tm.distanceM).toFixed(1)} ${distanceUnit()}`, time: formatTime(tm.durationS), load: thousands(tm.load) };
+  return tm.count === 1 ? t("1 activity · {distance} · {time} · Load {load}", vars) : t("{n} activities · {distance} · {time} · Load {load}", vars);
 }
 
 /** Reads filters from a URL query. Anything missing or unknown falls back to the default. */
@@ -204,7 +215,7 @@ export function parseFilters(params: { get(name: string): string | null }): Filt
     q: params.get("q") ?? "",
     sport: pick<Sport | "all">("sport", [...SPORT_VALUES, "all"], "all"),
     dates: pick("dates", DATE_RANGES.map((r) => r.value), DEFAULT_FILTERS.dates),
-    distance: pick("distance", DISTANCE_BANDS.map((b) => b.value), "any"),
+    distance: pick("distance", distanceBands().map((b) => b.value), "any"),
     sort: pick("sort", SORT_KEYS, "date"),
     dir: pick<SortDir>("dir", ["asc", "desc"], "desc"),
     page: Number.isInteger(page) && page > 1 ? page : 1,
@@ -289,7 +300,8 @@ function csvCell(value: string | number | null): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export const CSV_HEADER = ["Start", "Activity", "Sport", "Distance (km)", "Time", "Time (s)", "Pace / speed", "Avg HR", "Max HR", "Elevation (m)", "Cadence", "Load"];
+/** The CSV's column names, with the distance and elevation in the shown units. */
+export const csvHeader = (): string[] => ["Start", "Activity", "Sport", `Distance (${distanceUnit()})`, "Time", "Time (s)", "Pace / speed", "Avg HR", "Max HR", `Elevation (${heightUnit()})`, "Cadence", "Load"];
 
 /** The rows as a CSV file body (RFC 4180, CRLF lines). Times keep their hundredths. */
 export function toCsv(list: readonly Activity[]): string {
@@ -297,17 +309,17 @@ export function toCsv(list: readonly Activity[]): string {
     a.start,
     a.name,
     a.sportName ?? a.sport,
-    a.distanceM == null ? null : (a.distanceM / 1000).toFixed(3),
+    a.distanceM == null ? null : distanceIn(a.distanceM).toFixed(3),
     clock(a.durationS, 2),
     a.durationS.toFixed(2),
     a.distanceM == null ? null : formatPaceValue(a.sport, paceOver(a.sport, a.distanceM, a.durationS), 2),
     a.avgHr,
     a.maxHr,
-    a.elevationGainM,
+    a.elevationGainM == null || !imperial() ? a.elevationGainM : Math.round(heightIn(a.elevationGainM)),
     a.cadence,
     a.load,
   ]);
-  return [CSV_HEADER, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+  return [csvHeader(), ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 
 // ---------------------------------------------------------------------- laps
@@ -361,12 +373,14 @@ export function mergeLaps(laps: readonly Lap[], groups: readonly number[]): Lap[
 export function formatLapPace(sport: Sport, lap: Lap): string {
   const v = paceOver(sport, lap.distanceM, lap.durationS);
   if (v == null) return clock(lap.durationS, 2);
-  return paceUnit(sport) === "km/h" ? v.toFixed(2) : clock(v, 2);
+  const unit = paceUnit(sport);
+  return unit === "km/h" ? speedIn(v).toFixed(2) : clock(unit === "min/km" ? paceIn(v) : swimPaceIn(v), 2);
 }
 
+/** A lap's length as a bare number in the shown unit: 1.00 (km or mi), 100 (m or yd) for a swim. */
 export function formatLapDistance(sport: Sport, lap: Lap): string {
   if (lap.distanceM == null) return "—";
-  return sport === "Swim" ? thousands(lap.distanceM) : (lap.distanceM / 1000).toFixed(2);
+  return sport === "Swim" ? thousands(swimIn(lap.distanceM)) : distanceIn(lap.distanceM).toFixed(2);
 }
 
 /** Bar length (0 to 100) and whether the lap beat the activity's average, for the lap table. */
@@ -445,6 +459,12 @@ export function kmMarkers(distanceM: number): number[] {
   return out;
 }
 
+/** `kmMarkers` in the shown unit: whole kilometres or whole miles, each with its label and the metres it sits at. */
+export function distanceMarkers(distanceM: number): { label: string; metres: number }[] {
+  const step = distanceStep();
+  return kmMarkers((distanceM / step) * 1000).map((k) => ({ label: String(k), metres: k * step }));
+}
+
 /** Metres covered at a position on the chart axis; null when a recording drawn over time holds no distance. */
 export function metresAt(streams: Pick<Streams, "axis" | "x" | "distance">, at: number): number | null {
   if (streams.axis === "distance") return at;
@@ -495,21 +515,22 @@ export function routeFromCubics(start: [number, number], cubics: readonly Cubic[
 
 // -------------------------------------------------------------- chart helpers
 
-/** Five evenly spaced labels for the shared chart axis: 0 km, 2, 4, 6, 8 km. */
+/** Five evenly spaced labels for the shared chart axis: 0 km, 2, 4, 6, 8 km (or mi, and m or yd for a swim). */
 export function axisTicks(sport: Sport, streams: Pick<Streams, "axis" | "x">): string[] {
   const max = streams.x[streams.x.length - 1] ?? 0;
   return [0, 1, 2, 3, 4].map((k) => {
     const v = (max * k) / 4;
+    const end = k === 0 || k === 4;
     if (streams.axis === "time") return clock(Math.round(v));
-    if (sport === "Swim") return `${thousands(v)}${k === 0 || k === 4 ? " m" : ""}`;
-    return `${Number((v / 1000).toFixed(1))}${k === 0 || k === 4 ? " km" : ""}`;
+    if (sport === "Swim") return `${thousands(swimIn(v))}${end ? ` ${swimUnit()}` : ""}`;
+    return `${Number(distanceIn(v).toFixed(1))}${end ? ` ${distanceUnit()}` : ""}`;
   });
 }
 
 /** Where along the axis a sample sits: 4.5 km, 750 m, 12:00. */
 export function formatPosition(sport: Sport, axis: Streams["axis"], x: number): string {
   if (axis === "time") return clock(Math.round(x));
-  return sport === "Swim" ? `${thousands(x)} m` : `${(x / 1000).toFixed(1)} km`;
+  return sport === "Swim" ? `${thousands(swimIn(x))} ${swimUnit()}` : `${distanceIn(x).toFixed(1)} ${distanceUnit()}`;
 }
 
 /** The sample nearest to a position on the axis. */

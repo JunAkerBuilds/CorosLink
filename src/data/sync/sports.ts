@@ -9,6 +9,9 @@ import { hoursMinutes } from "@/lib/calendar";
 import { language, msg, t, tx } from "@/lib/i18n";
 import { clock, dayKey, thousands } from "@/lib/format";
 import {
+  distanceIn, distanceUnit, heightIn, heightUnit, height, imperial, paceText, swimDistance, swimIn, swimPaceIn, swimPaceText, swimPaceUnitLabel, swimUnit, weight, weightTotal,
+} from "@/lib/units";
+import {
   addDays, atBest, cogganZones, criticalSwimPace, cyclingVo2Estimate, dayMonthOf, detectSports, durationName, efficiencyTrend, ftpTrend, hoursText, includesSport,
   intensityBalance, isBlip, isSpike, kmText, monthOf, powerCurve, powerZoneSeconds, rideClimbing, runDurability, runTypes, sharePercents, shortfall,
   spikeCheck, sportVolume, standing, swimBands, volumeChange, wattsPerBeat, weekdayLong, weekdayOf, weekStart,
@@ -200,17 +203,22 @@ function buildRun(c: Context): RunPage {
   const vo2 = positive(c.training?.vo2max);
   const durability = runDurability(runs.map((r) => c.recordings.get(r.id)).filter((r): r is Recording => r != null), now);
   const efficiency = efficiencyTrend(runs, c.thresholdHr, now);
-  const km = (m: number) => (m / 1000).toFixed(1);
+  const km = (m: number) => distanceIn(m).toFixed(1);
+  const mi = imperial();
 
   const weeksChart = (): BarChart => ({
     bars: weekBars(volume, (w) => w.meters, km, plannedM),
     line: usual != null ? { value: usual, text: t("Usual, {distance}", { distance: kmText(usual) }) } : null,
     planned: plannedM > 0,
     label: plannedM > 0 && usual != null
-      ? t("Kilometres run in each of the last {weeks} weeks, with {done} so far this week and {planned} more planned, against the usual week of {usual}.", { weeks: volume.weeks.length, done: km(week.meters), planned: km(plannedM), usual: kmText(usual) })
-      : plannedM > 0 ? t("Kilometres run in each of the last {weeks} weeks, with {done} so far this week and {planned} more planned.", { weeks: volume.weeks.length, done: km(week.meters), planned: km(plannedM) })
-      : usual != null ? t("Kilometres run in each of the last {weeks} weeks, with {done} so far this week, against the usual week of {usual}.", { weeks: volume.weeks.length, done: km(week.meters), usual: kmText(usual) })
-      : t("Kilometres run in each of the last {weeks} weeks, with {done} so far this week.", { weeks: volume.weeks.length, done: km(week.meters) }),
+      ? (mi ? t("Miles run in each of the last {weeks} weeks, with {done} so far this week and {planned} more planned, against the usual week of {usual}.", { weeks: volume.weeks.length, done: km(week.meters), planned: km(plannedM), usual: kmText(usual) })
+        : t("Kilometres run in each of the last {weeks} weeks, with {done} so far this week and {planned} more planned, against the usual week of {usual}.", { weeks: volume.weeks.length, done: km(week.meters), planned: km(plannedM), usual: kmText(usual) }))
+      : plannedM > 0 ? (mi ? t("Miles run in each of the last {weeks} weeks, with {done} so far this week and {planned} more planned.", { weeks: volume.weeks.length, done: km(week.meters), planned: km(plannedM) })
+        : t("Kilometres run in each of the last {weeks} weeks, with {done} so far this week and {planned} more planned.", { weeks: volume.weeks.length, done: km(week.meters), planned: km(plannedM) }))
+      : usual != null ? (mi ? t("Miles run in each of the last {weeks} weeks, with {done} so far this week, against the usual week of {usual}.", { weeks: volume.weeks.length, done: km(week.meters), usual: kmText(usual) })
+        : t("Kilometres run in each of the last {weeks} weeks, with {done} so far this week, against the usual week of {usual}.", { weeks: volume.weeks.length, done: km(week.meters), usual: kmText(usual) }))
+      : mi ? t("Miles run in each of the last {weeks} weeks, with {done} so far this week.", { weeks: volume.weeks.length, done: km(week.meters) })
+        : t("Kilometres run in each of the last {weeks} weeks, with {done} so far this week.", { weeks: volume.weeks.length, done: km(week.meters) }),
   });
 
   const days: BarChart = {
@@ -221,7 +229,7 @@ function buildRun(c: Context): RunPage {
       return bar;
     }),
     line: null, planned: plannedM > 0,
-    label: t("This week by day: {days}.", { days: volume.days.map((d) => `${weekdayOf(d.date)} ${km(d.meters)} km`).join(", ") }),
+    label: t("This week by day: {days}.", { days: volume.days.map((d) => `${weekdayOf(d.date)} ${km(d.meters)} ${distanceUnit()}`).join(", ") }),
   };
 
   const latest = spikes?.runs[spikes.runs.length - 1] ?? null;
@@ -270,7 +278,7 @@ function buildRun(c: Context): RunPage {
   const runBests = bestsOf(c.training).filter((b) => b.family === "run").sort((a, b) => a.meters - b.meters);
   const marks: Figure[] = [];
   const thresholdPace = positive(c.training?.thresholdPaceSecPerKm);
-  if (thresholdPace != null) marks.push({ value: `${clock(thresholdPace, 2)} /km`, label: t("Threshold pace") });
+  if (thresholdPace != null) marks.push({ value: paceText(thresholdPace, 2), label: t("Threshold pace") });
   if (c.thresholdHr != null) marks.push({ value: `${Math.round(c.thresholdHr)} bpm`, label: t("Threshold heart rate") });
   const engine: RunPage["engine"] = !predictions.length && vo2 == null && !runBests.length ? missing() : {
     chip: null,
@@ -326,12 +334,12 @@ function buildRun(c: Context): RunPage {
   /* Tiles */
   const tiles: Tile[] = [
     {
-      label: t("Volume"), chip: muchChip, value: km(week.meters), unit: "km", spark: volume.weeks.map((w) => w.meters), hue: "run", href: "#much",
-      text: plannedM > 0 ? t("{planned} km planned takes the week to {total}", { planned: km(plannedM), total: kmText(week.meters + plannedM) }) : usual != null ? t("Your usual week is {usual}", { usual: kmText(usual) }) : week.sessions === 1 ? t("1 run") : t("{n} runs", { n: week.sessions }),
+      label: t("Volume"), chip: muchChip, value: km(week.meters), unit: distanceUnit(), spark: volume.weeks.map((w) => w.meters), hue: "run", href: "#much",
+      text: plannedM > 0 ? t("{planned} planned takes the week to {total}", { planned: kmText(plannedM), total: kmText(week.meters + plannedM) }) : usual != null ? t("Your usual week is {usual}", { usual: kmText(usual) }) : week.sessions === 1 ? t("1 run") : t("{n} runs", { n: week.sessions }),
     },
     {
       label: t("Long runs"), chip: latest ? (isSpike(latest) ? chip("attention", t("Big jump")) : chip("good", t("Safe to build"))) : null,
-      value: spikes?.nextLimit != null ? km(spikes.nextLimit) : "–", unit: "km", spark: volume.weeks.map((w) => w.longestMeters), hue: "ride", href: "#much",
+      value: spikes?.nextLimit != null ? km(spikes.nextLimit) : "–", unit: distanceUnit(), spark: volume.weeks.map((w) => w.longestMeters), hue: "ride", href: "#much",
       text: spikes?.nextLimit != null ? t("Your next run can go up to {distance}", { distance: kmText(spikes.nextLimit) }) : t("No runs in the last 8 weeks"),
     },
     {
@@ -364,7 +372,7 @@ function buildRun(c: Context): RunPage {
       ring: usual != null && usual > 0 ? { percent: Math.round((week.meters / usual) * 100), label: t("{done} of {usual} run this week", { done: km(week.meters), usual: kmText(usual) }) } : null,
       chip: t("This week · {total} so far", { total }),
       headline: tenK ? t("{lead}, on course for a {time} 10K.", { lead, time: clock(tenK.seconds) }) : t("{lead}.", { lead }),
-      text: heroText, figures, chart: weeksChart(), chartTitle: t("Kilometres a week"),
+      text: heroText, figures, chart: weeksChart(), chartTitle: mi ? t("Miles a week") : t("Kilometres a week"),
     },
     tiles,
     much: { chip: muchChip, headline: muchHeadline, sub: usual != null ? t("Your usual week is {usual}.", { usual: kmText(usual) }) : null, weeks: weeksChart(), days, long },
@@ -448,16 +456,18 @@ function buildRide(c: Context): RidePage {
   const climbCard: RidePage["climb"] = !climbing || !climbing.weeks.some((w) => w.meters > 0) ? missing(t("Needs an outdoor ride with its climbing.")) : {
     chip: climbing.isNotable ? chip("good", t("Big week")) : null,
     headline: !(climbNow > 0) ? t("No climbing yet this week")
-      : climbing.isNotable && climbing.moreBefore ? t("{meters} m this week, your most since {date}", { meters: thousands(climbNow), date: dayMonthOf(climbing.moreBefore) }) : t("{meters} m climbed this week", { meters: thousands(climbNow) }),
-    sub: climbLast > 0 ? t("Last week: {meters} m.", { meters: thousands(climbLast) }) : null, sampleBiggest: sampleBiggestClimb(),
+      : climbing.isNotable && climbing.moreBefore ? t("{height} this week, your most since {date}", { height: height(climbNow), date: dayMonthOf(climbing.moreBefore) }) : t("{height} climbed this week", { height: height(climbNow) }),
+    sub: climbLast > 0 ? t("Last week: {height}.", { height: height(climbLast) }) : null, sampleBiggest: sampleBiggestClimb(),
     weeks: {
       bars: climbing.weeks.map((w, k) => {
-        const bar: Bar = { value: w.meters, top: w.meters > 0 ? thousands(w.meters) : "", label: String(w.start.getDate()), now: k === climbing.weeks.length - 1 };
+        const bar: Bar = { value: w.meters, top: w.meters > 0 ? thousands(heightIn(w.meters)) : "", label: String(w.start.getDate()), now: k === climbing.weeks.length - 1 };
         if (k === 0 || w.start.getMonth() !== climbing.weeks[k - 1].start.getMonth()) bar.sub = monthOf(w.start);
         return bar;
       }),
       line: null, planned: false,
-      label: t("Metres climbed in each of the last {weeks} weeks: {values}.", { weeks: climbing.weeks.length, values: climbing.weeks.map((w) => thousands(w.meters)).join(", ") }),
+      label: imperial()
+        ? t("Feet climbed in each of the last {weeks} weeks: {values}.", { weeks: climbing.weeks.length, values: climbing.weeks.map((w) => thousands(heightIn(w.meters))).join(", ") })
+        : t("Metres climbed in each of the last {weeks} weeks: {values}.", { weeks: climbing.weeks.length, values: climbing.weeks.map((w) => thousands(w.meters)).join(", ") }),
     },
   };
 
@@ -492,7 +502,7 @@ function buildRide(c: Context): RidePage {
     figures: [
       { value: `${Math.round(ftp)} W`, label: setFtp != null ? "FTP" : t("Estimated FTP") },
       ...(perKg(ftp) ? [{ value: perKg(ftp) as string, label: "W/kg" }] : []),
-      ...(c.weightKg != null ? [{ value: `${c.weightKg.toFixed(1)} kg`, label: tx("body", "Weight") }] : []),
+      ...(c.weightKg != null ? [{ value: weight(c.weightKg), label: tx("body", "Weight") }] : []),
     ],
   };
 
@@ -501,7 +511,7 @@ function buildRide(c: Context): RidePage {
     ? missing(five == null ? t("Needs a ride of 5 minutes or more with a power meter in the last 90 days.") : t("Needs your weight."))
     : {
       chip: null, headline: t("C-LINK's estimate: about {value}", { value: Math.round(vo2Estimate) }),
-      sub: t("From your best 5 minutes, {watts} W at {kg} kg. Not COROS's number.", { watts: Math.round(five), kg: c.weightKg.toFixed(1) }),
+      sub: t("From your best 5 minutes, {watts} W at {weight}. Not COROS's number.", { watts: Math.round(five), weight: weight(c.weightKg) }),
       figures: [{ value: String(Math.round(vo2Estimate)), label: t("On the bike") }, ...(runVo2 != null ? [{ value: String(Math.round(runVo2)), label: t("On your runs") }] : [])],
     };
 
@@ -530,7 +540,7 @@ function buildRide(c: Context): RidePage {
   const longest = rides.reduce<SportAct | null>((a, r) => (!a || r.seconds > a.seconds ? r : a), null);
   if (longest && longest.seconds > 0) records.push({ name: t("Longest ride"), value: hoursText(longest.seconds, true), date: dayMonthOf(longest.at) });
   const steepest = rides.reduce<SportAct | null>((a, r) => ((r.climbM ?? 0) > (a?.climbM ?? 0) ? r : a), null);
-  if (steepest && (steepest.climbM ?? 0) > 0) records.push({ name: t("Most climbing"), value: `${thousands(steepest.climbM as number)} m`, date: dayMonthOf(steepest.at) });
+  if (steepest && (steepest.climbM ?? 0) > 0) records.push({ name: t("Most climbing"), value: height(steepest.climbM as number), date: dayMonthOf(steepest.at) });
 
   const nextRide = planned[0];
   const tiles: Tile[] = [
@@ -547,8 +557,8 @@ function buildRide(c: Context): RidePage {
       text: ftp == null ? t("Needs a ride with a power meter") : gain != null && gain >= 3 ? t("Best 20 minutes point to {watts} W more than {weeks} weeks ago", { watts: Math.round(gain), weeks: trend.length * 4 - 4 }) : setFtp != null ? t("As set on your watch") : t("From your best 20 minutes"),
     },
     {
-      label: t("Climbing"), chip: climbing?.isNotable ? chip("good", t("Big week")) : null, value: thousands(climbNow), unit: "m", spark: climbing ? climbing.weeks.map((w) => w.meters) : null, hue: "violet", href: "#climb",
-      text: climbing?.isNotable && climbing.moreBefore ? t("Your most since {date}", { date: dayMonthOf(climbing.moreBefore) }) : climbLast > 0 ? t("Last week: {meters} m", { meters: thousands(climbLast) }) : t("Metres climbed this week"),
+      label: t("Climbing"), chip: climbing?.isNotable ? chip("good", t("Big week")) : null, value: thousands(heightIn(climbNow)), unit: heightUnit(), spark: climbing ? climbing.weeks.map((w) => w.meters) : null, hue: "violet", href: "#climb",
+      text: climbing?.isNotable && climbing.moreBefore ? t("Your most since {date}", { date: dayMonthOf(climbing.moreBefore) }) : climbLast > 0 ? t("Last week: {height}", { height: height(climbLast) }) : imperial() ? t("Feet climbed this week") : t("Metres climbed this week"),
     },
     {
       label: t("Easy vs hard"), chip: balance ? balanceChip(balance) : null, value: balance ? String(sharePercents(balance)[0]) : "–", unit: balance ? t("% easy") : "", spark: null, hue: "run", href: "#balance",
@@ -615,12 +625,12 @@ function buildSwim(c: Context): SwimPage {
   const cssCard: SwimPage["css"] = css == null || !b200 || !b400 ? sampleCss() : (() => {
     const bands = swimBands(css);
     return {
-      chip: null, headline: t("Critical swim speed {pace} /100 m", { pace: clock(css) }),
+      chip: null, headline: t("Critical swim speed {pace}", { pace: swimPaceText(css) }),
       sub: t("Estimated from your best 200 m ({b200}) and 400 m ({b400}).", { b200: clock(b200.seconds, 2), b400: clock(b400.seconds, 2) }),
       bands: [
-        { name: t("Easy"), text: t("slower than {pace}", { pace: clock(bands.easyFrom) }), hue: "run" as const },
-        { name: t("Threshold"), text: t("{from} to {to}", { from: clock(bands.thresholdFrom), to: clock(bands.thresholdTo) }), hue: "gold" as const },
-        { name: t("Fast"), text: t("quicker than {pace}", { pace: clock(bands.fastTo) }), hue: "coral" as const },
+        { name: t("Easy"), text: t("slower than {pace}", { pace: clock(swimPaceIn(bands.easyFrom)) }), hue: "run" as const },
+        { name: t("Threshold"), text: t("{from} to {to}", { from: clock(swimPaceIn(bands.thresholdFrom)), to: clock(swimPaceIn(bands.thresholdTo)) }), hue: "gold" as const },
+        { name: t("Fast"), text: t("quicker than {pace}", { pace: clock(swimPaceIn(bands.fastTo)) }), hue: "coral" as const },
       ],
       sampleTrend: sampleCssTrend(),
     };
@@ -633,9 +643,9 @@ function buildSwim(c: Context): SwimPage {
     rows: bests.map((b) => ({ name: b.name, value: clock(b.seconds, 2), date: b.at ? dayMonthOf(b.at) : "", fresh: isFresh(b, now) })),
   };
 
-  /* Pace per 100 m of each swim of the last 12 weeks, rests included. */
+  /* Pace per 100 m (or yd, as shown) of each swim of the last 12 weeks, rests included. */
   const paced = swims.filter((x) => (x.meters ?? 0) >= 200 && x.seconds > 0 && x.at.getTime() >= now.getTime() - 84 * 86_400_000)
-    .sort((a, b) => a.at.getTime() - b.at.getTime()).map((x) => ({ at: x.at, value: (x.seconds / (x.meters as number)) * 100 }));
+    .sort((a, b) => a.at.getTime() - b.at.getTime()).map((x) => ({ at: x.at, value: swimPaceIn((x.seconds / (x.meters as number)) * 100) }));
   const cutoff = now.getTime() - 28 * 86_400_000;
   const paceNow = paced.filter((x) => x.at.getTime() >= cutoff).map((x) => x.value), paceThen = paced.filter((x) => x.at.getTime() < cutoff).map((x) => x.value);
   const paceDiff = paceNow.length >= 2 && paceThen.length >= 2 ? sum(paceThen) / paceThen.length - sum(paceNow) / paceNow.length : null;
@@ -645,34 +655,38 @@ function buildSwim(c: Context): SwimPage {
     chip: paceChip,
     headline: paceDiff != null && Math.abs(paceDiff) >= 1
       ? (paceDiff > 0 ? t("{seconds} s per 100 faster than before", { seconds: Math.abs(paceDiff).toFixed(1) }) : t("{seconds} s per 100 slower than before", { seconds: Math.abs(paceDiff).toFixed(1) }))
-      : t("{pace} /100 m on your latest swim", { pace: clock(latestPace.value, 2) }),
+      : t("{pace} on your latest swim", { pace: `${clock(latestPace.value, 2)} ${swimPaceUnitLabel()}` }),
     sub: paceDiff != null ? t("The last 4 weeks against the 8 before, rests included.") : t("Whole swims, rests included."),
-    chart: paced.length >= 2 ? lineChart(paced, (v) => clock(v), t("Average pace per 100 m on each swim, from {from} to {to}. Faster is higher.", { from: clock(paced[0].value), to: clock(latestPace.value) }), true) : null,
+    chart: paced.length >= 2 ? lineChart(paced, (v) => clock(v), imperial()
+      ? t("Average pace per 100 yd on each swim, from {from} to {to}. Faster is higher.", { from: clock(paced[0].value), to: clock(latestPace.value) })
+      : t("Average pace per 100 m on each swim, from {from} to {to}. Faster is higher.", { from: clock(paced[0].value), to: clock(latestPace.value) }), true) : null,
   };
 
-  const figures: Figure[] = [{ value: `${thousands(meters)} m`, label: t("Last 4 weeks") }, { value: String(count), label: t("Swims") }];
-  if (css != null) figures.push({ value: clock(css), label: "CSS /100 m" });
+  const figures: Figure[] = [{ value: swimDistance(meters), label: t("Last 4 weeks") }, { value: String(count), label: t("Swims") }];
+  if (css != null) figures.push({ value: clock(swimPaceIn(css)), label: `CSS ${swimPaceUnitLabel()}` });
   const longest = swims.filter((s) => s.at.getTime() >= now.getTime() - 28 * 86_400_000).reduce((a, s) => Math.max(a, s.meters ?? 0), 0);
-  if (longest > 0) figures.push({ value: `${thousands(longest)} m`, label: t("Longest swim") });
+  if (longest > 0) figures.push({ value: swimDistance(longest), label: t("Longest swim") });
 
   const tiles: Tile[] = [
-    { label: t("Speed"), chip: null, value: css != null ? clock(css) : "–", unit: css != null ? "/100 m" : "", spark: null, hue: "swim", href: "#css", text: css != null ? t("From your best 200 m and 400 m") : t("Needs a hard 200 m and 400 m") },
-    { label: t("Pace"), chip: paceChip, value: latestPace ? clock(latestPace.value) : "–", unit: latestPace ? "/100 m" : "", spark: paced.length > 1 ? paced.map((x) => -x.value) : null, hue: "ride", href: "#pace", text: latestPace ? t("On your latest swim, rests included") : t("Needs a swim of 200 m or more") },
+    { label: t("Speed"), chip: null, value: css != null ? clock(swimPaceIn(css)) : "–", unit: css != null ? swimPaceUnitLabel() : "", spark: null, hue: "swim", href: "#css", text: css != null ? t("From your best 200 m and 400 m") : t("Needs a hard 200 m and 400 m") },
+    { label: t("Pace"), chip: paceChip, value: latestPace ? clock(latestPace.value) : "–", unit: latestPace ? swimPaceUnitLabel() : "", spark: paced.length > 1 ? paced.map((x) => -x.value) : null, hue: "ride", href: "#pace", text: latestPace ? t("On your latest swim, rests included") : t("Needs a swim of 200 m or more") },
     {
       label: t("Records"), chip: fresh.length ? chip("attention", t("New record")) : null, value: fresh[0] ? clock(fresh[0].seconds, 2) : bests.length ? String(bests.length) : "–", unit: fresh[0] ? fresh[0].name : bests.length ? t("records") : "",
       spark: null, hue: "gold", href: "#records", text: fresh[0]?.at ? t("On {day} {date}", { day: weekdayOf(fresh[0].at), date: dayMonthOf(fresh[0].at) }) : bests.length ? t("No new record in the last 2 weeks") : t(NOTHING_YET),
     },
-    { label: t("Volume"), chip: volChip, value: thousands(meters), unit: "m", spark: volume.weeks.map((w) => w.meters), hue: "swim", href: "#now", text: swimsIn4(count) },
+    { label: t("Volume"), chip: volChip, value: thousands(swimIn(meters)), unit: swimUnit(), spark: volume.weeks.map((w) => w.meters), hue: "swim", href: "#now", text: swimsIn4(count) },
   ];
 
   return {
     hero: {
-      chip: t("Last 4 weeks · {meters} m", { meters: thousands(meters) }),
+      chip: t("Last 4 weeks · {distance}", { distance: swimDistance(meters) }),
       headline: change != null && change >= 0.1 ? t("More time in the water.") : change != null && change <= -0.1 ? t("A lighter month in the water.") : t("Steady in the water."),
       text: `${t("{swims}.", { swims: swimsIn4(count) })}${change != null && pct >= 1 ? ` ${change >= 0 ? t("{percent}% more than the 4 weeks before.", { percent: pct }) : t("{percent}% less than the 4 weeks before.", { percent: pct })}` : ""}`,
       figures,
-      lanes: volume.weeks.map((w, k) => ({ label: dayMonthOf(w.start), value: thousands(w.meters), share: w.meters / top, now: k === volume.weeks.length - 1 })),
-      lanesLabel: t("Metres swum in each of the last {weeks} weeks: {values}.", { weeks: volume.weeks.length, values: volume.weeks.map((w) => thousands(w.meters)).join(", ") }),
+      lanes: volume.weeks.map((w, k) => ({ label: dayMonthOf(w.start), value: thousands(swimIn(w.meters)), share: w.meters / top, now: k === volume.weeks.length - 1 })),
+      lanesLabel: imperial()
+        ? t("Yards swum in each of the last {weeks} weeks: {values}.", { weeks: volume.weeks.length, values: volume.weeks.map((w) => thousands(swimIn(w.meters))).join(", ") })
+        : t("Metres swum in each of the last {weeks} weeks: {values}.", { weeks: volume.weeks.length, values: volume.weeks.map((w) => thousands(w.meters)).join(", ") }),
     },
     tiles, css: cssCard, pace: paceCard, swolf: sampleSwolf(), strokes: sampleStrokes(), records,
   };
@@ -697,7 +711,7 @@ function buildHub(c: Context, items: SportsItems, run: RunPage | null, ride: Rid
     let value: string, of: string | null, percent: number | null;
     if (f === "run") { value = kmText(w.meters); of = v.usualMeters != null ? kmText(v.usualMeters) : null; percent = v.usualMeters ? (w.meters / v.usualMeters) * 100 : null; }
     else if (f === "ride") { value = hoursText(w.seconds); of = v.usualSeconds != null ? hoursText(v.usualSeconds) : null; percent = v.usualSeconds ? (w.seconds / v.usualSeconds) * 100 : null; }
-    else if (f === "swim") { value = `${thousands(w.meters)} m`; of = v.usualMeters != null ? `${thousands(v.usualMeters)} m` : null; percent = v.usualMeters ? (w.meters / v.usualMeters) * 100 : null; }
+    else if (f === "swim") { value = swimDistance(w.meters); of = v.usualMeters != null ? swimDistance(v.usualMeters) : null; percent = v.usualMeters ? (w.meters / v.usualMeters) * 100 : null; }
     else {
       const usual = Math.round(sum(v.weeks.slice(-5, -1).map((x) => x.sessions)) / 4);
       value = w.sessions === 1 ? t("1 workout") : t("{n} workouts", { n: w.sessions }); of = usual > 0 ? String(usual) : null; percent = usual > 0 ? (w.sessions / usual) * 100 : null;
@@ -765,7 +779,7 @@ function buildHub(c: Context, items: SportsItems, run: RunPage | null, ride: Rid
     return {
       family: f, name: t(FAMILY_NAME[f]), href: FAMILY_HREF[f], spark: volumeByWeek.some((x) => x > 0) ? volumeByWeek : v.weeks.slice(-8).map((x) => x.seconds),
       headline: muscles.length ? t("{ready} of {total} muscles ready", { ready, total: muscles.length }) : w.sessions === 1 ? t("1 workout this week") : t("{n} workouts this week", { n: w.sessions }),
-      figures: [{ value: String(Math.max(w.sessions, gymWeek.length)), label: t("Workouts") }, ...(gymWeek.length ? [{ value: String(sum(gymWeek.map(doneSetCount))), label: t("Sets") }, { value: `${thousands(sum(gymWeek.map(volumeKg)))} kg`, label: t("Volume") }] : [])],
+      figures: [{ value: String(Math.max(w.sessions, gymWeek.length)), label: t("Workouts") }, ...(gymWeek.length ? [{ value: String(sum(gymWeek.map(doneSetCount))), label: t("Sets") }, { value: weightTotal(sum(gymWeek.map(volumeKg))), label: t("Volume") }] : [])],
     };
   });
 

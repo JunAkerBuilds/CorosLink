@@ -5,6 +5,7 @@ import type {
   Tile, TrailRoute, WatchRoute,
 } from "../maps/types";
 import { language, locale, t } from "@/lib/i18n";
+import { distanceIn } from "@/lib/units";
 
 const BASE = "/api/desktop/maps";
 
@@ -90,7 +91,8 @@ export function bytes(n: number | undefined): string {
   if (n >= 1e3) return `${Math.round(n / 1e3)} KB`;
   return `${n} B`;
 }
-export const km = (m: number) => (m / 1000).toFixed(2);
+/** Metres as kilometres or miles to the hundredth, without the unit (`distanceUnit()` names it). */
+export const km = (m: number) => distanceIn(m).toFixed(2);
 export const shortDate = (iso: string) => {
   const d = new Date(iso);
   const today = new Date();

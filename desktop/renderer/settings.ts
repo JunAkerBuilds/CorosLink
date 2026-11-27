@@ -6,7 +6,8 @@ export interface Blocked { at: number; method: string; target: string }
 export interface About { version: string; platform: string; electron: string; chromium: string; node: string }
 /** What phones have synced to this computer (null without a local store). */
 export interface LocalData { activities: number; healthDays: number; lastPhoneSync: string | null; bytes: number }
-export interface SettingsState { dataMode: DataMode; blocked: Blocked[]; about: About; local: LocalData | null }
+/** `usage`: whether the daily anonymous check-in for usage counts is on (main/usage.ts). */
+export interface SettingsState { dataMode: DataMode; blocked: Blocked[]; about: About; local: LocalData | null; privacy: "pending" | "seen"; usage: boolean; crashReports: boolean }
 export interface Place { id: string; label: string; path: string; bytes: number | null }
 
 export class SettingsProblem extends Error {
@@ -38,10 +39,14 @@ export const readSettings = () => call<SettingsState>("").then(noted);
 /** Tells the main process which language the page speaks, for the menu and the lines it sends back. */
 export const tellLanguage = (language: string) => call<{ language: string }>("/language", { language }).catch(() => null);
 export const setDataMode = (next: DataMode) => call<SettingsState>("", { dataMode: next }).then(noted);
+export const setUsage = (on: boolean) => call<SettingsState>("", { usage: on }).then(noted);
 export const clearBlocked = () => call<SettingsState>("/blocked/clear", {}).then(noted);
 export const readStorage = () => call<{ folder: string; places: Place[] }>("/storage");
 export const openPlace = (id: string) => call<{ opened: boolean }>("/storage/open", { id });
 export const readLogs = (hours: number) => call<{ count: number; report: string }>(`/logs?hours=${hours}`);
+export const setCrashReports = (on: boolean) => call<SettingsState>("", { crashReports: on }).then(noted);
+/** Sends the error log of the last `hours` to the developer, with a note and an email for a reply. */
+export const sendLogs = (input: { note: string; contact: string; hours: number }) => call<{ reference: string }>("/logs/send", input);
 export const clearLogs = () => call<{ count: number }>("/logs/clear", {});
 export const exportBackup = (passphrase: string) => call<{ cancelled?: true; saved?: string; items?: number; sealed?: boolean }>("/backup/export", { passphrase });
 export const restoreBackup = (passphrase: string) => call<{ cancelled?: true; restored?: number }>("/backup/restore", { passphrase });

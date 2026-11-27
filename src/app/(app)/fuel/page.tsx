@@ -13,7 +13,7 @@ import {
 import { NO_MEASUREMENTS, ownMeasurements } from "@/data/local/body";
 import { fuelDays, NO_DAYS, useToday } from "@/data/local/fuel";
 import { useStore } from "@/data/local/store";
-import { mergeMeasurements, oneOrTwo } from "@/lib/body";
+import { mergeMeasurements, scaleWeight } from "@/lib/body";
 import { parseDay, signed, thousands } from "@/lib/format";
 import {
   addFood, burnedKcal, changeAmount, copyFoods, dayTotals, daysEnding, dial, DIAL_PETALS, emptyDay, FAN_PETALS, foodCount, foodLabel, foodNutrients,
@@ -189,7 +189,7 @@ function Fuel({ data, synced }: { data: FuelData; synced: boolean }) {
         <section aria-label={t("Body and goal")} style={{ flex: "1 1 320px", minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
           <Link className="card fuel-side" href="/body" style={{ borderRadius: 18 }}>
             <span style={{ fontWeight: 600 }}>{t("Body and goal")}</span>
-            <span className="muted">{[weight == null ? null : `${oneOrTwo(weight)} kg`, targets ? `${thousands(targets.kcal)} kcal` : null].filter(Boolean).join(" · ")}</span>
+            <span className="muted">{[weight == null ? null : scaleWeight(weight), targets ? `${thousands(targets.kcal)} kcal` : null].filter(Boolean).join(" · ")}</span>
           </Link>
           {data.tastes == null ? null : (
             <div className="card fuel-side" style={{ borderRadius: 18 }}>

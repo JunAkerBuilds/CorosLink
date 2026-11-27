@@ -54,6 +54,53 @@ export const KIND: Partial<Record<PanelKind, string>> = {
   sprite: msg("Image"), shape: msg("Shape"), text: msg("Text"), background: msg("Face"), chart: msg("Chart"), other: msg("Layer"),
 };
 
+/** How a kind of layer works on the watch, for the header's "i". A few short lines each. */
+const ABOUT: Record<PanelKind | "spot", string[]> = {
+  time: [msg("C-LINK turns your font into pictures of 0–9. The watch puts the current time together from them."), msg("Font, color and size apply to every digit.")],
+  metric: [msg("One reading the watch fills in, such as steps or heart rate."), msg("Its digits are pictures drawn in your font, like the time. The wearer can't swap what it shows.")],
+  native: [msg("The watch draws this data itself: value, icon, unit and the rest."), msg("Turn each part on or off and style it here; the watch keeps it up to date.")],
+  date: [msg("C-LINK draws the weekdays, months or digits as pictures. The watch shows the right one each day."), msg("Words are drawn again for each watch language while Translate is on.")],
+  selectable: [msg("A slot the wearer fills: they pick which data it shows from the watch."), msg("Choose the types on offer here. The preview shows one at a time; font and color apply to all.")],
+  ampm: [msg("Shows AM or PM while the watch is set to 12-hour time.")],
+  separator: [msg("A fixed sign between numbers, such as the colon in the time. It doesn't change on the watch.")],
+  weather: [msg("Shows one picture for the current weather, from the day set or the night set."), msg("The watch picks the picture. PNGs named 00, 01… replace those pictures; the rest stay built in.")],
+  batteryIcon: [msg("Shows one of 12 pictures for the charge: charging, empty, then every 10% up to full."), msg("The watch switches picture as the charge changes. Name them 00.png (charging), 01.png (empty) to 11.png (full).")],
+  image: [msg("A picture from the template. It stays put and doesn't change on the watch."), msg("Replace it with your own PNG or one from the official library.")],
+  animation: [msg("PNG frames the watch plays in a loop, each for its own delay."), msg("Every frame needs the same size, up to {max} frames.")],
+  sprite: [msg("Your own picture on the face. It doesn't change on the watch.")],
+  shape: [msg("A shape drawn into the face's picture when it's built. It doesn't change on the watch.")],
+  text: [msg("Text drawn into the face's picture when it's built. It doesn't change on the watch; for numbers that do, add data.")],
+  background: [msg("The picture behind every other layer.")],
+  chart: [msg("A graph the watch draws from recent data on the face's chart pages."), msg("Pick the pages it shows on and how the graph looks.")],
+  other: [msg("A part of the template. Move it, or hide it from the face.")],
+  spot: [msg("A status icon, such as Bluetooth or Do Not Disturb. The watch shows the picture for the state it's in."), msg("Pick a state to change its picture. Every state shares one place and size.")],
+};
+
+/** The header's "i": what this kind of layer is and how the watch uses it. Closes on a click elsewhere or Escape; keyed by layer, so it closes when another is picked. */
+function AboutLayer({ kind, spot }: { kind: PanelKind; spot: boolean }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); };
+  }, [open]);
+  const lines = ABOUT[spot ? "spot" : kind];
+  return (
+    <div className="st-menu-wrap" ref={wrap}>
+      <button type="button" className="st-icon-btn" aria-label={t("How this layer works")} title={t("How this layer works")} aria-expanded={open} onClick={() => setOpen((o) => !o)}><Icon name="info" /></button>
+      {open ? (
+        <div className="st-menu st-menu-down st-insp-about" role="note">
+          {lines.map((line) => <p key={line}>{t(line, { max: MAX_ANIMATION_FRAMES })}</p>)}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 type Edit = (fn: (d: Design) => Design) => void;
 
 export interface LayerInspectorProps {
@@ -113,6 +160,7 @@ export function LayerInspector(p: LayerInspectorProps) {
       <div className="st-insp-head">
         <span className="st-insp-icon"><Icon name={p.icon} size={19} /></span>
         <span><b>{t(layer.label)}</b><small>{layer.spot ? t("Status") : KIND[kind] ? t(KIND[kind]!) : ""}{p.aodNote ? ` · ${t("always-on")}` : ""}</small></span>
+        <AboutLayer key={layer.id} kind={kind} spot={Boolean(layer.spot)} />
         <div className="st-menu-wrap">
           <button type="button" className="st-icon-btn" aria-label={t("More actions")} title={t("More actions")} aria-expanded={more} onClick={() => setMore((m) => !m)}><Icon name="more" /></button>
           {more ? (

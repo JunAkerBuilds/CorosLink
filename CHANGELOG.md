@@ -3,6 +3,39 @@
 C-LINK desktop betas (`vX.Y.Z-clink.N`). They go to CorosLink installs on a Mac that opted in to C-LINK, to earlier
 C-LINK betas, and to anyone who downloads them from the release page. Each section here is also that release's notes on GitHub.
 
+## [0.2.0-clink.4] - 2026-11-27
+
+### Your privacy, your call
+- A new step in the first-run intro asks about usage counts and crash reports before anything is sent. If you
+  already use C-LINK, it shows once on its own after this update.
+- Usage counts: one anonymous check-in a day so the developer gets an idea of how many people use C-LINK: a random
+  ID, the app version and your OS. Nothing more. It starts on; switch it off right there or in Settings → Privacy.
+- Crash reports: when C-LINK crashes, the last hour of its error log, with home folders and keys taken out. Off
+  until you turn it on.
+- Nothing is sent in Local mode.
+
+### Report a problem
+- Help → Report a Problem… opens Settings → Error logs ready to type: send the log and a message straight to the
+  developer, with an email if you'd like a reply. You get a reference back.
+
+### Miles, feet and pounds
+- Settings has a units choice: metric or imperial. In imperial, every screen shows and takes miles, feet, min/mi,
+  mph, yards and pounds: activities and splits, the dashboard, calendar, workout builder, plans, body, strength,
+  Coach's cards and Route Studio. Your data stays as it was.
+- Swim workouts in imperial start on a 25 yd pool, and the watch shows it in yards.
+- A pace typed with "/km" or "/mi" is read in that unit.
+
+### Watch Studio
+- Download offers the project ZIP to upload to Community.
+- The Download menu opens above the panels instead of under them.
+- Text and shapes sit just above the background in Layers, as the watch draws them, and a click on the canvas picks
+  the layer in front.
+- An "i" on each layer says how that kind of layer works.
+- Thin pictures no longer show as a checkered strip.
+
+### Menus
+- Popovers are as solid as the drop-down menus, so busy pages don't show through.
+
 ## [0.2.0-clink.3] - 2026-11-26
 
 ### Languages

@@ -15,6 +15,7 @@ import { addToDraft, findPlan, listPlansText, planEdit, readPlanText, type Draft
 import { findActivity, profileText, readActivities, readActivity, readCalendar, readFuel, readHealth, readStrength, readTraining, type PlanEntry } from "./read";
 import { liftHistory } from "./strengthCard";
 import type { AthleteZones } from "./zones";
+import { inUnits, type Units } from "@/lib/units";
 import { describeBuilderWorkout, describeHubWorkout, pacingFor, parseWorkout, searchExercises, workoutCard, type CoachWorkout } from "./workout";
 
 export interface ToolDef { name: string; description: string; input_schema: { type: "object"; properties: Record<string, unknown>; required?: string[] } }
@@ -118,6 +119,8 @@ export interface ToolContext {
   plans?: readonly PlanBrief[];
   /** Plans being built with build_plan in this answer, by name, with their card id. */
   drafts?: Map<string, { id: string; draft: PlanDraft }>;
+  /** The units the athlete reads, from their request: cards are drawn in them. */
+  units?: Units;
 }
 
 /** What Coach may read from COROS Training Hub while answering. A failed read comes back as words. */
@@ -186,7 +189,7 @@ const detailOf = (made: CoachWorkout, card: { summary: string }): string => (mad
 async function makeForPlan(raw: unknown, day: string, ctx: ToolContext): Promise<(MadeWorkout & { detail: string }) | { error: string }> {
   const made = parseWorkout(raw, day, `w-${ctx.newId().toLowerCase()}`, await catalogFor(raw, ctx));
   if ("error" in made) return { error: `Workout: ${made.error}` };
-  const card = workoutCard(made, made.workout ? pacingFor(ctx.items, ctx.clock, made.workout.sport) : null, { id: "x", date: day });
+  const card = workoutCard(made, made.workout ? pacingFor(ctx.items, ctx.clock, made.workout.sport) : null, { id: "x", date: day, units: ctx.units });
   return { name: made.name, sport: made.sport, workout: made.workout, hub: made.hub, detail: detailOf(made, card), ...(card.totals ? { load: card.totals.load } : {}) };
 }
 
@@ -273,9 +276,9 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
       return { text: `${hits.length ? `COROS exercises: ${hits.map((e) => quoted(e.name, 60)).join("; ")}` : `No COROS exercise matches “${query}”. Search the movement's plain name: squat, row, curl, press.`}${ownLine}`, source: { title: t("COROS exercises"), detail: t("{n} in the list", { n: catalog.length }), href: "/strength" } };
     }
     case "show_workout_recap":
-      return built(recapCard(items, clock, ctx.newId(), input), SHOWN, { title: t("Activity"), detail: t("Splits and heart rate"), href: `/activities/${encodeURIComponent(String(input.activity_id ?? ""))}` });
+      return built(inUnits(ctx.units, () => recapCard(items, clock, ctx.newId(), input)), SHOWN, { title: t("Activity"), detail: t("Splits and heart rate"), href: `/activities/${encodeURIComponent(String(input.activity_id ?? ""))}` });
     case "show_comparison":
-      return built(compareCard(items, clock, ctx.newId(), input), SHOWN, { title: t("Activities"), detail: t("Two workouts compared"), href: "/activities" });
+      return built(inUnits(ctx.units, () => compareCard(items, clock, ctx.newId(), input)), SHOWN, { title: t("Activities"), detail: t("Two workouts compared"), href: "/activities" });
     case "show_trend":
       return built(trendCard(items, clock, ctx.newId(), input), SHOWN, { title: t("Health"), detail: t("90-day trend"), href: "/health" });
     case "show_today":
@@ -304,13 +307,13 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
         const found = await ctx.hub.libraryWorkout(saved.slice(6));
         if ("problem" in found) return fail(found.problem);
         if (!found.workout) return fail("that saved workout has steps this app can't write, so it can't be put on a day from here.");
-        return { text: `${AWAITING}\nThis is their saved COROS workout exactly as saved.`, block: { ...workoutCard({ workout: null, hub: found.workout, name: found.name, sport: found.workout.sport }, null, { id, date: input.date, note: input.note }, ctx.zones ?? null, liftHistory(items.gymWorkouts, items.strength?.exerciseNames)), saved: { id: found.id, name: found.name } } };
+        return { text: `${AWAITING}\nThis is their saved COROS workout exactly as saved.`, block: { ...workoutCard({ workout: null, hub: found.workout, name: found.name, sport: found.workout.sport }, null, { id, date: input.date, note: input.note, units: ctx.units }, ctx.zones ?? null, liftHistory(items.gymWorkouts, items.strength?.exerciseNames)), saved: { id: found.id, name: found.name } } };
       }
       if (input.workout === undefined) return fail("No workout: send workout, or saved_workout with a saved workout's id.");
       const made = parseWorkout(input.workout, input.date, id, await catalogFor(input.workout, ctx));
       if ("error" in made) return fail(`Workout: ${made.error}`);
       const where = made.hub ? (ctx.hub ? "" : "\nTraining Hub isn't connected, so it will be saved on this computer's calendar, not on COROS or the watch; say so in a few words.") : "\nA gym workout without COROS's own exercises is saved on this computer's calendar, not on the watch; say so in a few words.";
-      return { text: `${AWAITING}${where}`, block: workoutCard(made, made.workout ? pacingFor(items, clock, made.workout.sport) : null, { id, date: input.date, note: input.note }, ctx.zones ?? null, liftHistory(items.gymWorkouts, items.strength?.exerciseNames)) };
+      return { text: `${AWAITING}${where}`, block: workoutCard(made, made.workout ? pacingFor(items, clock, made.workout.sport) : null, { id, date: input.date, note: input.note, units: ctx.units }, ctx.zones ?? null, liftHistory(items.gymWorkouts, items.strength?.exerciseNames)) };
     }
     case "propose_workout_change": {
       const entry = findEntry(ctx.entries, input);
@@ -322,7 +325,7 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
       if ("error" in made) return fail(`Workout: ${made.error}`);
       if (entry.coros && !made.hub) return fail("this workout is on the COROS calendar, and COROS can't hold the new version: every strength training step needs an exercise from search_exercises.");
       if (entry.browser && !made.workout) return fail("this workout is saved in the browser's calendar, which holds only time and distance steps (and gym sets). Keep to those, or the athlete can re-add it with Training Hub connected.");
-      return { text: "awaiting_confirmation: the athlete sees a card with the workout as it would be. Nothing changes until they press Apply change. Say briefly what is different and stop.", block: workoutCard(made, made.workout ? pacingFor(items, clock, made.workout.sport) : null, { id: ctx.newId(), date: entry.date, note: input.note, replaces: planTarget(entry) }, ctx.zones ?? null, liftHistory(items.gymWorkouts, items.strength?.exerciseNames)) };
+      return { text: "awaiting_confirmation: the athlete sees a card with the workout as it would be. Nothing changes until they press Apply change. Say briefly what is different and stop.", block: workoutCard(made, made.workout ? pacingFor(items, clock, made.workout.sport) : null, { id: ctx.newId(), date: entry.date, note: input.note, replaces: planTarget(entry), units: ctx.units }, ctx.zones ?? null, liftHistory(items.gymWorkouts, items.strength?.exerciseNames)) };
     }
     case "propose_training_plan": {
       if (!isDay(input.start_date)) return fail("start_date must be a date, YYYY-MM-DD.");
@@ -345,7 +348,7 @@ export async function runTool(name: string, raw: unknown, ctx: ToolContext): Pro
         }
         const made = parseWorkout(w.workout, day, `w-${ctx.newId().toLowerCase()}`, await catalogFor(w.workout, ctx));
         if ("error" in made) return fail(`Workout ${i + 1} (day ${dayNo}): ${made.error}`);
-        const card = workoutCard(made, made.workout ? pacingFor(items, clock, made.workout.sport) : null, { id: "x", date: day });
+        const card = workoutCard(made, made.workout ? pacingFor(items, clock, made.workout.sport) : null, { id: "x", date: day, units: ctx.units });
         ops.push({ op: "add_workout", day, name: made.name, sport: HUB_SPORT_AS[made.sport], workout: made.workout, hub: made.hub, detail: detailOf(made, card), ...(card.totals ? { load: card.totals.load } : {}) });
       }
       const title = quoted(input.name, 60) || t("Training plan");

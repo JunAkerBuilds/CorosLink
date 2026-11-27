@@ -1,4 +1,5 @@
 import { describe as suite, expect, it } from "vitest";
+import { useUnitsNow } from "./units";
 import {
   addItem, canMove, defaultTarget, describe, expand, findItem, formatClock,
   locate, moveItem, moveNear, moveTo, newRepeat, newStep, paceIntensity, parseClock, removeItem,
@@ -83,6 +84,10 @@ suite("totals", () => {
     expect(t.seconds).toBe(2996);
     expect(t.load).toBe(104);
     expect(describe(cruise(), pacing)).toBe("9.60 km · 49:56");
+  });
+  it("prints the line in miles in imperial", () => {
+    useUnitsNow("imperial");
+    try { expect(describe(cruise(), pacing)).toBe("5.97 mi · 49:56"); } finally { useUnitsNow("metric"); }
   });
   it("follows the repeat count", () => {
     const six = setRepeatCount(cruise(), "rep", 6);

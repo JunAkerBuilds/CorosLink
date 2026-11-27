@@ -8,7 +8,7 @@ import { NotWiredError, useLoaded, type Origin } from "@/data/core";
 import type { HubClimbSystem, HubExercise, HubSport, HubStepTarget } from "@/data/hub";
 import { loadExerciseList, newStepId, removeWorkout, scheduleWorkout, type BuilderData } from "@/data/workouts";
 import {
-  allowsRepeats, CUSTOM_ZONE, DEFAULT_NAME, DEFAULT_POOL, defaultIntensity, defaultTarget, derivedText, DESCRIPTION_MAX, distanceText, docChecks, docReady, docShape,
+  allowsRepeats, CUSTOM_ZONE, DEFAULT_NAME, defaultIntensity, defaultPool, defaultTarget, derivedText, DESCRIPTION_MAX, distanceText, docChecks, docReady, docShape,
   docTotals, docUnwired, fitToSport, formatPaceRange, GRADE_SYSTEMS, gradesOf, gradeSystemOf, HEART_BASES, INTENSITY_LABEL, intensitiesFor, isCard, KIND_LABEL,
   kindsFor, listSteps, newRepeat, newStep, OPEN_TEXT, pacingFor, parseNumber, parsePaceRange, PER_SET_LABEL, repeatText, REST_CHIPS, setsText, shapeLabel, SPORTS,
   stepProblem, STROKES, TARGET_LABEL, targetsFor, withGradeSystem, withKind, zonesFor,
@@ -16,6 +16,10 @@ import {
 } from "@/lib/builder";
 import { monthOf, shortDay } from "@/lib/calendar";
 import { thousands } from "@/lib/format";
+import {
+  distanceFromInput, distanceIn, distanceUnit, heightFromInput, heightIn, heightUnit, imperial, speedFromInput, speedIn, speedUnit, swimFromInput, swimIn, swimUnit,
+  weightFromInput, weightIn, weightUnit,
+} from "@/lib/units";
 import { addItem, canMove, formatClock, moveItem, moveNear, moveTo, parseClock, removeItem, setRepeatCount, updateStep, type Pacing } from "@/lib/workout";
 import { t, tx } from "@/lib/i18n";
 
@@ -163,9 +167,9 @@ export function WorkoutBuilder({ initial, origin }: { initial: BuilderData; orig
             </Select>
             {sport === "swim" ? (
               <label className="muted" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600 }}>
-                {t("Pool length (m)")}
-                <DraftInput inputMode="decimal" value={String(doc.poolLength ?? DEFAULT_POOL)} style={{ width: 72, height: 44, fontSize: 15, fontWeight: 700, textAlign: "right" }}
-                  onCommit={(text) => { const v = parseNumber(text, 1, 1000); if (v !== null) patchDoc({ poolLength: v }); return v !== null; }} />
+                {t("Pool length ({unit})", { unit: swimUnit() })}
+                <DraftInput inputMode="decimal" value={String(cents(swimIn(doc.poolLength ?? defaultPool())))} style={{ width: 72, height: 44, fontSize: 15, fontWeight: 700, textAlign: "right" }}
+                  onCommit={(text) => { const v = parseNumber(text, 1, 1000); if (v !== null) patchDoc({ poolLength: imperial() ? cents(swimFromInput(v)) : v }); return v !== null; }} />
               </label>
             ) : null}
             {doc.gradeSystem ? (
@@ -314,13 +318,25 @@ function DraftInput({ value, onCommit, className, invalid, ...rest }: Omit<Compo
 }
 
 /** A number box: `value` undefined shows empty and marked as needing a value. */
-function NumberBox({ label, value, low, high, step, decimals = 0, width = 64, onChange }: {
-  label: string; value: number | undefined; low: number; high: number; step?: number; decimals?: number; width?: number; onChange: (value: number) => void;
+/** Rounds to the centimetre (or hundredth), the finest COROS keeps. */
+const cents = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * A number box. `low`, `high` and `value` are stored (metric) numbers; `shown` and `stored` turn them into what is typed
+ * in the athlete's units and back (both rising, so the limits convert with them). `step` is on the typed number.
+ */
+function NumberBox({ label, value, low, high, step, decimals = 0, width = 64, shown = (v) => v, stored = (v) => v, onChange }: {
+  label: string; value: number | undefined; low: number; high: number; step?: number; decimals?: number; width?: number;
+  shown?: (stored: number) => number; stored?: (typed: number) => number; onChange: (value: number) => void;
 }) {
   return (
-    <DraftInput aria-label={label} inputMode="decimal" value={value === undefined ? "" : value.toFixed(decimals)} invalid={value === undefined || value < low || value > high}
+    <DraftInput aria-label={label} inputMode="decimal" value={value === undefined ? "" : shown(value).toFixed(decimals)} invalid={value === undefined || value < low || value > high}
       style={{ width, textAlign: "right" }}
-      onCommit={(text) => { const v = parseNumber(text, low, high, step); if (v !== null) onChange(v); return v !== null; }} />
+      onCommit={(text) => {
+        const v = parseNumber(text, shown(low) - 1e-9, shown(high) + 1e-9, step);
+        if (v !== null) onChange(Math.min(high, Math.max(low, stored(v))));
+        return v !== null;
+      }} />
   );
 }
 
@@ -383,20 +399,20 @@ function TargetFields({ step, doc, n, onChange }: Pick<RowProps, "step" | "doc" 
       {step.target === "distance" ? (
         <>
           <DraftInput aria-label={t("Step {n} distance", { n })} inputMode="decimal" invalid={!(step.meters && step.meters > 0)} style={{ width: 64, textAlign: "right" }}
-            value={step.meters === undefined ? "" : pool ? String(Math.round(step.meters)) : (step.meters / 1000).toFixed(2)}
+            value={step.meters === undefined ? "" : pool ? String(Math.round(swimIn(step.meters))) : distanceIn(step.meters).toFixed(2)}
             onCommit={(text) => {
               const v = pool ? parseNumber(text, 1, 100_000) : parseNumber(text, 0.01, 1000);
-              if (v !== null) onChange({ meters: pool ? Math.round(v) : Math.round(v * 1000) });
+              if (v !== null) onChange({ meters: pool ? (imperial() ? cents(swimFromInput(v)) : Math.round(v)) : Math.round(distanceFromInput(v)) });
               return v !== null;
             }} />
-          <span className="muted">{pool ? "m" : "km"}</span>
+          <span className="muted">{pool ? swimUnit() : distanceUnit()}</span>
         </>
       ) : step.target === "time" ? (
         <DraftInput aria-label={t("Step {n} time", { n })} invalid={!(step.seconds && step.seconds > 0)} value={step.seconds === undefined ? "" : formatClock(step.seconds)} style={{ width: 64, textAlign: "right" }}
           onCommit={(text) => { const s = parseClock(text); const ok = s !== null && s >= 1 && s <= 86_399; if (ok) onChange({ seconds: s }); return ok; }} />
       ) : step.target === "load" ? <NumberBox label={t("Step {n} training load", { n })} value={step.load} low={0} high={999} step={1} onChange={(load) => onChange({ load })} />
         : step.target === "hrRecovery" ? <><NumberBox label={t("Step {n} heart rate to recover to", { n })} value={step.bpm} low={30} high={180} step={1} onChange={(bpm) => onChange({ bpm })} /><span className="muted">bpm</span></>
-        : step.target === "elevationGain" ? <><NumberBox label={t("Step {n} elevation gain", { n })} value={step.meters} low={20} high={10_000} step={1} onChange={(meters) => onChange({ meters })} /><span className="muted">m</span></>
+        : step.target === "elevationGain" ? <><NumberBox label={t("Step {n} elevation gain", { n })} value={step.meters} low={20} high={10_000} step={1} shown={heightIn} stored={(v) => cents(heightFromInput(v))} onChange={(meters) => onChange({ meters })} /><span className="muted">{heightUnit()}</span></>
         : step.target === "reps" ? <NumberBox label={t("Step {n} reps", { n })} value={step.count} low={1} high={500} step={1} onChange={(count) => onChange({ count })} />
         : step.target === "routes" ? <NumberBox label={t("Step {n} routes", { n })} value={step.count} low={1} high={20} step={1} onChange={(count) => onChange({ count })} />
         : <span className="wb-hint">{t(OPEN_TEXT)}</span>}
@@ -404,7 +420,7 @@ function TargetFields({ step, doc, n, onChange }: Pick<RowProps, "step" | "doc" 
   );
 }
 
-const RANGE_UNIT: Partial<Record<BuilderIntensityKind, string>> = { heartRate: "bpm", power: "W", speed: "km/h" };
+const RANGE_UNIT: Partial<Record<BuilderIntensityKind, () => string>> = { heartRate: () => "bpm", power: () => "W", speed: speedUnit };
 const RANGE_LIMIT: Partial<Record<BuilderIntensityKind, [number, number]>> = { heartRate: [30, 250], power: [1, 2500], speed: [1, 120], cadence: [1, 300] };
 
 /** The values of a target: a range, a zone, a stroke, a weight, a grade. */
@@ -418,13 +434,14 @@ function IntensityValues({ step, doc, n, numbers, onChange }: Pick<RowProps, "st
     case "kept": return <span className="wb-hint">{t("Kept as it is in COROS")}</span>;
     case "heartRate": case "power": case "speed": case "cadence": {
       const [low, high] = RANGE_LIMIT[i.kind]!;
-      const unit = RANGE_UNIT[i.kind] ?? (doc.sport === "bike" ? "rpm" : "spm");
+      const unit = RANGE_UNIT[i.kind]?.() ?? (doc.sport === "bike" ? "rpm" : "spm");
       const whole = i.kind === "speed" ? undefined : 1;
+      const speed = i.kind === "speed" ? { shown: speedIn, stored: (v: number) => cents(speedFromInput(v)) } : {};
       return (
         <>
-          <NumberBox label={t("Step {n} {what}, low", { n, what: t(INTENSITY_LABEL[i.kind]) })} value={i.low} low={low} high={high} step={whole} decimals={i.kind === "speed" ? 1 : 0} width={60} onChange={(v) => set({ low: v })} />
+          <NumberBox label={t("Step {n} {what}, low", { n, what: t(INTENSITY_LABEL[i.kind]) })} value={i.low} low={low} high={high} step={whole} decimals={i.kind === "speed" ? 1 : 0} width={60} {...speed} onChange={(v) => set({ low: v })} />
           <span className="muted">{t("to")}</span>
-          <NumberBox label={t("Step {n} {what}, high", { n, what: t(INTENSITY_LABEL[i.kind]) })} value={i.high} low={low} high={high} step={whole} decimals={i.kind === "speed" ? 1 : 0} width={60} onChange={(v) => set({ high: v })} />
+          <NumberBox label={t("Step {n} {what}, high", { n, what: t(INTENSITY_LABEL[i.kind]) })} value={i.high} low={low} high={high} step={whole} decimals={i.kind === "speed" ? 1 : 0} width={60} {...speed} onChange={(v) => set({ high: v })} />
           <span className="muted">{unit}</span>
         </>
       );
@@ -432,7 +449,7 @@ function IntensityValues({ step, doc, n, numbers, onChange }: Pick<RowProps, "st
     case "pace": case "effortPace":
       return (
         <>
-          <DraftInput aria-label={t("Pace range")} invalid={!(i.low && i.high)} value={i.low && i.high ? formatPaceRange(i.low, i.high) : ""} placeholder="4:30-4:40/km" style={{ width: 132 }}
+          <DraftInput aria-label={t("Pace range")} invalid={!(i.low && i.high)} value={i.low && i.high ? formatPaceRange(i.low, i.high) : ""} placeholder={imperial() ? "7:15-7:30/mi" : "4:30-4:40/km"} style={{ width: 132 }}
             onCommit={(text) => { const range = parsePaceRange(text); if (range) set(range); return range !== null; }} />
           <span className="wb-hint">{t("fast to slow")}</span>
         </>
@@ -467,7 +484,7 @@ function IntensityValues({ step, doc, n, numbers, onChange }: Pick<RowProps, "st
         </Select>
       );
     case "weight":
-      return <><NumberBox label={t("Step {n} weight", { n })} value={i.low} low={0} high={2000} step={0.5} decimals={1} width={68} onChange={(v) => set({ low: v })} /><span className="muted">kg</span></>;
+      return <><NumberBox label={t("Step {n} weight", { n })} value={i.low} low={0} high={2000} step={0.5} decimals={1} width={68} shown={weightIn} stored={(v) => (imperial() ? Math.round(weightFromInput(v) * 1000) / 1000 : v)} onChange={(v) => set({ low: v })} /><span className="muted">{weightUnit()}</span></>;
     case "rpe":
       return <NumberBox label={t("Step {n} RPE", { n })} value={i.low} low={1} high={10} step={1} width={56} onChange={(v) => set({ low: v })} />;
     case "grade":

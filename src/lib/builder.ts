@@ -8,6 +8,7 @@ import type {
   HubClimbSystem, HubExercise, HubIntensity, HubIntensityKind, HubSport, HubStepKind, HubStepTarget, HubStroke, HubWorkout, HubWorkoutBlock, HubWorkoutStep,
 } from "@/data/hub";
 import { thousands } from "@/lib/format";
+import { distance, imperial, MILE_M, paceFromInput, paceIn, paceText, paceUnitLabel, swimDistance } from "@/lib/units";
 import { msg, t, tx } from "@/lib/i18n";
 import { intensityLabel } from "@/lib/hubWorkout";
 import {
@@ -90,8 +91,10 @@ export interface AthleteNumbers {
 export const DEFAULT_NAME = msg("Structured Workout");
 export const DESCRIPTION_MAX = 300;
 export const DEFAULT_POOL = 25;
+/** A new swim's pool, in metres: 25 m, or 25 yd (22.86 m) for an athlete in imperial units. */
+export const defaultPool = (): number => (imperial() ? 22.86 : DEFAULT_POOL);
 export const REST_CHIPS: readonly number[] = [30, 45, 60, 90, 120];
-export const QUICK_DISTANCES: readonly number[] = [5, 8, 10, 21.1];
+export const QUICK_DISTANCES: readonly number[] = imperial() ? [3, 5, 6.2, 13.1] : [5, 8, 10, 21.1];
 
 /* ───────────── Sports, kinds, targets, intensities ───────────── */
 
@@ -247,7 +250,7 @@ export function derivedText(intensity: BuilderIntensity, numbers: AthleteNumbers
   if (intensity.kind === "ftpPercent") return numbers.ftp ? t("{low} to {high} W", { low: of(numbers.ftp, range.low), high: of(numbers.ftp, range.high) }) : null;
   // A higher percentage of threshold pace is a faster pace: fewer seconds per km.
   if (!numbers.thresholdPace || range.low <= 0) return null;
-  return t("{low} to {high} /km", { low: formatClock((numbers.thresholdPace * 100) / range.high), high: formatClock((numbers.thresholdPace * 100) / range.low) });
+  return t("{low} to {high} {unit}", { low: formatClock(paceIn((numbers.thresholdPace * 100) / range.high)), high: formatClock(paceIn((numbers.thresholdPace * 100) / range.low)), unit: paceUnitLabel() });
 }
 
 /* ───────────── New steps ───────────── */
@@ -307,7 +310,7 @@ export function starterItems(doc: Pick<BuilderDoc, "sport" | "gradeSystem">, ids
 }
 
 export function newDoc(sport: HubSport, ids: readonly [string, string, string]): BuilderDoc {
-  const doc: BuilderDoc = { name: "", sport, description: "", items: [], ...(sport === "swim" ? { poolLength: DEFAULT_POOL } : {}), ...(isClimb(sport) ? { gradeSystem: defaultGradeSystem(sport) } : {}) };
+  const doc: BuilderDoc = { name: "", sport, description: "", items: [], ...(sport === "swim" ? { poolLength: defaultPool() } : {}), ...(isClimb(sport) ? { gradeSystem: defaultGradeSystem(sport) } : {}) };
   return { ...doc, items: starterItems(doc, ids) };
 }
 
@@ -329,7 +332,7 @@ export function quickRunDoc(name: string, km: number, paceSeconds: number | null
 export function fitToSport(doc: BuilderDoc, sport: HubSport, nextId: () => string): BuilderDoc {
   if (sport === doc.sport) return doc;
   const next: BuilderDoc = { name: doc.name, sport, description: doc.description, items: [] };
-  if (sport === "swim") next.poolLength = doc.poolLength ?? DEFAULT_POOL;
+  if (sport === "swim") next.poolLength = doc.poolLength ?? defaultPool();
   if (isClimb(sport)) next.gradeSystem = defaultGradeSystem(sport);
   const fit = (step: BuilderStep): BuilderStep => {
     const kind = kindsFor(sport).includes(step.kind) ? step.kind : "training";
@@ -456,7 +459,7 @@ export function docFromHub(workout: HubWorkout, nextId: () => string, keepIds = 
   });
   return {
     name: workout.name, sport: workout.sport, description: workout.description ?? "", items,
-    ...(workout.sport === "swim" ? { poolLength: workout.poolLength ?? DEFAULT_POOL } : {}),
+    ...(workout.sport === "swim" ? { poolLength: workout.poolLength ?? defaultPool() } : {}),
     ...(isClimb(workout.sport) ? { gradeSystem: workout.gradeSystem ?? defaultGradeSystem(workout.sport) } : {}),
   };
 }
@@ -472,7 +475,7 @@ const LEGACY_KIND: Record<StepKind, HubStepKind> = { warmup: "warmup", work: "tr
  */
 export function legacyDoc(workout: { name: string; sport: Sport; items: readonly WorkoutItem[] }, zoneList: readonly { zone: number; low: number; high: number }[], nextId: () => string): BuilderDoc {
   const sport = LEGACY_SPORT[workout.sport] ?? "run";
-  const doc: BuilderDoc = { name: workout.name, sport, description: "", items: [], ...(sport === "swim" ? { poolLength: DEFAULT_POOL } : {}) };
+  const doc: BuilderDoc = { name: workout.name, sport, description: "", items: [], ...(sport === "swim" ? { poolLength: defaultPool() } : {}) };
   const intensity = (target: StepTarget, step: BuilderStep): BuilderIntensity => {
     let made: BuilderIntensity = { kind: "none" };
     if (target.type === "pace") made = { kind: "pace", low: target.fast, high: target.slow };
@@ -541,7 +544,7 @@ export function stepProblem(doc: BuilderDoc, step: BuilderStep, browser = false)
   const sport = doc.sport;
   const i = step.intensity;
   if (i.kind === "effortPace") {
-    if (!(i.low && i.high && i.low >= 60 && i.high <= 3600 && i.low <= i.high)) return t("Paces go from 1:00 to 60:00 per km, fast to slow.");
+    if (!(i.low && i.high && i.low >= 60 && i.high <= 3600 && i.low <= i.high)) return imperial() ? t("Paces go from {fast} to {slow}, fast to slow.", { fast: paceText(60), slow: paceText(3600) }) : t("Paces go from 1:00 to 60:00 per km, fast to slow.");
   } else if (isUnwired(i.kind) && !percentRange(i)) return t("A custom range needs both ends, low then high.");
   if (!intensitiesFor(sport, step).includes(i.kind) && i.kind !== "kept") return t("That target isn't available for this step.");
   if (step.kind === "sendOff" && !(step.sendOffSeconds && step.sendOffSeconds >= 1 && step.sendOffSeconds <= 3600)) return t("A send-off needs its time.");
@@ -674,9 +677,9 @@ export function docTotals(doc: BuilderDoc, pacing: Pacing | null): DocTotals {
   return tot;
 }
 
-/** A distance as the sport writes it: metres in the pool, kilometres elsewhere. */
+/** A distance as the sport writes it: metres (or yards) in the pool, kilometres (or miles) elsewhere. */
 export function distanceText(meters: number, sport: HubSport): string {
-  return sport === "swim" ? `${thousands(meters)} m` : `${(meters / 1000).toFixed(2)} km`;
+  return sport === "swim" ? swimDistance(meters) : distance(meters);
 }
 
 /** What a repeat block comes to, all its rounds together: its distance, else its time. */
@@ -760,16 +763,22 @@ export function shapeLabel(doc: BuilderDoc): string {
 
 /* ───────────── Text boxes ───────────── */
 
-/** "4:30-4:40/km", fast to slow. */
+/** "4:30-4:40/km" (or "/mi" in imperial) from seconds per km, fast to slow. */
 export function formatPaceRange(low: number, high: number): string {
-  return `${formatClock(low)}-${formatClock(high)}/km`;
+  return `${formatClock(paceIn(low))}-${formatClock(paceIn(high))}${paceUnitLabel()}`;
 }
 
-/** Reads "4:30-4:40/km", "4:30 – 4:40" or one pace ("5:30"); null when it isn't a pace range, fast to slow. */
+/**
+ * Reads "4:30-4:40/km", "4:30 – 4:40" or one pace ("5:30"), typed per km or per mile as the units say, as seconds
+ * per km; null when it isn't a pace range, fast to slow.
+ */
 export function parsePaceRange(text: string): { low: number; high: number } | null {
-  const parts = text.trim().replace(/\s*\/\s*km\s*$/i, "").split(/\s*(?:-|–|—|to)\s*/i).filter((p) => p !== "");
+  // A typed "/km" or "/mi" says the unit; without one it's the page's.
+  const suffix = /\/\s*(km|mi)\s*$/i.exec(text.trim())?.[1]?.toLowerCase();
+  const perKm = (v: number) => (suffix === "km" ? v : suffix === "mi" ? v / (MILE_M / 1000) : paceFromInput(v));
+  const parts = text.trim().replace(/\s*\/\s*(km|mi)\s*$/i, "").split(/\s*(?:-|–|—|to)\s*/i).filter((p) => p !== "");
   if (parts.length < 1 || parts.length > 2 || parts.some((p) => !p.includes(":"))) return null;
-  const [low, high] = parts.map(parseClock);
+  const [low, high] = parts.map((p) => { const v = parseClock(p); return v == null ? v : perKm(v); });
   const slow = high ?? low;
   if (low == null || slow == null || low < 60 || slow > 3600 || low > slow) return null;
   return { low, high: slow };

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { PlacedPoint } from "@/data/activities";
-import { kmMarkers, routeLngLatAt, routeLngLatSlice, type Span } from "@/lib/activities";
+import { distanceMarkers, routeLngLatAt, routeLngLatSlice, type Span } from "@/lib/activities";
 import { baseAlpha, basemapConfig, isStandard, mapStyle, type RouteMapLight, type RouteMapType } from "@/lib/routeMap";
 import { useTheme } from "@/lib/theme";
 import { t } from "@/lib/i18n";
@@ -67,7 +67,7 @@ export default function ActivityMapbox({ accessToken, route, distanceM, at, span
     map.on("style.load", () => { loaded = true; setStyleTick((v) => v + 1); });
     // Before the first style arrives an error means the token or the network: fall back to the sketch.
     map.on("error", () => { if (!loaded) onFail(); });
-    kmMarkers(distanceM).forEach((km) => new mapboxgl.Marker({ element: pin("act-pin", String(km)) }).setLngLat(routeLngLatAt(route, km * 1000)).addTo(map));
+    distanceMarkers(distanceM).forEach((m) => new mapboxgl.Marker({ element: pin("act-pin", m.label) }).setLngLat(routeLngLatAt(route, m.metres)).addTo(map));
     const last = route[route.length - 1];
     new mapboxgl.Marker({ element: pin("act-pin-finish") }).setLngLat([last.lon, last.lat]).addTo(map);
     new mapboxgl.Marker({ element: pin("act-pin-start") }).setLngLat([route[0].lon, route[0].lat]).addTo(map);

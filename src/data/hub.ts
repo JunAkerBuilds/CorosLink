@@ -9,6 +9,7 @@ import { useSyncExternalStore } from "react";
 import { fromCoros, NotWiredError, type Loaded } from "@/data/core";
 import { t } from "@/lib/i18n";
 import { md5Hex } from "@/lib/md5";
+import { imperial } from "@/lib/units";
 
 // The same rules the server checks a workout with, for the builder: what a step of a sport may end on and
 // carry, the climbing grades, why COROS would refuse a workout, and its planned totals.
@@ -209,6 +210,9 @@ export interface HubUnits {
   pounds?: boolean;
 }
 
+/** The athlete's own units unless the caller says otherwise, so COROS shows the workout the way C-LINK does. */
+const withUnits = (units: HubUnits): HubUnits => ({ imperial: imperial(), ...units });
+
 // MARK: Errors
 
 export type HubErrorCode =
@@ -345,7 +349,7 @@ export async function hubCalendar(from: HubDay, to: HubDay): Promise<Loaded<HubC
 
 /** Plans a new workout on `day` (COROS takes days from today on). Resolves to its `idInPlan`. */
 export async function hubScheduleWorkout(day: HubDay, workout: HubWorkout, units: HubUnits = {}): Promise<Loaded<string>> {
-  return fromCoros((await call<{ idInPlan: string }>("schedule", { method: "POST", body: { day, workout, ...units } })).idInPlan);
+  return fromCoros((await call<{ idInPlan: string }>("schedule", { method: "POST", body: { day, workout, ...withUnits(units) } })).idInPlan);
 }
 
 /**
@@ -353,7 +357,7 @@ export async function hubScheduleWorkout(day: HubDay, workout: HubWorkout, units
  * groups that came from COROS must keep their `id`, so what this app can't show about them survives.
  */
 export async function hubUpdateScheduled(planned: Pick<HubPlannedWorkout, "day" | "idInPlan" | "name">, workout: HubWorkout, units: HubUnits = {}): Promise<void> {
-  await call<{ ok: true }>("schedule", { method: "PUT", body: { day: planned.day, idInPlan: planned.idInPlan, name: planned.name, workout, ...units } });
+  await call<{ ok: true }>("schedule", { method: "PUT", body: { day: planned.day, idInPlan: planned.idInPlan, name: planned.name, workout, ...withUnits(units) } });
 }
 
 /** Takes a planned workout off the calendar. A library copy, if any, stays. */
@@ -392,7 +396,7 @@ export async function hubWorkout(id: string): Promise<Loaded<HubSavedWorkout>> {
 
 /** Saves a new workout to the COROS workout library, without putting it on a day. */
 export async function hubSaveWorkout(workout: HubWorkout, units: HubUnits = {}): Promise<Loaded<HubSavedWorkout>> {
-  return fromCoros((await call<{ workout: HubSavedWorkout }>("workouts", { method: "POST", body: { workout, ...units } })).workout);
+  return fromCoros((await call<{ workout: HubSavedWorkout }>("workouts", { method: "POST", body: { workout, ...withUnits(units) } })).workout);
 }
 
 /** Takes a workout out of the COROS workout library. Calendar entries made from it stay. */

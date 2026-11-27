@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { useUnitsNow } from "@/lib/units";
 import { isMissing } from "@/data/sports";
 import { sampleSports } from "@/data/sample/sports";
 import { seedItems } from "@/data/sampleSeed";
@@ -169,5 +170,20 @@ describe("the sample athlete", () => {
     expect(s.run).not.toBeNull();
     expect(s.hub.day).toBe("Thu 19 Nov");
     expect(s.run!.hero.figures[0].value).toBe("14.1 km");
+  });
+});
+
+describe("sports in imperial", () => {
+  it("shows miles, feet, yards and /100 yd", () => {
+    useUnitsNow("imperial");
+    try {
+      const sports = sportsFromItems(items(), NOW);
+      expect(sports.run!.hero.figures[0].value).toMatch(/^\d+\.\d mi$/);
+      expect(sports.run!.much.weeks.line!.text).toMatch(/^Usual, \d+\.\d mi$/);
+      expect(sports.run!.tiles[0].unit).toBe("mi");
+      expect(sports.ride!.tiles.find((x) => x.href === "#climb")!.unit).toBe("ft");
+      expect(sports.swim!.hero.figures[0].value).toMatch(/ yd$/);
+      expect(sports.swim!.tiles.find((x) => x.href === "#now")!.unit).toBe("yd");
+    } finally { useUnitsNow("metric"); }
   });
 });

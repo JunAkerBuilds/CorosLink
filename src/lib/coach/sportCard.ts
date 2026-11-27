@@ -7,6 +7,7 @@ import gymMuscles from "@/data/sync/gymMuscles.json";
 import { muscleWork } from "@/lib/activityDetail";
 import { clock as clockText, thousands } from "@/lib/format";
 import { msg, t, tx } from "@/lib/i18n";
+import { distanceIn, distanceUnit, heightIn, imperial, paceIn, paceUnitLabel, shortDistance, speedIn, speedUnit, swimDistance, swimIn, swimUnit, weightIn, weightUnit } from "@/lib/units";
 import { formatClock, paceIntensity, ZONE_INTENSITY, type Pacing } from "@/lib/workout";
 import { strengthLines, type LiftHistory } from "./strengthCard";
 import type { AthleteZones } from "./zones";
@@ -40,10 +41,11 @@ const STROKE_TITLES: Record<HubStroke | "any", string> = {
 const kindOf = (s: HubWorkoutStep): BodyStepKind =>
   s.kind === "warmup" ? "warmup" : s.kind === "cooldown" ? "cooldown" : s.kind === "training" ? "work" : s.target === "distance" || (s.intensity.kind !== "none" && s.intensity.kind !== "grade") ? "recovery" : "rest";
 
-const paceText = (s: number) => clockText(s, s % 1 ? 2 : 0);
 const range = (i: HubIntensity, text: (n: number) => string = String, join = "–") => (i.high != null && i.high !== i.low ? `${text(i.low!)}${join}${text(i.high)}` : text(i.low!));
 const mid = (i: HubIntensity): number | null => (i.low == null ? null : i.high != null ? (i.low + i.high) / 2 : i.low);
-const metresText = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`);
+const metresText = (m: number) => (imperial() ? shortDistance(m, 2) : m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`);
+/** A weight as typed, or in pounds to a tenth. */
+const kgText = (kg: number) => (imperial() ? `${Number(weightIn(kg).toFixed(1))} ${weightUnit()}` : `${kg} kg`);
 /** A rest in the fewest words: 20 s, 1:30. */
 const restText = (seconds: number) => (seconds < 60 ? `${seconds} s` : formatClock(seconds));
 const restWords = (seconds: number) => t("{time} rest", { time: restText(seconds) });
@@ -67,12 +69,12 @@ export function targetWords(i: HubIntensity, ath: BodyAthlete = {}): string {
   }
   if (i.low == null) return "";
   switch (i.kind) {
-    case "pace": return i.low > 0 ? `${range({ ...i, low: Math.min(i.low, i.high ?? i.low), high: Math.max(i.low, i.high ?? i.low) }, paceText, t(" to "))} /km` : "";
+    case "pace": return i.low > 0 ? `${range({ ...i, low: Math.min(i.low, i.high ?? i.low), high: Math.max(i.low, i.high ?? i.low) }, (v) => clockText(paceIn(v), v % 1 ? 2 : 0), t(" to "))} ${paceUnitLabel()}` : "";
     case "heartRate": { const z = hrZone(mid(i)!, ath.zones); return `${z ? `Z${z} · ` : ""}${range(i)} bpm`; }
     case "power": { const ftp = ath.zones?.ftp; return `${range(i)} W${ftp ? ` · ${range(i, (w) => String(Math.round((w / ftp) * 100)))} % FTP` : ""}`; }
-    case "speed": return `${range(i)} km/h`;
+    case "speed": return imperial() ? `${range(i, (v) => speedIn(v).toFixed(1))} ${speedUnit()}` : `${range(i)} km/h`;
     case "cadence": return `${range(i)} /min`;
-    case "weight": return `${i.low} kg`;
+    case "weight": return kgText(i.low);
     case "rpe": return `RPE ${i.low}`;
   }
   return "";
@@ -83,12 +85,12 @@ function amountWords(s: HubWorkoutStep, sport: HubSport): string {
   const sets = s.sets ?? 1, gym = sport === "strength" || (sport === "hyrox" && (s.sets ?? 0) > 1);
   switch (s.target) {
     case "time": return gym && s.kind === "training" ? `${sets} × ${formatClock(s.seconds ?? 0)}` : formatClock(s.seconds ?? 0);
-    case "distance": return sport === "swim" ? `${thousands(Math.round(s.meters ?? 0))} m` : metresText(s.meters ?? 0);
+    case "distance": return sport === "swim" ? (imperial() ? swimDistance(s.meters ?? 0) : `${thousands(Math.round(s.meters ?? 0))} m`) : metresText(s.meters ?? 0);
     case "reps": return gym || sets > 1 ? `${sets} × ${s.count ?? 0}` : s.count === 1 ? t("1 rep") : t("{n} reps", { n: s.count ?? 0 });
     case "routes": return s.count === 1 ? tx("climbing", "1 route") : tx("climbing", "{n} routes", { n: s.count ?? 0 });
     case "load": return t("Load {n}", { n: s.load ?? 0 });
     case "hrRecovery": return t("Until {n} bpm", { n: s.bpm ?? 0 });
-    case "elevationGain": return t("+{n} m climb", { n: Math.round(s.meters ?? 0) });
+    case "elevationGain": return imperial() ? t("+{n} ft climb", { n: Math.round(heightIn(s.meters ?? 0)) }) : t("+{n} m climb", { n: Math.round(s.meters ?? 0) });
     case "open": return gym && s.kind === "training" ? t("{sets} × to lap", { sets }) : t("To lap button");
   }
 }
@@ -298,8 +300,8 @@ export function workoutBody(w: HubWorkout, ath: BodyAthlete = {}): WorkoutBody {
     for (const g of list) g.rows[0].bar = (g.rows[0].bar ?? 0) / longest;
     const total = [...by.values()].reduce((a, b) => a + b, 0);
     if (total > 0 && by.size > 1) {
-      body.shares = [...by].sort((a, b) => b[1] - a[1]).map(([name, m]) => ({ name: t(STROKE_TITLES[name as HubStroke | "any"]), value: `${thousands(Math.round(m))} m`, share: m / total }));
-      body.sharesLabel = t("Metres by stroke");
+      body.shares = [...by].sort((a, b) => b[1] - a[1]).map(([name, m]) => ({ name: t(STROKE_TITLES[name as HubStroke | "any"]), value: imperial() ? swimDistance(m) : `${thousands(Math.round(m))} m`, share: m / total }));
+      body.sharesLabel = imperial() ? t("Yards by stroke") : t("Metres by stroke");
     }
   } else if (kind === "hyrox") {
     body.unit = station ? "stations" : "steps";
@@ -335,7 +337,7 @@ export function sportStats(w: HubWorkout, body: WorkoutBody, ath: BodyAthlete = 
   }
   if (w.sport === "swim" && c.metres > 0) {
     const pool = w.poolLength ?? 25, lengths = c.metres / pool;
-    const stats: CardStat[] = [{ label: t("Distance"), value: thousands(Math.round(c.metres)), unit: "m" }];
+    const stats: CardStat[] = [{ label: t("Distance"), value: thousands(Math.round(swimIn(c.metres))), unit: swimUnit() }];
     if (Number.isInteger(lengths)) stats.push({ label: t("Lengths, {pool} m pool", { pool }), value: String(lengths) });
     if (ath.pacing) stats.push({ label: t("Time, about"), value: formatClock(Math.round(about())) });
     return stats;
@@ -349,7 +351,7 @@ export function sportStats(w: HubWorkout, body: WorkoutBody, ath: BodyAthlete = 
   if (body.kind === "hyrox") {
     const stats: CardStat[] = [];
     if (body.unit === "stations") stats.push({ label: t("Stations"), value: String(body.count) });
-    if (c.runMetres > 0) stats.push({ label: t("Running"), value: (c.runMetres / 1000).toFixed(2), unit: "km" });
+    if (c.runMetres > 0) stats.push({ label: t("Running"), value: distanceIn(c.runMetres).toFixed(2), unit: distanceUnit() });
     return stats;
   }
   return null;

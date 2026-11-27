@@ -288,6 +288,12 @@ export function faceLayers(details: CorosWatchfaceTemplateDetails, design: Desig
 /** The template with the face's config text edits, not narrowed to a display (analog hands read both configs). */
 export const sourceDetailsOf = (source: FaceSource, root: Design) => applyConfigTextEditsToDetails(source.details, root.configTextEdits);
 
+/**
+ * The canvas's click boxes, back first: each box sits over the ones before it, so a click picks the layer the watch draws
+ * in front. Text and shapes are baked into the background picture, so any other layer over them wins the click.
+ */
+export const clickOrder = <L extends EngineLayer>(layers: readonly L[]): L[] => [...layers].reverse();
+
 /** The face's layers in panel order (front first), with their boxes in master pixels. */
 export function layersOf(source: FaceSource, design: Design, mode: Mode): EngineLayer[] {
   const active = resolveWatchfaceModeDesign(design, mode);
@@ -425,9 +431,12 @@ export function rowOf(rows: EditorLayer[], id: string | null | undefined): Edito
     ?? (/^controlBatteryIcon$|^configAsset:(?:config|aod):control_/.test(id) ? rows.find((r) => r.kind === SLOT_LAYER) : undefined);
 }
 
-/** The Layers panel's and the Add library's categories, from the design's Studio boards, in panel order. */
+/**
+ * The Layers panel's and the Add library's categories, from the design's Studio boards, in panel order (front first).
+ * Text and shapes sit at the bottom, just above the background: they are baked into the background picture, so on the
+ * watch everything else draws over them.
+ */
 export const LAYER_GROUPS = [
-  { id: "basic", label: msg("Text and shapes") },
   { id: "time", label: msg("Time and date") },
   { id: "health", label: msg("Health") },
   { id: "activity", label: msg("Activity") },
@@ -435,6 +444,7 @@ export const LAYER_GROUPS = [
   { id: "training", label: msg("Training") },
   { id: "charts", label: msg("Charts") },
   { id: "device", label: msg("Status") },
+  { id: "basic", label: msg("Text and shapes") },
   { id: "background", label: msg("Background") },
 ] as const;
 export type LayerGroup = (typeof LAYER_GROUPS)[number]["id"];

@@ -10,7 +10,8 @@ import c6 from "../es/release.json";
 import c7 from "../es/server.json";
 import c8 from "../es/studio.json";
 import c9 from "../es/training.json";
-import c10 from "../es/wellness-shell.json";
+import c10 from "../es/units.json";
+import c11 from "../es/wellness-shell.json";
 
-const words: Catalog = { ...c0, ...c1, ...c2, ...c3, ...c4, ...c5, ...c6, ...c7, ...c8, ...c9, ...c10 };
+const words: Catalog = { ...c0, ...c1, ...c2, ...c3, ...c4, ...c5, ...c6, ...c7, ...c8, ...c9, ...c10, ...c11 };
 export default words;

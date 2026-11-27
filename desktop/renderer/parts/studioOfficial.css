@@ -19,7 +19,7 @@
 .st-off-card { display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 14px; border: 1px solid var(--line); background: var(--card-bg); color: var(--fg); text-align: left; cursor: pointer; }
 .st-off-card:hover { border-color: color-mix(in srgb, var(--h-mint) 50%, transparent); }
 .st-off-card[aria-pressed="true"] { border-color: var(--h-mint-ink); box-shadow: 0 0 0 2px color-mix(in srgb, var(--h-mint-ink) 30%, transparent); }
-.st-off-peek { position: relative; display: flex; align-items: center; justify-content: center; height: 84px; border-radius: 10px; background: #0b0f0e; overflow: hidden; }
+.st-off-peek { position: relative; display: flex; align-items: center; justify-content: center; height: 84px; border-radius: 10px; overflow: hidden; }
 .st-off-peek img { flex: none; max-width: none; }
 .st-off-peek[data-crisp] img, .st-off-stage img[data-crisp], .st-off-frames img { image-rendering: pixelated; }
 .st-off-peek i { position: absolute; z-index: 1; top: 5px; right: 5px; padding: 1px 6px; border-radius: 999px; background: rgba(20, 26, 24, 0.82); color: #e6ecea; font: 700 10px/1.5 Inter, sans-serif; }
@@ -32,10 +32,10 @@
 .st-off-state small { font-size: 12px; }
 .st-off-state progress { width: min(320px, 80%); height: 6px; accent-color: var(--h-mint); }
 .st-off-detail { flex: 0 0 264px; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-left: 1px solid var(--line); overflow-y: auto; scrollbar-width: thin; }
-.st-off-stage { display: flex; align-items: center; justify-content: center; height: 216px; border-radius: 14px; background: #0b0f0e; overflow: hidden; }
+.st-off-stage { display: flex; align-items: center; justify-content: center; height: 216px; border-radius: 14px; overflow: hidden; }
 .st-off-wait { width: 64px; height: 64px; border-radius: 12px; background: rgba(255, 255, 255, 0.08); }
 .st-off-frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px; max-height: 128px; overflow-y: auto; scrollbar-width: thin; }
-.st-off-frames button { display: grid; place-items: center; height: 36px; padding: 3px; border-radius: 8px; border: 1px solid transparent; background: #0b0f0e; cursor: pointer; }
+.st-off-frames button { display: grid; place-items: center; height: 36px; padding: 3px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
 .st-off-frames button[aria-selected="true"] { border-color: var(--h-mint); }
 .st-off-frames img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .st-off-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; font-size: 12.5px; }

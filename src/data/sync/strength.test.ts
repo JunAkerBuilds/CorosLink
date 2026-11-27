@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   changeText, dateText, doneSetCount, durationSeconds, liftedRanges, liftNote, mainLifts, muscleRow, strengthFromItems,
   suggestionCard, topLine, volumeKg, weeksAgo, weekStart, workingSets, workoutRows,
 } from "./strength";
 import { dateToRef, type NativeGymSet, type NativeGymWorkout, type ViewStrengthBody } from "./native";
 import { seedItems } from "@/data/sampleSeed";
+import { useUnitsNow } from "@/lib/units";
+
+afterEach(() => useUnitsNow("metric"));
 
 // Friday 20 November 2026. Its week starts Monday 16 November.
 const NOW = new Date(2026, 10, 20, 14, 10);
@@ -43,6 +46,11 @@ describe("one workout", () => {
   it("writes the top line from the heaviest working set of the first exercises", () => {
     expect(topLine(w, { bench: "Bench press", plank: "Plank" })).toBe("Bench press 80 kg × 3 · pull-up 10 kg · Plank 60 s");
     expect(topLine(w, { bench: "Bench press" }, 1)).toBe("Bench press 80 kg × 3");
+  });
+
+  it("writes the top line in pounds when imperial", () => {
+    useUnitsNow("imperial");
+    expect(topLine(w, { bench: "Bench press", plank: "Plank" })).toBe("Bench press 176.37 lb × 3 · pull-up 22.05 lb · Plank 60 s");
   });
 
   it("makes the table row", () => {
@@ -152,6 +160,11 @@ describe("main lifts", () => {
     expect(liftNote([N, N, N, N, N, N, N, N, N, N, N, 60], null)).toBe(""); // first time: nothing to beat
     expect(liftNote([80, N, N, N, N, N, N, N, N, N, 82.5, 80], 82.5)).toBe(""); // back where it started, nothing to say
     expect(liftNote(new Array(12).fill(N), null)).toBe("");
+  });
+  it("writes the note in pounds when imperial", () => {
+    useUnitsNow("imperial");
+    expect(liftNote([N, N, N, N, N, N, N, N, N, N, 77.5, 80], 77.5)).toBe("New best, +5.51 lb");
+    expect(liftNote([N, N, 100, N, N, N, N, N, 95, N, N, N], 100)).toBe("−11.02 lb in 7 weeks");
   });
 
   const ws = [

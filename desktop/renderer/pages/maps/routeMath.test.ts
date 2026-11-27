@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { useUnitsNow } from "@/lib/units";
 import { quadkey, takesMapAreas, tileAt, tileBounds } from "../../../maps/types";
 import { estimate, joinLegs, pointAt, profile, shares, terrain } from "./routeMath";
 import { haversine, lengthM, place, shapeOutline, textOutline } from "./sketchShapes";
+
+afterEach(() => useUnitsNow("metric"));
 
 describe("route sums", () => {
   it("joins drawn legs without repeating the shared point, and adds their makeup", () => {
@@ -34,6 +37,12 @@ describe("route sums", () => {
     expect(estimate("run", 10_000, 0).time).toBe("1:00");
     expect(estimate("run", 10_000, 0).pace).toBe("6:00");
     expect(estimate("road", 25_000, 0).pace).toBe("25.0");
+  });
+
+  it("shows the estimate per mile and in mph in imperial", () => {
+    useUnitsNow("imperial");
+    expect(estimate("run", 10_000, 0)).toMatchObject({ time: "1:00", pace: "9:39", paceUnit: " /mi", speed: false });
+    expect(estimate("road", 25_000, 0)).toMatchObject({ pace: "15.5", paceUnit: " mph", speed: true });
   });
 });
 

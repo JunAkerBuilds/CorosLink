@@ -7,6 +7,7 @@ import type { Workout } from "@/data/workouts";
 import { intensityLabel } from "@/lib/hubWorkout";
 import { clock as clockText } from "@/lib/format";
 import { msg, t, tx } from "@/lib/i18n";
+import { distance, distanceIn, distanceUnit, heightIn, imperial, inUnits, paceIn, paceUnitLabel, shortDistance, weightIn, weightUnit, type Units } from "@/lib/units";
 import { expand, formatClock, stepIntensity, stepSeconds, totals, type Pacing, type Sport, type StepKind, type StepTarget, type WorkoutItem, type WorkoutStep } from "@/lib/workout";
 import { hubWorkoutProblem } from "@/server/hub/rules";
 import { dayOfRef, familyOf, finite, isDay, quoted, shownDay, today, type AthleteItems, type Clock } from "./items";
@@ -235,13 +236,19 @@ const KIND_HUE: Record<StepKind, CoachHue> = { warmup: "cyan", work: "mint", rec
 const KIND_HEIGHT: Record<StepKind, number> = { warmup: 0.42, cooldown: 0.42, work: 0.78, recovery: 0.3, rest: 0.16 };
 const SPORT_TITLE: Record<Sport, string> = { run: msg("Run"), ride: msg("Ride"), swim: msg("Swim"), strength: msg("Strength") };
 
-function lengthText(step: WorkoutStep): string {
+/** A step's length: as the model wrote it, or in the athlete's units when `shown`. */
+function lengthText(step: WorkoutStep, shown = false): string {
   if (step.length.type === "time") return formatClock(step.length.seconds);
+  if (shown && imperial()) return step.length.unit === "km" ? distance(step.length.metres, 2) : shortDistance(step.length.metres, 2);
   return step.length.unit === "km" ? `${(step.length.metres / 1000).toFixed(2)} km` : `${Math.round(step.length.metres)} m`;
 }
 
-/** A step's target in words: English for the model, or in the app's language when `shown`. */
+/** A step's target in words: English and metric for the model, or in the app's language and units when `shown`. */
 function targetText(target: StepTarget, shown = false): string {
+  if (target.type === "pace" && shown && imperial()) {
+    const per = (s: number) => clockText(paceIn(s), s % 1 ? 2 : 0);
+    return target.fast === target.slow ? `${per(target.fast)} ${paceUnitLabel()}` : t("{fast} to {slow} /mi", { fast: per(target.fast), slow: per(target.slow) });
+  }
   if (target.type === "pace") {
     if (target.fast === target.slow) return `${paceText(target.fast)} /km`;
     return shown ? t("{fast} to {slow} /km", { fast: paceText(target.fast), slow: paceText(target.slow) }) : `${paceText(target.fast)} to ${paceText(target.slow)} /km`;
@@ -261,18 +268,23 @@ export function hubLength(s: HubWorkoutStep, shown = false): string {
   const sets = s.sets && s.sets > 1 ? `${s.sets} × ` : "";
   switch (s.target) {
     case "time": return `${sets}${formatClock(s.seconds ?? 0)}`;
-    case "distance": return (s.meters ?? 0) >= 1000 ? `${((s.meters ?? 0) / 1000).toFixed(2)} km` : `${Math.round(s.meters ?? 0)} m`;
+    case "distance":
+      if (shown && imperial()) return (s.meters ?? 0) >= 1000 ? distance(s.meters ?? 0, 2) : shortDistance(s.meters ?? 0, 2);
+      return (s.meters ?? 0) >= 1000 ? `${((s.meters ?? 0) / 1000).toFixed(2)} km` : `${Math.round(s.meters ?? 0)} m`;
     case "reps": return `${s.sets ?? 1} × ${s.count ?? 0}`;
     case "routes": return shown ? (s.count === 1 ? tx("climbing", "1 route") : tx("climbing", "{n} routes", { n: s.count ?? 0 })) : `${s.count ?? 0} routes`;
     case "load": return shown ? t("load {n}", { n: s.load ?? 0 }) : `load ${s.load ?? 0}`;
     case "hrRecovery": return shown ? t("until {n} bpm", { n: s.bpm ?? 0 }) : `until ${s.bpm ?? 0} bpm`;
-    case "elevationGain": return `+${Math.round(s.meters ?? 0)} m`;
+    case "elevationGain": return shown && imperial() ? `+${Math.round(heightIn(s.meters ?? 0))} ft` : `+${Math.round(s.meters ?? 0)} m`;
     case "open": return `${sets}${shown ? t("open") : "open"}`;
   }
 }
 
+/** A weight in kilograms in the athlete's units, to a tenth of a pound. */
+const shownKg = (kg: number) => (imperial() ? `${Number(weightIn(kg).toFixed(1))} ${weightUnit()}` : `${kg} kg`);
+
 const hubTarget = (i: HubIntensity, shown = false): string =>
-  i.kind === "none" || i.kind === "kept" ? "" : i.kind === "pace" && finite(i.low) ? targetText(targetOf(i), shown) : i.kind === "bodyweight" ? (shown ? t("bodyweight") : "bodyweight") : i.kind === "weight" ? `${i.low ?? 0} kg` : intensityLabel(i);
+  i.kind === "none" || i.kind === "kept" ? "" : i.kind === "pace" && finite(i.low) ? targetText(targetOf(i), shown) : i.kind === "bodyweight" ? (shown ? t("bodyweight") : "bodyweight") : i.kind === "weight" ? (shown ? shownKg(i.low ?? 0) : `${i.low ?? 0} kg`) : intensityLabel(i);
 
 /** "Run · suggested", "Run · change": the workout card's eyebrow. */
 const eyebrowOf = (sport: string, change: boolean) => (change ? t("{sport} · change", { sport: t(sport) }) : t("{sport} · suggested", { sport: t(sport) }));
@@ -300,7 +312,8 @@ export function describeBuilderWorkout(w: Workout): string {
   return out.join("\n");
 }
 
-export interface CardInput { id: string; date: string; note?: unknown; replaces?: WorkoutCard["replaces"] }
+/** `units`: the athlete's, when a server draws the card for them; absent draws in the page's own. */
+export interface CardInput { id: string; date: string; note?: unknown; replaces?: WorkoutCard["replaces"]; units?: Units }
 
 /** The card for a workout only COROS can hold (open steps, HYROX, climbing): its steps as COROS has them. */
 function hubCard(hub: HubWorkout, drawn: HubWorkout, input: CardInput, zones: AthleteZones | null, lifts: LiftHistory | null): WorkoutCard {
@@ -324,7 +337,7 @@ function hubCard(hub: HubWorkout, drawn: HubWorkout, input: CardInput, zones: At
     }
   }
   const stats: CardStat[] = [];
-  if (metres > 0) stats.push({ label: t("Distance"), value: (metres / 1000).toFixed(2), unit: "km" });
+  if (metres > 0) stats.push({ label: t("Distance"), value: distanceIn(metres).toFixed(2), unit: distanceUnit() });
   if (seconds > 0) stats.push({ label: metres > 0 || open ? t("Timed steps") : t("Time"), value: formatClock(seconds) });
   if (sets > 0) stats.push({ label: t("Sets"), value: String(sets) });
   const body = workoutBody(drawn, { zones, lifts });
@@ -336,7 +349,14 @@ function hubCard(hub: HubWorkout, drawn: HubWorkout, input: CardInput, zones: At
   };
 }
 
+/** A gym line's weight ("60 kg", as the builder keeps it) in the athlete's units. */
+const gymLoad = (text: string) => { const kg = /^(\d+(?:\.\d+)?) kg$/.exec(text); return kg && imperial() ? shownKg(Number(kg[1])) : text; };
+
 export function workoutCard(made: CoachWorkout, pacing: Pacing | null, input: CardInput, zones: AthleteZones | null = null, lifts: LiftHistory | null = null): WorkoutCard {
+  return inUnits(input.units, () => drawWorkoutCard(made, pacing, input, zones, lifts));
+}
+
+function drawWorkoutCard(made: CoachWorkout, pacing: Pacing | null, input: CardInput, zones: AthleteZones | null, lifts: LiftHistory | null): WorkoutCard {
   if (!made.workout) return hubCard(made.hub!, made.draft ?? made.hub!, input, zones, lifts);
   const w = made.workout, strength = w.sport === "strength";
   const steps: WorkoutCard["steps"] = [];
@@ -347,7 +367,7 @@ export function workoutCard(made: CoachWorkout, pacing: Pacing | null, input: Ca
     const gym = strength && s.label?.includes(" · ") ? s.label.split(" · ") : null;
     steps.push({
       name: unique(`${times > 1 ? `${times} × ` : ""}${gym ? gym[0] : s.label || t(KIND_WORDS[s.kind])}`),
-      length: gym ? gym[1] ?? "" : lengthText(s), target: gym ? gym[2] ?? "" : targetText(s.target, true), note: gym || !s.label ? "" : t(KIND_WORDS[s.kind]),
+      length: gym ? gym[1] ?? "" : lengthText(s, true), target: gym ? gymLoad(gym[2] ?? "") : targetText(s.target, true), note: gym || !s.label ? "" : t(KIND_WORDS[s.kind]),
       hue: KIND_HUE[s.kind], weight: Math.max(1, Math.round(seconds * times)), height: pacing && !strength ? stepIntensity(s, pacing) : KIND_HEIGHT[s.kind],
       soft: s.kind !== "work" || undefined,
     });
@@ -363,17 +383,17 @@ export function workoutCard(made: CoachWorkout, pacing: Pacing | null, input: Ca
   if (pacing) {
     const sum = totals(w.items, pacing);
     stats.push({ label: timed ? t("Time") : t("Time, about"), value: formatClock(sum.seconds) });
-    if (sum.metres >= 1) stats.push({ label: measured ? t("Distance") : t("Distance, about"), value: (sum.metres / 1000).toFixed(2), unit: "km" });
+    if (sum.metres >= 1) stats.push({ label: measured ? t("Distance") : t("Distance, about"), value: distanceIn(sum.metres).toFixed(2), unit: distanceUnit() });
     if (!strength) stats.push({ label: t("Load, about"), value: String(sum.load), hue: "pink" });
-    summary = sum.metres >= 1 ? `${(sum.metres / 1000).toFixed(2)} km · ${formatClock(sum.seconds)}` : formatClock(sum.seconds);
+    summary = sum.metres >= 1 ? `${distanceIn(sum.metres).toFixed(2)} ${distanceUnit()} · ${formatClock(sum.seconds)}` : formatClock(sum.seconds);
   } else if (timed) {
     const seconds = all.reduce((sum, s) => sum + (s.length.type === "time" ? s.length.seconds : 0), 0);
     stats.push({ label: t("Time"), value: formatClock(seconds) });
     summary = formatClock(seconds);
   } else if (measured) {
     const metres = all.reduce((sum, s) => sum + (s.length.type === "distance" ? s.length.metres : 0), 0);
-    stats.push({ label: t("Distance"), value: (metres / 1000).toFixed(2), unit: "km" });
-    summary = `${(metres / 1000).toFixed(2)} km`;
+    stats.push({ label: t("Distance"), value: distanceIn(metres).toFixed(2), unit: distanceUnit() });
+    summary = `${distanceIn(metres).toFixed(2)} ${distanceUnit()}`;
   }
   if (strength) stats.push({ label: t("Exercises"), value: String(all.filter((s) => s.kind === "work").length) });
   const draft = made.draft ?? made.hub, athlete = { pacing: strength ? null : pacing, zones, lifts };

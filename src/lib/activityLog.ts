@@ -2,8 +2,15 @@
 // into the activity the server writes. Ported from the desktop app's Log activity tab (AddWorkoutModal.tsx).
 import { msg, t } from "@/lib/i18n";
 import type { ManualActivity, TcxSport } from "@/lib/tcx";
+import { distanceFromInput, distanceUnit, swimFromInput, swimUnit } from "@/lib/units";
 
+/** How a type's distance is typed: "km" a long distance (km or mi as shown), "m" a swim (m or yd), "none" none. */
 export type LogDistanceUnit = "km" | "m" | "none";
+
+/** The unit the distance field shows for a type: km or mi, m or yd; empty when the type has no distance. */
+export function logDistanceLabel(unit: LogDistanceUnit): string {
+  return unit === "km" ? distanceUnit() : unit === "m" ? swimUnit() : "";
+}
 export type LogIcon = "run" | "ride" | "walk" | "hike" | "swim" | "strength" | "yoga" | "other";
 
 export interface LogSport {
@@ -128,13 +135,13 @@ export function logStart(form: Pick<LogForm, "date" | "time">): Date | null {
   return new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]), hour, minute, 0, 0);
 }
 
-/** The activity to send, or null while the form has no start or no duration. Distance is km, or metres for a swim. */
+/** The activity to send, or null while the form has no start or no duration. Distance is typed in km or mi, or m or yd for a swim. */
 export function logActivityInput(form: LogForm): ManualActivity | null {
   const start = logStart(form), durationSec = logDuration(form);
   if (!start || durationSec <= 0) return null;
   const sport = logSport(form.sportId);
   const typed = amount(form.distance);
-  const distanceM = sport.distanceUnit === "m" ? Math.round(typed) : sport.distanceUnit === "km" ? Math.round(typed * 1000) : 0;
+  const distanceM = sport.distanceUnit === "m" ? Math.round(swimFromInput(typed)) : sport.distanceUnit === "km" ? Math.round(distanceFromInput(typed)) : 0;
   const calories = amount(form.calories), avgHr = amount(form.avgHr);
   return { sport: sport.uploadSport, startTimeIso: start.toISOString(), durationSec, distanceM, ...(calories > 0 ? { calories } : {}), ...(avgHr > 0 ? { avgHr } : {}) };
 }

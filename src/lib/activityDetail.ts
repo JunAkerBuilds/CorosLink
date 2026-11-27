@@ -4,6 +4,7 @@ import type { Activity, Lap, MuscleWork, Sport, Streams, StrengthExercise, Stren
 import { paceOver, paceUnit, weekKey } from "@/lib/activities";
 import { clock } from "@/lib/format";
 import { msg, t } from "@/lib/i18n";
+import { distanceStep, imperial, paceIn, paceUnitLabel, speedIn, swimIn, swimPaceIn, swimPaceUnitLabel, swimUnit } from "@/lib/units";
 
 const sum = (v: readonly number[]) => v.reduce((s, x) => s + x, 0);
 
@@ -32,14 +33,14 @@ export function effortIndex(percent: number): number {
   return k;
 }
 
-/** "11 s/km slower than your threshold pace of 4:35 /km." for a pace sport; null when either pace is unknown. */
+/** "11 s/km slower than your threshold pace of 4:35 /km." for a pace sport (or per mile); null when either pace is unknown. */
 export function thresholdPaceSentence(paceS: number | null, thresholdS: number | null | undefined): string | null {
   if (paceS == null || !thresholdS) return null;
-  const delta = paceS - thresholdS, size = Math.abs(delta);
-  const at = `${clock(Math.round(thresholdS))} /km`;
+  const delta = paceS - thresholdS, size = Math.abs(delta), shown = paceIn(size);
+  const at = `${clock(Math.round(paceIn(thresholdS)))} ${paceUnitLabel()}`;
   if (size < 3) return t("Right at your threshold pace of {pace}.", { pace: at });
-  const amount = size < 60 ? `${Math.round(size)} s` : clock(Math.round(size));
-  return delta > 0 ? t("{amount}/km slower than your threshold pace of {pace}.", { amount, pace: at }) : t("{amount}/km faster than your threshold pace of {pace}.", { amount, pace: at });
+  const amount = `${shown < 60 ? `${Math.round(shown)} s` : clock(Math.round(shown))}${paceUnitLabel()}`;
+  return delta > 0 ? t("{amount} slower than your threshold pace of {pace}.", { amount, pace: at }) : t("{amount} faster than your threshold pace of {pace}.", { amount, pace: at });
 }
 
 // ------------------------------------------------------------------- zones
@@ -106,10 +107,10 @@ export function hrZoneRange(z: ZoneTime): string {
 }
 
 export function paceZoneRange(i: number, thresholdS: number): string {
-  const at = (r: number) => clock(Math.round(r * thresholdS));
-  if (i === 0) return t("slower than {pace} /km", { pace: at(PACE_ZONE_RATIOS[0]) });
-  if (i === PACE_ZONE_RATIOS.length) return t("faster than {pace} /km", { pace: at(1) });
-  return `${at(PACE_ZONE_RATIOS[i])}–${at(PACE_ZONE_RATIOS[i - 1])} /km`;
+  const at = (r: number) => clock(Math.round(paceIn(r * thresholdS)));
+  if (i === 0) return t("slower than {pace}", { pace: `${at(PACE_ZONE_RATIOS[0])} ${paceUnitLabel()}` });
+  if (i === PACE_ZONE_RATIOS.length) return t("faster than {pace}", { pace: `${at(1)} ${paceUnitLabel()}` });
+  return `${at(PACE_ZONE_RATIOS[i])}–${at(PACE_ZONE_RATIOS[i - 1])} ${paceUnitLabel()}`;
 }
 
 export function powerZoneRange(i: number, ftp: number): string {
@@ -272,7 +273,7 @@ export function splitsFromTrack(track: Track, streams: Streams, sport: Sport, un
   for (let from = 0, k = 1; from < total - unitM * 0.005; from += unitM, k++) {
     const to = Math.min(total, from + unitM);
     const whole = to - from >= unitM * 0.98;
-    const label = whole ? String(Number(((k * unitM) / 1000).toFixed(2))) : Number(((to - from) / 1000).toFixed(2)).toString();
+    const label = whole ? String(Number(((k * unitM) / distanceStep()).toFixed(2))) : Number(((to - from) / distanceStep()).toFixed(2)).toString();
     const row = stretch(track, streams, sport, from, to, label, unitM);
     if (row) out.push(row);
   }
@@ -304,7 +305,7 @@ export function rowsFromLaps(laps: readonly Lap[], track: Track | null, streams:
     const whole = l.distanceM != null && l.distanceM >= unitM * 0.98;
     const running = paceUnit(sport) === "min/km";
     const row: SplitRow = {
-      label: l.distanceM != null && !whole && k === laps.length - 1 ? Number((l.distanceM / 1000).toFixed(2)).toString() : String(l.n),
+      label: l.distanceM != null && !whole && k === laps.length - 1 ? Number((l.distanceM / distanceStep()).toFixed(2)).toString() : String(l.n),
       fromM, toM, distanceM: l.distanceM ?? 0, durationS: l.durationS,
       gapS: read?.gapS != null && read.durationS > 0 ? read.gapS * (l.durationS / read.durationS) : null,
       avgHr: pickNum(l.avgHr, read?.avgHr), maxHr: pickNum(l.maxHr, read?.maxHr), cadence: pickNum(l.cadence, read?.cadence),
@@ -328,7 +329,7 @@ export function groupRows(rows: readonly SplitRow[], size: number, unitM: number
     const whole = total.distanceM >= unitM * size * 0.98;
     out.push({
       ...total,
-      label: whole ? String(Number(((unitM * size * (out.length + 1)) / 1000).toFixed(2))) : Number((total.toM / 1000).toFixed(2)).toString(),
+      label: whole ? String(Number(((unitM * size * (out.length + 1)) / distanceStep()).toFixed(2))) : Number((total.toM / distanceStep()).toFixed(2)).toString(),
       partial: !whole,
     });
   }
@@ -683,13 +684,15 @@ const STROKE_WORD: Record<Stroke | "mixed", string> = {
 
 export function swimSetText(set: SwimSet): { title: string; detail: string } {
   const stroke = t(STROKE_WORD[set.stroke] ?? set.stroke.toLowerCase());
-  const pace = `${clock(Math.round(set.paceS))} /100 m`;
-  if (set.reps.length === 1) return { title: t("{distance} m {stroke}", { distance: set.distanceM, stroke }), detail: t("{lengths} lengths · {pace}", { lengths: set.lengths, pace }) };
+  const pace = `${clock(Math.round(swimPaceIn(set.paceS)))} ${swimPaceUnitLabel()}`;
+  // A rep's length as the swimmer would say it: 100 m, or 109 yd.
+  const distance = `${imperial() ? Math.round(swimIn(set.distanceM)) : set.distanceM} ${swimUnit()}`;
+  if (set.reps.length === 1) return { title: t("{distance} {stroke}", { distance, stroke }), detail: t("{lengths} lengths · {pace}", { lengths: set.lengths, pace }) };
   const avg = clock(Math.round(set.avgRepS));
   return {
     title: set.intervalS
-      ? t("{reps} × {distance} m {stroke} on {interval}", { reps: set.reps.length, distance: set.distanceM, stroke, interval: clock(set.intervalS) })
-      : t("{reps} × {distance} m {stroke}", { reps: set.reps.length, distance: set.distanceM, stroke }),
+      ? t("{reps} × {distance} {stroke} on {interval}", { reps: set.reps.length, distance, stroke, interval: clock(set.intervalS) })
+      : t("{reps} × {distance} {stroke}", { reps: set.reps.length, distance, stroke }),
     detail: set.avgRestS != null ? t("Average {time}, rest {rest}", { time: avg, rest: clock(Math.round(set.avgRestS)) }) : t("Average {time}", { time: avg }),
   };
 }
@@ -791,11 +794,12 @@ export function muscleWork(entries: readonly { workingSets: number; muscles: rea
 
 // --------------------------------------------------------------- formatting
 
-/** A split's pace or speed for the table: 5:08, 27.8. */
+/** A split's pace or speed for the table, in the shown unit: 5:08, 27.8. */
 export function rowPace(sport: Sport, row: Pick<SplitRow, "distanceM" | "durationS">): string {
   const v = paceOver(sport, row.distanceM, row.durationS);
   if (v == null) return "—";
-  return paceUnit(sport) === "km/h" ? v.toFixed(1) : clock(Math.round(v));
+  const unit = paceUnit(sport);
+  return unit === "km/h" ? speedIn(v).toFixed(1) : clock(Math.round(unit === "min/km" ? paceIn(v) : swimPaceIn(v)));
 }
 
 /** Times to the hundredth under an hour; whole seconds with the hour shown above it stay exact too. */

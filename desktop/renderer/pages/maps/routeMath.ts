@@ -1,6 +1,7 @@
 // Route Studio's sums: joining drawn legs, the elevation profile, estimated time and the makeup line. Pure.
 import type { RouteGeometry, RouteMakeup, RouteSport, TrackPoint } from "../../../maps/types";
 import { msg, t, tx } from "@/lib/i18n";
+import { paceIn, paceUnitLabel, speedIn, speedUnit } from "@/lib/units";
 import { haversine } from "./sketchShapes";
 
 /** Legs end where the next starts: joined without repeating that point. */
@@ -68,12 +69,13 @@ const PACE: Record<RouteSport, { flat: number; climb: number; speed: boolean }> 
 export function estimate(sport: RouteSport, distanceM: number, ascentM: number) {
   const p = PACE[sport];
   const seconds = (distanceM / 1000) * p.flat + ascentM * p.climb;
-  const perKm = distanceM > 0 ? seconds / (distanceM / 1000) : 0;
+  const perKm = distanceM > 0 ? seconds / (distanceM / 1000) : 0, per = paceIn(perKm);
   return {
     seconds,
     time: clock(seconds),
-    pace: p.speed ? `${(3600 / Math.max(perKm, 1)).toFixed(1)}` : `${Math.floor(perKm / 60)}:${String(Math.round(perKm % 60)).padStart(2, "0")}`,
-    paceUnit: p.speed ? " km/h" : " /km",
+    speed: p.speed,
+    pace: p.speed ? `${speedIn(3600 / Math.max(perKm, 1)).toFixed(1)}` : `${Math.floor(per / 60)}:${String(Math.round(per % 60)).padStart(2, "0")}`,
+    paceUnit: p.speed ? ` ${speedUnit()}` : ` ${paceUnitLabel()}`,
   };
 }
 export const clock = (s: number) => {

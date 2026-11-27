@@ -2,6 +2,7 @@
 import type { Measurement, OwnMeasurement } from "@/data/body";
 import { dayKey, parseDay } from "@/lib/format";
 import { t } from "@/lib/i18n";
+import { weightIn, weightUnit } from "@/lib/units";
 
 /** A measurement on the page: the sample's, or the person's own (which can be deleted). */
 export interface Entry extends Measurement {
@@ -232,3 +233,6 @@ export function oneOrTwo(value: number): string {
   const two = value.toFixed(2);
   return two.endsWith("0") ? two.slice(0, -1) : two;
 }
+
+/** A weight in kg as scales print it, in the shown unit: 72.4 kg or 159.61 lb. */
+export const scaleWeight = (kg: number): string => `${oneOrTwo(weightIn(kg))} ${weightUnit()}`;

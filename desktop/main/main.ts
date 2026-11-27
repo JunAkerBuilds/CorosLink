@@ -36,7 +36,11 @@ import { cookieSecret, keychain, keychainName, keychainSecure, setKeychainFallba
 import { askedNamesFile, corosLinkKeychain } from "./coroslink/oldKeychain";
 import { guardSession } from "./dataMode";
 import { Updates, type Updater } from "./updates";
-import { DesktopSettings } from "./settings";
+import { DesktopSettings, platformLabel } from "./settings";
+import { CATALOG_ORIGIN } from "./watchface/community";
+import { release } from "node:os";
+import { USAGE_PATH, UsageCheckIn } from "./usage";
+import { ReportSender } from "./reports";
 import { applyLanguage } from "./language";
 import { t } from "@/lib/i18n";
 import { FirstRun } from "./setup";
@@ -94,7 +98,17 @@ console.error = (...args: unknown[]) => {
   consoleError(...args);
   errors.add("app", args.map((a) => (a instanceof Error ? a.stack ?? a.message : typeof a === "string" ? a : JSON.stringify(a))).join(" "));
 };
-process.on("uncaughtExceptionMonitor", (error) => errors.add("app", error.stack ?? String(error)));
+// Crash reports (reports.ts) once the app is ready; until then a crash is only logged.
+let reporter: ReportSender | null = null;
+process.on("uncaughtExceptionMonitor", (error) => {
+  errors.add("app", error.stack ?? String(error));
+  reporter?.crashed(`App: ${error.message || String(error)}`.slice(0, 300));
+});
+app.on("child-process-gone", (_event, details) => {
+  if (details.reason === "clean-exit" || details.reason === "killed") return;
+  errors.add("app", `A ${details.type} process stopped: ${details.reason}`);
+  reporter?.crashed(`${details.type} process: ${details.reason}`);
+});
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
@@ -160,7 +174,10 @@ function createWindow(): void {
   });
   window.once("ready-to-show", () => window?.show());
   window.webContents.on("console-message", (event) => { if (event.level === "error") errors.add("screen", event.message); });
-  window.webContents.on("render-process-gone", (_event, details) => errors.add("screen", `The window stopped: ${details.reason}`));
+  window.webContents.on("render-process-gone", (_event, details) => {
+    errors.add("screen", `The window stopped: ${details.reason}`);
+    if (details.reason !== "clean-exit" && details.reason !== "killed") reporter?.crashed(`Window: ${details.reason}`);
+  });
   if (process.env.CLINK_SMOKE && !app.isPackaged) {
     void runSmoke(window, ORIGIN, process.env.CLINK_SMOKE);
     return;
@@ -192,6 +209,8 @@ function buildMenu(dev: DevMode, change: (c: { devMode?: boolean; sample?: boole
   const settingsItem: MenuItemConstructorOptions = { label: t("Settings…"), accelerator: "CmdOrCtrl+,", click: () => void window?.loadURL(`${ORIGIN}${inCoach() ? "/coach/settings" : "/settings"}`) };
   const aiItem: MenuItemConstructorOptions = { label: t("Coach Settings…"), click: () => void window?.loadURL(`${ORIGIN}/coach/settings`) };
   const updatesItem: MenuItemConstructorOptions = { label: t("Check for Updates…"), click: () => void window?.loadURL(`${ORIGIN}/settings/about?check=1`) };
+  // Straight to Settings → Error logs, the message box ready: the error log and a note go to the developer (reports.ts).
+  const reportItem: MenuItemConstructorOptions = { label: t("Report a Problem…"), click: () => void window?.loadURL(`${ORIGIN}/settings/logs?send`) };
   const devSwitch: MenuItemConstructorOptions = { label: t("Developer Mode"), type: "checkbox", checked: state.devMode, click: (item) => void change({ devMode: item.checked }, true) };
   const template: MenuItemConstructorOptions[] = [
     ...(isMac ? [{ role: "appMenu" as const, submenu: [
@@ -213,8 +232,9 @@ function buildMenu(dev: DevMode, change: (c: { devMode?: boolean; sample?: boole
       { label: t("Run Setup Again"), click: () => void window?.loadURL(`${ORIGIN}/setup`) },
       { label: t("Open Data Folder"), click: () => void shell.openPath(app.getPath("userData")) },
       ...(isMac ? [] : [{ type: "separator" as const }, devSwitch]),
-    ] }] : isMac ? [] : [{ label: t("Help"), submenu: [updatesItem, settingsItem, aiItem, devSwitch] }]),
+    ] }] : []),
     { role: "windowMenu" },
+    isMac ? { role: "help", submenu: [reportItem] } : { label: t("Help"), submenu: [updatesItem, settingsItem, aiItem, ...(state.devMode ? [] : [devSwitch]), { type: "separator" }, reportItem] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -314,6 +334,21 @@ void app.whenReady().then(async () => {
   firstRun.startBackups();
   app.on("before-quit", () => firstRun.stop());
 
+  // Usage counts and error reports go to the Faces server: packaged builds only, unless a development build is pointed
+  // at a test server (CLINK_TELEMETRY_ORIGIN); never in smoke runs.
+  const telemetryOrigin = process.env.CLINK_SMOKE ? null : app.isPackaged ? CATALOG_ORIGIN : process.env.CLINK_TELEMETRY_ORIGIN || null;
+  const usage = new UsageCheckIn(data, {
+    version: app.getVersion(), platform: process.platform, arch: process.arch, endpoint: telemetryOrigin ? `${telemetryOrigin}${USAGE_PATH}` : undefined,
+    allowed: () => !!telemetryOrigin && settings.usageAllowed,
+  });
+  const system = platformLabel(process.platform, process.arch, release());
+  reporter = new ReportSender(data, {
+    version: app.getVersion(), platform: process.platform, arch: process.arch, system: system, electron: process.versions.electron,
+    origin: telemetryOrigin, log: (hours) => errors.report(hours, `C-LINK ${app.getVersion()} · ${system} · Electron ${process.versions.electron}`),
+    installId: () => usage.installId(), crashesAllowed: () => settings.crashesAllowed,
+  });
+  const reports: ReportSender = reporter;
+
   // The Settings page's own state: data mode, backups, storage, logs (settings.ts).
   const settings = new DesktopSettings(data, errors, {
     version: app.getVersion(),
@@ -335,9 +370,13 @@ void app.whenReady().then(async () => {
       return (window ? await dialog.showMessageBox(window, options) : await dialog.showMessageBox(options)).response === 0;
     },
     lastPhoneSync: () => phones.sessions.list().map((p) => p.lastUsedAt).sort().at(-1) ?? null,
-    modeChanged: (mode) => { if (mode === "connected") watch.leftLocalMode(); else watch.enteredLocalMode(); },
+    modeChanged: (mode) => { if (mode === "connected") { watch.leftLocalMode(); usage.start(); } else watch.enteredLocalMode(); },
     languageChanged: (lang) => { applyLanguage(lang); buildMenu(dev, changeDev); },
+    usageChanged: (on) => { if (on) usage.start(); else usage.forget(); },
+    sendReport: (input) => reports.send(input),
   }, { replayIntro: !app.isPackaged && !!process.env.CLINK_INTRO, skipIntro: !app.isPackaged && !!process.env.CLINK_SMOKE });
+  usage.start();
+  void reports.flush();
   // The menu in the language the page spoke last time, until the page says otherwise.
   applyLanguage(settings.language);
   buildMenu(dev, changeDev);

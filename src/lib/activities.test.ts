@@ -1,12 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { Activity, RecordedDetail } from "@/data/activities";
 import { SAMPLE_ACTIVITIES, SAMPLE_ZONE_BOUNDS, sampleActivityDetail } from "@/data/sample/activities";
 import {
   DEFAULT_FILTERS, axisTicks, filterActivities, filtersToQuery, formatDay, formatDayTime, formatDistance, formatLapPace, formatPace,
   formatTime, formatTotals, generateDetail, inDateRange, inDistanceBand, kmMarkers, lapBars, lapIndexAt, lapSpans, matchesSearch,
   dayStrip, groupByWeek, isPlaced, mergeLaps, nearestSample, nextSort, parseFilters, routeLngLatAt, routeLngLatSlice, routePositionAt, routeSlice, seededRandom, sortActivities, splitWhole, toCsv,
-  totals, weekKey, weekTitle, zoneLabel,
+  totals, weekKey, weekTitle, zoneLabel, distanceBands, distanceMarkers, formatElevation, formatLapDistance, formatPosition, recordPace,
 } from "./activities";
+import { useUnitsNow } from "./units";
 
 const TODAY = new Date(2026, 10, 19);
 // The newest fifteen: the rows these expectations were written against.
@@ -320,5 +321,57 @@ describe("a route on a real map", () => {
     expect(cut[0][0]).toBeCloseTo(-73.55, 10);
     expect(cut[2][1]).toBeCloseTo(45.55, 10);
     expect(routeLngLatSlice(placed, 1500, 500)).toEqual([]);
+  });
+});
+
+describe("imperial units", () => {
+  afterEach(() => useUnitsNow("metric"));
+  const tempo = sampleActivityDetail(all[0].id) as RecordedDetail;
+
+  it("shows the table in miles, yards and feet", () => {
+    useUnitsNow("imperial");
+    const row = (a: Activity) => [formatDistance(a), formatPace(a)];
+    expect(row(all[0])).toEqual(["4.98 mi", "7:40 /mi"]);
+    expect(row(all[3])).toEqual(["15.3 mi", "15.8 mph"]);
+    expect(row(all[5])).toEqual(["1,640 yd", "1:54 /100 yd"]);
+    expect(formatElevation(64)).toBe("+210 ft");
+    expect(formatElevation(null)).toBe("—");
+    expect(formatTotals(totals(all))).toBe("15 activities · 87.6 mi · 12:49:47 · Load 1,047");
+    expect(formatLapPace("Run", tempo.laps[0])).toBe("8:16.18");
+    expect(formatLapDistance("Run", tempo.laps[0])).toBe("0.62");
+    expect(recordPace(437.44, 1609.344)).toBe("7:17 /mi");
+  });
+
+  it("filters in 3 and 6 mile bands", () => {
+    useUnitsNow("imperial");
+    expect(distanceBands().map((b) => b.label)).toEqual(["Any distance", "Under 3 mi", "3 to 6 mi", "Over 6 mi"]);
+    expect(inDistanceBand({ distanceM: 4800 }, "under5")).toBe(true);
+    expect(inDistanceBand({ distanceM: 4900 }, "5to10")).toBe(true);
+    expect(inDistanceBand({ distanceM: 9700 }, "over10")).toBe(true);
+  });
+
+  it("labels the axis, the position and the route marks in miles", () => {
+    useUnitsNow("imperial");
+    expect(axisTicks("Run", tempo.streams)).toEqual(["0 mi", "1.2", "2.5", "3.7", "5 mi"]);
+    expect(formatPosition("Run", "distance", 4500)).toBe("2.8 mi");
+    expect(formatPosition("Swim", "distance", 750)).toBe("820 yd");
+    expect(distanceMarkers(8020)).toEqual([{ label: "2", metres: 3218.688 }]);
+    expect(distanceMarkers(18040).map((m) => m.label)).toEqual(["5"]);
+  });
+
+  it("writes the CSV in miles and feet", () => {
+    useUnitsNow("imperial");
+    const [head, first] = toCsv(all.slice(0, 1)).split("\r\n");
+    expect(head).toContain("Distance (mi)");
+    expect(head).toContain("Elevation (ft)");
+    expect(first).toContain(",4.983,");
+    expect(first).toContain("7:40.43 /mi");
+  });
+
+  it("keeps metric as it was", () => {
+    expect(distanceBands().map((b) => b.label)).toEqual(["Any distance", "Under 5 km", "5 to 10 km", "Over 10 km"]);
+    expect(distanceMarkers(8020)).toEqual([{ label: "2", metres: 2000 }, { label: "4", metres: 4000 }, { label: "6", metres: 6000 }]);
+    expect(formatElevation(64)).toBe("+64 m");
+    expect(recordPace(268.9, 1000)).toBe("4:29 /km");
   });
 });

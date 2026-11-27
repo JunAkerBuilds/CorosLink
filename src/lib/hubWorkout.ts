@@ -1,6 +1,7 @@
 /** COROS calendar workouts in the builder: their entry IDs, and COROS targets in words. */
 import type { HubIntensity, HubWorkout } from "@/data/hub";
 import { msg, t } from "@/lib/i18n";
+import { imperial, speedIn, speedUnit, weightIn, weightUnit } from "@/lib/units";
 
 /** Which COROS calendar entry a builder workout came from, with the workout as COROS sent it. */
 export interface CorosLink {
@@ -10,7 +11,12 @@ export interface CorosLink {
   original: HubWorkout;
 }
 
-const UNITS: Partial<Record<HubIntensity["kind"], string>> = { heartRate: "bpm", power: "W", speed: "km/h", cadence: "/min", weight: "kg" };
+const UNITS: Partial<Record<HubIntensity["kind"], () => string>> = { heartRate: () => "bpm", power: () => "W", speed: speedUnit, cadence: () => "/min", weight: weightUnit };
+/** A target's number in the shown units: speed and weight convert (to a tenth), the rest stay as COROS sent them. */
+const shown = (kind: HubIntensity["kind"], v: number): number => {
+  const out = kind === "speed" ? speedIn(v) : kind === "weight" ? weightIn(v) : v;
+  return imperial() && out !== v ? Math.round(out * 10) / 10 : out;
+};
 const NAMES: Partial<Record<HubIntensity["kind"], string>> = { heartRate: msg("Heart rate"), power: msg("Power"), speed: msg("Speed"), cadence: msg("Cadence"), weight: msg("Weight"), rpe: "RPE", stroke: msg("Stroke"), grade: msg("Grade"), bodyweight: msg("Bodyweight") };
 
 /** A COROS target the builder can't edit, in words: "Heart rate 140–155 bpm". */
@@ -19,8 +25,8 @@ export function intensityLabel(i: HubIntensity): string {
   const name = known ? t(known) : t("COROS target");
   if (i.kind === "stroke" && i.stroke) return t("Stroke: {stroke}", { stroke: i.stroke });
   if (i.low == null) return name;
-  const range = i.high != null && i.high !== i.low ? `${i.low}–${i.high}` : `${i.low}`;
-  const unit = UNITS[i.kind];
+  const range = i.high != null && i.high !== i.low ? `${shown(i.kind, i.low)}–${shown(i.kind, i.high)}` : `${shown(i.kind, i.low)}`;
+  const unit = UNITS[i.kind]?.();
   return `${name} ${range}${unit ? ` ${unit}` : ""}`;
 }
 

@@ -1,6 +1,7 @@
 import { fromSample, fromSynced, NotWiredError, type Loaded } from "@/data/core";
 import { createStore } from "@/data/local/store";
 import { language, t } from "@/lib/i18n";
+import { imperial } from "@/lib/units";
 import { addMinutes, weatherFrom, weatherUrl } from "@/lib/openMeteo";
 import { SAMPLE_ACTIVITIES, sampleActivityDetail } from "@/data/sample/activities";
 import { syncView } from "@/data/sync";
@@ -274,7 +275,7 @@ function askForNote(id: string, language: string): void {
   void fetch("/api/ai/note", {
     method: "POST", credentials: "same-origin", cache: "no-store",
     headers: { "Content-Type": "application/json", "X-Clink-Hub": "1" },
-    body: JSON.stringify({ kind: "workout", key: id, language, imperial: false, utcOffsetMinutes: -new Date().getTimezoneOffset() }),
+    body: JSON.stringify({ kind: "workout", key: id, language, imperial: imperial(), utcOffsetMinutes: -new Date().getTimezoneOffset() }),
   }).then((response) => { if (response.ok) void syncNow().catch(() => {}); }, () => {});
 }
 

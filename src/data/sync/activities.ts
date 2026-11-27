@@ -2,7 +2,7 @@
 import type {
   Activity, ActivityDetail, ActivityExtras, ChartScales, Lap, RecordRow, RoutePoint, Sport, Streams, StrengthExercise, StrengthSession, Thresholds, ZoneTime,
 } from "@/data/activities";
-import { formatDistance, paceUnit, scalesFor } from "@/lib/activities";
+import { formatDistance, paceUnit, recordPace, scalesFor } from "@/lib/activities";
 import { maxHrFor, muscleWork, relativeEffort, weekShare } from "@/lib/activityDetail";
 import { bestEfforts, timesFromDistance } from "@/lib/bestEfforts";
 import { clock } from "@/lib/format";
@@ -187,7 +187,7 @@ export function thresholdsFrom(view: ViewTrainingBody | undefined): Thresholds {
 export function recordsFor(id: string, view: ViewTrainingBody | undefined): RecordRow[] {
   return (view?.bests ?? [])
     .filter((b) => b != null && b.activityId === id && finite(b.seconds) && finite(b.meters) && b.meters > 0)
-    .map((b) => ({ what: b.name, rank: t("Personal best"), value: clock(b.seconds, 2), pace: `${clock(Math.round((b.seconds / b.meters) * 1000))} /km`, best: true }));
+    .map((b) => ({ what: b.name, rank: t("Personal best"), value: clock(b.seconds, 2), pace: recordPace(b.seconds, b.meters), best: true }));
 }
 
 /**
@@ -207,7 +207,7 @@ export function effortsFor(activity: Activity, body: ActivityDetailBody | undefi
     const mine = pb?.activityId === activity.id;
     const seconds = mine && pb ? pb.seconds : e.seconds;
     const rank = mine ? t("Personal best") : pb ? (seconds <= pb.seconds ? t("Faster than your best") : t("{time} off your best", { time: clock(seconds - pb.seconds, 2) })) : "";
-    return { what: t(e.name), rank, value: clock(seconds, 2), pace: `${clock(Math.round((seconds / e.metres) * 1000))} /km`, ...(mine ? { best: true } : {}) };
+    return { what: t(e.name), rank, value: clock(seconds, 2), pace: recordPace(seconds, e.metres), ...(mine ? { best: true } : {}) };
   });
 }
 

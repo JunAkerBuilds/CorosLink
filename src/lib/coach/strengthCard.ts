@@ -4,6 +4,7 @@ import type { BodyExtra, BodyLift, BodyNumber } from "@/data/coach";
 import type { HubWorkout, HubWorkoutStep } from "@/data/hub";
 import type { NativeGymWorkout } from "@/data/sync/native";
 import { t, tx } from "@/lib/i18n";
+import { imperial, weightIn, weightUnit } from "@/lib/units";
 import { formatClock } from "@/lib/workout";
 
 /** An exercise's best working set the last time it was logged: its heaviest weight, the most reps at it, the longest hold. */
@@ -51,7 +52,7 @@ function each(s: HubWorkoutStep): BodyNumber {
 }
 
 function load(s: HubWorkoutStep): BodyLift["load"] {
-  if (s.intensity.kind === "weight" && finite(s.intensity.low)) return { value: String(Number(s.intensity.low.toFixed(2))), unit: "kg" };
+  if (s.intensity.kind === "weight" && finite(s.intensity.low)) return imperial() ? { value: String(Number(weightIn(s.intensity.low).toFixed(1))), unit: weightUnit() } : { value: String(Number(s.intensity.low.toFixed(2))), unit: "kg" };
   if (s.intensity.kind === "bodyweight") return "bodyweight";
   return null;
 }
@@ -61,7 +62,7 @@ function upOn(s: HubWorkoutStep, name: string, history: LiftHistory | null): Bod
   const last = history?.get(plain(name));
   if (!last) return undefined;
   const kg = s.intensity.kind === "weight" && finite(s.intensity.low) ? s.intensity.low : 0;
-  if (kg > last.kg + 0.01) return { on: "load", by: plus(kg - last.kg) };
+  if (kg > last.kg + 0.01) return { on: "load", by: imperial() ? `+${Number(weightIn(kg - last.kg).toFixed(1))}` : plus(kg - last.kg) };
   if (Math.abs(kg - last.kg) >= 0.01) return undefined;
   if (s.target === "reps" && last.reps > 0 && (s.count ?? 0) > last.reps) return { on: "each", by: plus((s.count ?? 0) - last.reps) };
   if (s.target === "time" && last.seconds > 0 && (s.seconds ?? 0) > last.seconds) return { on: "each", by: `+${(s.seconds ?? 0) - last.seconds} s` };

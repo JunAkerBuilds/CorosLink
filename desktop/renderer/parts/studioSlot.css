@@ -6,7 +6,7 @@
 .st-sl-row { gap: 6px; }
 .st-sl-row .st-ch-pg-main { height: auto; min-height: 40px; padding: 3px 6px; }
 .st-sl-row .st-ch-pg-main:disabled { cursor: default; }
-.st-sl-thumb { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: #0b100f; color: #8aa39b; overflow: hidden; }
+.st-sl-thumb { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; color: #8aa39b; overflow: hidden; }
 .st-sl-thumb img { max-width: 22px; max-height: 22px; object-fit: contain; }
 .st-sl-thumb[data-empty] { background: none; border: 1px dashed rgba(var(--fg-rgb), 0.25); color: var(--dim); }
 .st-sl-row:not([data-on]) .st-sl-thumb { opacity: 0.55; }

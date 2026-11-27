@@ -7,6 +7,7 @@ import { Button, Card, OriginBadge, Select } from "@/components/ui";
 import type { Origin } from "@/data/core";
 import { saveTrainingPlan, type PlanEditorData } from "@/data/plans";
 import { dayMonth } from "@/lib/calendar";
+import { distanceIn, distanceUnit } from "@/lib/units";
 import { thousands } from "@/lib/format";
 import { inferPhases, planOutline } from "@/lib/planGenerate";
 import { TYPE_ORDER, WORKOUT_TYPES, workoutType, type WorkoutType } from "@/lib/workoutType";
@@ -293,7 +294,7 @@ export function PlanEditor({ initial, origin, draft }: { initial: PlanEditorData
             <div className="pe-facts">
               <div className="pl-fig"><span>{t("Workouts")}</span><span>{thousands(summary.workouts)}</span></div>
               <div className="pl-fig"><span>{t("Duration")}</span><span>{summary.durationSeconds ? durationText(summary.durationSeconds) : "—"}</span></div>
-              <div className="pl-fig"><span>{t("Distance")}</span><span>{summary.distanceMeters ? `${(summary.distanceMeters / 1000).toFixed(2)} km` : "—"}</span></div>
+              <div className="pl-fig"><span>{t("Distance")}</span><span>{summary.distanceMeters ? `${distanceIn(summary.distanceMeters).toFixed(2)} ${distanceUnit()}` : "—"}</span></div>
               <div className="pl-fig"><span>{t("Training load")}</span><span className={summary.trainingLoad ? "pl-load" : undefined}>{summary.trainingLoad ? thousands(summary.trainingLoad) : "—"}</span></div>
               <div className="pl-fig"><span>{t("Rest days")}</span><span>{summary.restDays}</span></div>
               <div className="pl-fig"><span>{t("Peak week")}</span><span>{peak.index >= 0 ? t("Week {n}", { n: peak.index + 1 }) : "—"}</span></div>

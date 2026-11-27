@@ -5,7 +5,14 @@
  */
 import type { LineChart, RidePage, RunPage, SwimPage } from "@/data/sports";
 import { t } from "@/lib/i18n";
+import { clock, thousands } from "@/lib/format";
 import { dayMonthOf, weekdayOf } from "@/lib/sports";
+import { distance, height, heightIn, heightUnit, imperial, swimDistance, swimPaceIn, swimPaceText } from "@/lib/units";
+
+/** Seconds per 100 m as the clock per 100 of the shown unit. */
+const per100 = (seconds: number): string => clock(swimPaceIn(seconds));
+/** A climbing rate, metres an hour, in the shown unit: 645 m/h or 2,116 ft/h. */
+const rate = (metres: number): string => `${thousands(heightIn(metres))} ${heightUnit()}/h`;
 
 /** A day of the sample's six weeks, as the charts write it ("8 Oct"). The year doesn't show. */
 const on = (month: number, day: number): string => dayMonthOf(new Date(2026, month - 1, day));
@@ -24,26 +31,28 @@ export function sampleRunTrend(): NonNullable<Extract<RunPage["engine"], { headl
 
 export function sampleBiggestClimb(): NonNullable<Extract<RidePage["climb"], { headline: string }>["sampleBiggest"]> {
   return {
-    title: t("{meters} m up in {time}", { meters: 412, time: "38:20" }), detail: t("{distance} at {grade}", { distance: "6.4 km", grade: "6.4%" }), tag: "Cat 2",
-    rate: t("On climbs like it: {now} against {before} before, {percent}% faster.", { now: "645 m/h", before: "608 m/h", percent: 6 }),
+    title: t("{height} up in {time}", { height: height(412), time: "38:20" }), detail: t("{distance} at {grade}", { distance: distance(6400, 1), grade: "6.4%" }), tag: "Cat 2",
+    rate: t("On climbs like it: {now} against {before} before, {percent}% faster.", { now: rate(645), before: rate(608), percent: 6 }),
   };
 }
 
 export function sampleCssTrend(): LineChart {
   return {
-    values: [109, 108.4, 108, 107.2, 106.6, 106], marks: ["1:46", "1:48", "1:49"], dates: sixWeeks(), flip: true,
-    label: t("Sample data: critical swim speed over six weeks, from 1:49 to 1:46 per 100 m. Faster is higher."),
+    values: [109, 108.4, 108, 107.2, 106.6, 106].map(swimPaceIn), marks: [per100(106), per100(108), per100(109)], dates: sixWeeks(), flip: true,
+    label: imperial()
+      ? t("Sample data: critical swim speed over six weeks, from {from} to {to} per 100 yd. Faster is higher.", { from: per100(109), to: per100(106) })
+      : t("Sample data: critical swim speed over six weeks, from 1:49 to 1:46 per 100 m. Faster is higher."),
   };
 }
 
 export function sampleCss(): Extract<SwimPage["css"], { headline: string }> {
   return {
-    sample: true, chip: { tone: "good", text: t("Faster") }, headline: t("Critical swim speed {pace} /100 m", { pace: "1:46" }),
+    sample: true, chip: { tone: "good", text: t("Faster") }, headline: t("Critical swim speed {pace}", { pace: swimPaceText(106) }),
     sub: `${t("Estimated from your best 200 m ({b200}) and 400 m ({b400}).", { b200: "3:18.40", b400: "6:51.20" })} ${t("2 s per 100 faster than six weeks ago.")}`,
     bands: [
-      { name: t("Easy"), text: t("slower than {pace}", { pace: "1:56" }), hue: "run" },
-      { name: t("Threshold"), text: t("{from} to {to}", { from: "1:44", to: "1:48" }), hue: "gold" },
-      { name: t("Fast"), text: t("quicker than {pace}", { pace: "1:40" }), hue: "coral" },
+      { name: t("Easy"), text: t("slower than {pace}", { pace: per100(116) }), hue: "run" },
+      { name: t("Threshold"), text: t("{from} to {to}", { from: per100(104), to: per100(108) }), hue: "gold" },
+      { name: t("Fast"), text: t("quicker than {pace}", { pace: per100(100) }), hue: "coral" },
     ],
     sampleTrend: sampleCssTrend(),
   };
@@ -58,7 +67,7 @@ export function sampleSwolf(): SwimPage["swolf"] {
       values: [43.8, 43.4, 43.1, 42.6, 42.0, 41.5], marks: ["41.5", "42.6", "43.8"], dates: sixWeeks(), flip: true,
       label: t("Sample data: SWOLF at the same pace over six weeks, falling from 43.8 to 41.5. Lower is higher on the chart."),
     },
-    stats: [{ value: "18.4", label: t("Strokes a length") }, { value: "23.1 s", label: t("Time a length") }, { value: "1:55", label: t("Pace /100 m") }],
+    stats: [{ value: "18.4", label: t("Strokes a length") }, { value: "23.1 s", label: t("Time a length") }, { value: per100(115), label: imperial() ? t("Pace /100 yd") : t("Pace /100 m") }],
   };
 }
 
@@ -66,8 +75,8 @@ export function sampleStrokes(): SwimPage["strokes"] {
   return {
     chip: null, headline: t("{percent}% freestyle", { percent: 72 }), sub: t("By distance over the last 4 weeks."),
     rows: [
-      { name: t("Freestyle"), percent: 72, detail: "6,912 m", hue: "swim" }, { name: t("Breaststroke"), percent: 14, detail: "1,344 m", hue: "ride" },
-      { name: t("Backstroke"), percent: 8, detail: "768 m", hue: "violet" }, { name: t("Drill"), percent: 6, detail: "576 m", hue: "slate" },
+      { name: t("Freestyle"), percent: 72, detail: swimDistance(6912), hue: "swim" }, { name: t("Breaststroke"), percent: 14, detail: swimDistance(1344), hue: "ride" },
+      { name: t("Backstroke"), percent: 8, detail: swimDistance(768), hue: "violet" }, { name: t("Drill"), percent: 6, detail: swimDistance(576), hue: "slate" },
     ],
   };
 }

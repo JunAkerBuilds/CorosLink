@@ -2,6 +2,7 @@
 // range of days to ask for, and how a row is written. Ported from the desktop app (CorosLink
 // electron/intervalsService.ts and intervalsMatch.ts).
 import { locale, msg, t } from "@/lib/i18n";
+import { distanceIn, distanceUnit, swimIn, swimUnit } from "@/lib/units";
 
 export interface MatchableActivity {
   startEpochMs: number;
@@ -109,11 +110,11 @@ export function importWindow(daysBack: number, now: number = Date.now()): { olde
   };
 }
 
-/** A row's distance: metres for a swim, kilometres to the hundredth otherwise, a dash when there is none. */
+/** A row's distance: metres (yards) for a swim, kilometres (miles) to the hundredth otherwise, a dash when there is none. */
 export function importDistance(row: Pick<IntervalsActivity, "distanceM" | "type">): string {
   if (!(row.distanceM > 0)) return "—";
-  if (row.type.toLowerCase().includes("swim")) return `${Math.round(row.distanceM).toLocaleString(locale("en-US"))} m`;
-  return `${(row.distanceM / 1000).toFixed(2)} km`;
+  if (row.type.toLowerCase().includes("swim")) return `${Math.round(swimIn(row.distanceM)).toLocaleString(locale("en-US"))} ${swimUnit()}`;
+  return `${distanceIn(row.distanceM).toFixed(2)} ${distanceUnit()}`;
 }
 
 /** "8 activities loaded · 4 missing from COROS". */

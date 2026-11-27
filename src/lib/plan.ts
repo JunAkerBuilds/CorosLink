@@ -10,6 +10,7 @@ import type { HubSport } from "@/data/hub";
 import { docReady, docToLegacy, docTotals, docUnwired, pacingFor, sportLabel, type BuilderDoc } from "@/lib/builder";
 import { addDays, isDayKey, shortDay, shortWeekday } from "@/lib/calendar";
 import { thousands } from "@/lib/format";
+import { distanceIn, distanceUnit } from "@/lib/units";
 import { msg, t } from "@/lib/i18n";
 import { totals, type Pacing, type Sport } from "@/lib/workout";
 
@@ -586,7 +587,7 @@ export function entryMeta(entry: TrainingPlanEntry, pacing: PlanPacing = null): 
   const m = trainingPlanEntryMetrics(entry, pacing);
   const parts: string[] = [];
   if (m.durationSeconds) parts.push(durationText(m.durationSeconds));
-  else if (m.distanceMeters) parts.push(`${(m.distanceMeters / 1000).toFixed(2)} km`);
+  else if (m.distanceMeters) parts.push(`${distanceIn(m.distanceMeters).toFixed(2)} ${distanceUnit()}`);
   else if (m.strengthSets) parts.push(m.strengthSets === 1 ? t("1 set") : t("{n} sets", { n: m.strengthSets }));
   if (m.trainingLoad) parts.push(thousands(m.trainingLoad));
   return parts.join(" · ") || (entry.workout ? sportLabel(entry.workout.sport) : "");

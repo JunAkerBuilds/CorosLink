@@ -6,6 +6,9 @@ import { paceUnit } from "@/lib/activities";
 import { exact, fastestIndex, groupRows, rowPace, showsGap, totalRow, type SplitRow } from "@/lib/activityDetail";
 import { clock, signed, thousands } from "@/lib/format";
 import { t } from "@/lib/i18n";
+import {
+  bodyHeightIn, bodyHeightUnit, distanceIn, distanceStep, distanceUnit, heightIn, heightUnit, paceIn, paceUnitLabel, speedUnit, swimIn, swimPaceUnitLabel, swimUnit,
+} from "@/lib/units";
 
 interface Column { key: string; head: string; unit: string; width: number; soft?: boolean; has: (r: SplitRow) => boolean; cell: (r: SplitRow) => string }
 
@@ -14,18 +17,18 @@ const whole = (v: number | null) => (v == null ? "—" : String(Math.round(v)));
 function columnsFor(sport: Sport, rows: readonly SplitRow[], gap: boolean): Column[] {
   const run = paceUnit(sport) === "min/km", ride = sport === "Ride";
   const all: Column[] = [
-    { key: "gap", head: "GAP", unit: "/km", width: 64, soft: true, has: () => gap, cell: (r) => (r.gapS == null ? "—" : clock(Math.round(r.gapS))) },
+    { key: "gap", head: "GAP", unit: paceUnitLabel(), width: 64, soft: true, has: () => gap, cell: (r) => (r.gapS == null ? "—" : clock(Math.round(paceIn(r.gapS)))) },
     { key: "bar", head: "", unit: "", width: 0, has: () => true, cell: () => "" },
     { key: "hr", head: t("Avg HR"), unit: "bpm", width: 68, has: (r) => r.avgHr != null, cell: (r) => whole(r.avgHr) },
     { key: "max", head: t("Max HR"), unit: "bpm", width: 68, soft: true, has: (r) => r.maxHr != null, cell: (r) => whole(r.maxHr) },
     { key: "cad", head: t("Cadence"), unit: ride ? "rpm" : "spm", width: 68, has: (r) => r.cadence != null, cell: (r) => whole(r.cadence) },
-    { key: "stride", head: t("Stride"), unit: "m", width: 68, has: (r) => run && r.strideM != null, cell: (r) => (r.strideM == null ? "—" : r.strideM.toFixed(2)) },
+    { key: "stride", head: t("Stride"), unit: heightUnit(), width: 68, has: (r) => run && r.strideM != null, cell: (r) => (r.strideM == null ? "—" : heightIn(r.strideM).toFixed(2)) },
     { key: "gct", head: "GCT", unit: "ms", width: 68, has: (r) => r.groundContactMs != null, cell: (r) => whole(r.groundContactMs) },
-    { key: "vo", head: t("Vert. osc."), unit: "cm", width: 78, has: (r) => r.verticalOscCm != null, cell: (r) => (r.verticalOscCm == null ? "—" : r.verticalOscCm.toFixed(1)) },
+    { key: "vo", head: t("Vert. osc."), unit: bodyHeightUnit(), width: 78, has: (r) => r.verticalOscCm != null, cell: (r) => (r.verticalOscCm == null ? "—" : bodyHeightIn(r.verticalOscCm).toFixed(1)) },
     { key: "pw", head: t("Power"), unit: "W", width: 68, has: (r) => r.powerW != null, cell: (r) => whole(r.powerW) },
     { key: "maxpw", head: t("Max power"), unit: "W", width: 84, soft: true, has: (r) => ride && r.maxPowerW != null, cell: (r) => whole(r.maxPowerW) },
-    { key: "asc", head: t("Ascent"), unit: "m", width: 68, soft: true, has: (r) => r.ascentM != null, cell: (r) => (r.ascentM == null ? "—" : signed(Math.round(r.ascentM))) },
-    { key: "desc", head: t("Descent"), unit: "m", width: 68, soft: true, has: (r) => r.descentM != null, cell: (r) => (r.descentM == null ? "—" : signed(-Math.round(r.descentM))) },
+    { key: "asc", head: t("Ascent"), unit: heightUnit(), width: 68, soft: true, has: (r) => r.ascentM != null, cell: (r) => (r.ascentM == null ? "—" : signed(Math.round(heightIn(r.ascentM)))) },
+    { key: "desc", head: t("Descent"), unit: heightUnit(), width: 68, soft: true, has: (r) => r.descentM != null, cell: (r) => (r.descentM == null ? "—" : signed(-Math.round(heightIn(r.descentM)))) },
   ];
   return all.filter((c) => rows.some(c.has));
 }
@@ -38,9 +41,9 @@ export type SplitChoice = { fromM: number; toM: number } | null;
  */
 export function SplitsCard({ sport, base, lengths, startLength, laps, total, hue, elapsedS, movingS, zoneColor, currentM, chosen, onChoose }: {
   sport: Sport;
-  /** One-kilometre rows. */
+  /** Rows one shown unit long (a kilometre or a mile). */
   base: readonly SplitRow[];
-  /** Split lengths on offer, in km. */
+  /** Split lengths on offer, in the shown unit (km or mi). */
   lengths: readonly number[];
   startLength: number;
   /** The watch's own laps, when they are more than its automatic splits. */
@@ -60,7 +63,7 @@ export function SplitsCard({ sport, base, lengths, startLength, laps, total, hue
   const [km, setKm] = useState(startLength);
   const [mode, setMode] = useState<"splits" | "laps">(base.length > 0 ? "splits" : "laps");
   const lapMode = mode === "laps" && laps != null;
-  const rows = lapMode ? laps : km === 1 ? base : groupRows(base, km, 1000);
+  const rows = lapMode ? laps : km === 1 ? base : groupRows(base, km, distanceStep());
   if (rows.length === 0) return null;
   const swim = sport === "Swim", speed = paceUnit(sport) === "km/h", timed = paceUnit(sport) == null;
   const gap = !lapMode && showsGap(rows);
@@ -74,9 +77,11 @@ export function SplitsCard({ sport, base, lengths, startLength, laps, total, hue
   const template = `${first}px ${lapMode ? "72px " : ""}84px ${timed ? "" : speed ? "72px " : "64px "}${columns.map((c) => (c.key === "bar" ? "minmax(110px, 1fr)" : `${c.width}px`)).join(" ")}`;
   const minWidth = 40 + first + (lapMode ? 80 : 0) + 92 + (timed ? 0 : 76) + columns.reduce((s, c) => s + (c.key === "bar" ? 118 : c.width + 8), 0);
   const grid = { gridTemplateColumns: template };
-  const dist = (r: SplitRow) => (swim ? `${thousands(r.distanceM)} m` : `${(r.distanceM / 1000).toFixed(2)}`);
+  const dist = (r: SplitRow) => (swim ? `${thousands(swimIn(r.distanceM))} ${swimUnit()}` : `${distanceIn(r.distanceM).toFixed(2)}`);
   const stopped = elapsedS != null ? elapsedS - movingS : 0;
-  const unit = speed ? "km/h" : swim ? "/100 m" : "/km";
+  const unit = speed ? speedUnit() : swim ? swimPaceUnitLabel() : paceUnitLabel();
+  // The first column's head is the unit itself: Km or Mi (M or Yd for a swim's laps).
+  const head = (u: string) => u.charAt(0).toUpperCase() + u.slice(1);
 
   return (
     <Card aria-label={lapMode ? t("Laps") : t("Splits")} className="ad-table">
@@ -91,14 +96,14 @@ export function SplitsCard({ sport, base, lengths, startLength, laps, total, hue
               <Segmented small label={t("Rows")} value={mode} options={[{ value: "splits", label: t("Splits") }, { value: "laps", label: t("Laps") }]} onChange={(m) => { setMode(m); onChoose(null); }} />
             ) : null}
             {!lapMode && lengths.length > 1 ? (
-              <Segmented small label={t("Split length")} value={String(km)} options={lengths.map((l) => ({ value: String(l), label: `${l} km` }))} onChange={(v) => { setKm(Number(v)); onChoose(null); }} />
+              <Segmented small label={t("Split length")} value={String(km)} options={lengths.map((l) => ({ value: String(l), label: `${l} ${distanceUnit()}` }))} onChange={(v) => { setKm(Number(v)); onChoose(null); }} />
             ) : null}
           </div>
         </div>
         <div role="table" aria-label={lapMode ? t("Laps") : t("Splits")}>
           <div className="ad-th" role="row" style={grid}>
-            <span role="columnheader">{lapMode ? t("Lap") : "Km"}</span>
-            {lapMode ? <span role="columnheader" className="ad-r">{swim ? "M" : "Km"}</span> : null}
+            <span role="columnheader">{lapMode ? t("Lap") : head(distanceUnit())}</span>
+            {lapMode ? <span role="columnheader" className="ad-r">{head(swim ? swimUnit() : distanceUnit())}</span> : null}
             <span role="columnheader" className="ad-r">{t("Time")}</span>
             {timed ? null : <span role="columnheader" className="ad-r">{speed ? t("Speed") : t("Pace")}</span>}
             {columns.map((c) => <span key={c.key} role="columnheader" className="ad-r" aria-hidden={c.key === "bar" || undefined}>{c.head}</span>)}

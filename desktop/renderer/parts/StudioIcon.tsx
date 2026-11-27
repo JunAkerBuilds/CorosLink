@@ -41,6 +41,7 @@ export const STUDIO_ICONS: Record<string, string> = {
   guides: "<path d=\"M12 3v18M3 12h18\"></path><circle cx=\"12\" cy=\"12\" r=\"8\"></circle>",
   hand: "<path d=\"M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4.5a1.5 1.5 0 0 1 3 0V11M14 10.5V6a1.5 1.5 0 0 1 3 0v8a7 7 0 0 1-7 7h-.5a6 6 0 0 1-4.8-2.4L3 15.5a1.6 1.6 0 0 1 2.4-2.1L8 16\"></path>",
   heart: "<path d=\"M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5a4 4 0 0 1 7 2.5c0 5.5-7 10-7 10z\"></path>",
+  info: "<circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M12 11v5\"></path><path d=\"M12 7.5h.01\" style=\"stroke-width: 2.6\"></path>",
   image: "<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"></rect><circle cx=\"9\" cy=\"10\" r=\"1.6\"></circle><path d=\"M21 16l-5-5-8 8\"></path>",
   layers: "<path d=\"M12 3l9 5-9 5-9-5z\"></path><path d=\"M3 13l9 5 9-5\"></path>",
   line: "<path d=\"M5 19L19 5\"></path>",

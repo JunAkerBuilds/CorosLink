@@ -2,6 +2,7 @@
 // TrainingTrends.swift, RideFindings.swift, SwimHistory.swift). Pure: activities and recordings in, readings out.
 // Weeks run Monday to Sunday, as everywhere on the web.
 import { language, locale, msg, t } from "@/lib/i18n";
+import { distanceIn, distanceUnit } from "@/lib/units";
 
 export type Family = "run" | "ride" | "swim" | "strength" | "walk" | "other";
 export const FAMILIES: readonly Family[] = ["run", "ride", "swim", "strength", "walk", "other"];
@@ -535,8 +536,8 @@ export function hoursText(seconds: number, long = false): string {
   return `${h} h ${pad(m)}${long ? " min" : ""}`;
 }
 
-/** Kilometres to one decimal: 30.6 km. */
-export const kmText = (meters: number): string => `${(meters / 1000).toFixed(1)} km`;
+/** Kilometres (or miles) to one decimal: 30.6 km, 19.0 mi. */
+export const kmText = (meters: number): string => `${distanceIn(meters).toFixed(1)} ${distanceUnit()}`;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

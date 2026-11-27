@@ -11,7 +11,7 @@ import {
   addStatusField, canRemove, chartPagesOnFace, deleteLayer, freeSpot, HOUR_HAND_LAYER, imageLayerId, libraryItems, NEGATIVE_SIGN_LAYER, newImage, newShape,
   removeLayer, restoreTemplateLayer, searchLibrary, shapeLayerId, type LibraryContext,
 } from "./studioLibrary";
-import { faceLayers, groupOf, setVisible, type FaceSource } from "./studioFace";
+import { clickOrder, faceLayers, grouped, groupOf, setVisible, type FaceSource } from "./studioFace";
 import { isLocked, setLocked } from "./studioEdits";
 import { deriveDesignDetails } from "../watchface/engine/watchfaceCompose";
 import { resolveWatchfaceModeDesign } from "../watchface/engine/watchfaceDisplayModes";
@@ -301,6 +301,11 @@ describe("Add → Artwork, time and date on a blank face", () => {
     const layer = layerOf(next, shapeLayerId(shape.id))!;
     expect(layer).toMatchObject({ kind: "backgroundElement", present: true, visible: true });
     expect(groupOf(layer)).toBe("basic");
+    // Baked into the background picture, so the panel lists text and shapes last, just above the background.
+    expect(grouped(built(next).layers).map((g) => g.id).slice(-2)).toEqual(["basic", "background"]);
+    // On the canvas every other layer's click box sits over it, the way the watch draws them.
+    const boxes = clickOrder(built(next).layers).map((l) => l.id);
+    expect(boxes.indexOf(layer.id)).toBeLessThan(boxes.findIndex((id) => layerOf(next, id)?.kind === "time"));
     expect(panelOf(layer, next)).toBe(kind === "text" ? "text" : "shape");
     const b = layer.bounds!;
     expect(Math.abs((b.x0 + b.x1) / 2 - 400)).toBeLessThanOrEqual(kind === "line" ? 100 : 60);

@@ -1,7 +1,8 @@
 import { fromCoros, fromSample, fromSynced, type Loaded } from "@/data/core";
 import { hubCalendar, hubSession, type HubCalendarDay, type HubSport, type HubWorkout } from "@/data/hub";
 import type { NativeGymPlanned } from "@/data/sync/native";
-import { clock, dayKey, km } from "@/lib/format";
+import { clock, dayKey } from "@/lib/format";
+import { distance } from "@/lib/units";
 import { msg, t } from "@/lib/i18n";
 import { corosWorkoutId } from "@/lib/hubWorkout";
 import { sampleCalendar, sampleDashboardNow } from "@/data/sample/training";
@@ -235,7 +236,7 @@ export function hubDetail(totals: { seconds: number; meters: number; sets: numbe
   // A gym workout's seconds are only its timed steps, so its sets say more.
   if (totals.sets > 0) return totals.sets === 1 ? t("1 set") : t("{n} sets", { n: totals.sets });
   const parts: string[] = [];
-  if (totals.meters > 0) parts.push(km(totals.meters));
+  if (totals.meters > 0) parts.push(distance(totals.meters));
   if (totals.seconds > 0) parts.push(clock(totals.seconds));
   return parts.join(" · ");
 }

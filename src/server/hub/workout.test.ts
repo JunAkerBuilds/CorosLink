@@ -213,6 +213,13 @@ describe("writing a COROS program", () => {
     expect(readProgram(buildProgram({ name: "Run", sport: "run", description: "", blocks: workout.blocks }))).not.toHaveProperty("poolLength");
   });
 
+  it("labels a typed pool in yards for an athlete in imperial", () => {
+    const workout: HubWorkout = { name: "Yards", sport: "swim", description: "", poolLength: 22.86, blocks: [
+      { repeats: null, steps: [{ kind: "training", target: "distance", meters: 400, intensity: { kind: "none" } }] }] };
+    expect(buildProgram(workout, null, { imperial: true })).toMatchObject({ poolLength: 2286, poolLengthUnit: 4 });
+    expect(buildProgram(workout)).toMatchObject({ poolLength: 2286, poolLengthUnit: 2 });
+  });
+
   it("shows weights in pounds when asked, keeping kilograms", () => {
     const workout: HubWorkout = { name: "Gym", sport: "strength", description: "", blocks: [{ repeats: null, steps: [
       { kind: "training", target: "reps", count: 5, intensity: { kind: "weight", low: 61.23 }, exercise: { id: "2", name: "Squat" } }] }] };

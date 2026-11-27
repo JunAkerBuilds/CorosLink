@@ -4,6 +4,7 @@
  * (and how much of it), the filters, and each week's numbers.
  */
 import { locale } from "@/lib/i18n";
+import { distanceIn, imperial, swimIn } from "@/lib/units";
 
 export type DraftOp =
   /** `id` is a calendar entry's id, or the `key` of a copy made earlier in the draft. */
@@ -303,9 +304,10 @@ export function doneOfPlanned(done: number, planned: number, fmt: (v: number) =>
   return done > 0 ? `${fmt(done)}${unit}` : "--";
 }
 
-/** Kilometres to one decimal (12.4); metres whole, with thousands marks, for swimming (1,500). */
-export const kmText = (m: number): string => (Math.round(Math.max(0, m) / 100) / 10).toFixed(1);
-export const metresText = (m: number): string => Math.round(Math.max(0, m)).toLocaleString(locale("en-US"));
+/** Kilometres (or miles) to one decimal (12.4); metres (or yards) whole, with thousands marks, for swimming (1,500). */
+export const kmText = (m: number): string =>
+  imperial() ? (Math.round(distanceIn(Math.max(0, m)) * 10) / 10).toFixed(1) : (Math.round(Math.max(0, m) / 100) / 10).toFixed(1);
+export const metresText = (m: number): string => Math.round(swimIn(Math.max(0, m))).toLocaleString(locale("en-US"));
 
 /* ───────────── Dropping ───────────── */
 

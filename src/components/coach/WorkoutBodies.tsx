@@ -8,6 +8,7 @@ import type { HubSport } from "@/data/hub";
 import { hueVar, inkVar, tint } from "./CardShell";
 import { t } from "@/lib/i18n";
 import { tr } from "@/lib/i18n/react";
+import { weightUnit } from "@/lib/units";
 
 /** The icon in a workout card's header tile, by sport. */
 export const SPORT_ICONS: Record<HubSport, string> = {
@@ -189,7 +190,7 @@ const liftWords = (l: BodyLift): string => {
   if (l.kind === "rest") return t("Rest {time}", { time: l.rest });
   const each = [l.each.value, l.each.unit].filter(Boolean).join(" ");
   return [l.name, l.sets === 1 ? t("1 set of {each}", { each }) : t("{n} sets of {each}", { n: l.sets, each }),
-    l.load === "bodyweight" ? t("bodyweight") : l.load ? `${l.load.value} kg` : "", l.rest ? t("{time} rest", { time: l.rest }) : ""].filter(Boolean).join(", ");
+    l.load === "bodyweight" ? t("bodyweight") : l.load ? `${l.load.value} ${l.load.unit}` : "", l.rest ? t("{time} rest", { time: l.rest }) : ""].filter(Boolean).join(", ");
 };
 
 /** What a set is, under the "Reps" heading: 6, 45 s, 1:30, to lap button. */
@@ -198,6 +199,8 @@ const perSet = (n: BodyNumber): BodyNumber => ({ value: n.value, unit: n.unit ==
 /** Warm-up, then one line per exercise (sets, each set, weight, rest in a block of its own), then cool-down. */
 export function StrengthBody({ body, hue }: { body: WorkoutBody; hue: CoachHue }) {
   const lifts = body.lifts ?? [];
+  // The weights are in the units the card was drawn in.
+  const loadUnit = lifts.map((l) => (l.load && l.load !== "bodyweight" ? l.load.unit : "")).find(Boolean) || weightUnit();
   return (
     <div className="cw-strength">
       <Extras label={body.before && body.before.length > 1 ? t("Warm-ups") : t("Warm-up")} items={body.before ?? []} hue="gold" />
@@ -205,7 +208,7 @@ export function StrengthBody({ body, hue }: { body: WorkoutBody; hue: CoachHue }
         <div className="cw-block">
           <div role="group" aria-label={lifts.map(liftWords).join("; ")} className="cw-lifts">
             <div aria-hidden="true" className="cw-lift cw-lift-head">
-              <span className="cw-lift-name">{t("Lifts")}</span><span>{t("Sets")}</span><span>{t("Reps")}</span><span>kg</span><span className="cw-lift-rest">{t("Rest")}</span>
+              <span className="cw-lift-name">{t("Lifts")}</span><span>{t("Sets")}</span><span>{t("Reps")}</span><span>{loadUnit}</span><span className="cw-lift-rest">{t("Rest")}</span>
             </div>
             {lifts.map((l, i) => (
               <div key={i} className="cw-lift" data-kind={l.kind}>

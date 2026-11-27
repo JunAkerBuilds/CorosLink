@@ -1,4 +1,12 @@
+import { clock } from "@/lib/format";
+import { distanceIn, distanceUnit, imperial, paceIn, paceUnitLabel } from "@/lib/units";
 import type { BriefCard, CoachData, CompareCard, DebriefCard, FuelCard, PlanCard, PlanCheckCard, QuestionCard, RecapCard, TodayCard, TrendCard, WorkoutCard } from "../coach";
+
+// The sample's numbers are metric; the ones on cards are shown in the page's units.
+const dist = (metres: number) => distanceIn(metres).toFixed(2);
+const pace = (secPerKm: number, decimals = 0) => clock(paceIn(secPerKm), decimals);
+const paces = (fast: number, slow: number) => `${pace(fast)} to ${pace(slow)} ${paceUnitLabel()}`;
+const BLOCK = imperial() ? `Tempo block, ${distanceIn(4000).toFixed(1)} mi` : "Tempo block, 4 km";
 
 const TEMPO = "/activities/2026-11-19-morning-tempo";
 const TEMPO_BEFORE = "/activities/2026-11-05-tempo-run";
@@ -9,10 +17,10 @@ const recap: RecapCard = {
   routePath: "M120 330C170 240 240 295 300 230S410 150 480 125C550 100 620 112 655 170C682 218 640 270 580 258C518 246 462 200 406 226S310 330 240 352C190 366 148 356 120 330Z",
   routeLabel: "Route sketch: a loop along the river and back through the park",
   stats: [
-    { label: "Distance", value: "8.02", unit: "km" },
+    { label: "Distance", value: dist(8020), unit: distanceUnit() },
     { label: "Time", value: "38:14.52" },
-    { label: "Avg pace", value: "4:46", unit: "/km" },
-    { label: "Tempo block, 4 km", value: "18:15.56", hue: "mint" },
+    { label: "Avg pace", value: pace(286), unit: paceUnitLabel() },
+    { label: BLOCK, value: "18:15.56", hue: "mint" },
     { label: "Avg heart rate", value: "158", unit: "bpm", hue: "rose" },
     { label: "Load", value: "96", hue: "pink" },
   ],
@@ -33,8 +41,8 @@ const compare: CompareCard = {
   before: { label: "Thu 5 Nov", short: "5 Nov", href: TEMPO_BEFORE },
   after: { label: "Thu 19 Nov", short: "19 Nov", href: TEMPO },
   rows: [
-    { label: "Tempo block, 4 km", before: "18:41.20", after: "18:15.56", change: "−25.64 s", better: true },
-    { label: "Tempo pace", before: "4:40.30 /km", after: "4:33.89 /km", change: "−6.41 s", better: true },
+    { label: BLOCK, before: "18:41.20", after: "18:15.56", change: "−25.64 s", better: true },
+    { label: "Tempo pace", before: `${pace(280.3, 2)} ${paceUnitLabel()}`, after: `${pace(273.89, 2)} ${paceUnitLabel()}`, change: `−${paceIn(6.41).toFixed(2)} s`, better: true },
     { label: "Heart rate in the block", before: "169 bpm", after: "167 bpm", change: "−2 bpm", better: true },
     { label: "Heart rate drift", before: "+13 bpm", after: "+9 bpm", change: "−4 bpm", better: true },
     { label: "Cadence", before: "176 spm", after: "177 spm", change: "+1 spm" },
@@ -101,7 +109,7 @@ const planCheck: PlanCheckCard = {
   ],
   daysLabel: "14 days, 6 to 19 November: nine sessions done on their day, one skipped on Wednesday 11, one moved from Saturday 14 to Monday 16, two rest days",
   totals: [
-    { label: "Distance", done: "71.42 km", planned: "79.42", fraction: 0.899, hue: "mint" },
+    { label: "Distance", done: `${dist(71_420)} ${distanceUnit()}`, planned: dist(79_420), fraction: 0.899, hue: "mint" },
     { label: "Time", done: "7 h 52 min", planned: "8 h 41", fraction: 0.906, hue: "blue" },
     { label: "Load", done: "548", planned: "612", fraction: 0.895, hue: "pink" },
   ],
@@ -143,18 +151,18 @@ const workout: WorkoutCard = {
   eyebrow: "Coach suggests · Run", title: "Long run with a fast finish",
   date: "2026-11-21", dayLabel: "Sat 21 Nov",
   stats: [
-    { label: "Planned", value: "18.00", unit: "km" },
+    { label: "Planned", value: dist(18_000), unit: distanceUnit() },
     { label: "About", value: "1 h 40", unit: "min" },
     { label: "Planned load", value: "130", hue: "pink" },
   ],
   steps: [
-    { name: "Warm up", length: "2.00 km", target: "5:35 to 5:45 /km", note: "Zone 2", hue: "gold", weight: 2, height: 0.5 },
-    { name: "Steady", length: "12.00 km", target: "5:20 to 5:30 /km", note: "Zone 2 to 3", hue: "mint", weight: 12, height: 0.68, soft: true },
-    { name: "Fast finish", length: "4.00 km", target: "4:45 to 4:50 /km", note: "9 s off goal pace", hue: "mint", weight: 4, height: 1 },
+    { name: "Warm up", length: `${dist(2000)} ${distanceUnit()}`, target: paces(335, 345), note: "Zone 2", hue: "gold", weight: 2, height: 0.5 },
+    { name: "Steady", length: `${dist(12_000)} ${distanceUnit()}`, target: paces(320, 330), note: "Zone 2 to 3", hue: "mint", weight: 12, height: 0.68, soft: true },
+    { name: "Fast finish", length: `${dist(4000)} ${distanceUnit()}`, target: paces(285, 290), note: "9 s off goal pace", hue: "mint", weight: 4, height: 1 },
     { name: "Cool down", length: "5:00", target: "Walk or jog", note: "Easy", hue: "blue", weight: 0.9, height: 0.34 },
   ],
   shapeLabel: "Workout shape: a short warm-up, a long steady block, a taller fast finish, a short cool-down",
-  summary: "Warm up 2.00 km · steady 12.00 km · fast finish 4.00 km at 4:45 to 4:50 /km · cool down",
+  summary: `Warm up ${dist(2000)} ${distanceUnit()} · steady ${dist(12_000)} ${distanceUnit()} · fast finish ${dist(4000)} ${distanceUnit()} at ${paces(285, 290)} · cool down`,
   note: "Replaces the plain 18 km on Saturday. Hold back until 14 km.",
 };
 
@@ -205,8 +213,8 @@ export const SAMPLE_COACH: CoachData = {
       ],
       suggestions: ["How should I fuel Saturday?", "Compare this tempo with 5 Nov", "Am I on track for 1:38?"],
       sources: [
-        { title: "Morning tempo", detail: "Today · 8.02 km · 4:46 /km", href: TEMPO },
-        { title: "Long run", detail: "Sun 15 Nov · 18.04 km · 5:20 /km", href: "/activities/2026-11-15-long-run" },
+        { title: "Morning tempo", detail: `Today · ${dist(8020)} ${distanceUnit()} · ${pace(286)} ${paceUnitLabel()}`, href: TEMPO },
+        { title: "Long run", detail: `Sun 15 Nov · ${dist(18_040)} ${distanceUnit()} · ${pace(320)} ${paceUnitLabel()}`, href: "/activities/2026-11-15-long-run" },
         { title: "This week's plan", detail: "16 to 22 Nov · 7 sessions", href: "/calendar" },
       ],
     },
@@ -251,8 +259,8 @@ export const SAMPLE_COACH: CoachData = {
       ],
       suggestions: ["What should the next tempo be?"],
       sources: [
-        { title: "Morning tempo", detail: "Today · 8.02 km · 4:46 /km", href: TEMPO },
-        { title: "Tempo run", detail: "Thu 5 Nov · 8.00 km · 4:50 /km", href: TEMPO_BEFORE },
+        { title: "Morning tempo", detail: `Today · ${dist(8020)} ${distanceUnit()} · ${pace(286)} ${paceUnitLabel()}`, href: TEMPO },
+        { title: "Tempo run", detail: `Thu 5 Nov · ${dist(8000)} ${distanceUnit()} · ${pace(290)} ${paceUnitLabel()}`, href: TEMPO_BEFORE },
       ],
     },
     {

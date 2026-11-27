@@ -1,4 +1,5 @@
 import { CoachError, loadCoachAccess, type CoachAccessInfo } from "@/data/coach";
+import { units } from "@/lib/units";
 import { fromBrowser, fromSample, NotWiredError, type Loaded, type Origin } from "@/data/core";
 import { dropPlan, planDraftStore, planStore, putPlan, savedPlans } from "@/data/local/plans";
 import { samplePlans } from "@/data/sample/plans";
@@ -202,7 +203,7 @@ async function askCoachForPlan(text: string, options: GenerateOptions): Promise<
     response = await fetch("/api/coach", {
       method: "POST", credentials: "same-origin", cache: "no-store", signal: options.signal,
       headers: { Accept: "application/x-ndjson", "Content-Type": "application/json", "X-Clink-Hub": "1" },
-      body: JSON.stringify({ text, history: [], offsetMin: new Date().getTimezoneOffset(), hubDays: null, browserWorkouts: [] }),
+      body: JSON.stringify({ text, history: [], offsetMin: new Date().getTimezoneOffset(), hubDays: null, browserWorkouts: [], units: units() }),
     });
   } catch {
     throw new CoachError(options.signal?.aborted ? "stopped" : "unreachable", options.signal?.aborted ? t("Stopped before Coach answered.") : t("Coach couldn't be reached. Check your connection and try again."));

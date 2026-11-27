@@ -16,12 +16,13 @@ import { useToday } from "@/data/local/fuel";
 import { useStore } from "@/data/local/store";
 import {
   ageDifference, bmi, bmiBand, daysBetween, deleteMeasurement, goalProgress, isDay, leanMass, mergeMeasurements, monthlyAverages,
-  nearestIndex, oneOrTwo, rangeStart, resample, saveMeasurement, series, shiftDay, spark, trend, weeksToGoal, weightDomain, within,
+  nearestIndex, oneOrTwo, rangeStart, resample, saveMeasurement, scaleWeight, series, shiftDay, spark, trend, weeksToGoal, weightDomain, within,
   xAt, yAt, type Entry, type Point, type Range,
 } from "@/lib/body";
 import { parseDay, signed, thousands } from "@/lib/format";
 import { parseAmount } from "@/lib/fuel";
 import { locale, msg, t, tx } from "@/lib/i18n";
+import { bodyHeight, bodyHeightFromInput, bodyHeightIn, bodyHeightUnit, imperial, weightFromInput, weightIn, weightUnit } from "@/lib/units";
 import { Dialog } from "../fuel/Dialog";
 import "./body.css";
 
@@ -29,7 +30,12 @@ const HUE: Record<Hue, string> = {
   rose: "var(--h-rose)", cyan: "var(--h-cyan)", sky: "var(--h-sky)", blue: "var(--h-blue)", mint: "var(--h-mint)", gold: "var(--h-gold)", violet: "var(--h-violet)",
 };
 const RANGES: readonly Range[] = ["1M", "3M", "1Y", "All"];
-const RANGE_WORDS: Record<Range, string> = { "1M": msg("{change} kg in 1 month"), "3M": msg("{change} kg in 3 months"), "1Y": msg("{change} kg in 1 year"), All: msg("{change} kg in all") };
+const RANGE_WORDS: Record<Range, string> = { "1M": msg("{change} in 1 month"), "3M": msg("{change} in 3 months"), "1Y": msg("{change} in 1 year"), All: msg("{change} in all") };
+/** What a typed weight and body height may be, in the shown units: 20–400 kg (45–881 lb), 100–250 cm (40–98 in). */
+const weightRange = (): [number, number] => [Math.ceil(weightIn(20)), Math.floor(weightIn(400))];
+const heightRange = (): [number, number] => [Math.ceil(bodyHeightIn(100)), Math.floor(bodyHeightIn(250))];
+/** Points in kg as points in the shown weight unit. */
+const inShownWeight = (points: Point[]): Point[] => points.map((p) => ({ day: p.day, value: weightIn(p.value) }));
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 const dayMonth = (day: string) => parseDay(day).toLocaleDateString(locale("en-GB"), { day: "numeric", month: "short" });
@@ -89,7 +95,9 @@ function Body({ data, synced, alert }: { data: BodyData; synced: boolean; alert:
   const end = latest && latest.day > today ? latest.day : today;
   const from3 = rangeStart("3M", end);
   const recent = (metric: Parameters<typeof series>[1]) => (metric === "bmi" && height == null ? [] : within(series(entries, metric, height ?? 0), from3, end));
-  const weight3 = recent("weight"), fat3 = recent("bodyFat"), lean3 = recent("lean"), bmi3 = recent("bmi");
+  const weight3 = inShownWeight(recent("weight")), fat3 = recent("bodyFat"), lean3 = inShownWeight(recent("lean")), bmi3 = recent("bmi");
+  const unit = weightUnit();
+  const goalShown = profile.goalWeightKg == null ? null : weightIn(profile.goalWeightKg);
   const last = (points: Point[]) => points.at(-1)?.value;
   const change = (points: Point[], unit: string) => { const tr = trend(points); return tr == null ? "" : `${signed(tr, 1)}${unit} · 3M`; };
 
@@ -106,9 +114,9 @@ function Body({ data, synced, alert }: { data: BodyData; synced: boolean; alert:
   }
   const tiles: TileData[] = [
     ...stats,
-    { name: msg("Weight"), value: latest ? oneOrTwo(latest.weightKg) : "—", unit: "kg", note: change(weight3, " kg"), hue: "mint", values: resample(weight3.map((p) => p.value), 14) },
+    { name: msg("Weight"), value: latest ? oneOrTwo(weightIn(latest.weightKg)) : "—", unit, note: change(weight3, ` ${unit}`), hue: "mint", values: resample(weight3.map((p) => p.value), 14) },
     { name: msg("Body fat"), value: last(fat3) == null ? "—" : oneOrTwo(last(fat3)!), unit: "%", note: change(fat3, ""), hue: "gold", values: resample(fat3.map((p) => p.value), 14) },
-    { name: msg("Lean body mass"), value: last(lean3)?.toFixed(1) ?? "—", unit: "kg", note: change(lean3, " kg"), hue: "mint", values: resample(lean3.map((p) => p.value), 14) },
+    { name: msg("Lean body mass"), value: last(lean3)?.toFixed(1) ?? "—", unit, note: change(lean3, ` ${unit}`), hue: "mint", values: resample(lean3.map((p) => p.value), 14) },
     { name: "BMI", value: latest && height != null ? bmi(latest.weightKg, height).toFixed(1) : "—", unit: "", note: latest && height != null ? t(bmiBand(bmi(latest.weightKg, height))) : "", hue: "violet", values: resample(bmi3.map((p) => p.value), 14) },
   ];
 
@@ -183,16 +191,16 @@ function Body({ data, synced, alert }: { data: BodyData; synced: boolean; alert:
       </section>
 
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "stretch", gap: 20 }}>
-        <WeightChart entries={entries} end={end} goal={profile.goalWeightKg} />
+        <WeightChart entries={entries} end={end} goal={goalShown} />
         <div style={{ flex: "1 1 340px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
-          <Goal weight3={weight3} goal={profile.goalWeightKg} />
+          <Goal weight3={weight3} goal={goalShown} />
           <Card clip aria-label={t("You")}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px 8px" }}>
               <h2 className="h2">{t("You")}</h2>
               <Button variant="plain" onClick={() => setDialog("profile")}>{t("Edit")}</Button>
             </div>
-            <div className="body-you"><span className="soft">{t("Body weight")}</span><span style={{ fontWeight: 600 }}>{latest ? `${oneOrTwo(latest.weightKg)} kg` : "—"}</span></div>
-            <div className="body-you"><span className="soft">{tx("body", "Height")}</span><span style={{ fontWeight: 600 }}>{height == null ? "—" : `${oneOrTwo(height).replace(/\.0$/, "")} cm`}</span></div>
+            <div className="body-you"><span className="soft">{t("Body weight")}</span><span style={{ fontWeight: 600 }}>{latest ? scaleWeight(latest.weightKg) : "—"}</span></div>
+            <div className="body-you"><span className="soft">{tx("body", "Height")}</span><span style={{ fontWeight: 600 }}>{height == null ? "—" : imperial() ? bodyHeight(height) : `${oneOrTwo(height).replace(/\.0$/, "")} cm`}</span></div>
             <div className="body-you"><span className="soft">{t("Age")}</span><span style={{ fontWeight: 600 }}>{profile.age ?? "—"}</span></div>
             <div className="body-you"><span className="soft">{t("Goal")}</span><span style={{ fontWeight: 600 }}>{profile.goal ? t(GOAL_LABEL[profile.goal]) : "—"}</span></div>
             <Link className="body-you" href="/fuel" style={{ minHeight: 52 }}>
@@ -253,12 +261,13 @@ const W = 800, H = 220;
 
 interface Dot { x: number; value: number; words: string }
 
-/** Weight through time with the goal as a dashed line. 1M and 3M draw every weigh-in, 1Y and All the monthly averages. */
+/** Weight through time with the goal as a dashed line. 1M and 3M draw every weigh-in, 1Y and All the monthly averages. `goal` is in the shown unit. */
 function WeightChart({ entries, end, goal }: { entries: Entry[]; end: string; goal: number | null }) {
   const [range, setRange] = useState<Range>("3M");
   const [at, setAt] = useState<number | null>(null);
   const start = rangeStart(range, end);
-  const shown = within(entries.map((e) => ({ day: e.day, value: e.weightKg })), start, end);
+  const shown = within(entries.map((e) => ({ day: e.day, value: weightIn(e.weightKg) })), start, end);
+  const unit = weightUnit();
   const ownDays = new Set(entries.filter((e) => e.own).map((e) => e.day));
   const monthly = range === "1Y" || range === "All";
 
@@ -267,13 +276,13 @@ function WeightChart({ entries, end, goal }: { entries: Entry[]; end: string; go
     const months = monthlyAverages(shown);
     dots = months.map((m, i) => ({
       x: months.length === 1 ? W / 2 : (i * W) / (months.length - 1), value: m.value,
-      words: `${monthYear(m.month)} · ${t("{value} kg average of {n}", { value: m.value.toFixed(2), n: m.count })}`,
+      words: `${monthYear(m.month)} · ${t("{value} average of {n}", { value: `${m.value.toFixed(2)} ${unit}`, n: m.count })}`,
     }));
     const picks = months.length <= 4 ? months.map((_, i) => i) : [0, 1, 2, 3].map((k) => Math.round((k * (months.length - 1)) / 3));
     labels = picks.map((i) => monthYear(months[i].month));
   } else {
     const first = start ?? shown[0]?.day ?? end;
-    dots = shown.map((p) => ({ x: xAt(p.day, first, end, W), value: p.value, words: `${fullDate(p.day)} · ${oneOrTwo(p.value)} kg${ownDays.has(p.day) ? ` · ${t("yours")}` : ""}` }));
+    dots = shown.map((p) => ({ x: xAt(p.day, first, end, W), value: p.value, words: `${fullDate(p.day)} · ${oneOrTwo(p.value)} ${unit}${ownDays.has(p.day) ? ` · ${t("yours")}` : ""}` }));
     const span = daysBetween(first, end);
     labels = [0, 1, 2, 3].map((k) => dayMonth(shiftDay(first, Math.ceil((k * span) / 3))));
   }
@@ -300,9 +309,9 @@ function WeightChart({ entries, end, goal }: { entries: Entry[]; end: string; go
   const summary = n === 0
     ? t("No weight measurements in this range")
     : [
-      t("Weight from {from} kg on {fromDay} to {to} kg on {toDay}", { from: oneOrTwo(shown[0].value), fromDay: fullDate(shown[0].day), to: oneOrTwo(shown[shown.length - 1].value), toDay: fullDate(shown[shown.length - 1].day) }),
+      t("Weight from {from} on {fromDay} to {to} on {toDay}", { from: `${oneOrTwo(shown[0].value)} ${unit}`, fromDay: fullDate(shown[0].day), to: `${oneOrTwo(shown[shown.length - 1].value)} ${unit}`, toDay: fullDate(shown[shown.length - 1].day) }),
       ...(monthly ? [t("as monthly averages")] : []),
-      ...(goal == null ? [] : [t("with the {goal} kg goal as a dashed line", { goal: oneOrTwo(goal) })]),
+      ...(goal == null ? [] : [t("with the {goal} goal as a dashed line", { goal: `${oneOrTwo(goal)} ${unit}` })]),
     ].join(", ");
 
   return (
@@ -310,8 +319,8 @@ function WeightChart({ entries, end, goal }: { entries: Entry[]; end: string; go
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 10px" }}>
           <h2 className="h2">{tx("body", "Weight")}</h2>
-          <CountUp className="num" style={{ fontSize: 22, fontWeight: 800 }} text={latest ? `${oneOrTwo(latest.weightKg)} kg` : "—"} />
-          {tr == null ? null : <span style={{ fontSize: 13, fontWeight: 600, color: "var(--h-mint-soft-ink)" }}>{t(RANGE_WORDS[range], { change: signed(tr, 1) })}</span>}
+          <CountUp className="num" style={{ fontSize: 22, fontWeight: 800 }} text={latest ? scaleWeight(latest.weightKg) : "—"} />
+          {tr == null ? null : <span style={{ fontSize: 13, fontWeight: 600, color: "var(--h-mint-soft-ink)" }}>{t(RANGE_WORDS[range], { change: `${signed(tr, 1)} ${unit}` })}</span>}
         </div>
         <Segmented small label={t("Range")} value={range} onChange={(r) => { setRange(r); setAt(null); }} options={RANGES.map((r) => ({ value: r, label: r === "All" ? tx("range", "All") : r }))} />
       </div>
@@ -342,6 +351,7 @@ function WeightChart({ entries, end, goal }: { entries: Entry[]; end: string; go
   );
 }
 
+/** `weight3` and `goal` in the shown unit. */
 function Goal({ weight3, goal }: { weight3: Point[]; goal: number | null }) {
   const first = weight3[0], last = weight3.at(-1);
   const gap = last && goal != null ? Math.abs(last.value - goal) : null;
@@ -352,12 +362,12 @@ function Goal({ weight3, goal }: { weight3: Point[]; goal: number | null }) {
   const words = goal == null ? t("No goal weight yet")
     : gap == null ? t("No weight measured yet")
     : gap < 0.05 ? t("Goal reached")
-    : `${t("{n} kg to go", { n: gap.toFixed(1) })}${weeksAt == null ? "" : ` · ${weeksAt === 1 ? t("about 1 week at this pace") : t("about {n} weeks at this pace", { n: weeksAt })}`}`;
+    : `${t("{weight} to go", { weight: `${gap.toFixed(1)} ${weightUnit()}` })}${weeksAt == null ? "" : ` · ${weeksAt === 1 ? t("about 1 week at this pace") : t("about {n} weeks at this pace", { n: weeksAt })}`}`;
   return (
     <section aria-label={t("Goal")} style={{ padding: "18px 20px", borderRadius: 22, background: "rgba(216,155,34,0.10)", border: "1px solid rgba(216,155,34,0.24)", display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <h2 className="h2">{t("Goal")}</h2>
-        <CountUp className="num" style={{ fontSize: 22, fontWeight: 800, color: "var(--h-amber-soft-ink)" }} text={goal == null ? "—" : `${oneOrTwo(goal)} kg`} />
+        <CountUp className="num" style={{ fontSize: 22, fontWeight: 800, color: "var(--h-amber-soft-ink)" }} text={goal == null ? "—" : `${oneOrTwo(goal)} ${weightUnit()}`} />
       </div>
       <div aria-hidden="true" style={{ height: 8, borderRadius: 999, background: "rgba(var(--fg-rgb), 0.1)" }}>
         <div className="cl-bar" style={{ width: `${Math.round(progress * 100)}%`, height: 8, borderRadius: 999, background: "var(--h-gold)" }} />
@@ -382,9 +392,9 @@ function OwnTable({ own, heightCm, onDelete }: { own: OwnMeasurement[]; heightCm
           {[...own].reverse().map((m) => (
             <div key={m.id} role="row" className="row" style={{ gridTemplateColumns: cols }}>
               <span role="cell" style={{ fontWeight: 600 }}>{fullDate(m.day)}</span>
-              <span role="cell" style={right}>{oneOrTwo(m.weightKg)} kg</span>
+              <span role="cell" style={right}>{scaleWeight(m.weightKg)}</span>
               <span role="cell" style={right}>{m.bodyFatPct == null ? "—" : `${oneOrTwo(m.bodyFatPct)}%`}</span>
-              <span role="cell" style={right}>{m.bodyFatPct == null ? "—" : `${leanMass(m.weightKg, m.bodyFatPct).toFixed(1)} kg`}</span>
+              <span role="cell" style={right}>{m.bodyFatPct == null ? "—" : `${weightIn(leanMass(m.weightKg, m.bodyFatPct)).toFixed(1)} ${weightUnit()}`}</span>
               <span role="cell" style={right}>{heightCm == null ? "—" : bmi(m.weightKg, heightCm).toFixed(1)}</span>
               <span role="cell" style={right}><Button variant="plain" aria-label={t("Delete the measurement of {day}", { day: fullDate(m.day) })} onClick={() => onDelete(m.id)}>{t("Delete")}</Button></span>
             </div>
@@ -407,17 +417,18 @@ function MeasureDialog({ today, own, onSave, onClose }: { today: string; own: Ow
         const submit = (e: FormEvent) => {
           e.preventDefault();
           const w = parseAmount(weight), f = fat.trim() === "" ? undefined : parseAmount(fat);
+          const [lo, hi] = weightRange();
           if (!isDay(day) || day > today) { setError(t("Choose a day up to today.")); return; }
-          if (w == null || w < 20 || w > 400) { setError(t("Enter a weight between 20 and 400 kg.")); return; }
+          if (w == null || w < lo || w > hi) { setError(t("Enter a weight between {min} and {max}.", { min: lo, max: `${hi} ${weightUnit()}` })); return; }
           if (f === null || (f != null && (f < 2 || f > 70))) { setError(t("Enter body fat between 2 and 70%, or leave it empty.")); return; }
-          onSave({ id: newId(), day, weightKg: w, ...(f == null ? {} : { bodyFatPct: f }) });
+          onSave({ id: newId(), day, weightKg: weightFromInput(w), ...(f == null ? {} : { bodyFatPct: f }) });
           close();
         };
         return (
           <form onSubmit={submit} style={{ display: "contents" }} noValidate>
             <div className="dlg-grid">
               <label className="dlg-label">{t("Date")}<Field type="date" value={day} max={today} onChange={(e) => setDay(e.target.value)} /></label>
-              <label className="dlg-label">{t("Weight (kg)")}<Field data-autofocus inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} autoComplete="off" /></label>
+              <label className="dlg-label">{t("Weight ({unit})", { unit: weightUnit() })}<Field data-autofocus inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} autoComplete="off" /></label>
               <label className="dlg-label">{t("Body fat (%)")}<Field inputMode="decimal" value={fat} onChange={(e) => setFat(e.target.value)} autoComplete="off" /></label>
             </div>
             {error ? <p className="dlg-error" role="alert">{error}</p> : null}
@@ -432,9 +443,12 @@ function MeasureDialog({ today, own, onSave, onClose }: { today: string; own: Ow
 
 /** Signed in, height and goal are only offered when the phone app has set up the profile they are saved in. */
 function ProfileDialog({ profile, synced, onSave, onClose }: { profile: BodyProfile; synced: boolean; onSave: (p: ProfileEdit) => void; onClose: () => void }) {
-  const [height, setHeight] = useState(profile.heightCm == null ? "" : String(profile.heightCm));
+  // As first shown: a field left as it was keeps the stored number, so a round trip through inches or pounds changes nothing.
+  const heightWas = profile.heightCm == null ? "" : imperial() ? String(Math.round(bodyHeightIn(profile.heightCm) * 10) / 10) : String(profile.heightCm);
+  const goalWeightWas = profile.goalWeightKg == null ? "" : oneOrTwo(weightIn(profile.goalWeightKg));
+  const [height, setHeight] = useState(heightWas);
   const [goal, setGoal] = useState<GoalKind | null>(profile.goal);
-  const [goalWeight, setGoalWeight] = useState(profile.goalWeightKg == null ? "" : oneOrTwo(profile.goalWeightKg));
+  const [goalWeight, setGoalWeight] = useState(goalWeightWas);
   const hasHeight = profile.heightCm != null, hasGoal = goal != null;
   const [error, setError] = useState<string | null>(null);
   return (
@@ -444,15 +458,18 @@ function ProfileDialog({ profile, synced, onSave, onClose }: { profile: BodyProf
           e.preventDefault();
           const h = parseAmount(height), g = parseAmount(goalWeight);
           const noGoalWeight = profile.goalWeightKg == null && goalWeight.trim() === "";
-          if (hasHeight && (h == null || h < 100 || h > 250)) { setError(t("Enter a height between 100 and 250 cm.")); return; }
-          if (!noGoalWeight && (g == null || g < 20 || g > 400)) { setError(t("Enter a goal weight between 20 and 400 kg.")); return; }
-          onSave({ ...(hasHeight && h != null ? { heightCm: h } : {}), ...(goal ? { goal } : {}), ...(noGoalWeight || g == null ? {} : { goalWeightKg: g }) });
+          const [hLo, hHi] = heightRange(), [wLo, wHi] = weightRange();
+          if (hasHeight && (h == null || h < hLo || h > hHi)) { setError(t("Enter a height between {min} and {max}.", { min: hLo, max: `${hHi} ${bodyHeightUnit()}` })); return; }
+          if (!noGoalWeight && (g == null || g < wLo || g > wHi)) { setError(t("Enter a goal weight between {min} and {max}.", { min: wLo, max: `${wHi} ${weightUnit()}` })); return; }
+          const heightCm = h == null ? null : height === heightWas && profile.heightCm != null ? profile.heightCm : bodyHeightFromInput(h);
+          const goalWeightKg = g == null ? null : goalWeight === goalWeightWas && profile.goalWeightKg != null ? profile.goalWeightKg : weightFromInput(g);
+          onSave({ ...(hasHeight && heightCm != null ? { heightCm } : {}), ...(goal ? { goal } : {}), ...(noGoalWeight || goalWeightKg == null ? {} : { goalWeightKg }) });
           close();
         };
         return (
           <form onSubmit={submit} style={{ display: "contents" }} noValidate>
             <div className="dlg-grid">
-              {hasHeight ? <label className="dlg-label">{t("Height (cm)")}<Field data-autofocus inputMode="decimal" value={height} onChange={(e) => setHeight(e.target.value)} /></label> : null}
+              {hasHeight ? <label className="dlg-label">{t("Height ({unit})", { unit: bodyHeightUnit() })}<Field data-autofocus inputMode="decimal" value={height} onChange={(e) => setHeight(e.target.value)} /></label> : null}
               {hasGoal ? (
                 <label className="dlg-label">{t("Goal")}
                   <Select value={goal} onChange={(e) => setGoal(e.target.value as GoalKind)}>
@@ -460,7 +477,7 @@ function ProfileDialog({ profile, synced, onSave, onClose }: { profile: BodyProf
                   </Select>
                 </label>
               ) : null}
-              <label className="dlg-label">{t("Goal weight (kg)")}<Field inputMode="decimal" value={goalWeight} onChange={(e) => setGoalWeight(e.target.value)} /></label>
+              <label className="dlg-label">{t("Goal weight ({unit})", { unit: weightUnit() })}<Field inputMode="decimal" value={goalWeight} onChange={(e) => setGoalWeight(e.target.value)} /></label>
             </div>
             {error ? <p className="dlg-error" role="alert">{error}</p> : null}
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>{synced ? t("Age, resting energy and body age come from the phone app.") : t("Age, resting energy and body age come from the phone app and stay as sample data here.")}</p>
