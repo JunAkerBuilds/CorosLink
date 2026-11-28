@@ -5,7 +5,7 @@
 import { msg } from "@/lib/i18n";
 
 /** Names this release's pages. A new name shows the sheet once more to everyone who updates. */
-export const RELEASE = "0.2.0-clink.4";
+export const RELEASE = "0.2.0-clink.5";
 
 /** Sent on the window to open the sheet now (Help → What's New…, the Developer page). */
 export const SHOW_WHATS_NEW = "clink:whats-new";
@@ -42,52 +42,62 @@ export const ICON = {
   plane: "M2 12h4l3-8h2l-1 8h5l2-3h2l-1 4 1 4h-2l-2-3h-5l1 8H9l-3-8H2z",
   wrench: "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z",
   tick: "M5 12.5l4.5 4.5L19 7.5",
+  phone: "M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2",
+  chat: "M4 5h16v11H9l-5 4z",
+  globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9s1-6.5 3.5-9z",
+  watch: "M9 3h6l1 4H8zM8 17h8l-1 4H9zM12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM12 10v2l1.5 1",
+  mountain: "M3 20l6-11 4 6 2.5-4L21 20z",
+  grip: "M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01",
+  trophy: "M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8",
+  play: "M8 5v14l11-7z",
+  sparkle: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
 };
 
 /** This release's feature pages, in order. A fixes-only release leaves this empty. */
 export const FEATURES: Feature[] = [
   {
-    id: "units", icon: ICON.ruler, tint: "mint", open: "/settings",
-    title: msg("Miles or kilometres, your pick"),
-    detail: msg("Settings → Language & units switches every screen to imperial."),
+    id: "phone-coach", icon: ICON.phone, tint: "blue", open: "/connect", beta: true,
+    title: msg("Coach on your phone, anywhere"),
+    detail: msg("Your paired phone talks to Coach on this computer, in the same conversations."),
     points: [
-      { icon: ICON.route, text: msg("Distances in miles and feet, paces in min/mi, speeds in mph") },
-      { icon: ICON.swim, text: msg("Swims in yards, starting on a 25 yd pool") },
-      { icon: ICON.weight, text: msg("Body weight and lifts in pounds") },
-      { icon: ICON.swap, text: msg("Your data stays as it is, so you can switch back any time") },
+      { icon: ICON.chat, text: msg("Pick up a conversation on whichever screen is closer") },
+      { icon: ICON.globe, text: msg("Reach from anywhere, on Connections, keeps it working away from home. Off until you turn it on.") },
+      { icon: ICON.watch, text: msg("No phone? Dashboard and Coach work from your watch's activities") },
     ],
   },
   {
-    id: "report", icon: ICON.mail, tint: "blue", open: "/settings/logs?send",
-    title: msg("Tell me what broke"),
-    detail: msg("Help → Report a Problem… sends the error log and your message straight to me."),
+    id: "sports", icon: ICON.mountain, tint: "mint", open: "/sports",
+    title: msg("A page for every sport you do"),
+    detail: msg("Walking, Hiking, Skiing and Climbing join the others, shown only when you do them."),
     points: [
-      { icon: ICON.reply, text: msg("Add an email if you'd like a reply") },
-      { icon: ICON.tag, text: msg("You get a reference back to quote") },
-      { icon: ICON.shield, text: msg("Home folders and keys are taken out first") },
+      { icon: ICON.chart, text: msg("Your week, the last four weeks and the climb") },
+      { icon: ICON.trophy, text: msg("Recent sessions and records") },
+      { icon: ICON.grip, text: msg("Drag the sport tabs into your own order. The hub and Go to follow it.") },
     ],
   },
   {
-    id: "privacy", icon: ICON.shield, tint: "violet", open: "/settings/privacy",
-    title: msg("Your data, your call"),
-    detail: msg("Usage counts and crash reports each have a switch in Settings → Privacy."),
+    id: "studio", icon: ICON.sparkle, tint: "violet", open: "/studio",
+    title: msg("Watch Studio, closer to the watch"),
+    detail: msg("What you see while you edit is what the watch will show."),
     points: [
-      { icon: ICON.chart, text: msg("Usage counts: a random ID, the app version and your OS. Nothing more.") },
-      { icon: ICON.bug, text: msg("Crash reports stay off until you turn them on") },
-      { icon: ICON.plane, text: msg("Nothing is sent in Local mode") },
+      { icon: ICON.play, text: msg("The canvas plays a face's animation as the watch will") },
+      { icon: ICON.phone, text: msg("Send to iPhone brings the editable project too") },
+      { icon: ICON.sparkle, text: msg("Watchmaker runs your own Codex CLI, with all its tools") },
+      { icon: ICON.ruler, text: msg("Values, colons and icons in a slot scale as one") },
     ],
   },
 ];
 
 /** The fixes worth naming, for the last page. */
 export const FIXES: string[] = [
-  msg("Watch Studio: Download offers the project ZIP to upload to Community"),
-  msg("Watch Studio: the Download menu opens above the panels, not under them"),
-  msg("Watch Studio: text and shapes sit just above the background in Layers, and a click picks the layer in front"),
-  msg("Watch Studio: an “i” on each layer says how that kind of layer works"),
-  msg("Watch Studio: thin pictures no longer show as a checkered strip"),
-  msg("A pace typed with /km or /mi is read in that unit"),
-  msg("Popovers are as solid as the drop-down menus, so busy pages don't show through"),
+  msg("Watch Studio: dragging stays smooth on busy faces"),
+  msg("Watch Studio: always-on selection boxes sit in the right place on PACE Pro"),
+  msg("Watch Studio: the barometer's icon can be dragged"),
+  msg("Always-on digits have clean, solid edges"),
+  msg("Phones on Windows: the pairing code puts Wi-Fi first, and Allow lets them through Windows Firewall"),
+  msg("Calendar: the unsaved-changes bar stays at the bottom of the window"),
+  msg("Checking for updates no longer fails while a new release is still being published"),
+  msg("Back and forward arrows at the top of the sidebar"),
 ];
 
 const BASE = "/api/desktop/settings/whats-new";

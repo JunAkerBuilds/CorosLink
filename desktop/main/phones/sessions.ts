@@ -35,6 +35,7 @@ export class PhoneSessions {
         created_at TEXT NOT NULL, last_used_at TEXT NOT NULL, expires_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS removed (jkt TEXT PRIMARY KEY, removed_at TEXT NOT NULL);
     `);
     const saved = this.db.prepare("SELECT value FROM meta WHERE key = 'environment'").get() as { value: string } | undefined;
     // 16 random bytes, base64url: the 22 characters the phones expect.
@@ -68,11 +69,19 @@ export class PhoneSessions {
     const a = Buffer.from(secret), b = Buffer.from(open.secret);
     if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
     this.pairing = null;
+    // Scanning a code here is the athlete's say-so: a phone removed earlier may use the relay again.
+    this.db.prepare("DELETE FROM removed WHERE jkt = ?").run(jkt);
     return this.issue(jkt, label, now);
   }
 
-  /** A one-time credential for the phone key `jkt`, for the relay to hand that phone (cloud/mint.ts). */
-  mintCredential(jkt: string, now = Date.now()): { credential: string; expiresAt: number } {
+  /** Whether the athlete removed the phone with key `jkt` here: it comes back only by scanning a new code. */
+  isRemoved(jkt: string): boolean {
+    return !!this.db.prepare("SELECT 1 FROM removed WHERE jkt = ?").get(jkt);
+  }
+
+  /** A one-time credential for the phone key `jkt`, for the relay to hand that phone (cloud/mint.ts). Null for a phone removed here. */
+  mintCredential(jkt: string, now = Date.now()): { credential: string; expiresAt: number } | null {
+    if (this.isRemoved(jkt)) return null;
     for (const [hash, c] of this.credentials) if (c.expiresAt <= now) this.credentials.delete(hash);
     const credential = token(32), expiresAt = now + BOOTSTRAP_MS;
     this.credentials.set(hashOf(credential), { jkt, expiresAt });
@@ -84,7 +93,7 @@ export class PhoneSessions {
     const hash = hashOf(credential), found = this.credentials.get(hash);
     if (!found) return null;
     this.credentials.delete(hash);
-    if (found.expiresAt <= now || found.jkt !== jkt) return null;
+    if (found.expiresAt <= now || found.jkt !== jkt || this.isRemoved(jkt)) return null;
     return this.issue(jkt, label, now);
   }
 
@@ -118,10 +127,15 @@ export class PhoneSessions {
     }));
   }
 
-  remove(id: string): boolean {
-    const removed = Number(this.db.prepare("DELETE FROM phones WHERE id = ?").run(id).changes) > 0;
-    if (removed) this.onEnded(id);
-    return removed;
+  /** Removes a phone. It can't sign in again through the relay until it scans a new code here. */
+  remove(id: string, now = Date.now()): boolean {
+    const row = this.db.prepare("SELECT jkt FROM phones WHERE id = ?").get(id) as { jkt: string } | undefined;
+    if (!row) return false;
+    this.db.prepare("DELETE FROM phones WHERE id = ?").run(id);
+    this.db.prepare("INSERT INTO removed (jkt, removed_at) VALUES (?, ?) ON CONFLICT(jkt) DO UPDATE SET removed_at = excluded.removed_at").run(row.jkt, new Date(now).toISOString());
+    for (const [hash, c] of this.credentials) if (c.jkt === row.jkt) this.credentials.delete(hash);
+    this.onEnded(id);
+    return true;
   }
 
   /** Ends the session a token names (the phone's own sign-out). */

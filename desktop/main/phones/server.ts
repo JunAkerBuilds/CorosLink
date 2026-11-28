@@ -18,6 +18,29 @@ import { MAX_FRAME, serveSocket, type CoachModels } from "./socket";
 export const PROTOCOL = 1;
 const MAX_BODY = 1024 * 1024 + 4096;
 const PAIR_ATTEMPTS_PER_MINUTE = 10;
+/** Senders remembered at once; past this the oldest are forgotten, so a flood can't grow the list without end. */
+const MAX_SENDERS = 1000;
+
+/** Failed attempts per sender over the last minute, so one sender's failures don't lock out everyone else. */
+export class FailedAttempts {
+  private readonly bySender = new Map<string, number[]>();
+  constructor(private readonly perMinute = PAIR_ATTEMPTS_PER_MINUTE) {}
+
+  /** Whether `sender` has used up its attempts for now. */
+  blocked(sender: string, now = Date.now()): boolean {
+    const recent = (this.bySender.get(sender) ?? []).filter((t) => now - t < 60_000);
+    if (recent.length) this.bySender.set(sender, recent); else this.bySender.delete(sender);
+    return recent.length >= this.perMinute;
+  }
+
+  failed(sender: string, now = Date.now()): void {
+    const list = this.bySender.get(sender) ?? [];
+    list.push(now);
+    this.bySender.delete(sender);
+    this.bySender.set(sender, list);
+    while (this.bySender.size > MAX_SENDERS) this.bySender.delete(this.bySender.keys().next().value as string);
+  }
+}
 
 export interface SyncStore { token: string; handle(request: Request): Promise<Response> }
 /** The relay's side of a phone away from home (remote/cloud): the tunnel's host and the mint exchange. */
@@ -89,8 +112,8 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
 export class PhoneServer {
   private server: Server | null = null;
   private readonly replay = new ReplayGuard();
-  private failedPairs: number[] = [];
-  private failedBootstraps: number[] = [];
+  private readonly failedPairs = new FailedAttempts();
+  private readonly failedBootstraps = new FailedAttempts();
   /** WebSocket tickets: single use, 30 s. */
   private readonly tickets = new Map<string, { phoneId: string; expiresAt: number }>();
   private readonly sockets = new Map<string, Set<WebSocket>>();
@@ -203,36 +226,35 @@ export class PhoneServer {
       let checked: { jkt: string; claims: unknown };
       try { checked = await tunnel.verifyMint(typeof body?.request === "string" ? body.request : ""); }
       catch (error) { return refuse(res, 401, "invalid_signature", error instanceof Error ? error.message : "Bad request."); }
-      const { credential, expiresAt } = this.options.sessions.mintCredential(checked.jkt);
-      return send(res, 200, await tunnel.mintAnswer(checked.claims, credential, expiresAt));
+      const minted = this.options.sessions.mintCredential(checked.jkt);
+      if (!minted) return refuse(res, 403, "phone_removed", "This phone was removed on the computer. Scan a new code there to pair it again.");
+      return send(res, 200, await tunnel.mintAnswer(checked.claims, minted.credential, minted.expiresAt));
     }
 
     // A phone spending the relay's credential for a session.
     if (url.pathname === "/v1/auth/bootstrap" && method === "POST") {
-      const now = Date.now();
-      this.failedBootstraps = this.failedBootstraps.filter((t) => now - t < 60_000);
-      if (this.failedBootstraps.length >= PAIR_ATTEMPTS_PER_MINUTE) return refuse(res, 429, "rate_limited", "Too many attempts.");
+      const sender = senderOf(req, where.tunnel);
+      if (this.failedBootstraps.blocked(sender)) return refuse(res, 429, "rate_limited", "Too many attempts.");
       let jkt: string;
       try { jkt = checkProof(header(req, "dpop"), { method, url: htu }, this.replay.check).jkt; }
       catch (error) { return refuse(res, 400, "invalid_dpop_proof", error instanceof ProofError ? error.message : "Bad proof."); }
       const body = parseJson(await readBody(req));
       const grant = typeof body?.credential === "string" ? this.options.sessions.bootstrap(body.credential, jkt, typeof body.label === "string" ? body.label : "Phone") : null;
-      if (!grant) { this.failedBootstraps.push(now); return refuse(res, 401, "invalid_grant", "This sign-in has expired. Try again."); }
+      if (!grant) { this.failedBootstraps.failed(sender); return refuse(res, 401, "invalid_grant", "This sign-in has expired. Try again."); }
       return send(res, 200, grant);
     }
 
     if (url.pathname === "/v1/auth/pair" && method === "POST") {
       // The QR code's secret, on this network only.
       if (where.tunnel) return refuse(res, 404, "not_found", "Not found.");
-      const now = Date.now();
-      this.failedPairs = this.failedPairs.filter((t) => now - t < 60_000);
-      if (this.failedPairs.length >= PAIR_ATTEMPTS_PER_MINUTE) return refuse(res, 429, "rate_limited", "Too many attempts.");
+      const sender = senderOf(req, false);
+      if (this.failedPairs.blocked(sender)) return refuse(res, 429, "rate_limited", "Too many attempts.");
       let jkt: string;
       try { jkt = checkProof(header(req, "dpop"), { method, url: htu }, this.replay.check).jkt; }
       catch (error) { return refuse(res, 400, "invalid_dpop_proof", error instanceof ProofError ? error.message : "Bad proof."); }
       const body = parseJson(await readBody(req));
       const grant = typeof body?.secret === "string" ? this.options.sessions.pair(body.secret, jkt, typeof body.label === "string" ? body.label : "Phone") : null;
-      if (!grant) { this.failedPairs.push(now); return refuse(res, 401, "invalid_secret", "This code has expired or was already used."); }
+      if (!grant) { this.failedPairs.failed(sender); return refuse(res, 401, "invalid_secret", "This code has expired or was already used."); }
       return send(res, 200, grant);
     }
 
@@ -274,6 +296,15 @@ export class PhoneServer {
     }
     return refuse(res, 404, "not_found", "Not found.");
   }
+}
+
+/**
+ * Who is asking, for counting failed attempts: the phone's address on this network, or through the tunnel the one
+ * Cloudflare's edge puts in CF-Connecting-IP (the edge sets it itself, so a caller can't choose it).
+ */
+function senderOf(req: IncomingMessage, tunnel: boolean): string {
+  const edge = tunnel ? header(req, "cf-connecting-ip")?.trim() : null;
+  return edge ? `edge:${edge.slice(0, 64)}` : `lan:${req.socket.remoteAddress ?? ""}`;
 }
 
 const header = (req: IncomingMessage, name: string): string | null => {

@@ -68,4 +68,30 @@ describe("local store, speaking the sync API", () => {
     expect(bad.status).toBe(400);
     expect(store.size).toBe(1);
   });
+
+  it("sends a client from before a restore back to 0, even when the backup holds more than it had seen", async () => {
+    const store = open();
+    store.seed(Array.from({ length: 3 }, (_, i) => ({ collection: "activity", id: `old${i}`, body: { n: i } })));
+    // A phone caught up at 3; then a backup of 10 items is restored here.
+    const phone = (await call(store, "GET", "/api/v1/me/sync?since=0")).body.cursor!;
+    expect(phone).toBe(3);
+    store.replaceWith(Array.from({ length: 10 }, (_, i) => ({ collection: "activity", id: `new${i}`, body: { n: i } })));
+    // Its status check sees something new, and its pull is told to start over.
+    expect((await call(store, "GET", "/api/v1/me/sync/status")).body.cursor).toBeGreaterThan(phone);
+    expect((await call(store, "GET", `/api/v1/me/sync?since=${phone}`)).body).toMatchObject({ items: [], cursor: 0, more: false });
+    const fresh = (await call(store, "GET", "/api/v1/me/sync?since=0&limit=500")).body;
+    expect(fresh.items.map((i) => (i as { id?: string }).id)).toEqual(Array.from({ length: 10 }, (_, i) => `new${i}`));
+    // From the new cursor on, nothing is new and nothing starts over.
+    expect((await call(store, "GET", `/api/v1/me/sync?since=${fresh.cursor}`)).body).toMatchObject({ items: [], cursor: fresh.cursor, more: false });
+  });
+
+  it("moves the cursor on for a wipe with nothing restored, so a client still notices and settles", async () => {
+    const store = open();
+    store.seed([{ collection: "activity", id: "a", body: { n: 1 } }]);
+    await call(store, "DELETE", "/api/v1/me/sync");
+    expect((await call(store, "GET", "/api/v1/me/sync/status")).body.cursor).toBe(2);
+    expect((await call(store, "GET", "/api/v1/me/sync?since=1")).body).toMatchObject({ items: [], cursor: 0 });
+    // Starting over from 0, it lands on the store's cursor, not 0 again (which would make every status check look new).
+    expect((await call(store, "GET", "/api/v1/me/sync?since=0")).body).toMatchObject({ items: [], cursor: 2, more: false });
+  });
 });

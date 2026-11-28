@@ -63,6 +63,8 @@ export class LocalStore {
     this.q = {
       cursor: this.db.prepare("SELECT value FROM meta WHERE key = 'cursor'"),
       setCursor: this.db.prepare("INSERT INTO meta (key, value) VALUES ('cursor', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"),
+      wipedAt: this.db.prepare("SELECT value FROM meta WHERE key = 'wipedAt'"),
+      setWipedAt: this.db.prepare("INSERT INTO meta (key, value) VALUES ('wipedAt', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"),
       token: this.db.prepare("SELECT value FROM meta WHERE key = 'token'"),
       setToken: this.db.prepare("INSERT INTO meta (key, value) VALUES ('token', ?)"),
       one: this.db.prepare("SELECT * FROM items WHERE collection = ? AND id = ?"),
@@ -85,6 +87,25 @@ export class LocalStore {
 
   get cursor(): number {
     return Number((this.q.cursor.get() as { value: string } | undefined)?.value ?? 0);
+  }
+
+  /** The cursor when everything was last wiped: a client still at or below it holds what was wiped. */
+  private get wipedAt(): number {
+    return Number((this.q.wipedAt.get() as { value: string } | undefined)?.value ?? 0);
+  }
+
+  /**
+   * Everything goes, but versions keep growing. A client whose cursor is from before the wipe is told to start again
+   * from 0 (`pull`); numbering from 1 again would let a restore of more items than the client had seen pass for news.
+   */
+  private wipe(): void {
+    this.inTransaction(() => {
+      const cursor = this.cursor;
+      this.q.wipe.run();
+      this.q.setWipedAt.run(String(cursor));
+      // One past the wipe, so a status check differs from every cursor handed out before it, even with nothing restored.
+      this.q.setCursor.run(String(cursor + 1));
+    });
   }
 
   /** How many items are kept here (deletion markers left out). */
@@ -161,7 +182,7 @@ export class LocalStore {
 
   /** Everything replaced by `items` (sample data starting over); clients see the wipe and read it all again. */
   replaceWith(items: readonly Seed[], now = new Date()): void {
-    this.inTransaction(() => { this.q.wipe.run(); this.q.setCursor.run("0"); });
+    this.wipe();
     this.seed(items, now);
   }
 
@@ -203,7 +224,7 @@ export class LocalStore {
     if (request.method === "POST") return this.push(await request.text());
     if (request.method === "DELETE") {
       const deleted = this.size;
-      this.inTransaction(() => { this.q.wipe.run(); this.q.setCursor.run("0"); });
+      this.wipe();
       return reply({ deleted });
     }
     return refuse(405, "METHOD", "Not allowed.");
@@ -213,7 +234,7 @@ export class LocalStore {
     const since = Number(url.searchParams.get("since") ?? 0), limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? 200)));
     if (!Number.isInteger(since) || since < 0 || !Number.isInteger(limit)) return refuse(400, "INVALID_SYNC", "since and limit must be whole numbers.");
     // A cursor from before a wipe: the client drops its cache and starts again from 0.
-    if (since > this.cursor) return reply({ items: [], cursor: 0, more: false });
+    if (since > this.cursor || (since > 0 && since <= this.wipedAt)) return reply({ items: [], cursor: 0, more: false });
     const rows = (this.q.after.all(since, limit) as unknown as DbRow[]).map(toRow);
     const items: Row[] = [];
     let bytes = 0;
@@ -223,8 +244,10 @@ export class LocalStore {
       items.push(row);
       bytes += size;
     }
-    const cursor = items.length ? items[items.length - 1].version : since;
-    const more = Number((this.q.waiting.get(cursor) as { n: number }).n) > 0;
+    const last = items.length ? items[items.length - 1].version : since;
+    const more = Number((this.q.waiting.get(last) as { n: number }).n) > 0;
+    // Caught up: the store's own cursor, which may be past the last item (a wipe moves it on with nothing after it).
+    const cursor = more ? last : this.cursor;
     return reply({ items, cursor, more });
   }
 

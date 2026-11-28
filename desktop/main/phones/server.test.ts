@@ -96,6 +96,30 @@ describe("phones on the local network", () => {
   });
 });
 
+describe("who may ask, on the local network", () => {
+  it("answers only to this computer's own address and port in Host, so a web page can't rebind a name to it", async () => {
+    const { base } = await setUp();
+    const port = Number(new URL(base).port);
+    expect((await viaTunnel(port, `127.0.0.1:${port}`, "GET", "/v1/descriptor", {})).status).toBe(200);
+    expect((await viaTunnel(port, `rebound.example:${port}`, "GET", "/v1/descriptor", {})).status).toBe(421);
+    expect((await viaTunnel(port, "127.0.0.1", "GET", "/v1/descriptor", {})).status).toBe(421);
+    // No tunnel is linked: its kind of name means nothing here either.
+    expect((await viaTunnel(port, "0123456789abcdef.coroslinkrelay.com", "GET", "/v1/descriptor", {})).status).toBe(421);
+  });
+
+  it("counts wrong pairing codes per phone, so one sender's guesses don't lock out the athlete's phone", async () => {
+    const { sessions, base } = await setUp();
+    const port = Number(new URL(base).port);
+    const guesser = phoneKey();
+    sessions.startPairing();
+    for (let i = 0; i < 10; i++) {
+      const answer = await viaTunnel(port, `127.0.0.1:${port}`, "POST", "/v1/auth/pair", { DPoP: guesser("POST", `${base}/v1/auth/pair`) }, JSON.stringify({ secret: `wrong-${i}` }));
+      expect(answer.status).toBe(401);
+    }
+    expect((await viaTunnel(port, `127.0.0.1:${port}`, "POST", "/v1/auth/pair", { DPoP: guesser("POST", `${base}/v1/auth/pair`) }, JSON.stringify({ secret: "wrong" }))).status).toBe(429);
+  });
+});
+
 /** A request as cloudflared makes it: from this computer, with the tunnel's name as Host. */
 function viaTunnel(port: number, hostName: string, method: string, pathName: string, headers: Record<string, string>, body?: string): Promise<{ status: number; json: Record<string, unknown> }> {
   return new Promise((resolve, reject) => {
@@ -186,5 +210,55 @@ describe("Coach for phones, on the network and through the tunnel", () => {
     expect((await viaTunnel(port, tunnel, "POST", "/v1/auth/bootstrap", { DPoP: proof("POST", url) }, JSON.stringify({ credential }))).status).toBe(401);
     // The QR pairing stays on the local network.
     expect((await viaTunnel(port, tunnel, "POST", "/v1/auth/pair", {}, "{}")).status).toBe(404);
+  });
+
+  /** The phone's key, and its thumbprint as the relay's mint request names it. */
+  async function relayPhone() {
+    const proof = phoneKey();
+    phoneJkt = (await import("./dpop")).thumbprint(JSON.parse(Buffer.from(proof("GET", "x").split(".")[0], "base64url").toString()).jwk);
+    return proof;
+  }
+  const TUNNEL = "0123456789abcdef.coroslinkrelay.com";
+  const BOOTSTRAP = `https://${TUNNEL}/v1/auth/bootstrap`;
+
+  it("won't let a phone removed here back in through the relay until it scans a new code", async () => {
+    const { sessions, port, base } = await withCoach();
+    const proof = await relayPhone();
+    const first = await viaTunnel(port, TUNNEL, "POST", "/v1/relay/mint", {}, JSON.stringify({ request: "good" }));
+    expect((await viaTunnel(port, TUNNEL, "POST", "/v1/auth/bootstrap", { DPoP: proof("POST", BOOTSTRAP) }, JSON.stringify({ credential: first.json.credential, label: "iPhone" }))).status).toBe(200);
+    // A second credential, minted before the athlete removes the phone, is no good after it.
+    const early = await viaTunnel(port, TUNNEL, "POST", "/v1/relay/mint", {}, JSON.stringify({ request: "good" }));
+    sessions.remove(sessions.list()[0].id);
+    expect((await viaTunnel(port, TUNNEL, "POST", "/v1/auth/bootstrap", { DPoP: proof("POST", BOOTSTRAP) }, JSON.stringify({ credential: early.json.credential }))).status).toBe(401);
+    const refused = await viaTunnel(port, TUNNEL, "POST", "/v1/relay/mint", {}, JSON.stringify({ request: "good" }));
+    expect(refused).toMatchObject({ status: 403, json: { error: { code: "phone_removed" } } });
+    expect(sessions.list()).toEqual([]);
+
+    // Scanning a new code on this network lets it use the relay again.
+    const { secret } = sessions.startPairing();
+    expect((await fetch(`${base}/v1/auth/pair`, { method: "POST", headers: { DPoP: proof("POST", `${base}/v1/auth/pair`) }, body: JSON.stringify({ secret, label: "iPhone" }) })).status).toBe(200);
+    expect((await viaTunnel(port, TUNNEL, "POST", "/v1/relay/mint", {}, JSON.stringify({ request: "good" }))).status).toBe(200);
+  });
+
+  it("spends a relay credential only with the key it was minted for", async () => {
+    const { port } = await withCoach();
+    await relayPhone();
+    const mint = await viaTunnel(port, TUNNEL, "POST", "/v1/relay/mint", {}, JSON.stringify({ request: "good" }));
+    const other = phoneKey();
+    expect((await viaTunnel(port, TUNNEL, "POST", "/v1/auth/bootstrap", { DPoP: other("POST", BOOTSTRAP) }, JSON.stringify({ credential: mint.json.credential }))).status).toBe(401);
+  });
+
+  it("counts failed relay sign-ins per sender, so junk from one address can't keep the athlete's phone out", async () => {
+    const { port } = await withCoach();
+    const attacker = phoneKey();
+    const junk = (ip: string) => viaTunnel(port, TUNNEL, "POST", "/v1/auth/bootstrap", { DPoP: attacker("POST", BOOTSTRAP), "CF-Connecting-IP": ip }, JSON.stringify({ credential: "junk" }));
+    for (let i = 0; i < 10; i++) expect((await junk("203.0.113.9")).status).toBe(401);
+    expect((await junk("203.0.113.9")).status).toBe(429);
+
+    // The athlete's phone, from its own address, still gets in.
+    const proof = await relayPhone();
+    const mint = await viaTunnel(port, TUNNEL, "POST", "/v1/relay/mint", {}, JSON.stringify({ request: "good" }));
+    const grant = await viaTunnel(port, TUNNEL, "POST", "/v1/auth/bootstrap", { DPoP: proof("POST", BOOTSTRAP), "CF-Connecting-IP": "198.51.100.4" }, JSON.stringify({ credential: mint.json.credential }));
+    expect(grant.status).toBe(200);
   });
 });

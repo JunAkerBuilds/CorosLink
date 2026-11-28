@@ -11,7 +11,7 @@ import { ReachAnywhere } from "./ReachAnywhere";
 
 interface Phone { id: string; label: string; createdAt: string; lastUsedAt: string }
 interface Status { name: string; listening: boolean; addresses: string[]; items: number; pairing: boolean; phones: Phone[]; firewall?: FirewallState }
-interface Pairing { link: string; qr: string; expiresAt: string }
+interface Pairing { link: string; qr: string; expiresAt: string; /** When the code was asked for, on this computer's clock. */ startedAt: number }
 
 const ago = (iso: string): string => {
   const minutes = Math.round((Date.now() - Date.parse(iso)) / 60_000);
@@ -43,15 +43,17 @@ export function ThisComputer() {
     const timer = setInterval(() => { setNow(Date.now()); void read(); }, 2000);
     return () => clearInterval(timer);
   }, [pairing, read]);
-  const pairedCount = status?.phones.length ?? 0;
-  const [seen, setSeen] = useState(pairedCount);
-  if (pairing && pairedCount > seen) { setPairing(null); setSeen(pairedCount); }
-  if (!pairing && pairedCount !== seen) setSeen(pairedCount);
+  // A phone paired since the code went up (a new one, or the same phone pairing again): the code has done its job.
+  if (pairing && status?.phones.some((p) => Date.parse(p.createdAt) >= pairing.startedAt)) setPairing(null);
 
   const left = pairing ? Math.max(0, Math.round((Date.parse(pairing.expiresAt) - now) / 1000)) : 0;
   if (pairing && left === 0) setPairing(null);
 
-  const pair = () => { setProblem(null); ask<Pairing>("/api/desktop/phones/pair", { method: "POST" }).then((p) => { setNow(Date.now()); setPairing(p); }, (e: unknown) => setProblem(e instanceof Error ? e.message : String(e))); };
+  const pair = () => {
+    setProblem(null);
+    const startedAt = Date.now();
+    ask<Omit<Pairing, "startedAt">>("/api/desktop/phones/pair", { method: "POST" }).then((p) => { setNow(Date.now()); setPairing({ ...p, startedAt }); }, (e: unknown) => setProblem(e instanceof Error ? e.message : String(e)));
+  };
   const remove = (id: string) => { void ask(`/api/desktop/phones?id=${encodeURIComponent(id)}`, { method: "DELETE" }).then(read); };
 
   return (

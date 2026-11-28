@@ -3,6 +3,47 @@
 C-LINK desktop betas (`vX.Y.Z-clink.N`). They go to CorosLink installs on a Mac that opted in to C-LINK, to earlier
 C-LINK betas, and to anyone who downloads them from the release page. Each section here is also that release's notes on GitHub.
 
+## [0.2.0-clink.5] - 2026-11-28
+
+### Coach on your phone, anywhere
+- Your paired phone talks to Coach on this computer, in the same conversations: pick one up on whichever screen is
+  closer.
+- Reach from anywhere, on Connections, keeps Coach working away from home through relay.coroslink.com and a
+  Cloudflare tunnel. It's off until you turn it on, and needs a coroslink.com account.
+- Phone sync still needs the phone and this computer on the same Wi-Fi. Sync from anywhere comes with the next
+  C-LINK Mobile build.
+- No phone? The Dashboard, Calendar and Coach work out fitness, load and readiness from your watch's activities.
+
+### A page for every sport you do
+- Walking, Hiking, Skiing and Climbing join the others, shown only when you do them: your week, the last four weeks,
+  the climb, recent sessions and records.
+- Drag the sport tabs into your own order. The hub and Go to follow it.
+
+### Watch Studio, closer to the watch
+- The canvas plays a face's animation as the watch will.
+- Send to iPhone brings the editable project too.
+- Watchmaker runs your own Codex CLI, with all its tools.
+- Values, colons and icons in a slot scale as one, and the slot's icons are built at the size the editor shows.
+- Studio no longer adds a barometer to a face's selectable slot; a template that has its own keeps it.
+
+### Phones
+- A phone you remove on Connections stays removed: it can't come back through Reach from anywhere until you scan a
+  new code on this computer.
+- Wrong sign-ins from one address no longer lock out your own phone.
+- The pairing code closes as soon as the phone pairs, also when the same phone pairs again.
+- After restoring a backup, a paired phone reads everything again instead of keeping what the backup replaced.
+- On Windows, the pairing code puts Wi-Fi first, and Allow lets phones through Windows Firewall.
+
+### Fixes
+- Watch Studio: dragging stays smooth on busy faces.
+- Watch Studio: always-on selection boxes sit in the right place on PACE Pro.
+- Watch Studio: the barometer's icon can be dragged.
+- Always-on digits have clean, solid edges.
+- Calendar: the unsaved-changes bar stays at the bottom of the window.
+- Checking for updates no longer fails while a new release is still being published.
+- Back and forward arrows at the top of the sidebar.
+- The old COROS account import is gone from Setup and Connections; it relied on a helper that was removed.
+
 ## [0.2.0-clink.4] - 2026-11-27
 
 ### What's new
