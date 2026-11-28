@@ -5,7 +5,7 @@ import { Bars, BarsLegend, DISCLAIMER, Figures, Icon, NotYourSport, Ring, Sample
 import { CountUp, Segmented } from "@/components/ui";
 import { useLoaded, type Origin } from "@/data/core";
 import { coachHref, isMissing, loadSports, type Hue, type RunPage } from "@/data/sports";
-import { locale, msg, t, tx } from "@/lib/i18n";
+import { dateText, locale, msg, t, tx } from "@/lib/i18n";
 import type { Family } from "@/lib/sports";
 import "../sports.css";
 
@@ -15,7 +15,7 @@ const KIND_WORD: Record<string, string> = { Easy: msg("Easy"), Long: msg("Long")
 /** A run kind in the app's language. */
 const kindWord = (kind: string) => tx("run kind", KIND_WORD[kind] ?? kind);
 /** A weekday in the app's language, 0 = Monday (3 January 2000 was a Monday). */
-const weekday = (d: number, style: "narrow" | "long") => new Date(Date.UTC(2000, 0, 3 + d)).toLocaleDateString(locale("en-GB"), { weekday: style, timeZone: "UTC" });
+const weekday = (d: number, style: "narrow" | "long") => dateText(new Date(Date.UTC(2000, 0, 3 + d)), locale("en-GB"), { weekday: style, timeZone: "UTC" });
 
 export default function RunningPage() {
   const loaded = useLoaded(loadSports);

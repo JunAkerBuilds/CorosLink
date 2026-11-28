@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { isValidElement, type ReactElement } from "react";
-import { isLang, LANGUAGES, languageFor, locale, setLanguageWords, t, tx } from "./index";
+import { longDay, monthTitle, weekTitle } from "../calendar";
+import { dateRangeText, dateText, isLang, LANGUAGES, languageFor, locale, setLanguageWords, t, tx } from "./index";
 import { tr } from "./react";
 
 afterEach(() => setLanguageWords("en", {}));
@@ -16,10 +17,15 @@ describe("languageFor", () => {
   it("maps German and Portuguese tags", () => {
     expect(languageFor("system", ["de-AT"])).toBe("de");
     expect(languageFor("system", ["de"])).toBe("de");
-    expect(languageFor("system", ["pt-PT"])).toBe("pt-BR");
+    expect(languageFor("system", ["pt-PT"])).toBe("pt-PT");
+    expect(languageFor("system", ["pt-pt"])).toBe("pt-PT");
+    expect(languageFor("system", ["pt-PT-u-nu-latn"])).toBe("pt-PT");
     expect(languageFor("system", ["pt"])).toBe("pt-BR");
+    expect(languageFor("system", ["pt-AO"])).toBe("pt-BR");
+    expect(languageFor("system", ["fr-FR", "pt-PT", "pt-BR"])).toBe("pt-PT");
     expect(languageFor("system", ["fr-FR", "pt-BR", "de-DE"])).toBe("pt-BR");
     expect(languageFor("de", ["pt-BR"])).toBe("de");
+    expect(languageFor("pt-PT", ["pt-BR"])).toBe("pt-PT");
   });
   it("falls back to English", () => expect(languageFor("system", ["fr", "it"])).toBe("en"));
 });
@@ -66,13 +72,38 @@ describe("locale", () => {
     expect(locale()).toBe("de-DE");
     setLanguageWords("pt-BR", {});
     expect(locale("en-US")).toBe("pt-BR");
+    setLanguageWords("pt-PT", {});
+    expect(locale("en-US")).toBe("pt-PT");
+  });
+});
+
+describe("dateText", () => {
+  const sat = new Date(2026, 10, 28);
+  it("writes pt-PT months and weekdays with a capital", () => {
+    expect(dateText(sat, "pt-PT", { weekday: "long", day: "numeric", month: "long" })).toBe("Sábado, 28 de Novembro");
+    expect(dateText(sat, "pt-PT", { month: "long", year: "numeric" })).toBe("Novembro de 2026");
+    expect(dateRangeText(new Date(2026, 10, 30), new Date(2026, 11, 6), "pt-PT", { day: "numeric", month: "long", year: "numeric" })).toBe("30 de Novembro\u2009–\u20096 de Dezembro de 2026");
+  });
+  it("leaves pt-BR and the other languages as Intl writes them", () => {
+    expect(dateText(sat, "pt-BR", { weekday: "long", day: "numeric", month: "long" })).toBe("sábado, 28 de novembro");
+    expect(dateText(sat, "es-ES", { weekday: "long", day: "numeric", month: "long" })).toBe("sábado, 28 de noviembre");
+    expect(dateText(sat, "en-GB", { weekday: "short", day: "numeric", month: "short" })).toBe("Sat 28 Nov");
+  });
+  it("reaches the screens' dates", () => {
+    setLanguageWords("pt-PT", {});
+    expect(longDay("2026-11-28")).toBe("Sábado, 28 de Novembro");
+    expect(monthTitle("2026-11")).toBe("Novembro de 2026");
+    expect(weekTitle("2026-11-23")).toBe("23–29 de Novembro de 2026");
+    setLanguageWords("pt-BR", {});
+    expect(longDay("2026-11-28")).toBe("sábado, 28 de novembro");
   });
 });
 
 describe("isLang", () => {
   it("knows every language on offer", () => {
     for (const l of LANGUAGES) expect(isLang(l.id)).toBe(true);
-    expect(LANGUAGES.map((l) => l.id)).toEqual(["en", "es", "de", "pt-BR", "zh-Hans"]);
+    expect(LANGUAGES.map((l) => l.id)).toEqual(["en", "es", "de", "pt-BR", "pt-PT", "zh-Hans"]);
+    expect(new Set(LANGUAGES.map((l) => l.label)).size).toBe(LANGUAGES.length);
   });
   it("refuses the rest", () => {
     for (const v of ["pt", "de-DE", "fr", "", null, undefined, 1]) expect(isLang(v)).toBe(false);

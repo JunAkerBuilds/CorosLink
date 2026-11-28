@@ -10,6 +10,7 @@ const CATALOGS: Record<Exclude<Lang, "en">, () => Promise<{ default: Catalog }>>
   es: () => import("./catalogs/es"),
   de: () => import("./catalogs/de"),
   "pt-BR": () => import("./catalogs/pt-BR"),
+  "pt-PT": () => import("./catalogs/pt-PT"),
   "zh-Hans": () => import("./catalogs/zh-Hans"),
 };
 

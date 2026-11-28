@@ -54,7 +54,7 @@
 .mp-card-head { display: flex; align-items: center; gap: 10px; }
 .mp-card-head h2 { margin: 0; font-size: 17px; font-weight: 800; }
 .mp-card-head > span { display: flex; flex-direction: column; gap: 2px; }
-.mp-card-head small { color: var(--muted); font-size: 12.5px; }
+.mp-card-head small { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
 .mp-seg { display: flex; width: 100%; box-sizing: border-box; }
 .mp-seg button { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
 .mp-chips { display: flex; flex-wrap: wrap; gap: 6px; }

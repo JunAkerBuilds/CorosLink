@@ -3,7 +3,7 @@
 // and the status spots. CorosLink's Simulation panel, on C-LINK's number fields. Nothing here is saved with the face.
 import { useState } from "react";
 import { Segmented, Select } from "@/components/ui";
-import { language, locale, t, tx } from "@/lib/i18n";
+import { dateText, language, locale, t, tx } from "@/lib/i18n";
 import {
   advanceSimulationDateTime, createWatchfaceSimulation, parseSimulationDateTime, simulationDateTime, simulationPreset,
   type WatchfaceSimulation,
@@ -106,7 +106,7 @@ export function SimPanel({ sim, setSim, speed, setSpeed, design, layers, spots, 
     <section className="st-sim" aria-label={t("Simulation")}>
       <div className="st-sim-row">
         <button type="button" className="st-play" aria-label={sim.playing ? t("Pause") : t("Play")} onClick={() => setSim((s) => ({ ...s, playing: !s.playing }))}><Icon name={sim.playing ? "pause" : "play"} size={18} width={2.3} /></button>
-        <div className="st-sim-clock"><b>{sim.dateTime.slice(11, 19)}</b><small>{at.toLocaleDateString(language() === "en" ? undefined : locale(), { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</small></div>
+        <div className="st-sim-clock"><b>{sim.dateTime.slice(11, 19)}</b><small>{dateText(at, language() === "en" ? undefined : locale(), { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</small></div>
         <SimDateTime dateTime={sim.dateTime} onChange={(dateTime) => setSim((s) => ({ ...s, dateTime, playing: false }))} />
         <span className="st-chips st-sim-steps">
           <button type="button" className="chip" onClick={() => setSim((s) => ({ ...s, dateTime: simulationDateTime(new Date()), playing: false }))}>{t("Now")}</button>

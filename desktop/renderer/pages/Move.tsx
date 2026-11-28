@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BrandMark } from "@/components/shell/BrandMark";
 import { Button, Switch } from "@/components/ui";
-import { language, locale, msg, t, tx } from "@/lib/i18n";
+import { dateText, language, locale, msg, t, tx } from "@/lib/i18n";
 import { computerWord } from "../computer";
 import { navigate } from "../router";
 import { changeSetup } from "../setup";
@@ -49,7 +49,7 @@ function when(iso: string | null): string {
   const days = Math.round((new Date(now.toDateString()).getTime() - new Date(at.toDateString()).getTime()) / 86_400_000);
   if (days === 0) return t("Today, {time}", { time });
   if (days === 1) return t("Yesterday, {time}", { time });
-  return t("{date}, {time}", { date: at.toLocaleDateString(tag, { month: "short", day: "numeric" }), time });
+  return t("{date}, {time}", { date: dateText(at, tag, { month: "short", day: "numeric" }), time });
 }
 
 interface TileView { state: "pick" | "wait" | "going" | "done" | "attn" | "left"; label: string; pct: number; detail: string }

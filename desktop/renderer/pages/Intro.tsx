@@ -211,15 +211,17 @@ function ScenePrivacy({ choice, onChoice, onGo, update }: { choice: PrivacyChoic
 // Scene 0 speaks the language being picked before it's in place, so its few lines are kept here in each language.
 const OWN: Record<Lang, { hello: string; sub: string; go: string; fine: string; system: string; names: Record<Lang, string> }> = {
   en: { hello: "Hello.", sub: "Pick the language C-LINK speaks.", go: "Continue", fine: "You can change it any time in Settings.", system: "System",
-    names: { en: "English", es: "Spanish", de: "German", "pt-BR": "Portuguese (Brazil)", "zh-Hans": "Chinese, Simplified" } },
+    names: { en: "English", es: "Spanish", de: "German", "pt-BR": "Portuguese (Brazil)", "pt-PT": "Portuguese (Portugal)", "zh-Hans": "Chinese, Simplified" } },
   es: { hello: "Hola.", sub: "Elige el idioma de C-LINK.", go: "Continuar", fine: "Puedes cambiarlo cuando quieras en Ajustes.", system: "Sistema",
-    names: { en: "Inglés", es: "Español", de: "Alemán", "pt-BR": "Portugués (Brasil)", "zh-Hans": "Chino simplificado" } },
+    names: { en: "Inglés", es: "Español", de: "Alemán", "pt-BR": "Portugués (Brasil)", "pt-PT": "Portugués (Portugal)", "zh-Hans": "Chino simplificado" } },
   de: { hello: "Hallo.", sub: "Wähle die Sprache von C-LINK.", go: "Weiter", fine: "Du kannst sie jederzeit in den Einstellungen ändern.", system: "System",
-    names: { en: "Englisch", es: "Spanisch", de: "Deutsch", "pt-BR": "Portugiesisch (Brasilien)", "zh-Hans": "Chinesisch (vereinfacht)" } },
+    names: { en: "Englisch", es: "Spanisch", de: "Deutsch", "pt-BR": "Portugiesisch (Brasilien)", "pt-PT": "Portugiesisch (Portugal)", "zh-Hans": "Chinesisch (vereinfacht)" } },
   "pt-BR": { hello: "Olá.", sub: "Escolha o idioma do C-LINK.", go: "Continuar", fine: "Você pode mudar quando quiser em Ajustes.", system: "Sistema",
-    names: { en: "Inglês", es: "Espanhol", de: "Alemão", "pt-BR": "Português (Brasil)", "zh-Hans": "Chinês simplificado" } },
+    names: { en: "Inglês", es: "Espanhol", de: "Alemão", "pt-BR": "Português (Brasil)", "pt-PT": "Português (Portugal)", "zh-Hans": "Chinês simplificado" } },
+  "pt-PT": { hello: "Olá.", sub: "Escolha o idioma do C-LINK.", go: "Continuar", fine: "Pode alterá-lo quando quiser nas Definições.", system: "Sistema",
+    names: { en: "Inglês", es: "Espanhol", de: "Alemão", "pt-BR": "Português (Brasil)", "pt-PT": "Português (Portugal)", "zh-Hans": "Chinês simplificado" } },
   "zh-Hans": { hello: "你好。", sub: "选择 C-LINK 使用的语言。", go: "继续", fine: "随时可以在设置中更改。", system: "跟随系统",
-    names: { en: "英语", es: "西班牙语", de: "德语", "pt-BR": "葡萄牙语（巴西）", "zh-Hans": "简体中文" } },
+    names: { en: "英语", es: "西班牙语", de: "德语", "pt-BR": "葡萄牙语（巴西）", "pt-PT": "葡萄牙语（葡萄牙）", "zh-Hans": "简体中文" } },
 };
 
 function Scene0({ pick, onPick, onGo }: { pick: Choice; onPick: (c: Choice) => void; onGo: () => void }) {

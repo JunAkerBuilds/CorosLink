@@ -12,7 +12,7 @@ import {
 } from "@/lib/activities";
 import { dayKey, thousands } from "@/lib/format";
 import { distanceIn, distanceUnit } from "@/lib/units";
-import { locale, msg, t } from "@/lib/i18n";
+import { dateText, locale, msg, t } from "@/lib/i18n";
 import { sportWord } from "./parts";
 import "@/app/(app)/activities/activities.css";
 
@@ -169,7 +169,7 @@ export function ActivitiesScreen() {
                       data-rest={a ? undefined : "true"} data-hover={a && hover === a.id ? "true" : undefined}
                       style={a ? { height: Math.round(10 + Math.min(1, d.load / fullLoad) * 78), background: SPORT_HUE[a.sport], opacity: on ? (hover && hover !== a.id ? 0.45 : 1) : 0.18 } : undefined}
                     />
-                    <span>{d.date.toLocaleDateString(locale("en-GB"), { weekday: "narrow" })}</span>
+                    <span>{dateText(d.date, locale("en-GB"), { weekday: "narrow" })}</span>
                     <b data-today={k === strip.length - 1 ? "true" : undefined}>{d.date.getDate()}</b>
                   </div>
                 );

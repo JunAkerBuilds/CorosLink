@@ -1,7 +1,7 @@
 /** Pure maths for the Activities table and the activity page: filtering, sorting, CSV, laps, routes, sample streams. */
 import type { Activity, ActivityDetail, ChartScales, Lap, PlacedPoint, RoutePoint, Sport, Streams, ZoneTime } from "@/data/activities";
 import { clock, thousands } from "@/lib/format";
-import { language, locale, msg, t } from "@/lib/i18n";
+import { dateText, language, locale, msg, t } from "@/lib/i18n";
 import {
   distanceIn, distanceStep, distanceUnit, heightIn, heightUnit, imperial, MILE_M, paceIn, paceUnitLabel, speedIn, speedUnit, swimIn, swimPaceIn, swimPaceUnitLabel, swimUnit,
 } from "@/lib/units";
@@ -22,14 +22,14 @@ export function parseStart(start: string): Date {
 /** Thu 19 Nov */
 export function formatDay(start: string): string {
   const d = parseStart(start);
-  if (language() !== "en") return d.toLocaleDateString(locale(), { weekday: "short", day: "numeric", month: "short" });
+  if (language() !== "en") return dateText(d, locale(), { weekday: "short", day: "numeric", month: "short" });
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
 /** Thu 19 Nov 2026, 07:42 */
 export function formatDayTime(start: string): string {
   const d = parseStart(start);
-  if (language() !== "en") return `${d.toLocaleDateString(locale(), { weekday: "short", day: "numeric", month: "short", year: "numeric" })} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  if (language() !== "en") return `${dateText(d, locale(), { weekday: "short", day: "numeric", month: "short", year: "numeric" })} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   return `${formatDay(start)} ${d.getFullYear()}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
@@ -251,7 +251,7 @@ export function weekTitle(key: string, today: Date): string {
   const day = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   if (day >= from && day <= to) return t("This week");
   if (language() !== "en") {
-    const short = (x: Date) => x.toLocaleDateString(locale(), { day: "numeric", month: "short" });
+    const short = (x: Date) => dateText(x, locale(), { day: "numeric", month: "short" });
     return `${short(from)} – ${short(to)}`;
   }
   return `${from.getDate()} ${MONTHS[from.getMonth()]} – ${to.getDate()} ${MONTHS[to.getMonth()]}`;

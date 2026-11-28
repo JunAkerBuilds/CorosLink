@@ -7,7 +7,7 @@ import { useLoaded, type Origin } from "@/data/core";
 import { loadSports, type HoursWeek, type Sports, type SportsHub } from "@/data/sports";
 import { FAMILY_NAME } from "@/data/sync/sports";
 import { useSportOrder } from "@/data/local/sportOrder";
-import { locale, t } from "@/lib/i18n";
+import { dateText, locale, t } from "@/lib/i18n";
 import { shownSports, type Family } from "@/lib/sports";
 import "./sports.css";
 
@@ -113,7 +113,7 @@ function hoursText(h: number): string {
 /** "26 Oct – 1 Nov" for the week starting on that Monday. */
 function weekRange(monday: string): string {
   const d = new Date(`${monday}T12:00:00`), e = new Date(d); e.setDate(d.getDate() + 6);
-  const f = (x: Date) => x.toLocaleDateString(locale("en-GB"), { day: "numeric", month: "short" });
+  const f = (x: Date) => dateText(x, locale("en-GB"), { day: "numeric", month: "short" });
   return `${f(d)} – ${f(e)}`;
 }
 

@@ -20,7 +20,7 @@ import {
   macroPercents, mealTargetKcal, mealTotals, mean, petalsLit, remaining, removeFood, ROW_PETALS, shiftDay, trim,
 } from "@/lib/fuel";
 import { EstimateDialog } from "./EstimateDialog";
-import { locale, msg, t, tx } from "@/lib/i18n";
+import { dateText, locale, msg, t, tx } from "@/lib/i18n";
 import { tr } from "@/lib/i18n/react";
 import { FoodDialog, MEAL_NAME, type FoodDialogState } from "./FoodDialog";
 import "./fuel.css";
@@ -41,9 +41,9 @@ const MEAL_LOOK: Record<MealKey, { rgb: string; hue: string; ink: string; icon: 
 };
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
-const shortDate = (day: string) => parseDay(day).toLocaleDateString(locale("en-US"), { weekday: "short", month: "short", day: "numeric" });
-const monthDay = (day: string) => parseDay(day).toLocaleDateString(locale("en-US"), { month: "short", day: "numeric" });
-const weekday = (day: string, width: "short" | "long") => parseDay(day).toLocaleDateString(locale("en-US"), { weekday: width });
+const shortDate = (day: string) => dateText(parseDay(day), locale("en-US"), { weekday: "short", month: "short", day: "numeric" });
+const monthDay = (day: string) => dateText(parseDay(day), locale("en-US"), { month: "short", day: "numeric" });
+const weekday = (day: string, width: "short" | "long") => dateText(parseDay(day), locale("en-US"), { weekday: width });
 
 /** The meal to offer first when adding from the page's Add food button: by the clock today, breakfast on other days. */
 function mealForNow(isToday: boolean): MealKey {

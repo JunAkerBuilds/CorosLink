@@ -54,7 +54,7 @@ export async function runSmoke(window: BrowserWindow, origin: string, folder: st
     await window.loadURL(origin + "/");
     await window.webContents.executeJavaScript(`localStorage.setItem("clink.theme", ${JSON.stringify(theme)})`).catch(() => {});
   }
-  // CLINK_SMOKE_LANG=es|de|pt-BR|zh-Hans shows every screen in that language (src/lib/i18n/load.ts reads it at each load).
+  // CLINK_SMOKE_LANG=es|de|pt-BR|pt-PT|zh-Hans shows every screen in that language (src/lib/i18n/load.ts reads it at each load).
   const lang = process.env.CLINK_SMOKE_LANG;
   if (isLang(lang)) {
     await window.loadURL(origin + "/");

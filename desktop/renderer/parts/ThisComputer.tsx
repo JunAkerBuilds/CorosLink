@@ -5,7 +5,7 @@ import { Button, Card } from "@/components/ui";
 // It sits in the Connections page's profile card and uses that page's styles; it brings them where it is reused.
 import "@/app/(app)/connect/connect.css";
 import "./thisComputer.css";
-import { language, locale, t } from "@/lib/i18n";
+import { dateText, language, locale, t } from "@/lib/i18n";
 import { FirewallNote, type FirewallState } from "./FirewallNote";
 import { ReachAnywhere } from "./ReachAnywhere";
 
@@ -19,7 +19,7 @@ const ago = (iso: string): string => {
   if (minutes < 60) return t("{n} min ago", { n: minutes });
   const hours = Math.round(minutes / 60);
   if (hours < 24) return t("{n} h ago", { n: hours });
-  return new Date(iso).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
+  return dateText(new Date(iso), language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
 };
 
 async function ask<T>(path: string, init?: RequestInit): Promise<T> {

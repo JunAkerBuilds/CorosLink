@@ -1,7 +1,7 @@
 /** Pure maths for the Health and Energy screens: dial geometry, sleep stage sums, energy sums, labels. */
 import type { SleepNight, SleepSegment, SleepStage } from "@/data/health";
 import type { EnergyBand, EnergyEvent, EnergyEventKind, EnergyPoint } from "@/data/energy";
-import { language, locale, msg, t } from "@/lib/i18n";
+import { dateText, language, locale, msg, t } from "@/lib/i18n";
 
 /** Repeatable scatter between -0.5 and 0.5, the same one the design canvas uses for its sample lines and stars. */
 export function scatter(i: number, k: number): number {
@@ -120,13 +120,13 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function weekdayShort(d: Date): string {
-  if (language() !== "en") return d.toLocaleDateString(locale(), { weekday: "short" });
+  if (language() !== "en") return dateText(d, locale(), { weekday: "short" });
   return WEEKDAYS[d.getDay()];
 }
 
 /** "19 Nov", with the year added when asked. */
 export function dayMonth(d: Date, withYear = false): string {
-  if (language() !== "en") return d.toLocaleDateString(locale(), { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
+  if (language() !== "en") return dateText(d, locale(), { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
   return `${d.getDate()} ${MONTHS[d.getMonth()]}${withYear ? ` ${d.getFullYear()}` : ""}`;
 }
 

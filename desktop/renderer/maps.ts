@@ -4,7 +4,7 @@ import type {
   RouteGeometry, RouteList, RouteSave, RouteSync, RoutingConfig, SavedRoute, SavedRouteSummary, SketchAnswer, SketchRequest,
   Tile, TrailRoute, WatchRoute,
 } from "../maps/types";
-import { language, locale, t } from "@/lib/i18n";
+import { dateText, language, locale, t } from "@/lib/i18n";
 import { distanceIn } from "@/lib/units";
 
 const BASE = "/api/desktop/maps";
@@ -97,5 +97,5 @@ export const shortDate = (iso: string) => {
   const d = new Date(iso);
   const today = new Date();
   if (d.toDateString() === today.toDateString()) return t("Today");
-  return d.toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
+  return dateText(d, language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
 };

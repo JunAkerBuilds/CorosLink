@@ -1,6 +1,6 @@
 // Local mode's watch (desktop/main/watch/service.ts) as the Watch page reads and drives it.
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { language, locale, t } from "@/lib/i18n";
+import { dateText, language, locale, t } from "@/lib/i18n";
 
 export type Region = "us" | "eu" | "sg" | "cn";
 export interface Found { name: string; display: string; rssi?: number; connected?: boolean }
@@ -83,7 +83,7 @@ export function whenSynced(iso: string, now = Date.now()): string {
   const tag = language() === "en" ? undefined : locale();
   const time = d.toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit", hour12: false });
   if (d.toDateString() === today.toDateString()) return t("today at {time}", { time });
-  return t("{date} at {time}", { date: d.toLocaleDateString(tag, { day: "numeric", month: "short" }), time });
+  return t("{date} at {time}", { date: dateText(d, tag, { day: "numeric", month: "short" }), time });
 }
 
 /** What a sync step is called while it runs. */

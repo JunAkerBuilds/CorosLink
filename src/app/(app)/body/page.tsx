@@ -21,7 +21,7 @@ import {
 } from "@/lib/body";
 import { parseDay, signed, thousands } from "@/lib/format";
 import { parseAmount } from "@/lib/fuel";
-import { locale, msg, t, tx } from "@/lib/i18n";
+import { dateText, locale, msg, t, tx } from "@/lib/i18n";
 import { bodyHeight, bodyHeightFromInput, bodyHeightIn, bodyHeightUnit, imperial, weightFromInput, weightIn, weightUnit } from "@/lib/units";
 import { Dialog } from "../fuel/Dialog";
 import "./body.css";
@@ -38,10 +38,10 @@ const heightRange = (): [number, number] => [Math.ceil(bodyHeightIn(100)), Math.
 const inShownWeight = (points: Point[]): Point[] => points.map((p) => ({ day: p.day, value: weightIn(p.value) }));
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
-const dayMonth = (day: string) => parseDay(day).toLocaleDateString(locale("en-GB"), { day: "numeric", month: "short" });
-const fullDate = (day: string) => parseDay(day).toLocaleDateString(locale("en-GB"), { day: "numeric", month: "short", year: "numeric" });
-const monthDay = (day: string) => parseDay(day).toLocaleDateString(locale("en-US"), { month: "short", day: "numeric" });
-const monthYear = (month: string) => parseDay(`${month}-01`).toLocaleDateString(locale("en-US"), { month: "short", year: "numeric" });
+const dayMonth = (day: string) => dateText(parseDay(day), locale("en-GB"), { day: "numeric", month: "short" });
+const fullDate = (day: string) => dateText(parseDay(day), locale("en-GB"), { day: "numeric", month: "short", year: "numeric" });
+const monthDay = (day: string) => dateText(parseDay(day), locale("en-US"), { month: "short", day: "numeric" });
+const monthYear = (month: string) => dateText(parseDay(`${month}-01`), locale("en-US"), { month: "short", year: "numeric" });
 
 export default function BodyPage() {
   const body = useLoaded(loadBody);

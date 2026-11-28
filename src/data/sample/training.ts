@@ -1,4 +1,4 @@
-import { locale, msg, t, tx } from "@/lib/i18n";
+import { dateText, locale, msg, t, tx } from "@/lib/i18n";
 import { dayLetter } from "@/data/sync/dashboard";
 import { signed, thousands } from "@/lib/format";
 import { distance, distanceIn, distanceUnit, imperial, paceText, swimDistance } from "@/lib/units";
@@ -331,7 +331,7 @@ export function sampleDashboardNow(): Dashboard {
   const today = (time: string) => `${t("Today")}, ${time}`;
   const what: Record<string, string> = { Ride: tx("sport", "Ride"), Gym: t("Gym"), Easy: t("Easy"), Tempo: t("Tempo"), Long: t("Long") };
   const intensity: Record<string, string> = { Easy: t("Easy"), Moderate: t("Moderate"), Hard: t("Hard") };
-  const yearDay = new Intl.DateTimeFormat(locale("en-GB"), { day: "numeric", month: "long" }).format(new Date(2026, 10, 19));
+  const yearDay = dateText(new Date(2026, 10, 19), locale("en-GB"), { day: "numeric", month: "long" });
   const shown = (km: number) => Math.round(distanceIn(km * 1000));
   const ahead = shown(d.year.km) - shown(d.year.lastYearByNowKm ?? 0);
   return {

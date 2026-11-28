@@ -1,7 +1,7 @@
 // Synced gym items → the Strength screen. Pure: plain bodies and `now` in, the screen's type out.
 // The workout maths follows CorosKit's GymLog.swift: a set is done when `doneAt` is there, working sets are the
 // done ones that are not warm-ups, volume is Σ weight × reps over working sets (a missing weight or reps counts 0).
-import { language, locale, msg, t } from "@/lib/i18n";
+import { dateText as intlDate, language, locale, msg, t } from "@/lib/i18n";
 import { weightIn, weightUnit } from "@/lib/units";
 import type { GymWorkout, Lift, LiftedRange, Muscle, Strength, Suggestion } from "../strength";
 import { refToDate, refToMs, type NativeGymSet, type NativeGymWorkout, type ViewStrengthBody } from "./native";
@@ -42,7 +42,7 @@ export const liftWeight = (kg: number): string => `${liftNumber(kg)} ${weightUni
 
 /** "Tue 17 Nov". */
 export function dateText(d: Date): string {
-  if (language() !== "en") return new Intl.DateTimeFormat(locale(), { weekday: "short", day: "numeric", month: "short" }).format(d);
+  if (language() !== "en") return intlDate(d, locale(), { weekday: "short", day: "numeric", month: "short" });
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
