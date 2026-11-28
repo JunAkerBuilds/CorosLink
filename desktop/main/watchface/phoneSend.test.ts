@@ -94,6 +94,49 @@ describe("Send to iPhone", () => {
     await expect(get(`${base}/face/${token}`)).rejects.toThrow(/ECONNREFUSED|ECONNRESET/);
   });
 
+  it("adds the Editable project as ph and ps, after the rest", () => {
+    const hash = createHash("sha256").update("C-LINK face").digest();
+    const projectHash = createHash("sha256").update("C-LINK project").digest();
+    expect(encodePhoneFaceLink({
+      hosts: ["10.0.0.7"], port: 52814, token: Buffer.alloc(16, 0xab).toString("base64url"), sha256: hash, size: 123456,
+      model: "pace-pro", project: { sha256: projectHash, size: 654321 },
+    })).toBe(`coroslink://face/1?a=10.0.0.7&p=52814&k=q6urq6urq6urq6urq6urqw&h=${hash.toString("base64url")}&s=123456&w=pace-pro`
+      + `&ph=${projectHash.toString("base64url")}&ps=654321`);
+  });
+
+  it("serves the project on its own token path; only the face counts as received", async () => {
+    const data = Buffer.from("face bytes"), project = Buffer.from("project bytes");
+    const phone = sender({ hosts: () => ["10.0.0.7"] });
+    const send = await phone.start({ data, name: "Both", project });
+    const link = new URL(send.link.replace("coroslink://face/1", "http://x/"));
+    expect(link.searchParams.get("ph")).toBe(createHash("sha256").update(project).digest("base64url"));
+    expect(link.searchParams.get("ps")).toBe(String(project.length));
+    const base = `http://127.0.0.1:${link.searchParams.get("p")}`, token = link.searchParams.get("k")!;
+    const got = await get(`${base}/project/${token}`);
+    expect(got.status).toBe(200);
+    expect(got.headers["content-type"]).toBe("application/zip");
+    expect(got.body.equals(project)).toBe(true);
+    expect((await get(`${base}/project/${token}`, "HEAD")).status).toBe(200);
+    expect((await get(`${base}/project/${token}`, "POST")).status).toBe(404);
+    expect((await get(`${base}/project/${"A".repeat(22)}`)).status).toBe(404);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(phone.status().received).toBe(0);
+    expect((await get(`${base}/face/${token}`)).body.equals(data)).toBe(true);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(phone.status().received).toBe(1);
+  });
+
+  it("offers no project when there's none, or it's over 64 MB", async () => {
+    for (const project of [undefined, Buffer.alloc(PHONE_FACE_MAX_BYTES + 1)]) {
+      const phone = sender({ hosts: () => ["10.0.0.7"] });
+      const send = await phone.start({ data: Buffer.from("face"), name: "Alone", project });
+      const link = new URL(send.link.replace("coroslink://face/1", "http://x/"));
+      expect(link.searchParams.has("ph")).toBe(false);
+      expect(link.searchParams.has("ps")).toBe(false);
+      expect((await get(`http://127.0.0.1:${link.searchParams.get("p")}/project/${link.searchParams.get("k")}`)).status).toBe(404);
+    }
+  });
+
   it("sends one face at a time", async () => {
     const phone = sender({ hosts: () => ["10.0.0.7"] });
     const first = await phone.start({ data: Buffer.from("one"), name: "One" });

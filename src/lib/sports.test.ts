@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { useUnitsNow } from "./units";
 import {
   atBest, bestPower, cogganZones, criticalSwimPace, cyclingVo2Estimate, decoupling, detectSports, efficiencyTrend, estimatedKind, ftpTrend, hoursText,
-  includesSport, intensityBalance, intensityOf, isSpike, kmText, polarizationIndex, powerCurve, powerZoneSeconds, rideClimbing, runDurability, runTypes, sharePercents,
+  includesSport, intensityBalance, orderSports, paletteSports, savedSportOrder, shownSports, sportTabs, intensityOf, isSpike, kmText, polarizationIndex, powerCurve, powerZoneSeconds, rideClimbing, runDurability, runTypes, sharePercents,
   shortfall, spikeCheck, sportVolume, standing, swimBands, volumeChange, wattsPerBeat, weekStart, type Family, type Recording, type SportAct,
 } from "./sports";
 
@@ -37,6 +37,49 @@ describe("which sports", () => {
   it("shows everything while nothing is known, and ignores what is older than 90 days", () => {
     expect(detectSports([act("run", 120, 10, 60)], NOW)).toEqual([]);
     expect(includesSport([], "swim")).toBe(true);
+  });
+
+  it("finds walking, snow sports and climbing like any other sport", () => {
+    const acts = [
+      ...[1, 8, 15, 22].map((d) => act("climb", d, 0, 90)),
+      act("snow", 4, 30, 360),
+      act("walk", 6, 4, 50),
+      act("run", 3, 10, 60),
+    ];
+    // Climbing and snow 360 min each (46%); a tie goes to more sessions. Walking 50 min (6%, one session) and one run are out.
+    expect(detectSports(acts, NOW)).toEqual(["climb", "snow"]);
+  });
+
+  it("lists the person's sports in detection order, the main four while nothing is known", () => {
+    expect(shownSports([])).toEqual(["run", "ride", "swim", "strength"]);
+    // "other" has no page of its own.
+    expect(shownSports(["walk", "other", "run", "climb"])).toEqual(["walk", "run", "climb"]);
+    expect(sportTabs(["snow", "strength"], null).map((t) => t.href)).toEqual(["/sports", "/sports/skiing", "/strength"]);
+    // A page open for a sport that isn't one of the person's keeps its own tab, last.
+    expect(sportTabs(["snow"], "walk").map((t) => t.href)).toEqual(["/sports", "/sports/skiing", "/sports/walking"]);
+    expect(sportTabs(["hike", "walk"], null).map((t) => t.label)).toEqual(["All sports", "Hiking", "Walking"]);
+  });
+
+  it("keeps the order the person dragged their sports into", () => {
+    // Saved order first; a sport they never placed keeps detection's order after it.
+    expect(orderSports(["run", "hike", "walk"], ["walk", "run"])).toEqual(["walk", "run", "hike"]);
+    // Whatever storage holds that isn't one of the sports, or isn't a sport at all, is skipped.
+    expect(orderSports(["run", "hike"], ["snow", 7, null, "hike", "hike"])).toEqual(["hike", "run"]);
+    expect(orderSports(["run", "hike"], "junk" as unknown as string[])).toEqual(["run", "hike"]);
+    expect(sportTabs(["run", "hike", "walk"], null, ["hike", "walk"]).map((t) => t.label)).toEqual(["All sports", "Hiking", "Walking", "Running"]);
+    expect(paletteSports(["run", "hike"], ["hike"]).map((p) => p.href)).toEqual(["/sports/hiking", "/sports/running"]);
+    // The main four while nothing is known follow it too.
+    expect(shownSports([], ["swim"])).toEqual(["swim", "run", "ride", "strength"]);
+  });
+
+  it("saves the dragged order without losing a sport placed before that isn't shown now", () => {
+    expect(savedSportOrder(["snow", "run", "hike"], ["hike", "run"])).toEqual(["hike", "run", "snow"]);
+    expect(savedSportOrder([], ["walk", "run"])).toEqual(["walk", "run"]);
+    expect(savedSportOrder(["bogus", "climb"], ["run"])).toEqual(["run", "climb"]);
+    expect(sportTabs([], null).map((t) => t.label)).toEqual(["All sports", "Running", "Riding", "Swimming", "Strength"]);
+    // The palette's chips leave out Strength, which has its own sidebar item.
+    expect(paletteSports(["strength", "climb", "run"]).map((p) => p.href)).toEqual(["/sports/climbing", "/sports/running"]);
+    expect(paletteSports([]).map((p) => p.href)).toEqual(["/sports/running", "/sports/riding", "/sports/swimming"]);
   });
 });
 

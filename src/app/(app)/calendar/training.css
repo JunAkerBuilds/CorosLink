@@ -111,6 +111,19 @@
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 12px 10px 18px; border-radius: 999px;
   background: var(--tip-bg); border: 1px solid var(--tip-border); box-shadow: var(--tip-shadow);
 }
+/* The unsaved-changes bar stays pinned to the bottom of the window while the calendar scrolls under it. */
+.cal-dock-float {
+  position: sticky; bottom: 16px; z-index: 40; padding: 12px 12px 12px 20px;
+  border-color: color-mix(in srgb, var(--h-mint) 55%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--h-mint) 14%, transparent), 0 18px 40px rgba(0, 0, 0, 0.35), var(--tip-shadow);
+  animation: cal-dock-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.cal-dock-float::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--h-mint); margin-right: -4px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--h-mint) 22%, transparent);
+}
+@keyframes cal-dock-in { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) { .cal-dock-float { animation: none; } }
 .cal-danger.btn { background: var(--h-rose); color: #fff; border-color: transparent; }
 .cal-scrim { position: fixed; inset: 0; z-index: 70; background: rgba(5, 8, 7, 0.45); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; }
 .cal-dialog {
@@ -124,6 +137,7 @@
   position: fixed; z-index: 80; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
   background: var(--tip-bg); border: 1px solid var(--tip-border); box-shadow: var(--tip-shadow); pointer-events: none;
 }
+.cal-toast[data-raised] { bottom: 96px; }
 .cal-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; font-size: 12px; }
 .cal-legend > span { display: inline-flex; align-items: center; gap: 6px; }
 .cal-legend i { display: inline-block; }

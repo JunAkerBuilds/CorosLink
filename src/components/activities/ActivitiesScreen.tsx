@@ -68,7 +68,7 @@ export function ActivitiesScreen() {
     const next = { ...filters, page: 1, ...patch };
     setFilters(next);
     const query = filtersToQuery(next);
-    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+    window.history.replaceState(window.history.state, "", query ? `?${query}` : window.location.pathname);
   };
 
   useEffect(() => {

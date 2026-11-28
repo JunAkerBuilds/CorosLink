@@ -86,3 +86,35 @@ export function columnBars(values: readonly number[], h: number, toHeight: (v: n
     })
     .join(" ");
 }
+
+/**
+ * The board's order mended against the widgets there are: unknown and repeated keys dropped, and a widget the
+ * saved order has never seen put back just after the widget it follows by default.
+ */
+export function boardOrder<K extends string>(saved: readonly unknown[] | null | undefined, all: readonly K[]): K[] {
+  const known = new Set<string>(all);
+  const out: K[] = [];
+  for (const k of Array.isArray(saved) ? saved : []) if (typeof k === "string" && known.has(k) && !out.includes(k as K)) out.push(k as K);
+  all.forEach((k, i) => {
+    if (!out.includes(k)) out.splice(i ? out.indexOf(all[i - 1]) + 1 : 0, 0, k);
+  });
+  return out;
+}
+
+/** `key` moved to `target`'s place: just after it when moving forward, just before it when moving back. */
+export function moveKey<K>(order: readonly K[], key: K, target: K): K[] {
+  const from = order.indexOf(key), to = order.indexOf(target);
+  if (from < 0 || to < 0 || from === to) return [...order];
+  const out = order.filter((k) => k !== key);
+  const at = out.indexOf(target);
+  out.splice(from < to ? at + 1 : at, 0, key);
+  return out;
+}
+
+/** The whole order with the shown widgets laid in as `shown` has them; hidden widgets keep their places. */
+export function placeShown<K>(all: readonly K[], shown: readonly K[]): K[] {
+  const on = new Set(shown);
+  const next = shown.filter((k) => all.includes(k));
+  let i = 0;
+  return all.map((k) => (on.has(k) && i < next.length ? next[i++] : k));
+}

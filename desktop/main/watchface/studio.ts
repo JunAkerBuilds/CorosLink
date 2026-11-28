@@ -28,7 +28,7 @@ import { parseCorosFaceMagic } from "../../watchface/corosBinLayout";
 import { readZip } from "../../watchface/zipRead";
 import { createStoreZip } from "../../watchface/zipStore";
 import { getWatchfaceTarget, WATCHFACE_TARGETS, type WatchfaceTarget } from "../../watchface/watchfaceTargets";
-import type { CorosWatchfaceDesignState, CorosWatchfaceTheme } from "../../watchface/types";
+import type { CorosWatchfaceDesignState, CorosWatchfacePreviewAnimation, CorosWatchfaceTheme } from "../../watchface/types";
 import { recoverCompiledCorosWatchface } from "../../watchface/recoverBin";
 import { CorosWatchfaceCompiler, type WatchfaceImageOptions } from "./compile";
 import { isLocalTemplateId, WatchfaceConverter } from "./convert";
@@ -153,6 +153,41 @@ function checkDesign(design: unknown): CorosWatchfaceDesignState {
   if (!design || typeof design !== "object" || (design as { version?: unknown }).version !== 1) throw new StudioProblem(t("The watchface project design is invalid."), "badDesign");
   if (Buffer.byteLength(JSON.stringify(design), "utf8") > MAX_PROJECT) throw new StudioProblem(t("The watchface project is too large to save."), "tooBig", 413);
   return design as CorosWatchfaceDesignState;
+}
+
+/** The website plays at most this many frames (CorosLink-web's MAX_ANIMATION_FRAMES). */
+const MAX_PREVIEW_ANIMATION_FRAMES = 44;
+/** As the editor caps it (watchfacePreviewAnimation.ts); this side doesn't load canvas code. */
+const MAX_PREVIEW_ANIMATION_BYTES = 16 * 1024 * 1024;
+const PNG_DATA_URL = /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/;
+
+/**
+ * The website's copy of the face's animation (CorosLink's portablePreviewAnimation), when it is
+ * well formed and lines up with `preview`; anything else is left out rather than failing the export.
+ */
+export function portablePreviewAnimation(value: unknown, preview: Buffer): CorosWatchfacePreviewAnimation | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { version, size, x, y, width, height, delays, frames, under, over, watch } = value as Partial<Record<keyof CorosWatchfacePreviewAnimation, unknown>>;
+  const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+  const previewSize = preview.byteLength >= 24 ? [preview.readUInt32BE(16), preview.readUInt32BE(20)] : [];
+  if (version !== 1 || !Number.isInteger(size) || (size as number) < 64 || (size as number) > 2048) return undefined;
+  const edge = size as number;
+  const ok = previewSize[0] === edge && previewSize[1] === edge &&
+    [x, y].every((n) => finite(n) && Math.abs(n) <= edge * 2) &&
+    [width, height].every((n) => finite(n) && n > 0 && n <= edge * 2) &&
+    Array.isArray(frames) && frames.length >= 1 && frames.length <= MAX_PREVIEW_ANIMATION_FRAMES &&
+    Array.isArray(delays) && delays.length === frames.length &&
+    delays.every((delay) => Number.isInteger(delay) && delay >= 1 && delay <= 65535) &&
+    [under, over, ...frames].every((url) => typeof url === "string" && PNG_DATA_URL.test(url)) &&
+    (watch === undefined || (typeof watch === "string" && /^[a-z0-9-]{1,40}$/.test(watch)));
+  if (!ok) return undefined;
+  const urls = [under, over, ...frames] as string[];
+  if (urls.reduce((sum, url) => sum + url.length, 0) > MAX_PREVIEW_ANIMATION_BYTES) return undefined;
+  return {
+    version: 1, size: edge, x: x as number, y: y as number, width: width as number, height: height as number,
+    delays: [...delays as number[]], frames: [...frames as string[]], under: under as string, over: over as string,
+    ...(watch ? { watch: watch as string } : {}),
+  };
 }
 
 function pngFromDataUrl(value: unknown): Buffer | undefined {
@@ -617,18 +652,20 @@ export class WatchfaceStudio {
   }
 
   /** CorosLink's portable project: coroslink-project.json, the starter reduced to the website's DAT standard, preview.png. */
-  async exportProject(id: string, input: { name?: unknown; design?: unknown; previewDataUrl?: unknown }): Promise<{ zip: Buffer; name: string }> {
+  async exportProject(id: string, input: { name?: unknown; design?: unknown; previewDataUrl?: unknown; previewAnimation?: unknown }): Promise<{ zip: Buffer; name: string }> {
     const stored = await this.readStored(id);
     const name = sanitizeProjectName(input.name ?? stored.name);
     const design = checkDesign(input.design ?? stored.design);
     const preview = pngFromDataUrl(input.previewDataUrl) ?? await this.preview(id).catch(() => undefined);
     if (!preview) throw new StudioProblem(t("The editable project needs a preview picture."), "badPreview");
+    // The website plays this over preview.png; the watch's own animation is compiled from `design`.
+    const previewAnimation = portablePreviewAnimation(input.previewAnimation, preview);
     const starterBytes = await this.starter(id);
     const all = readZip(starterBytes);
     const standard = standardizeWatchfacePackage(
       all.filter((e) => !e.directory).map((e) => ({ name: e.path, data: e.read() })), all.filter((e) => e.directory).map((e) => e.path), name);
     const zip = createStoreZip([
-      { name: "coroslink-project.json", data: Buffer.from(JSON.stringify({ format: "coroslink-watchface-project", version: 1, name, sourceTemplateId: stored.sourceTemplateId, ...(stored.firmwareType ? { firmwareType: stored.firmwareType } : {}), design })) },
+      { name: "coroslink-project.json", data: Buffer.from(JSON.stringify({ format: "coroslink-watchface-project", version: 1, name, sourceTemplateId: stored.sourceTemplateId, ...(stored.firmwareType ? { firmwareType: stored.firmwareType } : {}), design, ...(previewAnimation ? { previewAnimation } : {}) })) },
       { name: "starter.dat", data: standard.changed ? createStoreZip(standard.entries) : starterBytes },
       { name: "preview.png", data: preview },
     ]);
@@ -817,7 +854,11 @@ export class WatchfaceStudio {
     }
     if (action === "/phone") {
       try {
-        return json({ send: await this.phone.start({ data: item.archive, name, model: item.watch.model }) });
+        // The Editable project goes too, so the phone keeps the face editable; without it the face goes alone.
+        const project = body.design && typeof body.design === "object"
+          ? await this.exportProject(item.projectId, { name, design: body.design, previewDataUrl: body.previewDataUrl }).then((p) => p.zip, () => undefined)
+          : undefined;
+        return json({ send: await this.phone.start({ data: item.archive, name, model: item.watch.model, project }) });
       } catch (e) { throw new SendProblem(e instanceof Error ? e.message : t("The face couldn't be offered to the iPhone."), "phone"); }
     }
     if (action === "/coros") {

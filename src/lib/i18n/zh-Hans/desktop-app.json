@@ -766,5 +766,10 @@
   "What's new": "新功能",
   "You get a reference back to quote": "你会收到一个可引用的参考编号",
   "Your data stays as it is, so you can switch back any time": "你的数据保持不变，随时可以切换回来",
-  "Your data, your call": "你的数据，你做主"
+  "Your data, your call": "你的数据，你做主",
+  "Try C-LINK Mobile beta": "试用 C-LINK 移动版测试版",
+  "Windows Firewall may block your phone. Allow C-LINK, and set this Wi-Fi to Private in Windows settings.": "Windows 防火墙可能会阻止你的手机。请允许 C-LINK，并在 Windows 设置中将此 Wi-Fi 设为专用网络。",
+  "Waiting for Windows…": "正在等待 Windows…",
+  "Allow": "允许",
+  "C-LINK for iPhone and Android, now in beta": "C-LINK iPhone 和 Android 版，现已开放测试"
 }

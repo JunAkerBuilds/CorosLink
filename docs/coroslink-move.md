@@ -216,7 +216,7 @@ Local-Only calendar entries come over with ids `coroslink-day-<idInPlan>`, so th
 | Downloaded music | `downloads/*.mp3`, `downloads` table | The source | **Ported** → Media's library (a copy; `origin` `coroslink:<name>`, so not twice) |
 | Audiobooks | `audiobooks/<book>/` | archive.org / the athlete's files | **Later**: C-LINK's audiobooks come in through its converter |
 | Spotify playlist matching, YouTube history | `spotify_sync_tracks`, `youtube_history` | — | Not copied |
-| Cloudflare tunnel binary | `cloudflared/` | — | Not copied (no cloud) |
+| Cloudflare tunnel binary | `cloudflared/` | — | Not copied: Reach from anywhere downloads its own pinned build into `cloudflared/` when switched on |
 
 ## The Move screen's tiles
 

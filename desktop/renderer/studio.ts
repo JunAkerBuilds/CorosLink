@@ -1,7 +1,7 @@
 // The Studio pages' calls to the main process (desktop/main/watchface/studio.ts), at /api/desktop/studio.
 import { language, locale, t } from "@/lib/i18n";
 import type { WatchfaceCarriedPreferences } from "../watchface/engine/watchfaceCarriedPreferences";
-import type { CorosWatchfaceDesignState, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../watchface/types";
+import type { CorosWatchfaceDesignState, CorosWatchfacePreviewAnimation, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../watchface/types";
 import type { WatchfaceBuildInput } from "../watchface/archive/build";
 import type { CorosFace, ProjectSummary, StoredProject, StudioTemplate } from "../main/watchface/studio";
 import type { CommunityFace, CommunityGroup, CommunityPage, CommunityProgress, CommunityQuery } from "../main/watchface/community";
@@ -77,8 +77,8 @@ async function download(route: string, body: unknown, fallbackName: string): Pro
   return { name, warnings: warnings ? (JSON.parse(decodeURIComponent(warnings)) as string[]) : [] };
 }
 
-/** CorosLink's portable project ZIP: opens in Studio here and in CorosLink. */
-export const downloadEditable = (id: string, body: { name: string; design: CorosWatchfaceDesignState; previewDataUrl?: string }) =>
+/** CorosLink's portable project ZIP: opens in Studio here and in CorosLink; the website plays `previewAnimation`. */
+export const downloadEditable = (id: string, body: { name: string; design: CorosWatchfaceDesignState; previewDataUrl?: string; previewAnimation?: CorosWatchfacePreviewAnimation }) =>
   download(`${project(id)}/export/project`, body, "watch face (editable).zip");
 /** The final archive the watch and the COROS app take. */
 export const downloadFinal = (id: string, input: WatchfaceBuildInput) => download(`${project(id)}/export/final`, input, "watch face.zip");
@@ -107,7 +107,9 @@ export interface FaceSlots { slots: { slot: number; faceId?: number }[]; shown: 
 export const watchSlots = () => get<FaceSlots>("/watch/slots");
 export const installPrepared = (id: string, body: { name: string; fullColor: boolean; smoothEdges: boolean; slot?: number; expectedFaceId?: number | null; replace?: boolean }) =>
   post<FaceSlots & { warnings: string[] }>(`${prepared(id)}/install`, body);
-export const sendToPhone = (id: string, name: string) => post<{ send: PhoneSend }>(`${prepared(id)}/phone`, { name }).then((b) => b.send);
+/** `project`: the design and preview for the Editable project ZIP the phone keeps beside the face. */
+export const sendToPhone = (id: string, name: string, project?: { design: CorosWatchfaceDesignState; previewDataUrl?: string }) =>
+  post<{ send: PhoneSend }>(`${prepared(id)}/phone`, { name, ...project }).then((b) => b.send);
 export const phoneStatus = () => get<{ status: PhoneSendStatus }>("/phone").then((b) => b.status);
 export const stopPhone = () => post<{ status: PhoneSendStatus }>("/phone/stop").then((b) => b.status);
 /** The COROS app: the face goes up to the signed-in account and comes back as a share link (corosShare.ts). */

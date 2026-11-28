@@ -1,18 +1,46 @@
-// The computer as C-LINK's phones see it on the local network: the environment protocol they already speak for Remote
-// Coach (CorosKit CoachContract: descriptor, DPoP pairing, DPoP-bound sessions), offering `sync`: the account
-// server's sync API, answered from this computer's store. Plain HTTP on the LAN is safe the same way it is for
-// Coach: the pairing secret only travels in the QR code, and every request is bound to the phone's key.
+// The computer as C-LINK's phones see it: the environment protocol of CorosKit CoachContract (descriptor, DPoP
+// pairing, DPoP-bound sessions), offering `sync` (the account server's sync API, answered from this computer's
+// store) and `coach` (Coach's conversations on one WebSocket, socket.ts). Phones reach it on the local network, and,
+// with Reach from anywhere on, through this computer's Cloudflare Tunnel, which arrives on 127.0.0.1 with the
+// tunnel's own host name. Plain HTTP on the LAN is safe: the pairing secret only travels in the QR code, and every
+// request is bound to the phone's key.
+import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { networkInterfaces } from "node:os";
+import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
+import type { Duplex } from "node:stream";
+import { WebSocketServer, type WebSocket } from "ws";
+import { phoneReachable } from "../nics";
+import type { CoachHub } from "./coachHub";
 import { checkProof, ProofError, ReplayGuard } from "./dpop";
-import type { PhoneSessions } from "./sessions";
+import { PHONE_PERMISSIONS, type PhoneSessions } from "./sessions";
+import { MAX_FRAME, serveSocket, type CoachModels } from "./socket";
 
 export const PROTOCOL = 1;
 const MAX_BODY = 1024 * 1024 + 4096;
 const PAIR_ATTEMPTS_PER_MINUTE = 10;
 
 export interface SyncStore { token: string; handle(request: Request): Promise<Response> }
-export interface PhoneServerOptions { sessions: PhoneSessions; store: SyncStore; name: string; appVersion: string; platform: string }
+/** The relay's side of a phone away from home (remote/cloud): the tunnel's host and the mint exchange. */
+export interface TunnelSide {
+  hostname(): string | null;
+  /** Checks a relay-signed mint request; the phone key's thumbprint it is for. Throws when it isn't good. */
+  verifyMint(request: string): Promise<{ jkt: string; claims: unknown }>;
+  /** The signed answer the relay passes on to the phone. */
+  mintAnswer(claims: unknown, credential: string, expiresAt: number): Promise<unknown>;
+}
+
+export interface PhoneServerOptions {
+  sessions: PhoneSessions; store: SyncStore; name: string; appVersion: string; platform: string;
+  /** Coach for phones; without it the computer offers sync alone. */
+  coach?: { hub: CoachHub; models: CoachModels };
+  /** RFC 7638 thumbprint of this computer's key, which phones pin. */
+  keyThumbprint?: () => string | null;
+  tunnel?: TunnelSide;
+}
+
+const TICKET_MS = 30_000;
+/** A socket closed because the phone was removed here: C-LINK pairs again. */
+const CLOSE_REMOVED = 4401;
 
 /** Private, link-local and Tailscale IPv4 addresses: the ones a phone may reach this computer on. */
 export function isLocalIPv4(address: string): boolean {
@@ -22,12 +50,19 @@ export function isLocalIPv4(address: string): boolean {
   return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127);
 }
 
-/** This computer's addresses a phone could use (at most four, as the pairing code allows). */
-export function lanAddresses(): string[] {
+const isTailscale = (address: string) => { const [a, b] = address.split(".").map(Number); return a === 100 && b >= 64 && b <= 127; };
+
+/** This computer's addresses a phone could use, Wi-Fi first, at most four (as the pairing code allows). Virtual
+ *  adapters (WSL, Hyper-V, VMs, Docker, VPNs) are left out: listed first, they'd push the Wi-Fi address off the code. */
+export function lanAddresses(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]> = networkInterfaces()): string[] {
+  return phoneReachable(interfaces, isLocalIPv4, isTailscale).slice(0, 4);
+}
+
+/** Every address this computer answers on, for checking the Host a phone asked for. */
+function ownAddresses(): string[] {
   return Object.values(networkInterfaces()).flat()
     .filter((i): i is NonNullable<typeof i> => !!i && i.family === "IPv4" && !i.internal && isLocalIPv4(i.address))
-    .map((i) => i.address)
-    .slice(0, 4);
+    .map((i) => i.address);
 }
 
 const send = (res: ServerResponse, status: number, body: unknown) => {
@@ -55,9 +90,21 @@ export class PhoneServer {
   private server: Server | null = null;
   private readonly replay = new ReplayGuard();
   private failedPairs: number[] = [];
+  private failedBootstraps: number[] = [];
+  /** WebSocket tickets: single use, 30 s. */
+  private readonly tickets = new Map<string, { phoneId: string; expiresAt: number }>();
+  private readonly sockets = new Map<string, Set<WebSocket>>();
+  private readonly wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME });
   port = 0;
 
-  constructor(private readonly options: PhoneServerOptions) {}
+  constructor(private readonly options: PhoneServerOptions) {
+    options.sessions.onEnded = (id) => this.closeSockets(id);
+  }
+
+  private closeSockets(phoneId: string): void {
+    for (const socket of this.sockets.get(phoneId) ?? []) socket.close(CLOSE_REMOVED, "removed");
+    this.sockets.delete(phoneId);
+  }
 
   get listening(): boolean { return !!this.server?.listening; }
 
@@ -65,6 +112,7 @@ export class PhoneServer {
   async start(port: number): Promise<number> {
     if (this.server?.listening) return this.port;
     const server = createServer((req, res) => { void this.answer(req, res).catch(() => refuse(res, 500, "internal", "Something went wrong on the computer.")); });
+    server.on("upgrade", (req, socket, head) => this.upgrade(req, socket, head));
     server.headersTimeout = 15_000;
     server.requestTimeout = 60_000;
     await new Promise<void>((resolve, reject) => {
@@ -79,6 +127,8 @@ export class PhoneServer {
   stop(): Promise<void> {
     const server = this.server;
     this.server = null;
+    for (const set of this.sockets.values()) for (const socket of set) socket.terminate();
+    this.sockets.clear();
     return new Promise((resolve) => (server ? server.close(() => resolve()) : resolve()));
   }
 
@@ -90,23 +140,90 @@ export class PhoneServer {
     return `coroslink://remote/1?${query}#${secret}`;
   }
 
-  private async answer(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // Only phones on this network, and only by one of this computer's addresses (no DNS rebinding).
+  /**
+   * Where a request came from: a phone on this network by one of this computer's addresses (no DNS rebinding), or
+   * the tunnel (cloudflared on this computer, keeping the phone's Host: the tunnel's name). Null for anything else.
+   */
+  private where(req: IncomingMessage): { base: string; tunnel: boolean } | null {
     const remote = req.socket.remoteAddress ?? "";
     const host = req.headers.host ?? "";
     const hostName = host.replace(/:\d+$/, "");
-    if (!isLocalIPv4(remote) && remote !== "127.0.0.1" && remote !== "::ffff:127.0.0.1") return refuse(res, 403, "forbidden", "Not on this network.");
-    if (host !== `${hostName}:${this.port}` || !(lanAddresses().includes(hostName) || hostName === "127.0.0.1")) return refuse(res, 421, "wrong_host", "Wrong address.");
-    const url = new URL(req.url ?? "/", `http://${host}`);
-    const method = req.method ?? "GET";
-    const htu = `http://${host}${url.pathname}`;
+    const loopback = remote === "127.0.0.1" || remote === "::ffff:127.0.0.1" || remote === "::1";
+    const tunnel = this.options.tunnel?.hostname() ?? null;
+    if (loopback && tunnel && host.toLowerCase() === tunnel) return { base: `https://${tunnel}`, tunnel: true };
+    if (!isLocalIPv4(remote) && !loopback) return null;
+    if (host !== `${hostName}:${this.port}` || !(ownAddresses().includes(hostName) || hostName === "127.0.0.1")) return null;
+    return { base: `http://${host}`, tunnel: false };
+  }
 
-    if (url.pathname === "/v1/descriptor" && method === "GET") {
-      const { sessions, name, platform, appVersion } = this.options;
-      return send(res, 200, { environmentId: sessions.environmentId, name, platform, appVersion, protocol: PROTOCOL, capabilities: ["sync"] });
+  private descriptor() {
+    const { sessions, name, platform, appVersion, coach } = this.options;
+    const keyThumbprint = this.options.keyThumbprint?.() ?? null;
+    return { environmentId: sessions.environmentId, name, platform, appVersion, protocol: PROTOCOL, capabilities: coach ? ["sync", "coach"] : ["sync"], ...(keyThumbprint ? { keyThumbprint } : {}) };
+  }
+
+  /** The WebSocket, opened with a ticket from `/v1/auth/ws-ticket`. */
+  private upgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
+    const reject = (status: number, text: string) => { socket.end(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`); };
+    const where = this.where(req);
+    if (!where) return reject(403, "Forbidden");
+    const url = new URL(req.url ?? "/", where.base);
+    const coach = this.options.coach;
+    if (url.pathname !== "/v1/ws" || !coach) return reject(404, "Not Found");
+    const ticket = url.searchParams.get("ticket") ?? "";
+    const held = this.tickets.get(ticket);
+    this.tickets.delete(ticket);
+    if (!held || held.expiresAt <= Date.now() || !this.options.sessions.list().some((p) => p.id === held.phoneId)) return reject(401, "Unauthorized");
+    this.wss.handleUpgrade(req, socket, head, (ws) => {
+      const set = this.sockets.get(held.phoneId) ?? new Set<WebSocket>();
+      set.add(ws);
+      this.sockets.set(held.phoneId, set);
+      ws.on("close", () => set.delete(ws));
+      serveSocket(ws, {
+        hub: coach.hub, models: coach.models, permissions: PHONE_PERMISSIONS,
+        info: () => ({ lanRoutes: lanAddresses().map((host) => ({ host, port: this.port })) }),
+      });
+    });
+  }
+
+  private async answer(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const where = this.where(req);
+    if (!where) return refuse(res, req.headers.host ? 421 : 403, "wrong_host", "Wrong address.");
+    const url = new URL(req.url ?? "/", where.base);
+    const method = req.method ?? "GET";
+    const htu = `${where.base}${url.pathname}`;
+
+    if (url.pathname === "/v1/descriptor" && method === "GET") return send(res, 200, this.descriptor());
+
+    // The relay asking for a one-time credential for a phone away from home. Only through the tunnel.
+    if (url.pathname === "/v1/relay/mint" && method === "POST") {
+      const tunnel = this.options.tunnel;
+      if (!where.tunnel || !tunnel) return refuse(res, 404, "not_found", "Not found.");
+      const body = parseJson(await readBody(req));
+      let checked: { jkt: string; claims: unknown };
+      try { checked = await tunnel.verifyMint(typeof body?.request === "string" ? body.request : ""); }
+      catch (error) { return refuse(res, 401, "invalid_signature", error instanceof Error ? error.message : "Bad request."); }
+      const { credential, expiresAt } = this.options.sessions.mintCredential(checked.jkt);
+      return send(res, 200, await tunnel.mintAnswer(checked.claims, credential, expiresAt));
+    }
+
+    // A phone spending the relay's credential for a session.
+    if (url.pathname === "/v1/auth/bootstrap" && method === "POST") {
+      const now = Date.now();
+      this.failedBootstraps = this.failedBootstraps.filter((t) => now - t < 60_000);
+      if (this.failedBootstraps.length >= PAIR_ATTEMPTS_PER_MINUTE) return refuse(res, 429, "rate_limited", "Too many attempts.");
+      let jkt: string;
+      try { jkt = checkProof(header(req, "dpop"), { method, url: htu }, this.replay.check).jkt; }
+      catch (error) { return refuse(res, 400, "invalid_dpop_proof", error instanceof ProofError ? error.message : "Bad proof."); }
+      const body = parseJson(await readBody(req));
+      const grant = typeof body?.credential === "string" ? this.options.sessions.bootstrap(body.credential, jkt, typeof body.label === "string" ? body.label : "Phone") : null;
+      if (!grant) { this.failedBootstraps.push(now); return refuse(res, 401, "invalid_grant", "This sign-in has expired. Try again."); }
+      return send(res, 200, grant);
     }
 
     if (url.pathname === "/v1/auth/pair" && method === "POST") {
+      // The QR code's secret, on this network only.
+      if (where.tunnel) return refuse(res, 404, "not_found", "Not found.");
       const now = Date.now();
       this.failedPairs = this.failedPairs.filter((t) => now - t < 60_000);
       if (this.failedPairs.length >= PAIR_ATTEMPTS_PER_MINUTE) return refuse(res, 429, "rate_limited", "Too many attempts.");
@@ -134,6 +251,14 @@ export class PhoneServer {
     if (url.pathname === "/v1/auth/session" && method === "DELETE") {
       this.options.sessions.end(token);
       return send(res, 200, { ended: true });
+    }
+
+    if (url.pathname === "/v1/auth/ws-ticket" && method === "POST" && this.options.coach) {
+      const now = Date.now();
+      for (const [k, v] of this.tickets) if (v.expiresAt <= now) this.tickets.delete(k);
+      const ticket = randomBytes(32).toString("base64url"), expiresAt = now + TICKET_MS;
+      this.tickets.set(ticket, { phoneId: session.id, expiresAt });
+      return send(res, 200, { ticket, expiresAt: new Date(expiresAt).toISOString() });
     }
 
     // The sync API, as the local store has it (minus wiping everything: that stays on the computer).

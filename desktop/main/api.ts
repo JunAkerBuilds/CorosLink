@@ -40,7 +40,8 @@ export async function answerApi(request: Request, jar: CookieJar): Promise<Respo
     headers.set("origin", `${url.protocol}//${url.host}`);
     headers.set("sec-fetch-site", "same-origin");
     const hasBody = request.method !== "GET" && request.method !== "HEAD";
-    const next = new NextRequest(url.href, { method: request.method, headers, body: hasBody ? await request.arrayBuffer() : undefined });
+    // The caller's signal goes along, so a question stopped there stops the work here too.
+    const next = new NextRequest(url.href, { method: request.method, headers, body: hasBody ? await request.arrayBuffer() : undefined, signal: request.signal });
     try {
       return await runInRequest({ jar, path: url.pathname, headers }, async () => handler(next, { params: Promise.resolve(params) }));
     } catch (error) {

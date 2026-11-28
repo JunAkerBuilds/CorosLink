@@ -15,12 +15,16 @@ export const platformSlots: {
   corosAccount?: ComponentType;
   /** A hook: whether that way in is connected, for the card's pill. */
   useCorosAccountConnected?: () => boolean;
+  /** In the dashboard's header, before the weather (the desktop's C-LINK Mobile beta invite while no phone is paired). */
+  dashboardNote?: ComponentType;
   /** The host app's Settings page, linked from the account menu. */
   settingsHref?: string;
   /** A row the host app adds to the account menu, after Settings (the desktop's Updates, with its flyout). */
   accountItem?: ComponentType;
   /** A mark on the account button, such as a dot when the host app wants attention (an update is waiting). */
   accountBadge?: ComponentType;
+  /** Something the host app shows at the top of the sidebar, before the brand (the desktop's back and forward arrows). */
+  railTop?: ComponentType;
   /** Something the host app shows at the foot of the sidebar, above the watch and account (the desktop's Local-Only chip). */
   railNote?: ComponentType;
   /** Sidebar items only the host app has (the desktop's Media), placed after the web app's own in their group. */

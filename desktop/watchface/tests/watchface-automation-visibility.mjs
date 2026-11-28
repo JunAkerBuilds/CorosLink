@@ -451,4 +451,23 @@ assert.deepEqual(
   [0, 292, 180, 316]
 );
 
+
+// Several hidden metrics: each keeps the box it draws in once shown, the same as deriving with only it shown again. Those
+// boxes used to be found by deriving again for each hidden metric, which derived again for every other one.
+{
+  const hidden = { ...baseDesign, metricChanges: { ...baseDesign.metricChanges, heartRate: false, battery: false } };
+  const layers = deriveEditorLayers(details, hidden);
+  for (const id of ["heartRate", "battery"]) {
+    const layer = layers.find((l) => l.id === id);
+    assert.equal(layer?.visible, false, `${id} is hidden`);
+    // Both are the template's own, so shown means the template's place (the hide taken off).
+    const { [id]: _off, ...others } = hidden.metricChanges;
+    const shownAlone = deriveEditorLayers(details, { ...hidden, metricChanges: others }).find((l) => l.id === id)?.bounds;
+    assert.ok(shownAlone, `${id} draws somewhere once shown`);
+    assert.deepEqual(layer.bounds, shownAlone, `hidden ${id} keeps the box it draws in once shown`);
+  }
+  assert.equal(deriveEditorLayers(details, hidden, { hiddenBounds: false }).find((l) => l.id === "heartRate")?.bounds, null,
+    "hiddenBounds: false leaves a hidden metric without a box");
+}
+
 console.log("watchface automation visibility tests passed");

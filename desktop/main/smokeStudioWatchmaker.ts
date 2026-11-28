@@ -1,37 +1,46 @@
-// `CLINK_SMOKE_STUDIO_WATCHMAKER=1` (with CLINK_SMOKE): Watchmaker in the real editor. An empty profile has no AI set
-// up, so a scripted model stands in (`smokeWatchmakerModel`, used by main.ts only in this smoke): it reads the face,
-// plans, recolours the background and moves the time up in one step, draws a preview, checks contrast and answers.
-// Everything else is real: the panel, the stream, the broker, the editor's undo history and the saved chat.
+// `CLINK_SMOKE_STUDIO_WATCHMAKER=1` (with CLINK_SMOKE): Watchmaker in the real editor. The smoke doesn't run Codex,
+// so a scripted engine stands in (`smokeWatchmakerEngine`, used by main.ts only in this smoke): it plans, reads the
+// face, recolours the background and moves the time up in one step, draws a preview, checks contrast and answers.
+// Everything else is real: the panel, the stream, the tools, the broker, the editor's undo history and the saved chat.
 // Shots are `studio-watchmaker-*.png`.
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import type { BrowserWindow } from "electron";
-import type { CoachModel, ModelTurn } from "@/lib/coach/loop";
+import type { WatchmakerEngine } from "./watchface/watchmaker";
+import { STEP_WORDS } from "./watchface/watchmaker/tools";
+import { t } from "@/lib/i18n";
 
-/** The stand-in model: a fixed walk through the tools, reading the layer to move from the document it gets. */
-export function smokeWatchmakerModel(): CoachModel {
-  let n = 0;
+/** The stand-in engine: a fixed walk through the tools, finding the layer to move in the document it reads. */
+export function smokeWatchmakerEngine(): WatchmakerEngine {
   return {
-    async turn(request): Promise<ModelTurn> {
-      const say = async (text: string) => { for (const word of text.split(/(?<= )/)) { request.onText(word); await new Promise((r) => setTimeout(r, 30)); } };
-      const tools = (calls: { name: string; input: unknown }[], text = ""): ModelTurn => ({ content: { calls }, text, calls: calls.map((c) => ({ ...c, id: `smoke${++n}` })), stop: "tools", inputTokens: 0, outputTokens: 0 });
-      const results = request.messages.filter((m) => m.role === "user" && Array.isArray(m.content) && (m.content as { type?: string }[])[0]?.type === "tool_result").length;
-      await new Promise((r) => setTimeout(r, 400));
-      if (results === 0) {
-        await say("I'll make the background deep blue and lift the time a little.");
-        return tools([{ name: "update_plan", input: { items: [{ text: "Deep blue background", status: "doing" }, { text: "Lift the time", status: "pending" }, { text: "Check the preview and contrast", status: "pending" }] } }, { name: "get_document", input: {} }]);
-      }
-      if (results === 1) {
-        const doc = /"layers":(\[.*?\]),"assetContracts"/.exec(request.context)?.[1] ?? "[]";
-        const time = (JSON.parse(doc) as { id: string; kind: string; visible: boolean; movable: boolean }[]).filter((l) => l.kind === "time" && l.visible && l.movable).map((l) => l.id);
-        return tools([{ name: "apply_commands", input: { label: "Deep blue, time up", commands: [{ op: "set", path: "/design/backgroundColor", value: "#0B2A6F" }, ...time.map((id) => ({ op: "move_layer", id, dx: 0, dy: -30 }))] } },
-          { name: "update_plan", input: { items: [{ text: "Deep blue background", status: "done" }, { text: "Lift the time", status: "done" }, { text: "Check the preview and contrast", status: "doing" }] } }]);
-      }
-      if (results === 2) return tools([{ name: "render_preview", input: { resolution: 416 } }, { name: "check_contrast", input: {} }]);
-      if (results === 3) return tools([{ name: "update_plan", input: { items: [{ text: "Deep blue background", status: "done" }, { text: "Lift the time", status: "done" }, { text: "Check the preview and contrast", status: "done" }] } }]);
-      const text = "The background is deep blue now and the time sits a little higher. Every text layer passes the contrast check against the new background.";
-      await say(text);
-      return { content: text, text, calls: [], stop: "end", inputTokens: 0, outputTokens: 0 };
+    status: async () => ({ ready: true, label: "Smoke · scripted" }),
+    async run({ tools, emit, signal }) {
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      let n = 0, edits = 0, text = "";
+      const say = async (words: string) => { for (const word of words.split(/(?<= )/)) { emit({ t: "text", delta: word }); text += word; await wait(30); } };
+      const call = async (name: string, input: unknown) => {
+        const id = `s${++n}`;
+        emit({ t: "step", id, tool: name, label: t(STEP_WORDS[name] ?? name) });
+        await wait(300);
+        const r = await tools.run(name, input, signal);
+        emit({ t: "step-done", id, ok: !r.isError });
+        if (r.edited) { edits++; emit({ t: "edit" }); }
+        if (r.plan) emit({ t: "plan", items: r.plan });
+        for (const p of r.pictures ?? []) emit({ t: "picture", assetId: p.assetId, why: p.why });
+        return r;
+      };
+      const plan = (a: string, b: string, c: string) => call("update_plan", { items: [{ text: "Deep blue background", status: a }, { text: "Lift the time", status: b }, { text: "Check the preview and contrast", status: c }] });
+      await say("I'll make the background deep blue and lift the time a little. ");
+      await plan("doing", "pending", "pending");
+      const doc = JSON.parse((await call("get_document", {})).text) as { capabilities: { layers: { id: string; kind: string; visible: boolean; movable: boolean }[] } };
+      const time = doc.capabilities.layers.filter((l) => l.kind === "time" && l.visible && l.movable).map((l) => l.id);
+      await call("apply_commands", { label: "Deep blue, time up", commands: [{ op: "set", path: "/design/backgroundColor", value: "#0B2A6F" }, ...time.map((id) => ({ op: "move_layer", id, dx: 0, dy: -30 }))] });
+      await plan("done", "done", "doing");
+      await call("render_preview", { resolution: 416 });
+      await call("check_contrast", {});
+      await plan("done", "done", "done");
+      await say("\n\nThe background is deep blue now and the time sits a little higher. Every text layer passes the contrast check against the new background.");
+      return { text, edits, stopped: signal.aborted };
     },
   };
 }

@@ -1,17 +1,17 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { FitnessChart } from "@/components/training/FitnessChart";
 import { LoadError, LoadingPage } from "@/components/training/LoadStates";
 import { Button, Card, CountUp, LinkButton, OriginBadge } from "@/components/ui";
 import { useLoaded } from "@/data/core";
 import { setFeel } from "@/data/feel";
 import { createStore, useStore } from "@/data/local/store";
-import { loadDashboard, sliceSeries, WIDGETS, type Dashboard, type HueName, type Scale, type TimeShare, type WidgetKey } from "@/data/training";
+import { loadDashboard, PHONE_ONLY, sliceSeries, WIDGETS, type Dashboard, type HueName, type Scale, type TimeShare, type WidgetKey } from "@/data/training";
 import { addDays, dayMonth, longDay, shortDay } from "@/lib/calendar";
 import { linePath, sparkPath } from "@/lib/chart";
-import { columnBars, dayTime, HEAT_STEP, heatCell, heatIndexAt, heatPaths, hMin, hoursClock, monthCells, openingLine } from "@/lib/dashboard";
+import { boardOrder, columnBars, dayTime, HEAT_STEP, heatCell, heatIndexAt, heatPaths, hMin, hoursClock, monthCells, openingLine, placeShown } from "@/lib/dashboard";
 import { FEEL_LEVELS, FEEL_TAGS, feelAdjustment, loadHue } from "@/lib/feel";
 import { clock, thousands } from "@/lib/format";
 import { distanceIn, distanceUnit, paceText } from "@/lib/units";
@@ -19,11 +19,52 @@ import { sky, type WeatherNow } from "@/lib/openMeteo";
 import { loadWeatherNow } from "@/data/weatherNow";
 import { locale, msg, t, tx } from "@/lib/i18n";
 import { tr } from "@/lib/i18n/react";
+import { platformSlots } from "@/lib/platform";
+import { Board, type BoardHandle, type BoardItem } from "./Board";
 import "./dashboard.css";
+
+/** What the host app adds to the header (the desktop's mobile beta invite). */
+const DashboardNote = platformSlots.dashboardNote;
 
 /** Widgets the person switched off, saved in this browser. */
 const hiddenStore = createStore<Partial<Record<WidgetKey, boolean>>>("dashboard.hidden", {});
 const NONE: Partial<Record<WidgetKey, boolean>> = {};
+/** The person's order of the widgets, saved in this browser; hidden widgets keep their place in it. */
+const orderStore = createStore<string[]>("dashboard.order", []);
+const NO_ORDER: string[] = [];
+const WIDGET_KEYS = WIDGETS.map((w) => w.key);
+
+/** True on a board worked out on this computer, with no phone paired: empty widgets then don't wait on a phone. */
+const LocalBoard = createContext(false);
+
+/** How wide each widget sits on the 12-column board. */
+const SPAN: Record<WidgetKey, string> = {
+  rings: "db-w5", today: "db-w4", latest: "db-w3", fitness: "db-w8 db-tall", load: "db-w4", streak: "db-w4", heat: "db-w8",
+  goal: "db-w4", volume: "db-w4", year: "db-w4", intensity: "db-w4", sleep: "db-w4", hrv: "db-w4", mix: "db-w4",
+  thresholds: "db-w5", bests: "db-w4", month: "db-w3",
+};
+
+function widget(k: WidgetKey, d: Dashboard): ReactNode {
+  switch (k) {
+    case "rings": return <Morning m={d.morning} today={d.today} />;
+    case "today": return <Today t={d.todayWorkout} />;
+    case "latest": return <Latest a={d.latest} />;
+    case "fitness": return <Fitness f={d.fitness} />;
+    case "load": return <Load l={d.load} />;
+    case "streak": return <Streak s={d.streak} />;
+    case "heat": return <Heat h={d.heat} />;
+    case "goal": return <Goal g={d.goal} />;
+    case "volume": return <Volume v={d.volume} />;
+    case "year": return <Year y={d.year} />;
+    case "intensity": return <Shares label={t("Easy vs hard")} title={t("Easy vs hard")} status={d.intensity.status} statusInk="var(--h-mint-ink)" parts={d.intensity.parts} />;
+    case "sleep": return <Sleep s={d.sleep} />;
+    case "hrv": return <Hrv h={d.hrv} />;
+    case "mix": return <Shares label={t("Sport mix")} title={t("Sport mix")} status={d.mix.parts.length ? hMin(d.mix.parts.reduce((sum, p) => sum + p.minutes, 0)) : undefined} statusInk="var(--muted)" parts={d.mix.parts} />;
+    case "thresholds": return <Thresholds t={d.thresholds} />;
+    case "bests": return <Bests b={d.bests} />;
+    case "month": return <Month m={d.month} today={d.today} />;
+  }
+}
 
 const hue = (h: HueName) => `var(--h-${h})`;
 const dateWords = (day: string) => `${dayMonth(day)} ${day.slice(0, 4)}`;
@@ -33,14 +74,32 @@ const monthName = (k: number, month: "long" | "short") => new Date(Date.UTC(2000
 export default function DashboardPage() {
   const state = useLoaded(loadDashboard);
   const hidden = useStore(hiddenStore, NONE);
+  const savedOrder = useStore(orderStore, NO_ORDER);
   const [editing, setEditing] = useState(false);
+  const board = useRef<BoardHandle>(null);
+
+  // Escape ends Customise (a widget picked up with Space takes the first Escape itself).
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) setEditing(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing]);
 
   if (state.status === "loading") return <LoadingPage label={t("Dashboard")} />;
   if (state.status === "error") return <LoadError error={state.error} onRetry={state.reload} />;
 
   const d = state.data;
+  // With no phone, the widgets only a phone fills leave the board and the Customise list.
+  const offered = d.local ? WIDGETS.filter((w) => !PHONE_ONLY.includes(w.key)) : WIDGETS;
   const on = (k: WidgetKey) => !hidden[k];
-  const onCount = WIDGETS.filter((w) => on(w.key)).length;
+  const onCount = offered.filter((w) => on(w.key)).length;
+  const order = boardOrder(savedOrder, WIDGET_KEYS).filter((k) => offered.some((w) => w.key === k));
+  const items: BoardItem<WidgetKey>[] = order.filter(on).map((k) => ({ key: k, span: SPAN[k], label: t(WIDGETS.find((w) => w.key === k)!.name), node: widget(k, d) }));
+  const off = order.filter((k) => !on(k));
+  const customised = off.length > 0 || order.some((k, i) => k !== offered[i].key);
+  const show = (k: WidgetKey) => { board.current?.prepare(); hiddenStore.set((prev) => ({ ...prev, [k]: false })); };
+  const reset = () => { board.current?.prepare(); orderStore.clear(); hiddenStore.clear(); };
   const headline = openingLine(d.morning?.status);
 
   return (
@@ -58,6 +117,7 @@ export default function DashboardPage() {
         </div>
         <div className="actions">
         <OriginBadge origin={state.origin} />
+        {DashboardNote ? <DashboardNote /> : null}
         <WeatherChip />
         <Button aria-pressed={editing} onClick={() => setEditing((e) => !e)}>
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 2, strokeLinecap: "round" }}>
@@ -71,40 +131,33 @@ export default function DashboardPage() {
 
       {editing ? (
         <section aria-label={t("Widgets on this dashboard")} className="db-panel">
-          <div className="db-head"><h2>{t("Widgets")}</h2><span className="muted" style={{ fontSize: 13 }}>{t("{n} of {total} on", { n: onCount, total: WIDGETS.length })}</span></div>
-          <div className="db-chips">
-            {WIDGETS.map((w) => (
-              <button key={w.key} type="button" aria-pressed={on(w.key)}
-                onClick={() => hiddenStore.set((prev) => ({ ...prev, [w.key]: on(w.key) }))}>
-                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 2.5, strokeLinecap: "round", strokeLinejoin: "round" }}>
-                  <path d={on(w.key) ? "M5 12.5l4.5 4.5L19 7.5" : "M12 5v14M5 12h14"} />
-                </svg>
-                {t(w.name)}
-              </button>
-            ))}
+          <div className="db-panel-top">
+            <div className="db-panel-words">
+              <h2>{t("Customise")}</h2>
+              <p>{t("Drag a widget to move it. − hides it.")}</p>
+            </div>
+            <span className="db-panel-count">{t("{n} of {total} on", { n: onCount, total: offered.length })}</span>
+            {customised ? <button type="button" className="db-panel-reset" onClick={reset}>{t("Reset")}</button> : null}
+            <Button variant="primary" onClick={() => setEditing(false)}>{t("Done")}</Button>
           </div>
+          {off.length ? (
+            <div className="db-chips">
+              {off.map((k) => (
+                <button key={k} type="button" onClick={() => show(k)} aria-label={t("Show {name}", { name: t(WIDGETS.find((w) => w.key === k)!.name) })}>
+                  <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ strokeWidth: 2.5, strokeLinecap: "round" }}><path d="M12 5v14M5 12h14" /></svg>
+                  {t(WIDGETS.find((w) => w.key === k)!.name)}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
-      <div className="db-board">
-        {on("rings") ? <Morning m={d.morning} today={d.today} /> : null}
-        {on("today") ? <Today t={d.todayWorkout} /> : null}
-        {on("latest") ? <Latest a={d.latest} /> : null}
-        {on("fitness") ? <Fitness f={d.fitness} /> : null}
-        {on("load") ? <Load l={d.load} /> : null}
-        {on("streak") ? <Streak s={d.streak} /> : null}
-        {on("heat") ? <Heat h={d.heat} /> : null}
-        {on("goal") ? <Goal g={d.goal} /> : null}
-        {on("volume") ? <Volume v={d.volume} /> : null}
-        {on("year") ? <Year y={d.year} /> : null}
-        {on("intensity") ? <Shares label={t("Easy vs hard")} title={t("Easy vs hard")} status={d.intensity.status} statusInk="var(--h-mint-ink)" parts={d.intensity.parts} /> : null}
-        {on("sleep") ? <Sleep s={d.sleep} /> : null}
-        {on("hrv") ? <Hrv h={d.hrv} /> : null}
-        {on("mix") ? <Shares label={t("Sport mix")} title={t("Sport mix")} status={d.mix.parts.length ? hMin(d.mix.parts.reduce((sum, p) => sum + p.minutes, 0)) : undefined} statusInk="var(--muted)" parts={d.mix.parts} /> : null}
-        {on("thresholds") ? <Thresholds t={d.thresholds} /> : null}
-        {on("bests") ? <Bests b={d.bests} /> : null}
-        {on("month") ? <Month m={d.month} today={d.today} /> : null}
-      </div>
+      <LocalBoard.Provider value={!!d.local}>
+        <Board ref={board} items={items} editing={editing}
+          onReorder={(shown) => orderStore.set(placeShown(boardOrder(savedOrder, WIDGET_KEYS), shown))}
+          onHide={(k) => hiddenStore.set((prev) => ({ ...prev, [k]: true }))} />
+      </LocalBoard.Provider>
       {onCount === 0 ? <p className="muted" style={{ margin: 0 }}>{t("Every widget is off. Customise brings them back.")}</p> : null}
     </main>
   );
@@ -124,10 +177,12 @@ type Ghost = "lines" | "rings" | "chart" | "map" | "rows";
 const GHOST_BARS = [40, 64, 30, 78, 52, 90, 20];
 
 /**
- * What a widget shows when the person's phone has not sent what it needs: the outline of its usual content in
+ * What a widget shows when the phone (or, with none paired, this computer) has too little for it: the outline of its usual content in
  * dashes, so the tile keeps its place on the board, and one line saying why it is empty.
  */
-function Empty({ text = t("Nothing from your phone yet"), shape = "lines" }: { text?: string; shape?: Ghost }) {
+function Empty({ text, shape = "lines" }: { text?: string; shape?: Ghost }) {
+  const local = useContext(LocalBoard);
+  text ??= local ? t("Not enough on this computer yet") : t("Nothing from your phone yet");
   return (
     <div className="db-empty">
       <div aria-hidden="true" className="db-ghost" data-shape={shape}>
@@ -226,6 +281,8 @@ function FeelCheck({ today, feel }: { today: string; feel: { level: number; tags
   const [level, setLevel] = useState(feel?.level ?? 0);
   const [tags, setTags] = useState<string[]>(feel?.tags ?? []);
   const [problem, setProblem] = useState<string | null>(null);
+  // Worked out here, readiness takes the feel in at once.
+  const local = useContext(LocalBoard);
   const send = (nextLevel: number, nextTags: string[]) => {
     setLevel(nextLevel); setTags(nextTags); setProblem(null);
     setFeel(today, nextLevel, nextTags).catch((e: unknown) => setProblem(e instanceof Error ? e.message : t("That didn't save.")));
@@ -264,7 +321,7 @@ function FeelCheck({ today, feel }: { today: string; feel: { level: number; tags
         </div>
       ) : null}
       {problem ? <span role="alert" style={{ fontSize: 12, color: "var(--h-rose-ink)" }}>{problem}</span> : null}
-      {level && !problem ? <span className="muted" style={{ fontSize: 12 }}>{t("Readiness takes it in when your phone next syncs.")}</span> : null}
+      {level && !problem && !local ? <span className="muted" style={{ fontSize: 12 }}>{t("Readiness takes it in when your phone next syncs.")}</span> : null}
     </div>
   );
 }

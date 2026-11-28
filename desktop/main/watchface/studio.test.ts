@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { readZip } from "../../watchface/zipRead";
 import { createStoreZip } from "../../watchface/zipStore";
 import { describeTemplate, inspectTemplate, templateAssets, templateConfigTexts } from "../../watchface/archive/template";
 import { buildWatchfaceArchive } from "../../watchface/archive/build";
-import { duplicateName, templatesFor, WatchfaceStudio, type ProjectSummary, type StoredProject } from "./studio";
+import { duplicateName, portablePreviewAnimation, templatesFor, WatchfaceStudio, type ProjectSummary, type StoredProject } from "./studio";
 import { getWatchfaceTarget } from "../../watchface/watchfaceTargets";
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { PhoneSend } from "./phoneSend";
@@ -159,6 +160,39 @@ describe("Studio projects", () => {
     expect((await call(s, "GET", `/projects/${copy.projectId}`)).status).toBe(404);
   });
 
+  it("writes the website's preview animation into the editable project, lined up with preview.png", async () => {
+    const { s } = studio();
+    const made = (await jsonOf<{ project: ProjectSummary }>(await call(s, "POST", "/projects", { watch: "pace-pro", templateId: TEMPLATE_ID, design: design() }))).project;
+    const frame = dataUrl(png(10, 6, [255, 220, 0, 255]));
+    const previewAnimation = {
+      version: 1, size: 64, x: 4, y: 40, width: 10, height: 6, delays: [90, 90], frames: [frame, frame],
+      under: dataUrl(png(64, 64, [0, 0, 0, 255])), over: dataUrl(png(64, 64, [0, 0, 0, 0])), watch: "pace-pro",
+    };
+    const manifestOf = async (body: Record<string, unknown>) => {
+      const zip = Buffer.from(await (await call(s, "POST", `/projects/${made.projectId}/export/project`, { name: "Arcade", design: design(), ...body })).arrayBuffer());
+      return JSON.parse(readZip(zip)[0].read().toString()) as { previewAnimation?: unknown };
+    };
+    expect((await manifestOf({ previewDataUrl: dataUrl(png(64, 64)), previewAnimation })).previewAnimation).toEqual(previewAnimation);
+    // Laid out for another preview size: left out, and the export still goes ahead.
+    expect((await manifestOf({ previewDataUrl: dataUrl(png(32, 32)), previewAnimation })).previewAnimation).toBeUndefined();
+    expect((await manifestOf({ previewDataUrl: dataUrl(png(64, 64)) })).previewAnimation).toBeUndefined();
+  });
+
+  it("leaves out a preview animation that is malformed", () => {
+    const preview = png(64, 64);
+    const frame = dataUrl(png(10, 6));
+    const good = { version: 1, size: 64, x: 0, y: 0, width: 10, height: 6, delays: [90], frames: [frame], under: frame, over: frame };
+    expect(portablePreviewAnimation(good, preview)).toEqual(good);
+    expect(portablePreviewAnimation({ ...good, version: 2 }, preview)).toBeUndefined();
+    expect(portablePreviewAnimation({ ...good, delays: [90, 90] }, preview)).toBeUndefined();
+    expect(portablePreviewAnimation({ ...good, delays: [0] }, preview)).toBeUndefined();
+    expect(portablePreviewAnimation({ ...good, frames: [] , delays: [] }, preview)).toBeUndefined();
+    expect(portablePreviewAnimation({ ...good, frames: Array(45).fill(frame), delays: Array(45).fill(90) }, preview)).toBeUndefined();
+    expect(portablePreviewAnimation({ ...good, over: "data:image/gif;base64,R0lGOA==" }, preview)).toBeUndefined();
+    expect(portablePreviewAnimation({ ...good, watch: "Pace Pro" }, preview)).toBeUndefined();
+    expect(portablePreviewAnimation("nope", preview)).toBeUndefined();
+  });
+
   it("builds the Final watch ZIP and a BIN that passes compile.ts's checks", async () => {
     const { s } = studio();
     const made = (await jsonOf<{ project: ProjectSummary }>(await call(s, "POST", "/projects", { watch: "pace-pro", templateId: TEMPLATE_ID, design: design() }))).project;
@@ -195,6 +229,16 @@ describe("Studio projects", () => {
 
     const sent = await jsonOf<{ send: { link: string } }>(await call(s, "POST", `/prepared/${prepared.id}/phone`, { name: "Mint" }));
     expect(sent.send.link).toMatch(/^coroslink:\/\/face\/1\?a=192\.168\.1\.20&p=\d+&k=/);
+    expect(sent.send.link).not.toContain("&ph=");
+    // With the design, the Editable project goes too, at /project/<token>.
+    const both = await jsonOf<{ send: { link: string } }>(await call(s, "POST", `/prepared/${prepared.id}/phone`,
+      { name: "Mint", design: design(), previewDataUrl: dataUrl(png(800, 800, [0, 40, 80, 255])) }));
+    const items = new URL(both.send.link.replace("coroslink://face/1", "http://x/")).searchParams;
+    const served = await fetch(`http://127.0.0.1:${items.get("p")}/project/${items.get("k")}`);
+    const project = Buffer.from(await served.arrayBuffer());
+    expect(project.length).toBe(Number(items.get("ps")));
+    expect(createHash("sha256").update(project).digest("base64url")).toBe(items.get("ph"));
+    expect(readZip(project).map((e) => e.path).sort()).toEqual(["coroslink-project.json", "preview.png", "starter.dat"]);
     expect((await jsonOf<{ status: { active: boolean } }>(await call(s, "GET", "/phone"))).status.active).toBe(true);
     expect((await jsonOf<{ status: { active: boolean } }>(await call(s, "POST", "/phone/stop"))).status.active).toBe(false);
 

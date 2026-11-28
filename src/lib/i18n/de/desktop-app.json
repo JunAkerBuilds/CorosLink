@@ -766,5 +766,10 @@
   "What's new": "Neu",
   "You get a reference back to quote": "Du bekommst eine Referenz zum Angeben zurück",
   "Your data stays as it is, so you can switch back any time": "Deine Daten bleiben, wie sie sind, du kannst jederzeit zurückwechseln",
-  "Your data, your call": "Deine Daten, deine Entscheidung"
+  "Your data, your call": "Deine Daten, deine Entscheidung",
+  "Try C-LINK Mobile beta": "C-LINK Mobile Beta testen",
+  "Windows Firewall may block your phone. Allow C-LINK, and set this Wi-Fi to Private in Windows settings.": "Die Windows-Firewall kann dein Handy blockieren. Erlaube C-LINK und stelle dieses WLAN in den Windows-Einstellungen auf Privat.",
+  "Waiting for Windows…": "Warte auf Windows…",
+  "Allow": "Erlauben",
+  "C-LINK for iPhone and Android, now in beta": "C-LINK für iPhone und Android, jetzt in der Beta"
 }

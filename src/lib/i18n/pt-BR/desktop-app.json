@@ -204,7 +204,7 @@
   "Copy code": "Copiar código",
   "Do this later": "Fazer depois",
   "Trail running": "Trail running",
-  "Hiking": "Caminhada",
+  "Hiking": "Trilha",
   "Skiing": "Esqui",
   "Rowing": "Remo",
   "Yoga": "Ioga",
@@ -766,5 +766,10 @@
   "What's new": "Novidades",
   "You get a reference back to quote": "Você recebe uma referência para citar",
   "Your data stays as it is, so you can switch back any time": "Seus dados ficam como estão: você pode voltar quando quiser",
-  "Your data, your call": "Seus dados, sua escolha"
+  "Your data, your call": "Seus dados, sua escolha",
+  "Try C-LINK Mobile beta": "Experimente o beta do C-LINK Mobile",
+  "Windows Firewall may block your phone. Allow C-LINK, and set this Wi-Fi to Private in Windows settings.": "O Firewall do Windows pode bloquear seu celular. Permita o C-LINK e defina este Wi-Fi como Privado nas configurações do Windows.",
+  "Waiting for Windows…": "Aguardando o Windows…",
+  "Allow": "Permitir",
+  "C-LINK for iPhone and Android, now in beta": "C-LINK para iPhone e Android, agora em beta"
 }

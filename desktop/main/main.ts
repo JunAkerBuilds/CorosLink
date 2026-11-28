@@ -27,10 +27,14 @@ import { electronWeb } from "./media/electronWeb";
 import { MediaService } from "./media/service";
 import { WatchfaceStudio } from "./watchface/studio";
 import { StudioAutomation } from "./watchface/automation";
-import { Watchmaker } from "./watchface/watchmaker";
-import { openAIImageMaker } from "./watchface/watchmaker/imageMaker";
+import { codexEngine, Watchmaker } from "./watchface/watchmaker";
 import { CorosAccount } from "./watchface/corosAccount";
+import { CoachHub } from "./phones/coachHub";
+import { coachModels } from "./phones/coachModels";
 import { PhoneSync } from "./phones/phoneSync";
+import { CloudLink } from "./remote/cloud/cloudLink";
+import { isAuthCallback } from "./remote/cloud/websiteAccount";
+import { EnvironmentKey } from "./remote/identity";
 import { runInRequest } from "./requestScope";
 import { cookieSecret, keychain, keychainName, keychainSecure, setKeychainFallback } from "./secrets";
 import { askedNamesFile, corosLinkKeychain } from "./coroslink/oldKeychain";
@@ -52,7 +56,7 @@ import { ActivityScreens } from "./watch/activityScreens";
 import { runSmoke } from "./smoke";
 import { CorosLinkMove } from "./coroslink/move";
 import { ActivityRules } from "./activities/duplicates";
-import { smokeWatchmakerModel } from "./smokeStudioWatchmaker";
+import { smokeWatchmakerEngine } from "./smokeStudioWatchmaker";
 import { simulatedPacePro } from "./smokeActivityScreens";
 
 const ORIGIN = "clink://app";
@@ -244,7 +248,18 @@ function buildMenu(dev: DevMode, change: (c: { devMode?: boolean; sample?: boole
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.on("second-instance", () => {
+// Reach from anywhere's sign-in comes back as coroslink://auth/callback: on macOS as open-url, elsewhere in the
+// command line of a second launch (or this one's).
+let cloudLink: CloudLink | null = null;
+const pendingLinks: string[] = [];
+const takeDeepLink = (url: string) => { if (!isAuthCallback(url)) return; if (cloudLink) cloudLink.handleDeepLink(url); else pendingLinks.push(url); };
+if (app.isPackaged) app.setAsDefaultProtocolClient("coroslink");
+else if (process.argv[1]) app.setAsDefaultProtocolClient("coroslink", process.execPath, [path.resolve(process.argv[1])]);
+app.on("open-url", (event, url) => { event.preventDefault(); takeDeepLink(url); });
+process.argv.forEach(takeDeepLink);
+
+app.on("second-instance", (_event, argv) => {
+  argv.forEach(takeDeepLink);
   if (!window) return;
   if (window.isMinimized()) window.restore();
   window.focus();
@@ -319,10 +334,36 @@ void app.whenReady().then(async () => {
   app.on("will-quit", () => mcp.stopNow());
   hostAI.current = ai;
 
-  // Phones sync straight to this store on the local network (pairing by QR code, on the Connections page).
-  const phones = new PhoneSync(path.join(data, "phones.db"), store, app.getVersion());
-  void phones.startIfPaired();
-  app.on("before-quit", () => { void phones.stop(); });
+  // Coach for the paired phones: the same conversations and the same Coach route as the Coach page (phones/coachHub.ts).
+  const coachHub = new CoachHub({
+    items: () => store,
+    ask: async (apiPath, body, signal) => {
+      await ensureSignedIn();
+      return answerApi(new Request(`clink://app${apiPath}`, {
+        method: "POST", signal, body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson", "X-Clink-Hub": "1" },
+      }), jar);
+    },
+    provider: async () => vault.current.picked ?? "",
+  });
+  app.on("before-quit", () => coachHub.stop());
+
+  // Phones sync straight to this store and use Coach, on the local network (pairing by QR code, on the Connections
+  // page).
+  const phones = new PhoneSync(path.join(data, "phones.db"), store, app.getVersion(), { coach: { hub: coachHub, models: coachModels(ai) } });
+  // Reach from anywhere (remote/): off until the athlete turns it on, on the Connections page.
+  const environmentKey = await EnvironmentKey.load(path.join(data, "remote"), keychain).catch((error: unknown) => { errors.add("app", `Reach from anywhere: this computer's key couldn't be read (${error instanceof Error ? error.message : "unknown"})`); return null; });
+  if (environmentKey) {
+    cloudLink = new CloudLink({
+      dir: path.join(data, "remote"), sealer: keychain, key: environmentKey, environmentId: phones.sessions.environmentId, label: phones.name,
+      platform: process.platform, port: () => phones.port, isPackaged: app.isPackaged, openExternal: (url) => shell.openExternal(url),
+      cloudflaredDir: path.join(data, "cloudflared"),
+    });
+    phones.connectCloud(cloudLink, environmentKey);
+    pendingLinks.splice(0).forEach((url) => cloudLink!.handleDeepLink(url));
+  }
+  void phones.startIfPaired().then(() => cloudLink?.start()).catch((error: unknown) => errors.add("app", `Reach from anywhere couldn't start: ${error instanceof Error ? error.message : "unknown"}`));
+  app.on("before-quit", () => { void cloudLink?.stop(); void phones.stop(); });
 
   // First-run setup (setup.ts): shown at launch until done; an install that already has data isn't asked.
   const firstRun = new FirstRun(data, {
@@ -491,16 +532,11 @@ void app.whenReady().then(async () => {
     copy: (text) => clipboard.writeText(text),
   });
   void automation.start();
-  // Watchmaker, Studio's AI designer: the AI picked on the AI page, driving the open face through the same broker.
+  // Watchmaker, Studio's AI designer: the athlete's own Codex CLI with its own harness, driving the open face through
+  // the same broker. The smoke doesn't run Codex; a scripted engine stands in (development builds only).
   const watchmaker = new Watchmaker({
     broker: automation.broker, assets: automation.assets, projectsDir: path.join(studio.root, "projects"),
-    model: async () => {
-      // The Watchmaker smoke has no AI set up; a scripted model stands in (development builds only).
-      if (process.env.CLINK_SMOKE_STUDIO_WATCHMAKER && !app.isPackaged) return { model: smokeWatchmakerModel(), label: "Smoke · scripted", provider: "smoke" };
-      const m = await ai.model();
-      return m ? { ...m, provider: vault.current.picked } : null;
-    },
-    imageMaker: async () => { const key = await vault.secret("openai"); return key ? openAIImageMaker(key) : null; },
+    engine: process.env.CLINK_SMOKE_STUDIO_WATCHMAKER && !app.isPackaged ? smokeWatchmakerEngine() : codexEngine(automation.assets),
   });
   app.on("before-quit", () => void automation.stop());
   // Local-Only Mode holds for Chromium's own requests too, not only the server code's fetch (dataMode.ts).

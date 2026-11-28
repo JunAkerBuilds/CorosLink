@@ -64,3 +64,19 @@
 .wa-link svg { color: var(--h-mint); }
 .wa-link b { color: var(--fg); font-weight: 700; }
 .rail:not([data-collapsed="true"]) .theme-switch[data-tip]::after { content: none; }
+
+/* Dashboard header: the C-LINK phone beta invite while no phone is paired (parts/MobileBeta.tsx). coroslink.com/mobile's
+   beta button (.m-btn-primary): mint gradient, dark ink, a green glow, lifted on hover. Sized like the weather chip. */
+.mobile-beta {
+  display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px 0 14px; border-radius: 999px; white-space: nowrap;
+  background: linear-gradient(180deg, #6fe0b8, #3fb98e); color: #03130d; font-size: 14px; font-weight: 600; text-decoration: none;
+  box-shadow: 0 10px 40px -10px rgb(83 203 161 / 0.7), inset 0 1px 0 rgb(255 255 255 / 0.5);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.mobile-beta:hover, .mobile-beta:focus-visible {
+  color: #03130d; transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 16px 50px -10px rgb(83 203 161 / 0.9), inset 0 1px 0 rgb(255 255 255 / 0.5);
+}
+.mobile-beta svg { flex: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@media (prefers-reduced-motion: reduce) { .mobile-beta { transition: none; } .mobile-beta:hover, .mobile-beta:focus-visible { transform: none; } }
+@media (max-width: 900px) { .mobile-beta span { display: none; } .mobile-beta { padding: 0 12px; } }

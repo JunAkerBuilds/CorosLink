@@ -8,25 +8,26 @@ import { msg } from "@/lib/i18n";
 import type { WatchfaceCarriedPreferences } from "../watchface/engine/watchfaceCarriedPreferences";
 import type {
   CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceDesignState, CorosWatchfaceTemplateAsset,
-  CorosWatchfaceTemplateDetails,
+  CorosWatchfacePreviewAnimation, CorosWatchfaceTemplateDetails,
 } from "../watchface/types";
 import type { WatchfaceBuildInput } from "../watchface/archive/build";
 import { getWatchfaceTarget, type WatchfaceTarget } from "../watchface/watchfaceTargets";
 import {
   applyConfigTextEditsToDetails, buildDisabledControlComplicationOverrides, buildDisabledWatchfaceConfigAssetOverrides,
-  corosConfigColorToCss, detailsForCompositionMode, detailsForPreviewResolution, drawStudioPreview, getAmPmCapability,
+  corosConfigColorToCss, detailsForCompositionMode, detailsForPreviewMode, detailsForPreviewResolution, drawStudioPreview, getAmPmCapability,
   getFixedMetricCapabilities, getTemplateBackgroundAssetPaths, hasWatchfaceAod, inferExerciseSeparatorStyle,
   inferStaticSeparators, loadStudioImage, mergeAssetReplacements, mergeConfigOverrides, pickPreviewResolution,
   pickWatchPreviewResolution, retargetWatchfaceCompositionToAod, retargetWatchfaceCompositionToCurrent,
   type WatchfacePreviewMode,
 } from "../watchface/engine/watchfaceStudio";
 import { buildAodBackgroundComposition, buildAodSafeSpriteReplacements, composeWatchfaceReplacements, deriveDesignDetails, toStudioOptions } from "../watchface/engine/watchfaceCompose";
-import { isTemplateBackgroundUntouched, makeDefaultDesign, renderDesignBackground } from "../watchface/engine/watchfaceBackground";
+import { isTemplateBackgroundUntouched, makeDefaultDesign, renderDesignBackground, renderDesignBackgroundCanvas } from "../watchface/engine/watchfaceBackground";
 import { dimExerciseSeparator, materializeLegacyAodDesign, resolveWatchfaceModeDesign, writeWatchfaceModeDesign } from "../watchface/engine/watchfaceDisplayModes";
 import { maskCanvasToCircle, drawWeatherPreviewLayer, normalizeEditorDesign } from "../watchface/engine/watchfaceExportPipeline";
 import { blankWatchfaceDesign } from "../watchface/engine/watchfaceBlankStart";
 import { recoverChartPageCompanions, recoverGraphlessChart, recoverWatchfaceDesign, type ChartPageCompanions } from "../watchface/engine/recoveredWatchfaceDesign";
 import { readTemplateAnimation } from "../watchface/engine/watchfaceAnimation";
+import { buildPreviewAnimation } from "../watchface/engine/watchfacePreviewAnimation";
 import { normalizeWatchfaceLayerOpacity, resolveWatchfaceLayerOpacity } from "../watchface/engine/watchfaceLayerOpacity";
 import { getWeatherCapability, drawWeatherTemperaturePreview, weatherAssetUrl, weatherPreviewDataUrl, weatherTemperatureGeometry } from "../watchface/engine/weatherAssets";
 import { defaultNativeDataStyle } from "../watchface/engine/nativeDataParts";
@@ -294,17 +295,32 @@ export const sourceDetailsOf = (source: FaceSource, root: Design) => applyConfig
  */
 export const clickOrder = <L extends EngineLayer>(layers: readonly L[]): L[] => [...layers].reverse();
 
+/**
+ * Every layer of a design, worked out once per face, design and display: the editor asks for them many times per
+ * change (the list, its spots, the Add library, the other display, the drag frames), and on a busy face each is a
+ * long walk over the template. Designs are never changed in place, so the same object always has the same layers;
+ * a FaceSource is replaced when fonts arrive, which measures them again.
+ */
+const layerCache = new WeakMap<FaceSource, WeakMap<Design, Partial<Record<Mode, readonly EngineLayer[]>>>>();
+function cachedLayers(source: FaceSource, design: Design, mode: Mode): readonly EngineLayer[] {
+  let byDesign = layerCache.get(source);
+  if (!byDesign) layerCache.set(source, (byDesign = new WeakMap()));
+  let byMode = byDesign.get(design);
+  if (!byMode) byDesign.set(design, (byMode = {}));
+  return (byMode[mode] ??= faceLayers(modeDetails(source, design, mode), resolveWatchfaceModeDesign(design, mode)));
+}
+
 /** The face's layers in panel order (front first), with their boxes in master pixels. */
 export function layersOf(source: FaceSource, design: Design, mode: Mode): EngineLayer[] {
   const active = resolveWatchfaceModeDesign(design, mode);
   // The selectable slot stays listed with every type off, so its panel can turn one back on.
-  return faceLayers(modeDetails(source, design, mode), active)
+  return cachedLayers(source, design, mode)
     .filter((layer) => layer.present || layer.kind === "background" || slotListed(layer, active));
 }
 
 /** Every layer the engine knows for the face, template parts it lacks included (the Add library's status images). */
 export function allLayersOf(source: FaceSource, design: Design, mode: Mode): EngineLayer[] {
-  return faceLayers(modeDetails(source, design, mode), resolveWatchfaceModeDesign(design, mode));
+  return [...cachedLayers(source, design, mode)];
 }
 
 // ───── Spots: several images at one place on the watch ─────
@@ -498,9 +514,13 @@ export function isChartPart(layer: EditorLayer): boolean {
   return layer.kind === "configAsset" && /^(config|aod):chart_/.test(layer.configAssetId ?? "");
 }
 
-/** The master's size for this template (800 when it has one). */
-export function masterSize(source: FaceSource): number {
-  return pickPreviewResolution(source.details)?.width ?? MASTER;
+/**
+ * The master's size for this template in a mode (800 when it has one). Layer boxes are measured in it, so the editor
+ * maps them to the screen with it. Some templates have always-on settings only at the watch's size (416 on the PACE
+ * Pro, with no 800 AODconfig), so always-on boxes are in that size, not the current face's 800.
+ */
+export function masterSize(source: FaceSource, mode: Mode = "current"): number {
+  return pickPreviewResolution(detailsForPreviewMode(source.details, mode))?.width ?? MASTER;
 }
 
 /**
@@ -526,6 +546,11 @@ function chartCompanions(source: FaceSource, root: Design): Promise<ChartPageCom
  * as the watch layers them: "under" is the background and its artwork, "over" everything the watch draws on top.
  */
 export async function renderFace(source: FaceSource, root: Design, mode: Mode, size: number, scenario?: WatchfacePreviewScenario, round = true, choice?: SpotChoice, part?: "under" | "over"): Promise<string> {
+  return (await renderFaceCanvas(source, root, mode, size, scenario, round, choice, part)).toDataURL("image/png");
+}
+
+/** The face drawn as `renderFace` draws it, left on its canvas (for reading its pixels without a PNG in between). */
+export async function renderFaceCanvas(source: FaceSource, root: Design, mode: Mode, size: number, scenario?: WatchfacePreviewScenario, round = true, choice?: SpotChoice, part?: "under" | "over"): Promise<HTMLCanvasElement> {
   const design = resolveWatchfaceModeDesign(root, mode);
   const sourceDetails = modeDetails(source, root, mode);
   // One state of each shared spot, as the watch shows it (Bluetooth's on, off and airplane images are one place).
@@ -534,14 +559,14 @@ export async function renderFace(source: FaceSource, root: Design, mode: Mode, s
   const master = pickPreviewResolution(previewDetails);
   const width = master?.width ?? MASTER;
   const details = master ? detailsForPreviewResolution(previewDetails, master.directory) : previewDetails;
-  const background = await renderDesignBackground(design, width);
+  const background = await renderDesignBackgroundCanvas(design, width);
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   if (part === "under") {
-    canvas.getContext("2d", { colorSpace: "display-p3" })!.drawImage(await loadStudioImage(background, false), 0, 0, size, size);
+    canvas.getContext("2d", { colorSpace: "display-p3" })!.drawImage(background, 0, 0, size, size);
     if (round) maskCanvasToCircle(canvas);
-    return canvas.toDataURL("image/png");
+    return canvas;
   }
   await drawStudioPreview(canvas, background, details, {
     ...toStudioOptions(design),
@@ -559,7 +584,35 @@ export async function renderFace(source: FaceSource, root: Design, mode: Mode, s
     if (url) drawWeatherPreviewLayer(canvas, await loadStudioImage(url), design, width);
   }
   if (round) maskCanvasToCircle(canvas);
-  return canvas.toDataURL("image/png");
+  return canvas;
+}
+
+/**
+ * The face's animation as the website plays it over the exported 800 px preview: the
+ * background under it, the face over it, and the frames `watch` plays. CorosLink's
+ * renderWebsitePreviewAnimation. Undefined when there is nothing to play; never throws,
+ * so it can't block an export.
+ */
+export async function renderWebsitePreviewAnimation(source: FaceSource, root: Design, watch: WatchfaceTarget | undefined): Promise<CorosWatchfacePreviewAnimation | undefined> {
+  const animation = resolveWatchfaceModeDesign(root, "current").animation;
+  if (!animation?.enabled || !animation.frames.length) return undefined;
+  try {
+    const [under, over] = await Promise.all([
+      renderFace(source, root, "current", MASTER, undefined, true, undefined, "under"),
+      renderFace(source, root, "current", MASTER, undefined, true, undefined, "over"),
+    ]);
+    return await buildPreviewAnimation({
+      animation,
+      previewWidth: resolutionOf(source, root, "current")?.width ?? MASTER,
+      size: MASTER,
+      under,
+      over,
+      target: watch ? { display: watch.display, model: watch.model, previewSize: watch.previewSize } : undefined,
+    });
+  } catch (caught) {
+    console.warn("The website animation preview was left out of the export.", caught);
+    return undefined;
+  }
 }
 
 // ───── Edits ─────

@@ -1,9 +1,10 @@
 import { fromCoros, fromSample, fromSynced, type Loaded } from "./core";
 import { hubCalendar, hubSession } from "./hub";
-import { sampleSports } from "./sample/sports";
+import { sampleSportActivities, sampleSports, sampleSportsNow } from "./sample/sports";
 import { syncView } from "./sync";
-import { plannedFromHub, sportsFromItems, type PlannedWorkout } from "./sync/sports";
-import type { Family } from "@/lib/sports";
+import { actFromNative, plannedFromHub, sportsFromItems, type PlannedWorkout } from "./sync/sports";
+import type { NativeActivity } from "./sync/native";
+import { detectSports, type Family, type SportAct } from "@/lib/sports";
 import { dayKey } from "@/lib/format";
 
 /** How a reading reads: mint for good, gold for something to look at, grey otherwise. */
@@ -105,6 +106,26 @@ export interface SwimPage {
   records: Reading & { sample?: boolean; rows: { name: string; value: string; date: string; fresh: boolean }[] };
 }
 
+/* ───────────── Walking, Hiking, Skiing, Climbing ───────────── */
+
+/** One recent session: its name, kind and day, and the figures the activity list has for it. */
+export interface RecentSession { id: string; name: string; kind: string; date: string; figures: string[] }
+
+/**
+ * The page of a sport the activity list alone can read: walking, hiking, skiing and snowboarding, climbing.
+ * Only what each activity carries (time, distance, climb, heart rate), nothing made up.
+ */
+export interface SportPage {
+  family: Family;
+  hero: { chip: string; headline: string; text: string | null; figures: Figure[]; chart: BarChart };
+  /** The last four weeks against the four before, with the split by kind when there is more than one. */
+  month: Reading & { figures: Figure[]; kinds: SplitShare[] | null };
+  /** Metres climbed a week. Null for a sport with no climb in its list (climbing's height is the wall's). */
+  climb: (Reading & { weeks: BarChart }) | Missing | null;
+  recent: RecentSession[];
+  records: { name: string; value: string; date: string }[];
+}
+
 export interface Sports {
   /** The person's sports, most time first, worked out from the last 90 days. Empty when nothing is known: everything shows. */
   families: Family[];
@@ -112,6 +133,10 @@ export interface Sports {
   run: RunPage | null;
   ride: RidePage | null;
   swim: SwimPage | null;
+  walk: SportPage | null;
+  hike: SportPage | null;
+  snow: SportPage | null;
+  climb: SportPage | null;
 }
 
 /** What Training Hub has planned for the rest of this week, when it is connected. A failure there leaves the plan out. */
@@ -128,7 +153,7 @@ async function plannedThisWeek(now: Date): Promise<{ planned: PlannedWorkout[]; 
 }
 
 /**
- * The Sports hub and the Running, Riding and Swimming pages, worked out in the browser from what the phone synced
+ * The Sports hub and each sport's page, worked out in the browser from what the phone synced
  * (activities, recordings, the training view) and, when Training Hub is connected, this week's planned workouts.
  */
 export async function loadSports(): Promise<Loaded<Sports>> {
@@ -146,6 +171,14 @@ export async function loadSports(): Promise<Loaded<Sports>> {
     planned,
   }, now);
   return hub && planned.length ? fromCoros(data) : fromSynced(data);
+}
+
+/** Only the person's sports, most time first, for what lists them outside the Sports pages (the Go to palette). */
+export async function loadSportFamilies(): Promise<Family[]> {
+  const view = await syncView();
+  const now = view ? new Date() : sampleSportsNow();
+  const activities: NativeActivity[] = view ? view.all("activity").map((i) => i.body) : sampleSportActivities();
+  return detectSports(activities.map(actFromNative).filter((a): a is SportAct => a != null && a.at.getTime() <= now.getTime()), now);
 }
 
 /** What a Coach question opens: the Coach page with the question in its message box. */

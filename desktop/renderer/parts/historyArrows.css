@@ -1,0 +1,14 @@
+/* Back and forward at the top of the sidebar (HistoryArrows.tsx): a row above the brand, or folded, under it. */
+.rail-history { display: flex; justify-content: flex-end; gap: 2px; margin-bottom: 2px; }
+.rail[data-collapsed="true"] .rail-history { justify-content: center; }
+.rail-history button {
+  position: relative; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer;
+}
+.rail-history button:hover:not(:disabled), .rail-history button:focus-visible { background: var(--hover); color: var(--fg); }
+.rail-history button:disabled { opacity: 0.35; cursor: default; }
+.rail-history svg { stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+/* Mac, panel open: beside the window buttons, in the strip they leave free, like Teams. */
+@media (min-width: 861px) {
+  [data-titlebar="inset"] .rail:not([data-collapsed="true"]) .rail-history { position: absolute; top: 5px; right: 10px; margin: 0; }
+}

@@ -23,8 +23,8 @@ import { TemplateImageFacts, TemplatePicture } from "../parts/StudioTemplateImag
 import { AmPmPictures } from "../parts/StudioAmPmPictures";
 import { SpotHeight } from "../parts/StudioSpotHeight";
 import { NativePartLayout, NativePictures } from "../parts/StudioNativePart";
-import { animationOutcomeText, droppedFrames, useAnimationOutcome } from "../studioAnimationOutcome";
-import { animationOutcomeNeedsNotice } from "../../watchface/engine/watchfaceAnimationOutcome";
+import { animationOutcomeText, droppedFrames } from "../studioAnimationOutcome";
+import { animationOutcomeNeedsNotice, type WatchAnimationOutcome } from "../../watchface/engine/watchfaceAnimationOutcome";
 import { SlotTop } from "../parts/StudioSlot";
 import { officialArtwork, officialBatteryRequest, officialBatteryStates, officialImageRequest, officialWeatherRequest, restoreWeatherSet, setWeatherSet, weatherSetCount } from "../studioOfficial";
 import { googleWeights } from "../studioGoogleFonts";
@@ -136,6 +136,8 @@ export interface LayerInspectorProps {
   watchLabel?: string;
   /** The animation on the canvas: playing, or held on one frame. */
   playback?: AnimationPlayback;
+  /** What the face's watch plays of the animation; null while it is measured. */
+  animationOutcome?: WatchAnimationOutcome | null;
   onPlayback?: (next: AnimationPlayback) => void;
   /** The face's own artwork: where it stands in the paint order (0 at the back), moving it, and copying it. */
   arrange?: { place: { index: number; count: number }; move: (step: "forward" | "backward" | "front" | "back") => void; copy: () => void };
@@ -656,10 +658,9 @@ function NativeParts({ design, edit, layer, fail, watch, resolution }: { design:
   </>;
 }
 
-function AnimationFolds({ design, edit, fail, watchLabel, watch: model, resolution, playback = { playing: true, still: 0 }, onPlayback }: LayerInspectorProps & { fail: (e: unknown) => void }) {
+function AnimationFolds({ design, edit, fail, watchLabel, playback = { playing: true, still: 0 }, onPlayback, animationOutcome: outcome = null }: LayerInspectorProps & { fail: (e: unknown) => void }) {
   const a = design.animation;
   const input = useRef<HTMLInputElement>(null);
-  const outcome = useAnimationOutcome(a, model, resolution?.width);
   if (!a) return null;
   const load = async (files: FileList | null) => {
     if (!files?.length) return;

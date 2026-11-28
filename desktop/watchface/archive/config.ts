@@ -241,6 +241,8 @@ export function applyCorosWatchfaceConfigOverrides(
     }
   }
   appendableKeys.add("control_temperature_negative_sign_icon");
+  // The colon Studio gives a sunrise, sunset or exercise time it adds.
+  appendableKeys.add("control_colon_icon");
   for (const prefix of ["exercise", "sunrise", "sunset"]) {
     for (const suffix of [
       "icon_pos",

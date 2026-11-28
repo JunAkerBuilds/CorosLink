@@ -126,9 +126,30 @@ function fontInk(font: CorosWatchfaceRasterFont): Promise<Map<string, Ink>> {
   return pending;
 }
 
+/**
+ * Glyphs already drawn, per font object (fonts aren't changed in place) and cell. Every preview draws the time and
+ * data digits again from a PNG font, and each was a PNG encode.
+ */
+const rasterGlyphCache = new WeakMap<CorosWatchfaceRasterFont, Map<string, Promise<string | null>>>();
+
+export function renderAlignedRasterGlyph(
+  text: string, width: number | undefined, height: number,
+  font: CorosWatchfaceRasterFont, color: string
+): Promise<string | null> {
+  let byCell = rasterGlyphCache.get(font);
+  if (!byCell) rasterGlyphCache.set(font, (byCell = new Map()));
+  const key = `${text}|${width ?? ""}|${height}|${color}`;
+  const cached = byCell.get(key);
+  if (cached) return cached;
+  const pending = drawAlignedRasterGlyph(text, width, height, font, color);
+  byCell.set(key, pending);
+  pending.catch(() => byCell.delete(key));
+  return pending;
+}
+
 /** PNG ink and its advance cell are independent. All numerals use one cap
  * height and baseline, even when source images have different padding. */
-export async function renderAlignedRasterGlyph(
+async function drawAlignedRasterGlyph(
   text: string, width: number | undefined, height: number,
   font: CorosWatchfaceRasterFont, color: string
 ): Promise<string | null> {

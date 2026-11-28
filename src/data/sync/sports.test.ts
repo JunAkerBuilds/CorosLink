@@ -4,7 +4,9 @@ import { isMissing } from "@/data/sports";
 import { sampleSports } from "@/data/sample/sports";
 import { seedItems } from "@/data/sampleSeed";
 import type { SyncBodies } from "./native";
-import { actFromNative, plannedFromHub, recordingFrom, sportsFromItems, type SportsItems } from "./sports";
+import { sportTabs } from "@/lib/sports";
+import { dateToRef, type NativeActivity, type NativeSport } from "./native";
+import { actFromNative, familyOf, kindOf, plannedFromHub, recordingFrom, sportsFromItems, type SportsItems } from "./sports";
 
 // Tuesday 24 November 2026, mid-afternoon.
 const NOW = new Date(2026, 10, 24, 15, 0);
@@ -22,8 +24,11 @@ describe("sports from synced items", () => {
     expect([...sports.families].sort()).toEqual(["ride", "run", "strength", "swim"]);
     expect(sports.families[0]).toBe("run");
     expect(sports.run && sports.ride && sports.swim).toBeTruthy();
-    expect(sports.hub.rings.map((r) => r.family)).toEqual(["run", "ride", "swim", "strength"]);
-    expect(sports.hub.cards.map((c) => c.href)).toEqual(["/sports/running", "/sports/riding", "/sports/swimming", "/strength"]);
+    // The hub follows the detected order.
+    expect(sports.hub.rings.map((r) => r.family)).toEqual(sports.families);
+    expect(sports.hub.cards.map((c) => c.family)).toEqual(sports.families);
+    expect(new Set(sports.hub.cards.map((c) => c.href))).toEqual(new Set(["/sports/running", "/sports/riding", "/sports/swimming", "/strength"]));
+    expect(sports.walk ?? sports.snow ?? sports.climb).toBeNull();
     expect(sports.hub.hours.weeks).toHaveLength(12);
   });
 
@@ -98,8 +103,9 @@ describe("sports from synced items", () => {
     const noSwims = sportsFromItems({ ...base, activities: base.activities.filter((a) => a.sport !== "poolSwim" && a.sport !== "openWater") }, NOW);
     expect(noSwims.families).not.toContain("swim");
     expect(noSwims.swim).toBeNull();
-    expect(noSwims.hub.rings.map((r) => r.family)).toEqual(["run", "ride", "strength"]);
-    expect(noSwims.hub.cards.map((c) => c.family)).toEqual(["run", "ride", "strength"]);
+    expect(noSwims.hub.rings.map((r) => r.family)).toEqual(noSwims.families);
+    expect(noSwims.hub.cards.map((c) => c.family)).toEqual(noSwims.families);
+    expect([...noSwims.families].sort()).toEqual(["ride", "run", "strength"]);
     expect(noSwims.hub.standouts.some((s) => s.family === "swim")).toBe(false);
   });
 
@@ -185,5 +191,123 @@ describe("sports in imperial", () => {
       expect(sports.swim!.hero.figures[0].value).toMatch(/ yd$/);
       expect(sports.swim!.tiles.find((x) => x.href === "#now")!.unit).toBe("yd");
     } finally { useUnitsNow("metric"); }
+  });
+});
+
+describe("sport kinds", () => {
+  it("files each of the phone's sports under a family", () => {
+    const families = (["run", "indoorRun", "trailRun", "track", "bike", "indoorBike", "poolSwim", "openWater", "strength", "walk", "hike", "ski", "cardio", "row", "multisport", "other"] as NativeSport[])
+      .map((s) => familyOf(s));
+    expect(families).toEqual(["run", "run", "run", "run", "ride", "ride", "swim", "swim", "strength", "walk", "hike", "snow", "other", "other", "other", "other"]);
+  });
+
+  it("tells climbing and the snow sports apart by COROS's code", () => {
+    // Indoor climbing and bouldering come over from the phone as "other".
+    expect([kindOf("other", 800), familyOf("other", 800)]).toEqual(["indoorClimb", "climb"]);
+    expect([kindOf("other", 801), familyOf("other", 801)]).toEqual(["bouldering", "climb"]);
+    expect([kindOf("ski", 500), kindOf("ski", 501), kindOf("ski", 502), kindOf("ski", 503), kindOf("ski")]).toEqual(["ski", "snowboard", "xcSki", "ski", "ski"]);
+    expect(familyOf("ski", 501)).toBe("snow");
+    // A code is only read for the sport it belongs to, and an unknown one leaves the phone's sport.
+    expect([familyOf("run", 800), familyOf("other", 1200), familyOf("other")]).toEqual(["run", "other", "other"]);
+    expect(actFromNative({ id: "c", name: "", sport: "other", sportCode: 801, start: dateToRef(NOW), durationSeconds: 3600 })).toMatchObject({ family: "climb", kind: "bouldering", name: "Workout" });
+  });
+});
+
+describe("walking, hiking, skiing and climbing pages", () => {
+  let k = 0;
+  const day = (d: number, h = 10) => new Date(2026, 10, 24 - d, h, 0);
+  const activity = (sport: NativeSport, d: number, minutes: number, more: Partial<NativeActivity> = {}): NativeActivity => ({
+    id: `x${++k}`, name: `${sport} ${d}`, sport, start: dateToRef(day(d)), durationSeconds: minutes * 60, ...more,
+  });
+  const walks = [
+    activity("walk", 0, 50, { distanceMeters: 4200, elevationGain: 30, averageHR: 98 }),
+    activity("walk", 7, 40, { distanceMeters: 3100 }),
+    activity("walk", 14, 45, { distanceMeters: 3600 }),
+    activity("walk", 40, 45, { distanceMeters: 3600 }),
+  ];
+  const hikes = [
+    activity("hike", 2, 240, { distanceMeters: 14000, elevationGain: 900 }),
+    activity("hike", 9, 180, { distanceMeters: 10000, elevationGain: 600 }),
+    activity("hike", 16, 300, { distanceMeters: 18000, elevationGain: 1200 }),
+    activity("hike", 23, 200, { distanceMeters: 12000, elevationGain: 700 }),
+  ];
+  const climbs = [1, 8, 15, 22].map((d) => activity("other", d, 90, { sportCode: d === 22 ? 801 : 800, averageHR: 128 }));
+  const base = items();
+  const sports = sportsFromItems({ ...base, activities: [...base.activities, ...walks, ...hikes, ...climbs] }, NOW);
+
+  it("gives a page to a sport the athlete does, and lists it where detection puts it", () => {
+    expect(sports.families).toContain("walk");
+    expect(sports.families).toContain("hike");
+    expect(sports.families).toContain("climb");
+    expect(sports.families).not.toContain("snow");
+    expect(sports.walk && sports.hike && sports.climb).toBeTruthy();
+    expect(sports.snow).toBeNull();
+    expect(sports.hub.rings.map((r) => r.family)).toEqual(sports.families);
+    expect(sports.hub.cards.find((c) => c.family === "walk")?.href).toBe("/sports/walking");
+    expect(sports.hub.cards.find((c) => c.family === "hike")?.href).toBe("/sports/hiking");
+    expect(sports.hub.standouts.some((s) => s.family === "climb")).toBe(true);
+    // Walks, hikes and climbs have their own place now, not "Also in the last 90 days".
+    expect(sports.hub.also.map((a) => a.name)).not.toContain("Workout");
+    expect(sportTabs(sports.families, null).map((t) => t.href)).toEqual(["/sports", ...sports.families.map((f) => sports.hub.rings.find((r) => r.family === f)!.href)]);
+  });
+
+  it("reads walking from the activity list: time, distance and climb", () => {
+    const walk = sports.walk!;
+    expect(walk.hero.figures).toEqual([
+      { value: "50 min", label: "This week" }, { value: "1", label: "Sessions" }, { value: "4.2 km", label: "Distance" }, { value: "30 m", label: "Climb" },
+    ]);
+    expect(walk.hero.chart.bars).toHaveLength(12);
+    // The last 28 days: three walks, 2 h 15, 10.9 km. Hikes are not walks.
+    expect(walk.month.headline).toBe("3 walks");
+    expect(walk.month.figures.slice(0, 2).map((f) => f.value)).toEqual(["2 h 15", "10.9 km"]);
+    expect(isMissing(walk.climb)).toBe(false);
+    expect(walk.recent[0]).toMatchObject({ id: walks[0].id, kind: "Walk", figures: ["50 min", "4.2 km", "30 m", "98 bpm"] });
+    expect(walk.recent.every((r) => r.kind === "Walk")).toBe(true);
+  });
+
+  it("gives hiking a page of its own: time, distance and climb", () => {
+    const hike = sports.hike!;
+    expect(hike.family).toBe("hike");
+    // The last 28 days: four hikes, 15 h 20, 54.0 km, 3,400 m.
+    expect(hike.month.headline).toBe("4 hikes");
+    expect(hike.month.figures.slice(0, 3).map((f) => f.value)).toEqual(["15 h 20", "54.0 km", "3,400 m"]);
+    expect(hike.recent.map((r) => r.id)).toEqual(hikes.map((h) => h.id));
+    expect(hike.records.map((r) => [r.name, r.value])).toEqual([["Longest", "5 h 00 min"], ["Farthest", "18.0 km"], ["Most climbing", "1,200 m"], ["Biggest week, last 12", "5 h 00 min"]]);
+  });
+
+  it("puts Hiking first and leaves Running out for someone who mostly hikes", () => {
+    const run = activity("run", 5, 30, { distanceMeters: 5000 });
+    const hiker = sportsFromItems({ ...base, activities: [...hikes, run] }, NOW);
+    expect(hiker.families[0]).toBe("hike");
+    expect(hiker.families).not.toContain("run");
+    expect(sportTabs(hiker.families, null).map((t) => t.label)).toEqual(["All sports", "Hiking"]);
+  });
+
+  it("reads climbing without distance or climb, and splits it by kind", () => {
+    const climb = sports.climb!;
+    expect(climb.climb).toBeNull();
+    expect(climb.hero.figures.map((f) => f.label)).toEqual(["This week", "Sessions", "Avg heart rate"]);
+    expect(climb.month.kinds!.map((x) => x.name)).toEqual(["Indoor climb", "Bouldering"]);
+    expect(climb.recent.every((r) => r.figures.length === 2)).toBe(true);
+    expect(climb.records.map((r) => r.name)).toEqual(["Longest", "Biggest week, last 12"]);
+  });
+
+  it("says so when a skier has no climb in the list", () => {
+    const skis = [0, 1, 2, 3].map((d) => activity("ski", d, 180, { sportCode: d % 2 ? 501 : 500, distanceMeters: 30000 }));
+    const s = sportsFromItems({ ...base, activities: [...base.activities, ...skis] }, NOW);
+    expect(s.families).toContain("snow");
+    expect(s.snow!.climb).toEqual({ missing: "Needs a session with its climb from the watch." });
+    expect(s.snow!.month.kinds!.map((x) => x.name).sort()).toEqual(["Ski", "Snowboard"]);
+  });
+
+  it("keeps a page for a sport the athlete doesn't do closed, and with nothing known shows the main four", () => {
+    const one = sportsFromItems({ ...base, activities: [...base.activities, activity("hike", 3, 120)] }, NOW);
+    expect(one.families).not.toContain("hike");
+    expect(one.hike).toBeNull();
+    expect(one.hub.rings.some((r) => r.family === "hike")).toBe(false);
+    const none = sportsFromItems({ ...base, activities: [] }, NOW);
+    expect(none.families).toEqual([]);
+    expect(none.hub.rings.map((r) => r.family)).toEqual(["run", "ride", "swim", "strength"]);
+    expect(none.walk ?? none.hike ?? none.snow ?? none.climb).toBeNull();
   });
 });

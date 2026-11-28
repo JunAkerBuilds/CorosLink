@@ -161,8 +161,31 @@ function canvasImage(width: number, height: number, draw: (context: CanvasRender
   return canvas.toDataURL("image/png");
 }
 
+/**
+ * Sprites already drawn, per style object (designs are never changed in place) and part. Every preview draws each
+ * native field's sprites again, and each was a PNG encode. Text is drawn in whatever fonts are loaded, so a font
+ * finishing loading starts afresh.
+ */
+const nativeAssetCache = new WeakMap<Style, Map<string, Promise<string>>>();
+let fontEpoch = 0;
+if (typeof document !== "undefined" && document.fonts) {
+  document.fonts.addEventListener("loadingdone", () => { fontEpoch += 1; });
+}
+
 /** The same sprite renderer feeds the editor, thumbnail and native export. */
-export async function nativeDataAsset(id: string, style: Style, role: Role, index: number, scale = 1): Promise<string> {
+export function nativeDataAsset(id: string, style: Style, role: Role, index: number, scale = 1): Promise<string> {
+  let byPart = nativeAssetCache.get(style);
+  if (!byPart) nativeAssetCache.set(style, (byPart = new Map()));
+  const key = `${fontEpoch}|${typeof document !== "undefined" ? document.fonts?.size ?? 0 : 0}|${id}|${role}|${index}|${scale}`;
+  const cached = byPart.get(key);
+  if (cached) return cached;
+  const pending = drawNativeDataAsset(id, style, role, index, scale);
+  byPart.set(key, pending);
+  pending.catch(() => byPart.delete(key));
+  return pending;
+}
+
+async function drawNativeDataAsset(id: string, style: Style, role: Role, index: number, scale = 1): Promise<string> {
   const part = nativePart(id, style, nativeRolePart(role));
   const width = (role === "digits" ? part.digitWidth : part.width) * scale;
   const height = part.height * scale;

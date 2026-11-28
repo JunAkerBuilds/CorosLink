@@ -1,11 +1,12 @@
 // Watchmaker, the inspector's AI tab (main: watchface/watchmaker). A chat that edits the open face live: each applied
 // step is one undo step, and Stop interrupts. Pictures pasted, dropped or attached go with the message as a design
-// reference or a screenshot. The AI, its model and power are the ones Coach uses, picked right here (CoachAI.tsx).
+// reference or a screenshot. It always runs the athlete's own Codex CLI, with Codex's sign-in, model and harness
+// (shell and image generation in a temporary folder), so the bar shows Codex rather than Coach's AI pills.
 // Chats are saved with the face. Loaded on demand.
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
 import { language, locale, t, tx } from "@/lib/i18n";
-import { CoachAI } from "./CoachAI";
 import { Icon } from "./StudioIcon";
+// The chat list menu uses its menu colours.
 import "./coachAI.css";
 import "./studioWatchmaker.css";
 
@@ -19,6 +20,7 @@ export interface ChatMessage {
 }
 interface ChatSummary { id: string; title: string; updatedAt: string; messages: number }
 interface Attachment { dataUrl: string; use: "reference" | "screenshot" }
+interface Status { ready: boolean; label: string; account?: string; problem?: string; running: string[] }
 
 const BASE = "/api/desktop/studio/watchmaker";
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -105,6 +107,7 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [dropping, setDropping] = useState(false);
+  const [engine, setEngine] = useState<Status | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -118,10 +121,23 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
   useEffect(() => {
     let live = true;
     void refresh().then((list) => { if (live && list[0]) void open(list[0].id); }).catch(() => undefined);
-    void call<{ running: string[] }>("").then((s) => { if (live) setRunning(s.running.includes(projectId)); }).catch(() => undefined);
+    void call<Status>("").then((s) => { if (live) { setEngine(s); setRunning(s.running.includes(projectId)); } }).catch(() => undefined);
     return () => { live = false; };
   }, [projectId, refresh, open]);
   useEffect(() => { scroller.current?.scrollTo({ top: scroller.current.scrollHeight }); }, [messages]);
+  // A run this panel didn't start (it was reopened mid-run) is followed by asking until it ends, then the chat reloads.
+  const streaming = useRef(false);
+  useEffect(() => {
+    if (!running || streaming.current) return;
+    const timer = setInterval(() => {
+      void call<Status>("").then((s) => {
+        if (s.running.includes(projectId)) return;
+        setRunning(false);
+        void refresh().then((list) => { if (list[0]) void open(list[0].id); });
+      }).catch(() => undefined);
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [running, projectId, refresh, open]);
 
   const attach = async (files: File[]) => {
     setProblem(null);
@@ -143,7 +159,7 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
   const send = async () => {
     const text = draft.trim();
     if ((!text && !attachments.length) || running) return;
-    setProblem(null); setRunning(true);
+    setProblem(null); streaming.current = true; setRunning(true);
     const sentAttachments = attachments;
     setDraft(""); setAttachments([]);
     try {
@@ -183,6 +199,7 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
       setProblem(e instanceof Error ? e.message : t("Watchmaker couldn't finish."));
       setDraft((d) => d || text); setAttachments((a) => (a.length ? a : sentAttachments));
     } finally {
+      streaming.current = false;
       setRunning(false);
     }
   };
@@ -227,6 +244,8 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
             <Icon name="spark" size={22} />
             <b>{t("What should change?")}</b>
             <p>{t("It edits this face as you watch. Each step can be undone.")}</p>
+            {engine && !engine.ready ? <p className="st-wm-error" role="alert">{engine.problem}</p> : null}
+            <p className="st-wm-notice">{t("Codex works in a temporary folder with its own shell, web access and image generation. Its shell work isn't part of Undo.")}</p>
           </div>
         )}
       </div>
@@ -252,7 +271,9 @@ export default function StudioWatchmaker({ projectId }: { projectId: string }) {
         <div className="st-wm-bar">
           <button type="button" className="st-icon-btn" aria-label={t("Attach pictures")} title={t("Attach pictures")} disabled={attachments.length >= MAX_ATTACHMENTS} onClick={() => fileInput.current?.click()}><Icon name="attach" size={16} /></button>
           <input ref={fileInput} type="file" accept={IMAGE_TYPES.join(",")} multiple hidden onChange={(e) => { void attach([...(e.target.files ?? [])]); e.target.value = ""; }} />
-          <div className="st-wm-ai"><CoachAI /></div>
+          <span className="st-wm-engine" title={engine?.label ?? "Codex CLI"} data-off={engine && !engine.ready ? true : undefined}>
+            <Icon name="spark" size={12} />{engine?.label ?? "Codex CLI"}
+          </span>
           {running
             ? <button type="button" className="st-wm-send" data-stop aria-label={t("Stop")} title={t("Stop")} onClick={stop}><Icon name="pause" size={15} /></button>
             : <button type="button" className="st-wm-send" aria-label={t("Send")} title={t("Send")} disabled={!draft.trim() && !attachments.length} onClick={() => void send()}><Icon name="send" size={15} /></button>}

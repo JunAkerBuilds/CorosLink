@@ -7,6 +7,7 @@ import { replayIntro } from "../welcome";
 import { showWhatsNew } from "../whatsNew";
 import { navigate } from "../router";
 import { startPreview } from "../updates";
+import { setCoffeeHidden, useCoffeeHidden } from "../coffeeChip";
 import { t } from "@/lib/i18n";
 
 // Activity screens for PACE Pro (experimental): loaded only here, and shown only where the main process allows it.
@@ -15,6 +16,7 @@ const ActivityScreens = lazy(() => import("../parts/ActivityScreens"));
 export default function Developer() {
   const [state, setState] = useState<DeveloperState | null>(null);
   const [busy, setBusy] = useState(false);
+  const coffeeHidden = useCoffeeHidden();
   useEffect(() => { void readDeveloper().then(setState); }, []);
 
   const change = (c: Parameters<typeof changeDeveloper>[0], then?: string) => { setBusy(true); void changeDeveloper(c, then); };
@@ -64,10 +66,13 @@ export default function Developer() {
             <Row title={t("Update prompt")} detail={t("A made-up update in the prompt and the account menu's Updates, to see them in a development build. Nothing is downloaded or installed.")}>
               <Button onClick={startPreview}>{t("Preview")}</Button>
             </Row>
+            <Row title={t("Hide Buy me a coffee")} detail={t("Takes the coffee pill out of the sidebar, for clean screenshots. It comes back when developer mode is off.")}>
+              <Switch label={t("Hide Buy me a coffee")} checked={coffeeHidden} onChange={setCoffeeHidden} />
+            </Row>
           </Card>
           <Card pad style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <Row title={t("Developer mode")} detail={t("This page, the Developer menu and the developer tools. Turning it off also turns sample data off.")}>
-              <Switch label={t("Developer mode")} checked disabled={busy} onChange={() => change({ devMode: false }, "/")} />
+              <Switch label={t("Developer mode")} checked disabled={busy} onChange={() => { setCoffeeHidden(false); change({ devMode: false }, "/"); }} />
             </Row>
           </Card>
         </>

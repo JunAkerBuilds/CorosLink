@@ -14,6 +14,7 @@ import { backStep, coachSays, countdown, LIST, listIndex, listLabel, nextStep, p
 import { restoreBackup, SettingsProblem } from "../settings";
 import { useCorosImport } from "../corosImport";
 import { CorosAccountPart } from "../parts/CorosImport";
+import { FirewallNote, type FirewallState } from "../parts/FirewallNote";
 import "../parts/localMode.css";
 import "./setup.css";
 
@@ -116,11 +117,11 @@ function SourceStep({ source, onNext }: { source: Source; onNext: (s: Source) =>
     const here = location.pathname + location.search;
     try {
       if (sample) await setSample(false);
-      history.replaceState(null, "", placeHref({ step: "sports", source: "backup" }));
+      history.replaceState(history.state, "", placeHref({ step: "sports", source: "backup" }));
       const done = await restoreBackup(passphrase);
-      if (done.cancelled) { history.replaceState(null, "", here); setBusy(false); if (sample) window.location.reload(); }
+      if (done.cancelled) { history.replaceState(history.state, "", here); setBusy(false); if (sample) window.location.reload(); }
     } catch (e) {
-      history.replaceState(null, "", here);
+      history.replaceState(history.state, "", here);
       if (e instanceof SettingsProblem && e.code === "passphrase") setNeedsPassphrase(true);
       setProblem(said(e));
       setBusy(false);
@@ -178,7 +179,7 @@ function CorosStep({ onBack, onNext }: { onBack: () => void; onNext: () => void 
 /* ───────────── Pair with your phone ───────────── */
 
 interface Phone { id: string; label: string; createdAt: string; lastUsedAt: string }
-interface PhoneStatus { listening: boolean; items: number; phones: Phone[] }
+interface PhoneStatus { listening: boolean; items: number; phones: Phone[]; firewall?: FirewallState }
 interface Pairing { link: string; qr: string; expiresAt: string }
 
 async function ask<T>(path: string, init?: RequestInit): Promise<T> {
@@ -285,6 +286,7 @@ function PhoneStep({ onPaired, onBack, onNext }: { onPaired: (label: string | nu
             </ol>
             {problem ? <div className="notice ob-problem" role="alert">{problem}<Button onClick={pair}>{t("Try again")}</Button></div>
               : <div className="ob-wait" role="status"><Dots />{t("Waiting for your phone")}</div>}
+            <FirewallNote state={status?.firewall} />
             <Note icon={WIFI} hue="blue">{t("On the same Wi-Fi it syncs straight to this {computer}.", { computer: computerWord() })}</Note>
             {pairing ? (
               <Note icon={KEY}>

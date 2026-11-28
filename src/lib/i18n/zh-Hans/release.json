@@ -73,5 +73,7 @@
   "{n} races kept": "保留了 {n} 场比赛",
   "“{name}” goes on this computer’s calendar, one workout at a time: {n} workouts from {from} to {to}.": "“{name}”将逐次加入这台电脑的日历：从 {from} 到 {to} 共 {n} 次训练。",
   "“{name}” goes on this computer’s calendar: 1 workout on {from}.": "“{name}”将加入这台电脑的日历：{from} 1 次训练。",
-  "“{name}” is not saved on this computer any more.": "“{name}”已不再保存在这台电脑上。"
+  "“{name}” is not saved on this computer any more.": "“{name}”已不再保存在这台电脑上。",
+  "Hide Buy me a coffee": "隐藏“请我喝杯咖啡”",
+  "Takes the coffee pill out of the sidebar, for clean screenshots. It comes back when developer mode is off.": "从侧边栏移除咖啡按钮，便于截取干净的屏幕截图。关闭开发者模式后会恢复显示。"
 }

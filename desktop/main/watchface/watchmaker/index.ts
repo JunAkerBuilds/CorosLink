@@ -1,55 +1,78 @@
-// Watchmaker, the AI designer in Studio's inspector (CorosLink's WatchfaceAiPanel + electron/watchfaceAi*.ts). It asks
-// the AI picked on the AI page (any provider: a key, ChatGPT, the CLIs) and drives the open face through the editor
-// broker, so every applied step is one undo step and the canvas changes as it works. Chats are saved per face.
-// Routes under /api/desktop/studio/watchmaker: status, chats (list, read, delete), send (a stream of events, one JSON
-// line each), stop.
-import type { CoachModel, ModelMessage } from "@/lib/coach/loop";
-import type { CoachFile } from "@/lib/coach/files";
+// Watchmaker, the AI designer in Studio's inspector (CorosLink's WatchfaceAiPanel + electron/watchfaceAi*.ts). Like
+// CorosLink, it always runs the athlete's own Codex CLI with its own harness (codex.ts), whatever Coach uses: Codex
+// drives the open face through the editor broker, so every applied step is one undo step and the canvas changes as it
+// works. Chats are saved per face. Routes under /api/desktop/studio/watchmaker: status, chats (list, read, delete),
+// send (a stream of events, one JSON line each), stop.
 import type { AssetStore } from "../automation/assets";
 import type { EditorBroker } from "../automation/broker";
 import { ChatStore, titleOf, type Chat, type ChatMessage } from "./chats";
-import { runWatchmaker, type WatchmakerEvent } from "./loop";
+import { codexAccount, findCodex, NOT_INSTALLED, runCodex } from "./codex";
 import { WATCHMAKER_RULES } from "./rules";
-import { compactDocument, watchmakerTools, type ImageMaker } from "./tools";
+import { compactDocument, watchmakerTools, type WatchmakerEvent, type WatchmakerTools } from "./tools";
 import { t } from "@/lib/i18n";
 
-export interface PickedModel { model: CoachModel; label: string; provider: string | null }
+/** One message for the engine: the rules, the whole prompt, its pictures, and the face's tools. */
+export interface EngineJob {
+  instructions: string;
+  prompt: string;
+  pictures: { name: string; bytes: Buffer }[];
+  tools: WatchmakerTools;
+  emit(event: WatchmakerEvent): void;
+  signal: AbortSignal;
+}
+
+/** Who answers Watchmaker: Codex, or a stand-in in tests and the smoke. */
+export interface WatchmakerEngine {
+  status(): Promise<{ ready: boolean; label: string; account?: string; problem?: string }>;
+  run(job: EngineJob): Promise<{ text: string; edits: number; stopped: boolean }>;
+}
+
+/** The installed Codex CLI. Its sign-in is checked at most once a minute. */
+export function codexEngine(assets: AssetStore): WatchmakerEngine {
+  let checked: { at: number; program: string; status: Awaited<ReturnType<typeof codexAccount>> } | null = null;
+  const program = async () => {
+    const found = await findCodex();
+    if (!found) throw new Error(t(NOT_INSTALLED));
+    return found;
+  };
+  return {
+    async status() {
+      const found = await findCodex();
+      if (!found) return { ready: false, label: "Codex CLI", problem: t(NOT_INSTALLED) };
+      if (!checked || checked.program !== found || Date.now() - checked.at > 60_000 || !checked.status.ready) checked = { at: Date.now(), program: found, status: await codexAccount(found) };
+      return { label: "Codex CLI", ...checked.status };
+    },
+    run: async (job) => runCodex({ ...job, program: await program(), assets }),
+  };
+}
 
 export interface WatchmakerDeps {
   broker: EditorBroker;
   assets: AssetStore;
   projectsDir: string;
-  /** The AI picked on the AI page, or null while none is set up. */
-  model(): Promise<PickedModel | null>;
-  /** Image generation, when a provider for it is set up. */
-  imageMaker(): Promise<ImageMaker | null>;
+  engine: WatchmakerEngine;
 }
 
-/** Providers that run as their own program get tool text only (ai/agent.ts restarts on any other message). */
-const AGENTS = new Set(["claude-code", "gemini-cli", "opencode", "antigravity"]);
 const MAX_ATTACHMENTS = 4;
 const MAX_ATTACHMENT_URL = 12 * 1024 * 1024;
 
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const uuid = () => crypto.randomUUID();
 
-/** The earlier conversation as plain text turns (pictures by id), so any provider can carry it. */
-export function historyOf(messages: ChatMessage[]): ModelMessage[] {
-  const out: ModelMessage[] = [];
-  for (const m of messages) {
+/** The earlier conversation as text (pictures by id): Codex starts fresh for every message. */
+export function historyOf(messages: ChatMessage[]): string {
+  return messages.map((m) => {
     if (m.role === "user") {
       const attached = m.attachments?.length ? `\n(Attached: ${m.attachments.map((a) => `${a.use === "reference" ? "design reference" : "screenshot"} ${a.assetId}`).join(", ")})` : "";
-      out.push({ role: "user", content: `${m.text}${attached}` });
-    } else {
-      const did = [
-        m.edits ? `Applied ${m.edits} step${m.edits === 1 ? "" : "s"} to the face.` : "",
-        m.pictures?.length ? `Pictures made: ${m.pictures.map((p) => `${p.why ?? "image"} ${p.assetId}`).join(", ")}.` : "",
-        m.stopped ? "Stopped by the person." : "", m.error ? `Failed: ${m.error}` : "",
-      ].filter(Boolean).join(" ");
-      out.push({ role: "assistant", content: [m.text, did ? `(${did})` : ""].filter(Boolean).join("\n") || "(No answer.)" });
+      return `Person: ${m.text}${attached}`;
     }
-  }
-  return out;
+    const did = [
+      m.edits ? `Applied ${m.edits} step${m.edits === 1 ? "" : "s"} to the face.` : "",
+      m.pictures?.length ? `Pictures made: ${m.pictures.map((p) => `${p.why ?? "image"} ${p.assetId}`).join(", ")}.` : "",
+      m.stopped ? "Stopped by the person." : "", m.error ? `Failed: ${m.error}` : "",
+    ].filter(Boolean).join(" ");
+    return `Watchmaker: ${[m.text, did ? `(${did})` : ""].filter(Boolean).join("\n") || "(No answer.)"}`;
+  }).join("\n\n");
 }
 
 /** The design reference the person picked most recently, if any. */
@@ -63,16 +86,16 @@ export class Watchmaker {
     this.chats = new ChatStore(deps.projectsDir);
   }
 
-  private async picture(assetId: string): Promise<CoachFile | null> {
+  private async picture(assetId: string): Promise<{ name: string; bytes: Buffer } | null> {
     try {
       const a = await this.deps.assets.get(assetId);
-      return { name: `${assetId}.${a.mime.split("/")[1]}`, mime: a.mime, kind: "image", data: a.bytes.toString("base64") };
+      return { name: `${assetId}.${a.mime.split("/")[1]}`, bytes: a.bytes };
     } catch { return null; }
   }
 
   async status() {
-    const picked = await this.deps.model().catch(() => null);
-    return { ready: !!picked, label: picked?.label ?? null, images: !!(await this.deps.imageMaker().catch(() => null)), running: [...this.running.keys()] };
+    const engine = await this.deps.engine.status().catch((error: unknown) => ({ ready: false, label: "Codex CLI", problem: error instanceof Error ? error.message : String(error) }));
+    return { ...engine, running: [...this.running.keys()] };
   }
 
   /** One message: saved, answered as a stream of events, and the answer saved. */
@@ -82,8 +105,8 @@ export class Watchmaker {
     const raw = Array.isArray(body.attachments) ? body.attachments.slice(0, MAX_ATTACHMENTS) : [];
     if (!text && !raw.length) return reply({ error: "invalid", message: t("Say what to change.") }, 400);
     if (this.running.has(projectId)) return reply({ error: "busy", message: t("Watchmaker is still working on this face.") }, 409);
-    const picked = await this.deps.model();
-    if (!picked) return reply({ error: "not_ready", message: t("Set up an AI first.") }, 400);
+    const engine = await this.deps.engine.status().catch(() => null);
+    if (!engine?.ready) return reply({ error: "not_ready", message: engine?.problem ?? t(NOT_INSTALLED) }, 400);
 
     let chat: Chat;
     try {
@@ -106,9 +129,10 @@ export class Watchmaker {
 
     const abort = new AbortController();
     this.running.set(projectId, abort);
-    const answer: ChatMessage = { id: uuid(), role: "assistant", at: new Date().toISOString(), text: "", steps: [], pictures: [], by: picked.label };
+    // Who answered, without the account's email.
+    const by = engine.label;
+    const answer: ChatMessage = { id: uuid(), role: "assistant", at: new Date().toISOString(), text: "", steps: [], pictures: [], by };
     const encoder = new TextEncoder();
-    const seesPictures = !AGENTS.has(picked.provider ?? "");
 
     const stream = new ReadableStream<Uint8Array>({
       start: async (controller) => {
@@ -123,35 +147,27 @@ export class Watchmaker {
           send(event);
         };
         try {
-          const tools = watchmakerTools({ broker: this.deps.broker, assets: this.deps.assets, makeImage: await this.deps.imageMaker().catch(() => null), projectId });
+          const tools = watchmakerTools({ broker: this.deps.broker, assets: this.deps.assets, projectId });
           const doc = await tools.read(abort.signal);
-          // What the model sees with the message: the person's pictures, the design reference they picked earlier, and
-          // the face as it is now.
-          const files: CoachFile[] = [];
+          // With the message: the person's pictures, the design reference they picked earlier, and the face as it is now.
+          const pictures: { name: string; bytes: Buffer }[] = [];
           const lines: string[] = [];
-          if (seesPictures) {
-            for (const a of attachments) { const f = await this.picture(a.assetId); if (f) { files.push(f); lines.push(`${a.use === "reference" ? "Design reference" : "Screenshot"} ${a.assetId}`); } }
-            const ref = attachments.some((a) => a.use === "reference") ? null : latestReference(earlier);
-            if (ref) { const f = await this.picture(ref.assetId); if (f) { files.push(f); lines.push(`Design reference from earlier ${ref.assetId}`); } }
-            const shot = await tools.run("render_preview", { resolution: (doc.capabilities as { placement?: { width?: number } })?.placement?.width }, abort.signal);
-            const preview = shot.pictures?.[0];
-            if (preview) { const f = await this.picture(preview.assetId); if (f) { files.push(f); lines.push(`The face now (${preview.assetId})`); } }
-          } else if (attachments.length) {
-            lines.push(...attachments.map((a) => `${a.use === "reference" ? "Design reference" : "Screenshot"} ${a.assetId} (look at it with inspect_asset if you can)`));
-          }
-          const note = lines.length ? `\n\n(Pictures with this message, in order: ${lines.join("; ")}.)` : "";
-          const messages: ModelMessage[] = [...historyOf(earlier), {
-            role: "user",
-            content: files.length ? [{ type: "text", text: `${text || "Use the attached picture."}${note}` }, ...files.map((file) => ({ type: "file", file }))] : `${text}${note}`,
-          }];
-          const outcome = await runWatchmaker({
-            model: picked.model, rules: WATCHMAKER_RULES, context: `The open face:\n${JSON.stringify(compactDocument(doc))}`,
-            messages, tools: tools.defs, runTool: tools.run, picture: (id) => this.picture(id), seesPictures, emit, signal: abort.signal,
-          });
+          for (const a of attachments) { const f = await this.picture(a.assetId); if (f) { pictures.push(f); lines.push(`${a.use === "reference" ? "Design reference" : "Screenshot"} ${a.assetId}`); } }
+          const ref = attachments.some((a) => a.use === "reference") ? null : latestReference(earlier);
+          if (ref) { const f = await this.picture(ref.assetId); if (f) { pictures.push(f); lines.push(`Design reference from earlier ${ref.assetId}`); } }
+          const shot = await tools.run("render_preview", { resolution: (doc.capabilities as { placement?: { width?: number } })?.placement?.width }, abort.signal);
+          const preview = shot.pictures?.[0];
+          if (preview) { const f = await this.picture(preview.assetId); if (f) { pictures.push(f); lines.push(`The face now (${preview.assetId})`); } }
+          const prompt = [
+            earlier.length ? `The conversation so far:\n\n${historyOf(earlier)}` : "",
+            `The open face:\n${JSON.stringify(compactDocument(doc))}`,
+            `The person now asks:\n\n${text || "Use the attached picture."}`,
+            lines.length ? `(Pictures with this message, in order: ${lines.join("; ")}.)` : "",
+          ].filter(Boolean).join("\n\n");
+          const outcome = await this.deps.engine.run({ instructions: WATCHMAKER_RULES, prompt, pictures, tools, emit, signal: abort.signal });
           answer.text = outcome.text || (outcome.stopped ? "" : t("Done."));
           answer.edits = outcome.edits;
           if (outcome.stopped) answer.stopped = true;
-          if (outcome.outOfRounds) answer.error = t("Watchmaker ran out of steps for this message. Send another to carry on.");
         } catch (error) {
           if (abort.signal.aborted) answer.stopped = true;
           else answer.error = error instanceof Error ? error.message : t("Watchmaker couldn't finish.");

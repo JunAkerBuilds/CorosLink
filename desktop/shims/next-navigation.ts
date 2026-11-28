@@ -1,6 +1,6 @@
 // `next/navigation` for the desktop app, on top of the in-app router.
 import { useMemo } from "react";
-import { back, navigate, useLocation, useRouteParams } from "../renderer/router";
+import { back, forward, navigate, useLocation, useRouteParams } from "../renderer/router";
 
 export interface AppRouter {
   push(href: string, options?: { scroll?: boolean }): void;
@@ -15,7 +15,7 @@ const router: AppRouter = {
   push: (href, o) => navigate(href, { scroll: o?.scroll }),
   replace: (href, o) => navigate(href, { replace: true, scroll: o?.scroll }),
   back,
-  forward: () => history.forward(),
+  forward,
   refresh: () => navigate(location.pathname + location.search, { replace: true, scroll: false, reload: true }),
   prefetch: () => {},
 };

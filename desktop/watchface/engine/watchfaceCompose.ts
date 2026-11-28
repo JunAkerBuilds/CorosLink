@@ -52,6 +52,7 @@ import {
   pickPreviewResolution,
   rasterFontSupportsText,
   rebaseNegativeControlChildren,
+  isWatchfaceAodGlyphLayer,
   renderWatchfaceAodSafeSprite,
   renderWatchfaceSolidFontSprite,
   type WatchfaceAssetLoader,
@@ -109,7 +110,8 @@ export interface WatchfaceComposeResult {
 /**
  * Cleans dynamic AOD sprites after every style/effect pass. Background art is
  * intentionally excluded because it is a flattened canvas rather than a
- * firmware-tinted glyph mask.
+ * firmware-tinted glyph mask. Digit and letter sprites are cut at half
+ * coverage (isWatchfaceAodGlyphLayer); other sprites keep the softer cleanup.
  */
 export async function buildAodSafeSpriteReplacements(
   replacements: CorosWatchfaceAssetReplacement[]
@@ -120,7 +122,11 @@ export async function buildAodSafeSpriteReplacements(
         ? replacement
         : {
             ...replacement,
-            dataUrl: await renderWatchfaceAodSafeSprite(replacement.dataUrl, aodKeepCutoff === true)
+            dataUrl: await renderWatchfaceAodSafeSprite(
+              replacement.dataUrl,
+              aodKeepCutoff === true,
+              /\/\d{2}\.png$/i.test(replacement.path) && isWatchfaceAodGlyphLayer(effectLayerForReplacement(replacement.path))
+            )
           }
     )
   );
@@ -824,11 +830,13 @@ export async function composeWatchfaceReplacements(
           metricStyles.temperature?.color
         )
       : [],
-    selectableMetricComposition.replacements,
+    // The plain pictures Studio adds first, so a styled slot's own colon replaces its plain one.
     buildBarometerIconReplacements(
       selectableConfigDetails,
-      design.layerColors?.complication ?? design.digitColor
+      design.layerColors?.complication ?? design.digitColor,
+      design.configAssetOverrides ?? {}
     ),
+    selectableMetricComposition.replacements,
     timeStyleActive
       ? await buildTimeSpriteReplacements(
           metricDetails,

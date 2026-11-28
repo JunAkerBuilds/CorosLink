@@ -93,8 +93,8 @@ are saved a moment after each change as `studio/faces/<id>.json` in the data fol
 The home page browses COROS's templates, its official faces and the faces saved to your COROS account (sign in from
 the COROS account chip; the session is sealed with the keychain in `studio/coros-account.bin`) and the reviewed
 Community faces from watchfaces.coroslink.com; each opens as a project (`desktop/main/watchface/community.ts`,
-`corosAccount.ts`). Not in Studio yet: sending to the watch (needs the watch engine) and Watchmaker (AI). See
-`docs/studio-port.md`.
+`corosAccount.ts`). Watchmaker, the AI tab, runs the Codex CLI you installed and signed in to (`codex login`).
+Not in Studio yet: sending to the watch (needs the watch engine). See `docs/studio-port.md`.
 
 ## Not done yet
 

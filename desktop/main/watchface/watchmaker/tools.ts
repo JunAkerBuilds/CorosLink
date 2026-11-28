@@ -1,12 +1,14 @@
 // Watchmaker's tools: the same editor methods the MCP server offers, through the same broker, with two differences.
-// The session and revision are kept here (the model never copies them), and pictures (previews, inspected and
-// generated images) come back as pictures the model can look at, not only ids.
+// The session and revision are kept here (the model never copies them), and pictures (previews, inspected, cropped
+// and drawn images) come back as pictures the model can look at, not only ids. Images Codex generates itself come in
+// through codex.ts.
 import type { ToolDef } from "@/lib/coach/tools";
 import type { AssetStore } from "../automation/assets";
 import { pngSize } from "../automation/assets";
 import { EditorError, type EditorBroker } from "../automation/broker";
 import { cropAsset } from "../automation/images";
 import { schemaSection } from "../automation/tools";
+import { msg } from "@/lib/i18n";
 
 export interface Picture { assetId: string; why: string }
 
@@ -22,8 +24,23 @@ export interface ToolResult {
 
 export interface PlanItem { text: string; status: "pending" | "doing" | "done" }
 
-/** Makes a picture from words; null when no image provider is set up. */
-export type ImageMaker = (prompt: string, options: { transparent: boolean; size: "1024x1024" | "1536x1024" | "1024x1536"; signal?: AbortSignal }) => Promise<Buffer>;
+/** What the chat is told while an answer runs (one JSON line each on the wire). */
+export type WatchmakerEvent =
+  | { t: "text"; delta: string }
+  | { t: "step"; id: string; tool: string; label: string }
+  | { t: "step-done"; id: string; ok: boolean; message?: string }
+  | { t: "picture"; assetId: string; why: string }
+  | { t: "plan"; items: PlanItem[] }
+  | { t: "edit" };
+
+/** What each tool is shown as in the chat while it runs. */
+export const STEP_WORDS: Record<string, string> = {
+  get_document: msg("Reading the face"), get_schema: msg("Reading the schema"), apply_commands: msg("Editing the face"), undo: msg("Undoing a step"),
+  render_preview: msg("Drawing a preview"), get_geometry: msg("Measuring"), check_contrast: msg("Checking contrast"), sample_color: msg("Sampling colours"),
+  validate: msg("Validating"), inspect_asset: msg("Looking at an image"), crop_image: msg("Cropping an image"), render_svg: msg("Drawing artwork"),
+  recolor_image: msg("Recolouring an image"), update_plan: msg("Planning"), get_generated_images: msg("Taking the generated images"),
+  import_file: msg("Importing an image"),
+};
 
 export interface EditorSession { sessionId: string; revision: number }
 
@@ -71,7 +88,7 @@ export interface WatchmakerTools {
   session(): EditorSession | null;
 }
 
-export function watchmakerTools(deps: { broker: EditorBroker; assets: AssetStore; makeImage: ImageMaker | null; projectId: string }): WatchmakerTools {
+export function watchmakerTools(deps: { broker: EditorBroker; assets: AssetStore; projectId: string }): WatchmakerTools {
   const { broker, assets } = deps;
   let session: EditorSession | null = null;
 
@@ -110,7 +127,6 @@ export function watchmakerTools(deps: { broker: EditorBroker; assets: AssetStore
     { name: "crop_image", description: "A new PNG from a stored one: crop (region in its pixels), trim (transparent margins, on unless false), then width and / or height. Returns the new {assetId}.", input_schema: obj({ image: ASSET, crop: { type: "object" }, trim: { type: "boolean" }, width: { type: "integer" }, height: { type: "integer" } }, ["image"]) },
     { name: "render_svg", description: "Draw a self-contained SVG (with a viewBox) to a transparent PNG of exactly width × height. Returns its {assetId}.", input_schema: obj({ svg: { type: "string" }, width: { type: "integer" }, height: { type: "integer" } }, ["svg", "width", "height"]) },
     { name: "recolor_image", description: "Paint a stored image's visible pixels one #RRGGBB colour (only near from, when given). Returns the new {assetId}.", input_schema: obj({ image: ASSET, color: { type: "string" }, from: { type: "string" }, tolerance: { type: "integer" } }, ["image", "color"]) },
-    ...(deps.makeImage ? [{ name: "generate_image", description: "Make an illustration from a prompt (no text or numbers in it). transparent for sprites and icons. Returns its {assetId}, size and the picture.", input_schema: obj({ prompt: { type: "string" }, transparent: { type: "boolean" }, shape: { type: "string", enum: ["square", "wide", "tall"] } }, ["prompt"]) }] : []),
     { name: "update_plan", description: "Your short plan for this request, shown to the person. Send the whole list each time.", input_schema: obj({ items: { type: "array", items: { type: "object", properties: { text: { type: "string" }, status: { type: "string", enum: ["pending", "doing", "done"] } }, required: ["text", "status"] } } }, ["items"]) },
   ];
 
@@ -151,15 +167,6 @@ export function watchmakerTools(deps: { broker: EditorBroker; assets: AssetStore
           const out = await ask(name, pick("svg", "width", "height", "image", "color", "from", "tolerance"), signal) as { dataUrl: { assetId: string } } & Record<string, unknown>;
           const { dataUrl, ...rest } = out;
           return { text: JSON.stringify({ ...rest, assetId: dataUrl.assetId }), pictures: [{ assetId: dataUrl.assetId, why: `${name === "render_svg" ? "Drawn" : "Recoloured"} ${String(rest.width)}×${String(rest.height)}` }] };
-        }
-        case "generate_image": {
-          if (!deps.makeImage) throw new EditorError("UNAVAILABLE", "Image generation isn't set up.");
-          const prompt = typeof args.prompt === "string" ? args.prompt.slice(0, 4000) : "";
-          if (!prompt.trim()) throw new EditorError("INVALID_PARAMS", "prompt is empty.");
-          const size = args.shape === "wide" ? "1536x1024" : args.shape === "tall" ? "1024x1536" : "1024x1024";
-          const bytes = await deps.makeImage(prompt, { transparent: args.transparent === true, size, signal });
-          const id = await assets.put(bytes);
-          return { text: JSON.stringify({ assetId: id, ...(pngSize(bytes) ?? {}) }), pictures: [{ assetId: id, why: "Generated image" }] };
         }
         case "update_plan": {
           const items = (Array.isArray(args.items) ? args.items : []).slice(0, 12).map((i) => {

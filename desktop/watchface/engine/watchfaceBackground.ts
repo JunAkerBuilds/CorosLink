@@ -45,6 +45,33 @@ export const DEFAULT_AMPM_STYLE: WatchfaceAmPmStyle = {
   scale: 1
 };
 
+/**
+ * The Exercise colon's height in master pixels: always the digits' own size.
+ * With a font size the colon draws at it; with the template's digits it's the
+ * template colon (sized to their box) times the digits' scale.
+ */
+export function exerciseColonSize(
+  design: Pick<CorosWatchfaceDesignState, "metricStyles">,
+  separator: Pick<CorosWatchfaceExerciseSeparatorStyle, "size" | "scale">
+): number {
+  const style = design.metricStyles?.exercise;
+  const fontSize = style?.fontSize;
+  if (typeof fontSize === "number" && Number.isFinite(fontSize) && fontSize > 0) return fontSize;
+  const scale = typeof style?.scale === "number" && Number.isFinite(style.scale) && style.scale > 0 ? style.scale : 1;
+  return separator.size * separator.scale * scale;
+}
+
+/** The Exercise colon's weight and style: the digits' own (their layer's, else the face's). */
+export function exerciseColonFace(
+  design: Pick<CorosWatchfaceDesignState, "metricStyles" | "fontWeight" | "fontStyle">
+): { fontWeight: number; fontStyle: "normal" | "italic" } {
+  const style = design.metricStyles?.exercise;
+  return {
+    fontWeight: style?.fontWeight ?? design.fontWeight ?? 400,
+    fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal"
+  };
+}
+
 async function drawExerciseSeparator(
   context: CanvasRenderingContext2D,
   design: CorosWatchfaceDesignState,
@@ -62,7 +89,7 @@ async function drawExerciseSeparator(
   const offset = design.layoutOffsets?.exercise ?? { dx: 0, dy: 0 };
   const centerX = (separator.x + offset.dx) * coordinateScale;
   const centerY = (separator.y + offset.dy) * coordinateScale;
-  const height = Math.max(1, separator.size * separator.scale * coordinateScale);
+  const height = Math.max(1, exerciseColonSize(design, separator) * coordinateScale);
   const layer = document.createElement("canvas");
   layer.width = canvasSize;
   layer.height = canvasSize;
@@ -97,8 +124,7 @@ async function drawExerciseSeparator(
       : "system-ui, sans-serif";
     layerContext.textAlign = "center";
     layerContext.textBaseline = "middle";
-    const fontWeight = separator.fontWeight ?? 700;
-    const fontStyle = separator.fontStyle ?? "normal";
+    const { fontWeight, fontStyle } = exerciseColonFace(design);
     setWatchfaceCanvasFont(
       layerContext,
       { family: separatorFont, size: Math.round(height), weight: fontWeight, style: fontStyle },
@@ -297,6 +323,17 @@ export async function renderDesignBackground(
   design: CorosWatchfaceDesignState,
   previewWidth: number
 ): Promise<string> {
+  return (await renderDesignBackgroundCanvas(design, previewWidth)).toDataURL("image/png");
+}
+
+/**
+ * The same background as a canvas, for drawing straight into a preview: no PNG
+ * encode and decode in between, which is most of a busy face's redraw.
+ */
+export async function renderDesignBackgroundCanvas(
+  design: CorosWatchfaceDesignState,
+  previewWidth: number
+): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
   canvas.width = CREATOR_CANVAS_SIZE;
   canvas.height = CREATOR_CANVAS_SIZE;
@@ -479,5 +516,5 @@ export async function renderDesignBackground(
   context.textAlign = "start";
   context.textBaseline = "alphabetic";
 
-  return canvas.toDataURL("image/png");
+  return canvas;
 }

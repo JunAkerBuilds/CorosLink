@@ -1,6 +1,7 @@
 // Coach's tools for an AI that runs as its own program (Claude Code, Gemini CLI, OpenCode, Antigravity): a small MCP
 // server over HTTP on 127.0.0.1, for one answer only. It takes a random bearer token, offers exactly Coach's tools and
-// refuses anything else. Calls are handed to `call`; nothing here reads data itself.
+// refuses anything else. Calls are handed to `call`; nothing here reads data itself. Watchmaker's Codex engine uses it
+// too, with its own name and pictures in the results.
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -10,6 +11,9 @@ export const BRIDGE_NAME = "clink";
 const MAX_BODY = 4 * 1024 * 1024;
 
 export interface ToolBridge { url: string; token: string; close(): void }
+
+/** A tool's answer: text, and pictures for agents that look at them. */
+export interface BridgeResult { text: string; isError?: boolean; images?: { mime: string; data: string }[] }
 
 type Rpc = { jsonrpc: "2.0"; id?: number | string | null; method?: string; params?: Record<string, unknown> };
 
@@ -22,14 +26,14 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return body;
 }
 
-export async function openBridge(tools: readonly ToolDef[], call: (name: string, input: unknown) => Promise<{ text: string; isError?: boolean }>): Promise<ToolBridge> {
+export async function openBridge(tools: readonly ToolDef[], call: (name: string, input: unknown) => Promise<BridgeResult>, serverName = "C-LINK Coach"): Promise<ToolBridge> {
   const token = randomBytes(32).toString("base64url");
   const offered = new Set(tools.map((t) => t.name));
 
   async function answer(rpc: Rpc): Promise<unknown> {
     switch (rpc.method) {
       case "initialize":
-        return { protocolVersion: typeof rpc.params?.protocolVersion === "string" ? rpc.params.protocolVersion : "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "C-LINK Coach", version: "1" } };
+        return { protocolVersion: typeof rpc.params?.protocolVersion === "string" ? rpc.params.protocolVersion : "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: serverName, version: "1" } };
       case "ping":
         return {};
       case "tools/list":
@@ -38,7 +42,8 @@ export async function openBridge(tools: readonly ToolDef[], call: (name: string,
         const name = String(rpc.params?.name ?? "");
         if (!offered.has(name)) return { content: [{ type: "text", text: `Error: there is no tool called ${name}.` }], isError: true };
         const result = await call(name, rpc.params?.arguments ?? {});
-        return { content: [{ type: "text", text: result.text }], isError: !!result.isError };
+        const images = (result.images ?? []).map((i) => ({ type: "image", data: i.data, mimeType: i.mime }));
+        return { content: [{ type: "text", text: result.text }, ...images], isError: !!result.isError };
       }
       default:
         throw Object.assign(new Error(`Unknown method ${rpc.method}`), { code: -32601 });

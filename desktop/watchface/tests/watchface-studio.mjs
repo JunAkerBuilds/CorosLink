@@ -937,7 +937,8 @@ for (const candidate of noControlDetails.resolutions) {
   for (const key of ["control_barometer_integer_rect", "control_barometer_decimal_rect"]) {
     assert.match(
       override?.values?.[key] ?? "",
-      /^\{\d+,\d+,\d+,\d+,hcenter\|vcenter\}$/,
+      // Whole part against the point, decimal after it.
+      key.endsWith("integer_rect") ? /^\{\d+,\d+,\d+,\d+,right\|vcenter\}$/ : /^\{\d+,\d+,\d+,\d+,left\|vcenter\}$/,
       `enabling barometer must write ${key}`
     );
   }
@@ -1081,9 +1082,11 @@ for (const candidate of details.resolutions) {
     /^studio\\.+\\00\.png$/,
     "a custom icon for an injected selectable should add its config path"
   );
+  // Studio's default icon already placed it; the custom picture keeps that place.
   assert.match(
-    override?.values.control_exercise_icon_pos ?? "",
-    /^\{\d+,\d+\}$/,
+    override?.values.control_exercise_icon_pos ??
+      exerciseDetails.resolutions.find((r) => r.directory === candidate.directory)?.config.control_exercise_icon_pos ?? "",
+    /^\{-?\d+,-?\d+\}$/,
     "a custom icon for an injected selectable should receive an editable position"
   );
 }
@@ -1091,11 +1094,16 @@ const positionedVirtualExercise = buildControlIconPositionOverrides(
   applyConfigOverridesToDetails(exerciseDetails, exerciseIconOverrides),
   { exercise: { dx: 10, dy: -6 } }
 );
-assert.deepEqual(
-  positionedVirtualExercise.map(({ values }) => values.control_exercise_icon_pos),
-  ["{88,-3}", "{170,-6}"],
-  "an imported virtual selectable icon should participate in position editing"
-);
+// Moved right and up from where it was placed (Studio's default icon set that place).
+for (const [index, { values }] of positionedVirtualExercise.entries()) {
+  const pos = (value) => { const m = value?.match(/^\{(-?\d+),(-?\d+)\}$/); return m ? { x: Number(m[1]), y: Number(m[2]) } : null; };
+  const base = pos(exerciseDetails.resolutions[index].config.control_exercise_icon_pos);
+  const moved = pos(values.control_exercise_icon_pos);
+  assert.ok(
+    base && moved && moved.x > base.x && moved.y < base.y,
+    "an imported virtual selectable icon should participate in position editing"
+  );
+}
 const finalVirtualExerciseVisibility =
   buildDisabledWatchfaceConfigAssetOverrides(exerciseDetails, {
     "config:control_exercise_icon": {
@@ -2542,8 +2550,17 @@ assert.deepEqual(
     { nativeSize: true, scale: 2 },
     { width: 37, height: 37 }
   ),
-  { width: 37, height: 37, native: false },
-  "only status icons resize their template PNG without an import"
+  { width: 74, height: 74, native: true },
+  "a selectable type's icon resizes its template PNG with a size of its own"
+);
+assert.deepEqual(
+  configAssetCanvasSize(
+    "control_colon_icon",
+    { nativeSize: true, scale: 2 },
+    { width: 12, height: 30 }
+  ),
+  { width: 12, height: 30, native: false },
+  "other slot pictures keep their template PNG size without an import"
 );
 assert.equal(configAssetCanScaleTemplateImage("bluetooth_off_icon"), true);
 assert.equal(configAssetCanScaleTemplateImage("no_disturb_on_icon"), true);
@@ -2553,7 +2570,8 @@ assert.equal(
   false,
   "touch lock keeps its template box"
 );
-assert.equal(configAssetCanScaleTemplateImage("control_hr_icon"), false);
+// A selectable type's icon can have a size of its own (the slot inspector's Size).
+assert.equal(configAssetCanScaleTemplateImage("control_hr_icon"), true);
 assert.deepEqual(
   configAssetCanvasSize(
     "control_hr_icon",

@@ -8,10 +8,11 @@
 import { msg, t } from "@/lib/i18n";
 import type { CorosWatchfaceTemplateDetails } from "../watchface/types";
 import {
-  CONTROL_DATE_COMPLICATION, getAvailableComplications, hasControlComplication, isControlComplicationEnabled, parseConfigPos, pickPreviewResolution,
+  CONTROL_DATE_COMPLICATION, getAvailableComplications, hasControlComplication, isControlComplicationEnabled, parseConfigPos, pickPreviewResolution, slotTypeIconSize, studioSlotPictureDataUrl, virtualControlIconCanvasSize,
   WATCHFACE_COMPLICATIONS, watchfaceComplicationChoices, type WatchfaceComplicationDefinition, type WatchfaceComplicationId,
 } from "../watchface/engine/watchfaceStudio";
 import { deriveDesignDetails } from "../watchface/engine/watchfaceCompose";
+import { studioControlIconPrefix } from "../watchface/engine/watchfaceControlIcons";
 import { isSelectableSlotConfigAssetKey } from "../watchface/engine/watchfaceSpritePreview";
 import type { Design, EditorLayer, Mode } from "./studioFace";
 
@@ -62,7 +63,8 @@ export type SlotIcon =
   /** There is one, switched off. */ | "hidden"
   /** Nothing to draw: the watch shows the value alone. */ | "none"
   /** The battery choice's level pictures. */ | "states"
-  /** The barometer's three trend images. */ | "trend";
+  /** The barometer's three trend images. */ | "trend"
+  /** The default Studio draws for a type the template has no picture for. */ | "studio";
 
 export interface SlotType {
   id: WatchfaceComplicationId;
@@ -124,7 +126,9 @@ export function slotTypes(details: CorosWatchfaceTemplateDetails, design: Design
     } else if (c.id === "date") icon = "template";
     else if (override?.enabled === false) icon = "hidden";
     else if (override?.replacement) icon = "custom";
-    else if (file) { icon = "template"; iconPath = file.path; } else icon = "none";
+    else if (file) { icon = "template"; iconPath = file.path; }
+    else if (relative && studioControlIconPrefix(relative)) icon = "studio";
+    else icon = "none";
     return {
       id: c.id, label: slotLabel(c.id), sample: `${c.sampleValue}${SAMPLE_UNIT[c.id] ?? ""}`, ...(NOTE[c.id] ? { note: NOTE[c.id] } : {}), on, inTemplate, blocked, icon, iconKey, iconLayer, iconPath,
       canOffset: on && c.id !== "date" && parseConfigPos(config[`control_${c.controlPrefix}_icon_pos`]) !== null && icon !== "none",
@@ -235,8 +239,16 @@ export function slotIconGrip(details: CorosWatchfaceTemplateDetails, design: Des
   const key = `control_${c.controlPrefix}_icon`;
   const pos = parseConfigPos(config[`${key}_pos`]);
   if (!resolution || !origin || !pos) return null;
-  const size = iconSize(resolution, config, key, design.configAssetOverrides?.[ty.iconLayer?.configAssetId ?? `config:${key}`]?.replacement);
-  if (!size) return null;
+  // The barometer draws one of its trend arrows (or a single icon) at that place: size the grip by it.
+  const pictureKey = c.id === "barometer"
+    ? [key, ...BAROMETER_TRENDS.map((tr) => `control_barometer_${tr.id}_icon`)].find((k) => config[k]?.trim()) ?? key
+    : key;
+  const override = design.configAssetOverrides?.[pictureKey === key ? ty.iconLayer?.configAssetId ?? `config:${key}` : `config:${pictureKey}`];
+  const base = iconSize(resolution, config, pictureKey, override?.replacement);
+  if (!base) return null;
+  // The icon's own size, when it has one, grows it from its top left.
+  const factor = slotTypeIconSize(pictureKey, override);
+  const size = { width: base.width * factor, height: base.height * factor };
   const x0 = origin.x + pos.x, y0 = origin.y + pos.y;
   return { id: ty.id, label: t("{label} icon", { label: t(ty.label) }), bounds: { x0, y0, x1: x0 + size.width, y1: y0 + size.height } };
 }
@@ -251,7 +263,8 @@ function iconSize(resolution: Resolution, config: Record<string, string>, key: s
   const dir = config[`${key}_dir`]?.trim().replace(/\\/g, "/");
   const state = dir ? resolution.spriteFolders.find((f) => f.kind === "state" && f.folder === dir)?.files[0] : undefined;
   if (state) return { width: state.width, height: state.height };
-  return own ? { width: own.width, height: own.height } : null;
+  // Studio's own icon, or the designer's in a slot with none: drawn at the slot's icon size.
+  return config[key]?.trim() ? virtualControlIconCanvasSize(resolution) : own ? { width: own.width, height: own.height } : null;
 }
 
 // ───── Value tint ─────
@@ -297,6 +310,21 @@ export function slotImagePaths(details: CorosWatchfaceTemplateDetails, design: D
     const relative = config[key]?.trim().replace(/\\/g, "/").replace(/^\.\//, "");
     const path = relative ? `${resolution.directory}/${relative}` : "";
     return path && resolution.icons.some((i) => i.path === path) ? [[key, path]] : [];
+  }));
+}
+
+/**
+ * The pictures Studio draws itself for these keys (the barometer's arrows and point, the time colon), drawn in the
+ * slot's colour, for showing beside the template's own in the inspector. Keys the template has a picture for, or that
+ * are hidden, are left out.
+ */
+export function slotStudioPictures(details: CorosWatchfaceTemplateDetails, design: Design, keys: string[]): Record<string, string> {
+  const { resolution } = slotConfig(details, design);
+  if (!resolution) return {};
+  const color = design.selectableMetricStyle?.color ?? design.layerColors?.complication ?? design.digitColor;
+  return Object.fromEntries(keys.flatMap((key) => {
+    const url = studioSlotPictureDataUrl(resolution, key, color);
+    return url ? [[key, url]] : [];
   }));
 }
 

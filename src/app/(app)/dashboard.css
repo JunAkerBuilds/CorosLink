@@ -86,22 +86,37 @@
 .db-ghost[data-shape="map"] > i:nth-child(3) { height: 12px; width: 34%; }
 .db-ghost[data-shape="rows"] > i { height: 22px; }
 
+/* Customise: a glass tray that stays in view while widgets are dragged, holding the hidden widgets to bring back. */
 .db-panel {
-  display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; border-radius: 16px;
-  background: var(--db-panel-bg); border: 1px dashed var(--db-panel-border);
+  position: sticky; top: 12px; z-index: 20; display: flex; flex-direction: column; gap: 12px; padding: 14px 14px 14px 20px;
+  border-radius: 20px; border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow), 0 18px 40px rgba(0, 0, 0, 0.12);
+  background: color-mix(in srgb, var(--db-marker-ring) 72%, transparent);
+  backdrop-filter: blur(20px) saturate(1.8); -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  animation: db-tray-in 0.42s cubic-bezier(0.3, 1.32, 0.45, 1) both;
 }
+@keyframes db-tray-in { from { opacity: 0; transform: translateY(-10px) scale(0.98); } to { opacity: 1; transform: none; } }
+.db-panel-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.db-panel-words { flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.db-panel-words h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.db-panel-words p { margin: 0; font-size: 13px; color: var(--muted); }
+.db-panel-count { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.db-panel-reset { height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--fg); font: 600 13px Inter, system-ui, sans-serif; cursor: pointer; }
+.db-panel-reset:hover { background: var(--hover); }
 .db-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .db-chips button {
-  display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 10px; border-radius: 999px;
-  border: 1px solid var(--db-chip-off-border); background: transparent; color: var(--muted); font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px 0 10px; border-radius: 999px; cursor: pointer;
+  border: 1px dashed var(--db-chip-off-border); background: transparent; color: var(--muted); font-size: 13px; font-weight: 600;
+  animation: db-pop 0.38s cubic-bezier(0.3, 1.32, 0.45, 1) both;
 }
-.db-chips button[aria-pressed="true"] { border-color: var(--db-chip-on-border); background: var(--db-chip-on-bg); color: var(--fg); }
+.db-chips button:hover { border-style: solid; border-color: var(--db-chip-on-border); background: var(--db-chip-on-bg); color: var(--fg); }
+@keyframes db-pop { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: none; } }
 
-.db-board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-flow: dense; gap: 20px; }
-.db-board > * { animation: cl-rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
-.db-board > :nth-child(n + 4) { animation-delay: 0.1s; }
-.db-board > :nth-child(n + 7) { animation-delay: 0.2s; }
-.db-board > :nth-child(n + 10) { animation-delay: 0.3s; }
+.db-board { position: relative; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-flow: dense; gap: 20px; }
+/* The rise-in sits on the card, not its place, so ending Customise (which stops the place's jiggle) never replays it. */
+.db-slot > .db-slot-body { animation: cl-rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+.db-board > :nth-child(n + 4) > .db-slot-body { animation-delay: 0.1s; }
+.db-board > :nth-child(n + 7) > .db-slot-body { animation-delay: 0.2s; }
+.db-board > :nth-child(n + 10) > .db-slot-body { animation-delay: 0.3s; }
 .db-w3 { grid-column: span 3; } .db-w4 { grid-column: span 4; } .db-w5 { grid-column: span 5; } .db-w8 { grid-column: span 8; }
 .db-tall { grid-row: span 2; }
 @media (max-width: 1100px) {
@@ -110,6 +125,52 @@
 @media (max-width: 700px) {
   .db-w3, .db-w4, .db-w5 { grid-column: span 12; }
 }
+
+/* A grid place: the widget in it, and in Customise its hide badge. The card fills the place's height. */
+.db-slot { position: relative; display: flex; min-width: 0; border-radius: 22px; outline: none; }
+.db-slot-body { flex: 1; display: flex; min-width: 0; }
+.db-slot-body > .card { flex: 1; min-width: 0; }
+
+/* Edit mode: the cards jiggle, out of step with each other, and can be taken anywhere. */
+.db-board[data-editing] { user-select: none; -webkit-user-select: none; }
+.db-board[data-editing] > .db-slot { cursor: grab; touch-action: none; }
+/* `rotate` rather than `transform`, so the jiggle never fights the drag and the glides, which use `transform`. */
+.db-board[data-editing] > .db-slot { --jiggle: 0.32deg; animation: db-jiggle 0.3s ease-in-out infinite alternate; }
+.db-board[data-editing] > .db-w8 { --jiggle: 0.14deg; }
+.db-board[data-editing] > .db-slot:nth-child(2n) { animation-duration: 0.27s; animation-delay: -0.12s; }
+.db-board[data-editing] > .db-slot:nth-child(3n) { animation-duration: 0.33s; animation-delay: -0.2s; }
+@keyframes db-jiggle { from { rotate: calc(var(--jiggle) * -1); } to { rotate: var(--jiggle); } }
+.db-board[data-editing] .db-slot-body > .card { transform: none; }
+.db-board[data-editing] > .db-slot:active:not([data-lifted]) > .db-slot-body > .card { transform: scale(0.985); }
+.db-board[data-editing] > .db-slot:focus-visible > .db-slot-body > .card { box-shadow: var(--card-shadow), 0 0 0 3px var(--h-mint); }
+
+/* Picked up: above everything, still, with a deep shadow; the rest step back a little. */
+.db-board[data-dragging] { cursor: grabbing; }
+.db-board[data-dragging] > .db-slot:not([data-lifted]) > .db-slot-body { opacity: 0.86; transition: opacity 0.25s; }
+.db-slot[data-lifted] { z-index: 10; cursor: grabbing; will-change: transform; }
+.db-board > .db-slot[data-lifted], .db-board > .db-slot[data-grabbed] { animation: none; }
+.db-slot[data-lifted] > .db-slot-body > .card {
+  box-shadow: var(--card-shadow), 0 28px 60px rgba(0, 0, 0, 0.22), 0 8px 18px rgba(0, 0, 0, 0.12); transition: box-shadow 0.3s;
+}
+.db-slot[data-lifted] > .db-remove { opacity: 0; }
+.db-slot[data-grabbed] > .db-slot-body > .card { transform: scale(1.02); box-shadow: var(--card-shadow), 0 0 0 3px var(--h-mint), 0 20px 44px rgba(0, 0, 0, 0.18); }
+
+/* Where the lifted card will land: a soft well that glides from place to place. */
+.db-well {
+  position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; border-radius: 22px;
+  background: rgba(var(--fg-rgb), 0.04); box-shadow: inset 0 0 0 1.5px rgba(var(--fg-rgb), 0.1), inset 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+.db-well[data-ready] { transition: transform 0.42s cubic-bezier(0.3, 1.32, 0.45, 1), width 0.3s, height 0.3s; }
+
+/* The hide badge, top left, as on a phone's home screen. */
+.db-remove {
+  position: absolute; top: -9px; left: -9px; z-index: 2; display: grid; place-items: center; width: 26px; height: 26px; padding: 0;
+  border-radius: 999px; border: 1px solid var(--glass-border); cursor: pointer; color: var(--fg);
+  background: color-mix(in srgb, var(--db-marker-ring) 70%, rgba(128, 128, 128, 0.5)); box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(12px) saturate(1.6); -webkit-backdrop-filter: blur(12px) saturate(1.6);
+  animation: db-pop 0.36s cubic-bezier(0.3, 1.32, 0.45, 1) both; transition: transform 0.15s, opacity 0.2s, background-color 0.2s;
+}
+.db-remove:hover { transform: scale(1.12); background: var(--h-rose); color: #fff; border-color: transparent; }
 
 .db-card { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; }
 .db-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }

@@ -301,7 +301,7 @@ function PanelItem({ item, today, onCopy, onMove, onRemove }: { item: PanelEntry
 
 export function ChangesDock({ count, onUndo, onDiscard, onReview }: { count: number; onUndo: () => void; onDiscard: () => void; onReview: () => void }) {
   return (
-    <div className="cal-dock" role="region" aria-label={t("Unsaved calendar changes")}>
+    <div className="cal-dock cal-dock-float" role="region" aria-label={t("Unsaved calendar changes")}>
       <b style={{ fontSize: 15 }}>{count === 1 ? t("1 change") : t("{n} changes", { n: count })}</b>
       <span className="muted" style={{ fontSize: 13 }}>{t("Only here until you save")}</span>
       <span style={{ marginLeft: "auto", display: "flex", flexWrap: "wrap", gap: 8 }}>

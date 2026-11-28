@@ -2,11 +2,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { HeroText, Icon, Ring, SPORT_HUE, SportHead, Spark, Stats, ToneChip } from "@/components/sports/parts";
+import { HeroText, Icon, Ring, SPORT_HUE, SPORT_ICON, SportHead, Spark, Stats, ToneChip } from "@/components/sports/parts";
 import { useLoaded, type Origin } from "@/data/core";
 import { loadSports, type HoursWeek, type Sports, type SportsHub } from "@/data/sports";
 import { FAMILY_NAME } from "@/data/sync/sports";
+import { useSportOrder } from "@/data/local/sportOrder";
 import { locale, t } from "@/lib/i18n";
+import { shownSports, type Family } from "@/lib/sports";
 import "./sports.css";
 
 export default function SportsPage() {
@@ -18,6 +20,10 @@ export default function SportsPage() {
 
 function HubScreen({ data, origin }: { data: Sports; origin: Origin }) {
   const hub = data.hub;
+  const saved = useSportOrder();
+  // The person's own order from the switcher, when they have dragged one.
+  const rank = shownSports(data.families, saved);
+  const bySaved = (a: { family: Family }, b: { family: Family }) => rank.indexOf(a.family) - rank.indexOf(b.family);
   return (
     <main className="page sp-page">
       <SportHead title={t("Sports")} crumb={hub.day} current={null} families={data.families} origin={origin} />
@@ -25,10 +31,10 @@ function HubScreen({ data, origin }: { data: Sports; origin: Origin }) {
       <section aria-label={t("This week across your sports")} className="sp-hero" data-hue="run">
         <HeroText chip={hub.range} headline={hub.headline} text={hub.text} figures={hub.figures} mascot basis={400} />
         <div className="sp-rings">
-          {hub.rings.map((r) => (
+          {hub.rings.slice().sort(bySaved).map((r) => (
             <Link key={r.family} href={r.href} aria-label={r.label} data-hue={SPORT_HUE[r.family]}>
               <Ring percent={r.percent} size={122} stroke={13} label={r.label}>
-                <span aria-hidden="true"><Icon name={r.family} size={26} width={2} /></span>
+                <span aria-hidden="true"><Icon name={SPORT_ICON[r.family]} size={26} width={2} /></span>
                 {r.percent != null ? <b className="num">{r.percent}%</b> : null}
               </Ring>
               <span className="sp-ring-cap"><span>{r.name}</span><b className="num">{r.value}</b>{r.of ? <span className="sp-small">{r.of}</span> : null}</span>
@@ -42,7 +48,7 @@ function HubScreen({ data, origin }: { data: Sports; origin: Origin }) {
           <div className="sp-card-head" style={{ marginBottom: 6 }}><h2>{t("What stands out")}</h2></div>
           {hub.standouts.map((s) => (
             <Link key={s.family} href={s.href} className="sp-stand">
-              <span aria-hidden="true" className="sp-icon lg sp-tint" data-hue={SPORT_HUE[s.family]}><Icon name={s.family} size={21} /></span>
+              <span aria-hidden="true" className="sp-icon lg sp-tint" data-hue={SPORT_HUE[s.family]}><Icon name={SPORT_ICON[s.family]} size={21} /></span>
               <span className="t"><b>{s.title}</b>{s.detail ? <span>{s.detail}</span> : null}</span>
               <ToneChip chip={s.chip} />
               <Icon name="chevron" size={18} width={2.2} />
@@ -59,11 +65,11 @@ function HubScreen({ data, origin }: { data: Sports; origin: Origin }) {
         </section>
       </div>
 
-      <div className="sp-hub-grid" style={hub.cards.length > 2 ? { gridTemplateColumns: `repeat(${hub.cards.length}, minmax(0, 1fr))` } : undefined}>
-        {hub.cards.map((c) => (
+      <div className="sp-hub-grid" style={hub.cards.length > 2 ? { gridTemplateColumns: `repeat(${Math.min(hub.cards.length, 4)}, minmax(0, 1fr))` } : undefined}>
+        {hub.cards.slice().sort(bySaved).map((c) => (
           <Link key={c.family} href={c.href} aria-label={`${c.name}: ${c.headline}`} className="sp-sport-card" data-hue={SPORT_HUE[c.family]}>
             <div className="sp-card-head">
-              <span aria-hidden="true" className="sp-icon sp-tint"><Icon name={c.family} /></span>
+              <span aria-hidden="true" className="sp-icon sp-tint"><Icon name={SPORT_ICON[c.family]} /></span>
               <span className="name">{c.name}</span>
               <span aria-hidden="true" className="sp-end muted"><Icon name="chevron" size={18} width={2.2} /></span>
             </div>
@@ -89,7 +95,7 @@ function HubScreen({ data, origin }: { data: Sports; origin: Origin }) {
         <section aria-label={t("Your sports")} className="sp-card">
           <div className="sp-card-head"><h2>{t("Your sports")}</h2></div>
           <div className="sp-pills">
-            {hub.rings.map((r) => <span key={r.family} data-hue={SPORT_HUE[r.family]}><Icon name={r.family} />{r.name}</span>)}
+            {hub.rings.map((r) => <span key={r.family} data-hue={SPORT_HUE[r.family]}><Icon name={SPORT_ICON[r.family]} />{r.name}</span>)}
           </div>
           <p className="sp-note">{t("Worked out from your workouts of the last 90 days.")}</p>
         </section>

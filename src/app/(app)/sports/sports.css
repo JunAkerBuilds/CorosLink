@@ -21,10 +21,14 @@
 .sp-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .sp-crumb a { font-weight: 600; text-decoration: none; }
 .sp-head h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
-.sp-switch { display: flex; flex-wrap: wrap; padding: 3px; border-radius: 22px; background: var(--well-bg); box-shadow: var(--well-shadow); max-width: 100%; }
+.sp-switch { position: relative; display: flex; flex-wrap: wrap; padding: 3px; border-radius: 22px; background: var(--well-bg); box-shadow: var(--well-shadow); max-width: 100%; }
 .sp-switch a { display: flex; align-items: center; height: 32px; padding: 0 15px; border-radius: 999px; color: var(--muted); font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; }
 .sp-switch a:hover { color: var(--fg); }
 .sp-switch a[aria-current="page"] { background: var(--thumb-bg); box-shadow: var(--thumb-shadow); color: var(--fg); }
+/* The tabs move by script while dragged and glide by animation: the links' own eased transform would only lag behind. */
+.sp-switch a[aria-describedby] { position: relative; touch-action: pan-y; user-select: none; -webkit-user-select: none; transition: color 0.2s, background-color 0.2s; }
+.sp-switch[data-dragging] a { cursor: grabbing; }
+.sp-switch a[data-lifted] { z-index: 1; will-change: transform; color: var(--fg); background: var(--thumb-bg); box-shadow: var(--thumb-shadow), 0 0 0 2px var(--focus); }
 
 /* Hero */
 .sp-hero {

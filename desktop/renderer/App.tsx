@@ -7,6 +7,7 @@ import { t } from "@/lib/i18n";
 import { findRoute, pageTitle } from "./routes";
 import { navigate, ParamsContext, useLocation } from "./router";
 import { readDeveloper } from "./developer";
+import { setCoffeeHidden } from "./coffeeChip";
 import { INTRO_SEEN, PRIVACY_PATH, PRIVACY_SEEN, readIntro } from "./welcome";
 import { markWhatsNew, SHOW_WHATS_NEW, whatsNewDue } from "./whatsNew";
 
@@ -27,6 +28,8 @@ export function App() {
   useEffect(() => {
     void readDeveloper().then(async (d) => {
       setSample(!!d?.sample);
+      // The coffee pill hidden for screenshots comes back once developer mode is off, however it was turned off.
+      if (d && !d.devMode) setCoffeeHidden(false);
       // Plans and workouts the page kept in its own storage move into this computer's store, once (never the sample athlete's).
       if (d && !d.sample && (await import("@/data/sync").then((s) => s.syncView()).catch(() => null))) (await import("@/data/local/fromBrowser")).moveFromBrowser();
     });

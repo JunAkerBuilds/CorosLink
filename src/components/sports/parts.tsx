@@ -1,20 +1,28 @@
 "use client";
-// The shared pieces of the Sports hub and the Running, Riding and Swimming pages (styles in sports.css).
+// The shared pieces of the Sports hub and each sport's page (styles in sports.css).
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { CountUp, OriginBadge } from "@/components/ui";
 import type { Origin } from "@/data/core";
 import { coachHref, isMissing, type BarChart, type Chip, type Figure, type Hue, type LineChart, type Missing, type Reading, type SplitShare, type Tile } from "@/data/sports";
 import { msg, t } from "@/lib/i18n";
-import { includesSport, type Family } from "@/lib/sports";
+import { sportOrderStore, useSportOrder } from "@/data/local/sportOrder";
+import { moveKey } from "@/lib/dashboard";
+import { savedSportOrder, shownSports, sportTabs, type Family } from "@/lib/sports";
 
-export const SPORT_HUE: Record<Family, Hue> = { run: "run", ride: "ride", swim: "swim", strength: "strength", walk: "slate", other: "slate" };
+export const SPORT_HUE: Record<Family, Hue> = { run: "run", ride: "ride", swim: "swim", strength: "strength", walk: "gold", hike: "coral", snow: "violet", climb: "rose", other: "slate" };
+/** The `Icon` each sport is drawn with. */
+export const SPORT_ICON: Record<Family, string> = { run: "run", ride: "ride", swim: "swim", strength: "strength", walk: "walk", hike: "hike", snow: "snow", climb: "climber", other: "pulse" };
 
 const ICONS: Record<string, ReactNode> = {
   run: <><circle cx="14.5" cy="4.5" r="1.8" /><path d="M5 20l4-4.500 1.500-4.500 4-1.500 2.500 3.500 3 .800M10.500 11l-3 .500-1.500 3M12.500 13.500l2.500 3 .500 4.500" /></>,
   ride: <><circle cx="6" cy="16.5" r="3.5" /><circle cx="18" cy="16.5" r="3.5" /><path d="M6 16.500l4-8h5.500l2.500 8M10 8.500l2.500 8M8.500 6h3M14.500 6h2l-1 2.500" /></>,
   swim: <><circle cx="16.5" cy="7" r="1.8" /><path d="M3 12.500l5.500-3.500 3.500 3.500 4-1.500M3 17c1.500 1.200 3 1.200 4.500 0s3-1.200 4.500 0 3 1.200 4.500 0 3-1.200 4.500 0" /></>,
   strength: <path d="M4 9v6M7.500 6.500v11M16.500 6.500v11M20 9v6M7.500 12h9" />,
+  walk: <><circle cx="13" cy="4.500" r="1.800" /><path d="M8 21l2.500-6 2-2.500-.500-4-3 2-1 3.500M12.500 8.500l2.500 3 3 1M12.500 12.500l2 3.500.500 5" /></>,
+  hike: <><path d="M3 20l6-11 4 6 2.500-4L21 20z" /><path d="M7.500 12.500l1.500 1 1.500-1" /></>,
+  snow: <path d="M12 3v18M4.200 7.500l15.600 9M4.200 16.500l15.600-9M9.500 4.500L12 6.500l2.500-2M9.500 19.500L12 17.500l2.500 2" />,
+  climber: <><circle cx="15.500" cy="4.500" r="1.800" /><path d="M19 3v18M15 8l-3 4 1.500 4-2 5M12 12l-4-1-2-4M13.500 16l-5 1" /></>,
   bars: <path d="M5 20v-7M10 20V9M15 20V11M20 20V5" />,
   pulse: <path d="M3 12h4l3-8 4 16 3-8h4" />,
   trend: <path d="M3 17l6-6 4 4 8-9M15 6h6v6" />,
@@ -37,14 +45,6 @@ export function Icon({ name, size = 17, width = 2.1 }: { name: string; size?: nu
 
 /* ───────────── Head ───────────── */
 
-const SWITCH: { family: Family | null; label: string; href: string }[] = [
-  { family: null, label: msg("All sports"), href: "/sports" },
-  { family: "run", label: msg("Running"), href: "/sports/running" },
-  { family: "ride", label: msg("Riding"), href: "/sports/riding" },
-  { family: "swim", label: msg("Swimming"), href: "/sports/swimming" },
-  { family: "strength", label: msg("Strength"), href: "/strength" },
-];
-
 /** Breadcrumb and title, where the numbers come from, and the switcher between the person's sports. */
 export function SportHead({ title, crumb, current, families, origin }: { title: string; crumb?: string; current: Family | null; families: readonly Family[]; origin: Origin }) {
   return (
@@ -56,12 +56,161 @@ export function SportHead({ title, crumb, current, families, origin }: { title: 
         </nav>
         <h1>{title}</h1>
       </div>
-      <nav aria-label={t("Sport")} className="sp-switch">
-        {SWITCH.filter((s) => s.family == null || s.family === current || includesSport(families, s.family)).map((s) => (
-          <Link key={s.href} href={s.href} aria-current={s.family === current ? "page" : undefined}>{t(s.label)}</Link>
-        ))}
-      </nav>
+      <SportSwitch families={families} current={current} />
     </div>
+  );
+}
+
+/** How far the pointer goes before a press on a tab becomes a drag. */
+const DRAG_START = 5;
+/** How the tabs glide into their places: easing in as well as out, so no frame moves a tab much more than the next. */
+const GLIDE = { duration: 260, easing: "cubic-bezier(0.4, 0, 0.2, 1)" };
+const stillMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+interface TabDrag { key: Family; id: number; startX: number; grabX: number; x: number; live: boolean; order: Family[] }
+
+/**
+ * The switcher between the person's sports. Their sports' tabs can be dragged into another order, or moved with Alt
+ * and the arrow keys; the order is saved on this computer and the hub and the Go to palette follow it. The dragged
+ * tab stays under the pointer while the others glide out of its way, and on letting go it settles into its place.
+ */
+function SportSwitch({ families, current }: { families: readonly Family[]; current: Family | null }) {
+  const saved = useSportOrder();
+  const mine = shownSports(families, saved);
+  const [preview, setPreview] = useState<Family[] | null>(null);
+  const [lifted, setLifted] = useState<Family | null>(null);
+  const [said, setSaid] = useState("");
+  const drag = useRef<TabDrag | null>(null);
+  const dragged = useRef(false);
+  const nav = useRef<HTMLElement>(null);
+  const tabs = useRef(new Map<Family, HTMLAnchorElement>());
+  /** Where every tab was on screen just before the order changed, to glide each from there. */
+  const before = useRef<Map<Family, number> | null>(null);
+  const hint = useId();
+  const order = preview ?? mine;
+  const all = sportTabs(families, current, saved);
+  const byFamily = new Map(all.map((s) => [s.family, s]));
+  const rows = [all[0], ...order.flatMap((f) => byFamily.get(f) ?? []), ...all.filter((s) => s.family && !order.includes(s.family))];
+  const name = (f: Family) => t(byFamily.get(f)?.label ?? "");
+
+  /** A tab's left edge where the layout puts it, leaving out any transform or glide (offsetLeft ignores both). */
+  const slotLeft = (el: HTMLElement) => {
+    const n = nav.current;
+    return n ? n.getBoundingClientRect().left + n.clientLeft + el.offsetLeft : el.getBoundingClientRect().left;
+  };
+  const snapshot = () => {
+    before.current = new Map([...tabs.current].map(([f, el]) => [f, el.getBoundingClientRect().left]));
+  };
+  /** Keeps the dragged tab under the pointer, held inside the switcher. */
+  const follow = (d: TabDrag) => {
+    const el = tabs.current.get(d.key), n = nav.current;
+    if (!el || !n) return;
+    const box = n.getBoundingClientRect(), slot = slotLeft(el);
+    const left = Math.min(Math.max(d.x - d.grabX, box.left + 3), box.right - 3 - el.offsetWidth);
+    el.style.transform = `translateX(${left - slot}px)`;
+  };
+
+  // After the order changes: each tab glides from where it was to its new place, and the dragged one follows on.
+  useLayoutEffect(() => {
+    const was = before.current;
+    before.current = null;
+    const d = drag.current;
+    if (d?.live) follow(d);
+    if (!was) return;
+    const still = stillMotion();
+    for (const [f, el] of tabs.current) {
+      if (d?.live && f === d.key) continue;
+      const from = was.get(f);
+      el.style.transform = "";
+      const dx = from == null ? 0 : from - slotLeft(el);
+      if (still || Math.abs(dx) < 0.5) continue;
+      el.getAnimations().forEach((a) => a.cancel());
+      el.animate([{ transform: `translateX(${dx}px)` }, { transform: "none" }], GLIDE);
+    }
+  });
+
+  const save = (next: Family[]) => sportOrderStore.set(savedSportOrder(saved, next));
+
+  const down = (f: Family, e: PointerEvent<HTMLAnchorElement>) => {
+    if (e.button !== 0 || mine.length < 2) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    drag.current = { key: f, id: e.pointerId, startX: e.clientX, grabX: e.clientX - r.left, x: e.clientX, live: false, order: [...mine] };
+  };
+  const move = (e: PointerEvent<HTMLAnchorElement>) => {
+    const d = drag.current;
+    if (!d || e.pointerId !== d.id) return;
+    d.x = e.clientX;
+    if (!d.live) {
+      if (Math.abs(e.clientX - d.startX) < DRAG_START) return;
+      d.live = true;
+      const el = e.currentTarget;
+      el.setPointerCapture(e.pointerId);
+      el.getAnimations().forEach((a) => a.cancel());
+      setLifted(d.key);
+      setPreview(d.order);
+    }
+    follow(d);
+    // Past the middle of a neighbour's place, the dragged tab takes it.
+    const at = d.order.indexOf(d.key);
+    for (const f of d.order) {
+      const el = f === d.key ? null : tabs.current.get(f);
+      if (!el) continue;
+      const to = d.order.indexOf(f), middle = slotLeft(el) + el.offsetWidth / 2;
+      if ((to > at && e.clientX > middle) || (to < at && e.clientX < middle)) {
+        snapshot();
+        d.order = moveKey(d.order, d.key, f);
+        setPreview(d.order);
+        break;
+      }
+    }
+  };
+  const end = (e: PointerEvent<HTMLAnchorElement>, keep: boolean) => {
+    const d = drag.current;
+    if (!d || e.pointerId !== d.id) return;
+    drag.current = null;
+    if (!d.live) return;
+    dragged.current = true;
+    // Every tab, the dragged one included, settles from where it is now. The new order is saved before the preview
+    // goes, so no render shows the old one in between.
+    snapshot();
+    if (keep && d.order.join() !== mine.join()) {
+      save(d.order);
+      setSaid(t("{name}, {n} of {total}", { name: name(d.key), n: d.order.indexOf(d.key) + 1, total: d.order.length }));
+    }
+    setPreview(null);
+    setLifted(null);
+  };
+  const key = (f: Family, e: KeyboardEvent<HTMLAnchorElement>) => {
+    const step = e.altKey ? ({ ArrowLeft: -1, ArrowRight: 1 } as Record<string, number>)[e.key] : undefined;
+    if (step == null) return;
+    e.preventDefault();
+    const at = mine.indexOf(f), target = mine[at + step];
+    if (!target) return;
+    snapshot();
+    save(moveKey(mine, f, target));
+    setSaid(t("{name}, {n} of {total}", { name: name(f), n: at + step + 1, total: mine.length }));
+  };
+
+  return (
+    <>
+      <nav ref={nav} aria-label={t("Sport")} className="sp-switch" data-dragging={lifted ? true : undefined}
+        onClickCapture={(e) => { if (dragged.current) { dragged.current = false; e.preventDefault(); } }}>
+        {rows.map((s) => {
+          const f = s.family, movable = f != null && order.includes(f) && mine.length > 1;
+          return (
+            <Link key={s.href} href={s.href} aria-current={f === current ? "page" : undefined} draggable={false}
+              ref={(el) => { if (!f) return; if (el) tabs.current.set(f, el); else tabs.current.delete(f); }}
+              data-lifted={(f != null && lifted === f) || undefined}
+              aria-describedby={movable ? hint : undefined}
+              onPointerDown={movable ? (e) => down(f, e) : undefined} onPointerMove={movable ? move : undefined}
+              onPointerUp={movable ? (e) => end(e, true) : undefined} onPointerCancel={movable ? (e) => end(e, false) : undefined}
+              onKeyDown={movable ? (e) => key(f, e) : undefined}>{t(s.label)}</Link>
+          );
+        })}
+      </nav>
+      <p id={hint} hidden>{t("Drag to reorder, or press Alt with the arrow keys.")}</p>
+      <p className="sr-only" aria-live="polite">{said}</p>
+    </>
   );
 }
 

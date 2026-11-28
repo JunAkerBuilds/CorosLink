@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { columnBars, dayTime, heatIndexAt, heatPaths, hMin, hoursClock, monthCells, openingLine } from "./dashboard";
+import { boardOrder, columnBars, dayTime, heatIndexAt, heatPaths, hMin, hoursClock, moveKey, monthCells, openingLine, placeShown } from "./dashboard";
 
 describe("dashboard time words", () => {
   it("writes hours and minutes the way the board does", () => {
@@ -56,5 +56,28 @@ describe("the dashboard's headline", () => {
     expect(openingLine(undefined)).toBeNull();
     expect(openingLine("")).toBeNull();
     expect(openingLine("Strained")).toBeNull();
+  });
+});
+
+describe("board order", () => {
+  const all = ["a", "b", "c", "d"] as const;
+  it("keeps a saved order and mends it", () => {
+    expect(boardOrder(["c", "a", "b", "d"], all)).toEqual(["c", "a", "b", "d"]);
+    expect(boardOrder(null, all)).toEqual(["a", "b", "c", "d"]);
+    expect(boardOrder("junk" as unknown as unknown[], all)).toEqual(["a", "b", "c", "d"]);
+    expect(boardOrder(["d", "x", "d", 3, "b"], all)).toEqual(["a", "d", "b", "c"]);
+    // A widget new since the order was saved lands after the one it follows by default.
+    expect(boardOrder(["d", "a", "b"], all)).toEqual(["d", "a", "b", "c"]);
+  });
+  it("moves a widget onto another's place", () => {
+    expect(moveKey(["a", "b", "c", "d"], "a", "c")).toEqual(["b", "c", "a", "d"]);
+    expect(moveKey(["a", "b", "c", "d"], "d", "b")).toEqual(["a", "d", "b", "c"]);
+    expect(moveKey(["a", "b", "c", "d"], "b", "b")).toEqual(["a", "b", "c", "d"]);
+    expect(moveKey(["a", "b"], "a", "z")).toEqual(["a", "b"]);
+  });
+  it("lays the shown widgets in and leaves the hidden ones where they were", () => {
+    expect(placeShown(["a", "b", "c", "d"], ["d", "a", "c"])).toEqual(["d", "b", "a", "c"]);
+    expect(placeShown(["a", "b", "c"], ["c", "b", "a"])).toEqual(["c", "b", "a"]);
+    expect(placeShown(["a", "b", "c"], [])).toEqual(["a", "b", "c"]);
   });
 });

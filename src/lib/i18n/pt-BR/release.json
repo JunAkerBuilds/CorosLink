@@ -73,5 +73,7 @@
   "{n} races kept": "{n} provas guardadas",
   "“{name}” goes on this computer’s calendar, one workout at a time: {n} workouts from {from} to {to}.": "“{name}” vai para o calendário deste computador, um treino de cada vez: {n} treinos de {from} a {to}.",
   "“{name}” goes on this computer’s calendar: 1 workout on {from}.": "“{name}” vai para o calendário deste computador: 1 treino em {from}.",
-  "“{name}” is not saved on this computer any more.": "“{name}” não está mais salvo neste computador."
+  "“{name}” is not saved on this computer any more.": "“{name}” não está mais salvo neste computador.",
+  "Hide Buy me a coffee": "Ocultar “Me pague um café”",
+  "Takes the coffee pill out of the sidebar, for clean screenshots. It comes back when developer mode is off.": "Tira o botão do café da barra lateral, para capturas de tela limpas. Ele volta quando o modo de desenvolvedor está desligado."
 }

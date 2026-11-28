@@ -7,6 +7,9 @@
 //   p  port                                                      s  archive size in bytes
 //   k  token: 16 random bytes, base64url                         n  face name
 //   w  the watch it was built for (a WATCHFACE_TARGETS model ID)
+//   ph SHA-256 of the Editable project ZIP, base64url (optional)   ps its size in bytes
+//
+// With ph and ps, the project is served at /project/<token> so the phone keeps an editable copy; older phones ignore it.
 //
 // The token keeps others on the network from fetching the face; the hash keeps them from swapping it, since the
 // transfer is plain HTTP. One send at a time; the page polls `status()`.
@@ -14,6 +17,7 @@ import { createHash, randomBytes } from "node:crypto";
 import http from "node:http";
 import os from "node:os";
 import { t } from "@/lib/i18n";
+import { phoneReachable } from "../nics";
 
 export const PHONE_FACE_LINK_PREFIX = "coroslink://face/1";
 /** How long a code stays live: long enough to find the phone, short enough not to leave a port open. */
@@ -33,6 +37,7 @@ export interface PhoneFaceLinkFields {
   size: number;
   name?: string;
   model?: string;
+  project?: { sha256: Buffer; size: number };
 }
 
 export interface PhoneFaceSendInfo {
@@ -60,12 +65,7 @@ export const isPrivateIPv4 = (address: string) => /^(10\.|192\.168\.|172\.(1[6-9
 
 /** This computer's private IPv4 addresses, Wi-Fi first. Virtual adapters (VMs, containers, VPNs) are left out: a phone can't reach them. */
 export function phoneSendAddresses(interfaces: NodeJS.Dict<os.NetworkInterfaceInfo[]> = os.networkInterfaces()): string[] {
-  const found = Object.entries(interfaces).flatMap(([name, list]) => (list ?? [])
-    .filter((entry) => !entry.internal && entry.family === "IPv4" && isPrivateIPv4(entry.address))
-    .filter(() => !/docker|veth|vmnet|vbox|virbr|vethernet|utun|tun\d|tap\d|bridge|loopback/i.test(name))
-    .map((entry) => ({ address: entry.address, rank: /^(en0|wi-?fi|wlan|wlp|wireless)/i.test(name) ? 0 : 1 })));
-  found.sort((a, b) => a.rank - b.rank);
-  return [...new Set(found.map((f) => f.address))].slice(0, MAX_HOSTS);
+  return phoneReachable(interfaces, isPrivateIPv4).slice(0, MAX_HOSTS);
 }
 
 const cleanName = (name: string) => name.replace(CONTROL, "").trim().slice(0, MAX_NAME);
@@ -78,6 +78,7 @@ export function encodePhoneFaceLink(fields: PhoneFaceLinkFields): string {
     ["h", fields.sha256.toString("base64url")], ["s", String(fields.size)],
     ...(name ? [["n", name] as [string, string]] : []),
     ...(fields.model ? [["w", fields.model] as [string, string]] : []),
+    ...(fields.project ? [["ph", fields.project.sha256.toString("base64url")], ["ps", String(fields.project.size)]] as [string, string][] : []),
   ];
   return `${PHONE_FACE_LINK_PREFIX}?${items.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}`;
 }
@@ -108,9 +109,11 @@ export class PhoneSend {
     return { ...(this.active?.status ?? this.last) };
   }
 
-  /** Serves `data` until it expires or `stop()`; a new send replaces the last. */
-  async start(input: { data: Buffer; name: string; model?: string }): Promise<PhoneFaceSendInfo> {
+  /** Serves `data` (and `project`, the Editable project ZIP) until it expires or `stop()`; a new send replaces the last. */
+  async start(input: { data: Buffer; name: string; model?: string; project?: Buffer }): Promise<PhoneFaceSendInfo> {
     const { data } = input;
+    // A project the phone would refuse isn't offered; the face goes alone.
+    const project = input.project?.length && input.project.length <= PHONE_FACE_MAX_BYTES ? input.project : undefined;
     if (!data.length) throw new Error(t("Build the watch face before sending it to your iPhone."));
     if (data.length > PHONE_FACE_MAX_BYTES) throw new Error(t("This watch face is larger than 64 MB, which C-LINK on iPhone can't receive."));
     const hosts = (this.options.hosts ?? phoneSendAddresses)();
@@ -120,6 +123,7 @@ export class PhoneSend {
     const token = randomBytes(16).toString("base64url");
     const sha256 = createHash("sha256").update(data).digest();
     const facePath = `/face/${token}`;
+    const projectPath = `/project/${token}`;
     const ttlMs = this.options.ttlMs ?? PHONE_FACE_SEND_TTL_MS;
     const expiresAt = Date.now() + ttlMs;
     const status: PhoneFaceSendStatus = { active: true, sending: false, received: 0, expiresAt };
@@ -131,13 +135,16 @@ export class PhoneSend {
 
     const server = http.createServer((request, response) => {
       const method = request.method ?? "";
-      if (request.url !== facePath || (method !== "GET" && method !== "HEAD")) {
+      const body = request.url === facePath ? data : project && request.url === projectPath ? project : undefined;
+      if (!body || (method !== "GET" && method !== "HEAD")) {
         response.writeHead(404, { "Content-Type": "text/plain", Connection: "close" });
         response.end("Not found");
         return;
       }
-      response.writeHead(200, { "Content-Type": "application/zip", "Content-Length": data.length, "Cache-Control": "no-store", Connection: "close" });
+      response.writeHead(200, { "Content-Type": "application/zip", "Content-Length": body.length, "Cache-Control": "no-store", Connection: "close" });
       if (method === "HEAD") { response.end(); return; }
+      // Only the face counts as received.
+      if (body === project) { response.end(body); return; }
       downloading++;
       changed();
       let finished = false;
@@ -165,7 +172,10 @@ export class PhoneSend {
     this.active = { server, timer, status };
 
     const name = cleanName(input.name) || t("Custom watch face");
-    const link = encodePhoneFaceLink({ hosts, port, token, sha256, size: data.length, name, model: input.model });
+    const link = encodePhoneFaceLink({
+      hosts, port, token, sha256, size: data.length, name, model: input.model,
+      project: project && { sha256: createHash("sha256").update(project).digest(), size: project.length },
+    });
     return { link, qrDataUrl: await qrCodeDataUrl(link), name, size: data.length, hosts, expiresAt };
   }
 

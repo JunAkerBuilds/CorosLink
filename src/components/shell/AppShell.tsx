@@ -10,6 +10,8 @@ import { createStore, useStore } from "@/data/local/store";
 import { useSyncItems, useSyncStatus, type SyncStatus } from "@/data/sync";
 import { locale, msg, t, tx } from "@/lib/i18n";
 import { platformSlots, type NavItem } from "@/lib/platform";
+import { paletteSports, type Family } from "@/lib/sports";
+import { useSportOrder } from "@/data/local/sportOrder";
 import { ALWAYS_SHOWN, applySportColors, hiddenNavStore, sportColorsStore } from "@/lib/preferences";
 import { useTheme, type ThemeChoice } from "@/lib/theme";
 
@@ -36,11 +38,12 @@ export function navItems(): readonly NavItem[] {
   return extra.length ? [...NAV, ...extra].sort((a, b) => a.group - b.group) : NAV;
 }
 
-/** Pages inside other pages: chips under the palette's grid, and search results that say where they live. */
-const EXTRA = [
-  { href: "/sports/running", label: msg("Running"), where: msg("Sports") },
-  { href: "/sports/riding", label: msg("Riding"), where: msg("Sports") },
-  { href: "/sports/swimming", label: msg("Swimming"), where: msg("Sports") },
+/**
+ * Pages inside other pages: chips under the palette's grid, and search results that say where they live. The
+ * person's sports come first, in their own order (the four main ones while nothing is known).
+ */
+const extraPages = (families: readonly Family[], saved: readonly string[]) => [
+  ...paletteSports(families, saved).map((p) => ({ ...p, where: msg("Sports") })),
   { href: "/health/energy", label: msg("Energy"), where: msg("Health") },
   { href: "/calendar/workout", label: msg("Plan a workout"), where: msg("Calendar") },
   { href: "/connect", label: msg("Connections"), where: msg("Profile") },
@@ -105,6 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <a href="#main" className="sr-only">{t("Skip to content")}</a>
       <div className="shell">
         <aside className="rail" aria-label={t("Sidebar")} data-collapsed={collapsed}>
+          {platformSlots.railTop ? <platformSlots.railTop /> : null}
           <div className="rail-top">
             <Link href="/" className="rail-brand" aria-label="C-LINK" onClick={closeAll}><BrandMark /><span className="rail-label">C-LINK</span></Link>
             <button type="button" className="rail-toggle" aria-label={collapsed ? t("Expand the side panel") : t("Collapse the side panel")} aria-expanded={!collapsed}
@@ -224,7 +228,16 @@ function Palette({ onClose }: { onClose: () => void }) {
   const list = useRef<HTMLDivElement>(null);
   const needle = q.trim().toLowerCase();
   // Shown in the app's language; the search also finds the English name.
-  const grid = useMemo(() => paletteGrid(navItems(), EXTRA).map((e) => ({ ...e, english: e.label, label: t(e.label), where: e.where && t(e.where) })), []);
+  // The person's sports, read when the palette opens; the Sports data loads only then.
+  const [families, setFamilies] = useState<Family[]>([]);
+  useEffect(() => {
+    let live = true;
+    import("@/data/sports").then((m) => m.loadSportFamilies()).then((f) => { if (live) setFamilies(f); }, () => undefined);
+    return () => { live = false; };
+  }, []);
+  const sportOrder = useSportOrder();
+  const extra = useMemo(() => extraPages(families, sportOrder), [families, sportOrder]);
+  const grid = useMemo(() => paletteGrid(navItems(), extra).map((e) => ({ ...e, english: e.label, label: t(e.label), where: e.where && t(e.where) })), [extra]);
   const items: PaletteEntry[] = useMemo(() => {
     if (!needle) return grid;
     const starts = (i: typeof grid[number]) => i.label.toLowerCase().startsWith(needle) || i.english.toLowerCase().startsWith(needle);
@@ -248,7 +261,7 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   let body: React.ReactNode;
   if (!needle) {
-    const rows = grid.filter((e) => !EXTRA.some((x) => x.href === e.href));
+    const rows = grid.filter((e) => !extra.some((x) => x.href === e.href));
     const groups = [...new Set(navItems().map((n) => n.group))];
     body = (
       <>

@@ -9,6 +9,7 @@ import { sampleCalendar, sampleDashboardNow } from "@/data/sample/training";
 import { syncedEntries, syncedWeeks } from "@/data/sync/calendar";
 import { buildDashboard, latestActivity } from "@/data/sync/dashboard";
 import { syncView } from "@/data/sync";
+import { trainingOf } from "@/data/sync/trainingLocal";
 import type { Sport } from "@/lib/workout";
 import type { Sport as SportFamily } from "@/data/activities";
 
@@ -67,6 +68,9 @@ export const WIDGETS = [
 ] as const;
 export type WidgetKey = (typeof WIDGETS)[number]["key"];
 
+/** Widgets only the phone fills (from its recordings and settings): with no phone, they stay off the board. */
+export const PHONE_ONLY: readonly WidgetKey[] = ["intensity", "thresholds", "bests", "goal"];
+
 /** A share of time: easy/moderate/hard or one sport. */
 export interface TimeShare { label: string; hue: HueName; percent: number; minutes: number }
 
@@ -76,6 +80,11 @@ export interface TimeShare { label: string; hue: HueName; percent: number; minut
  */
 export interface Dashboard {
   today: string;
+  /**
+   * True when no phone has sent its training view, so fitness, load and readiness were worked out on this computer
+   * and the widgets only the phone can fill (`PHONE_ONLY`) have nothing coming.
+   */
+  local?: boolean;
   /** Null when there is no Coach line to show (the web has no Coach for synced data yet). */
   coach: { text: string; nextLabel: string } | null;
   morning: {
@@ -152,8 +161,8 @@ export function sliceSeries(series: FitnessSeries, weeks: number): FitnessSeries
 }
 
 /**
- * The dashboard. Built from the items in the store on this computer (what the phone synced), and only those.
- * Otherwise the sample athlete.
+ * The dashboard. Built from the items in the store on this computer (what the phone or the watch synced), and only
+ * those; with no phone paired, fitness, load and readiness are worked out here (`trainingOf`). Otherwise the sample athlete.
  */
 export async function loadDashboard(): Promise<Loaded<Dashboard>> {
   const view = await syncView();
@@ -161,17 +170,18 @@ export async function loadDashboard(): Promise<Loaded<Dashboard>> {
   const now = new Date();
   const activities = view.all("activity").map((i) => i.body);
   const latest = latestActivity(activities, now);
-  return fromSynced(buildDashboard({
+  const local = !view.get("view.training", "me");
+  return fromSynced({ local, ...buildDashboard({
     activities,
     latestDetail: latest ? view.get("activity.detail", latest.id) : undefined,
     days: view.all("health.day").map((i) => i.body),
     nights: view.all("health.night").map((i) => i.body),
-    training: view.get("view.training", "me"),
+    training: trainingOf(view, now),
     planned: view.all("gym.planned").map((i) => i.body),
     routines: view.all("gym.routine").map((i) => i.body),
     feel: view.get("feel.check", dayKey(now)),
     gym: view.all("gym.workout").map((i) => i.body),
-  }, now));
+  }, now) });
 }
 
 /* ───────────── Calendar ───────────── */
@@ -280,8 +290,9 @@ export async function loadCalendar(): Promise<Loaded<CalendarData>> {
   if (!view) return fromCoros({ today: at(0), entries: planned, weeks: [] });
   const activities = view.all("activity").map((i) => i.body);
   const entries = syncedEntries(activities, view.all("gym.planned").map((i) => i.body), view.all("gym.routine").map((i) => i.body), now);
-  // Base Fitness is the phone's fitness line (the long-term average of daily load), as on the Dashboard; Load Ratio is its acute ÷ chronic.
-  const training = view.get("view.training", "me");
+  // Base Fitness is the fitness line (the long-term average of daily load), as on the Dashboard; Load Ratio is its acute ÷ chronic.
+  // The phone's, or this computer's own when no phone has synced one.
+  const training = trainingOf(view, now);
   const fitness = training?.fitness?.fitness;
   const baseFitness = fitness?.length ? fitness[fitness.length - 1] : undefined;
   const loadRatio = training?.load?.ratio;

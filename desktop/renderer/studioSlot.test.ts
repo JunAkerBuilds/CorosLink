@@ -269,12 +269,13 @@ describe("A type's icon", () => {
     expect(view(details, design).type("heartRate")).toMatchObject({ icon: "template", iconPath: "watchface_800x800/icon/hr.png" });
   });
 
-  it("imports an icon for a type the template has none for, and warns until it has one", () => {
+  it("gives a type the template has no icon for Studio's, which can be replaced or hidden", () => {
     const details = template({ slot: true });
     let design = setSlotType(makeDefaultDesign(), details, "current", "elevation", true);
     let v = view(details, design);
-    expect(v.type("elevation")).toMatchObject({ on: true, icon: "none", canOffset: false });
-    expect(v.selector.warnings.find((w) => w.kind === "noIcon")).toMatchObject({ ids: ["elevation"] });
+    // Studio's default icon: no warning, and it sits beside the value.
+    expect(v.type("elevation")).toMatchObject({ on: true, icon: "studio", canOffset: true });
+    expect(v.selector.warnings.some((w) => w.kind === "noIcon")).toBe(false);
     const layer = v.type("elevation").iconLayer!;
     expect(layer.configAssetId).toBe("config:control_elevation_icon");
     design = replaceAsset(design, layer, art());
@@ -285,9 +286,15 @@ describe("A type's icon", () => {
       expect(config.control_elevation_icon).toBeTruthy();
       expect(parseConfigPos(config.control_elevation_icon_pos)).not.toBeNull();
     }
-    // Taking the picture out again takes its key with it.
+    // Taking the picture out again goes back to Studio's.
     design = restoreAsset(design, layer);
-    expect(view(details, design).type("elevation").icon).toBe("none");
+    expect(view(details, design).type("elevation").icon).toBe("studio");
+    for (const config of built(details, design)) expect(config.control_elevation_icon).toBe("icon\\coroslink_control_elevation.png");
+    // Hidden, the watch shows the value alone, and says so.
+    design = setAsset(design, layer, { enabled: false });
+    v = view(details, design);
+    expect(v.type("elevation").icon).toBe("hidden");
+    expect(v.selector.warnings.find((w) => w.kind === "noIcon")).toMatchObject({ ids: ["elevation"] });
     for (const config of built(details, design)) expect(config.control_elevation_icon ?? "").toBe("");
   });
 
@@ -319,6 +326,17 @@ describe("A type's icon", () => {
     expect(grip(nudge(design, view(details, design).slot, 5, 7))?.bounds).toMatchObject({ x0: 305, y0: 567 });
     expect(grip({ ...design, lockedLayerIds: ["complication"] })).toBeNull();
     expect(grip(setSlotPreview(design, "steps"))?.id).toBe("steps");
+  });
+
+  it("gives the barometer's trend arrow a grip too, which moves it", () => {
+    const details = template({ slot: true });
+    const design = setSlotPreview(setSlotType(makeDefaultDesign(), details, "current", "barometer", true), "barometer");
+    const grip = (d: Design) => slotIconGrip(details, d, view(details, d).types);
+    const before = grip(design);
+    expect(before?.id).toBe("barometer");
+    const moved = grip(setIconOffset(design, "barometer", 12, -4));
+    expect(moved?.bounds.x0).toBe(before!.bounds.x0 + 12);
+    expect(moved?.bounds.y0).toBe(before!.bounds.y0 - 4);
   });
 
   it("moving the slot moves icon and value together, by its one origin", () => {

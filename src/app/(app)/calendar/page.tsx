@@ -414,7 +414,6 @@ function CalendarScreen() {
         </div>
       ) : null}
 
-      {changes.length > 0 ? <ChangesDock count={changes.length} onUndo={undo} onDiscard={discard} onReview={() => { setReview(true); setSaveError(null); }} /> : null}
       {saveError && !review ? <div className="notice" role="alert" style={{ color: "var(--h-rose-ink)" }}>{saveError}</div> : null}
 
       {view === "list" ? (
@@ -482,8 +481,10 @@ function CalendarScreen() {
 
       <Legend />
 
+      {changes.length > 0 ? <ChangesDock count={changes.length} onUndo={undo} onDiscard={discard} onReview={() => { setReview(true); setSaveError(null); }} /> : null}
+
       <p className="sr-only" role="status" aria-live="polite">{say}</p>
-      {say ? <div className="cal-toast" aria-hidden="true" key={say}>{say}</div> : null}
+      {say ? <div className="cal-toast" aria-hidden="true" key={say} data-raised={changes.length > 0 || undefined}>{say}</div> : null}
 
 
       {menu ? <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu)} onClose={() => setMenu(null)} /> : null}

@@ -60,7 +60,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   const rows = await pull(account.token);
   if (rows instanceof Response) return rows;
-  const items = athleteItems(rows);
+  const items = athleteItems(rows, new Date(asked.clock.nowMs));
   // The Training Hub session the athlete shares between phone and web, when their account holds one. It is used
   // here for reads only (the calendar, zones, the exercise list, the library) and goes no further than this route.
   const session = sharedSession(rows);

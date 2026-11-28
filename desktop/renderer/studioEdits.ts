@@ -10,7 +10,7 @@ import type {
 } from "../watchface/types";
 import {
   dateFontSize, dateMonthShowsLabels, dateSpriteCanvasSize, dateSizeForFontSize, exerciseProgressStyleForResolution, fixedMetricCurrentFontSize,
-  kcalProgressStyleForResolution, resolveWatchfaceComponentTypography, shouldRenderWatchfaceText, styleFontSize,
+  kcalProgressStyleForResolution, parseConfigRect, resolveWatchfaceComponentTypography, shouldRenderWatchfaceText, styleFontSize,
   watchfaceFixedMetricDigitSize, watchfaceTimeDigitSize, type WatchfaceDatePartId, type WatchfaceTimePartId,
 } from "../watchface/engine/watchfaceStudio";
 import { createWatchfaceStroke, resolveWatchfaceLayerStrokes } from "../watchface/engine/watchfaceEditorStrokes";
@@ -183,7 +183,13 @@ export function fontSizeOf(design: Design, layer: EditorLayer, resolution: Coros
 export function setFontSize(design: Design, layer: EditorLayer, fontSize: number, resolution: CorosWatchfaceResolutionDetails | null): Design {
   const size = Math.max(4, Math.min(400, Math.round(fontSize)));
   switch (panelOf(layer, design)) {
-    case "time": case "metric": return setTypo(design, layer, { fontSize: size });
+    case "time": return setTypo(design, layer, { fontSize: size });
+    case "metric": {
+      const next = setTypo(design, layer, { fontSize: size });
+      if (layer.metricId !== "exercise") return next;
+      const before = fontSizeOf(design, layer, resolution);
+      return before ? withExerciseColonScaled(next, design, resolution, size / before) : next;
+    }
     case "date": return setDateStyle(design, layer.id as WatchfaceDatePartId, { fontSize: size }, resolution);
     case "separator": {
       const id = layer.staticSeparatorId!;
@@ -195,6 +201,35 @@ export function setFontSize(design: Design, layer: EditorLayer, fontSize: number
     }
     default: return design;
   }
+}
+
+/**
+ * Exercise's colon is its own picture between the hour and minute boxes. Those grow around their shared center with
+ * the font size, so the colon moves by the same factor and keeps its place in the gap between them (its height is the
+ * digits' size, exerciseColonSize).
+ */
+function withExerciseColonScaled(next: Design, before: Design, resolution: CorosWatchfaceResolutionDetails | null, factor: number): Design {
+  const colon = next.exerciseSeparator;
+  if (!colon || !(factor > 0) || factor === 1) return next;
+  const rects = resolution
+    ? [resolution.config.exercise_hour_rect, resolution.config.exercise_minute_rect].map((v) => parseConfigRect(v)).filter((r) => r !== null)
+    : [];
+  // The boxes as drawn carry the layer's move; the colon's own place doesn't.
+  const moved = before.layoutOffsets?.exercise ?? { dx: 0, dy: 0 };
+  const center = rects.length
+    ? {
+        x: (Math.min(...rects.map((r) => r.x0)) + Math.max(...rects.map((r) => r.x1))) / 2 - moved.dx,
+        y: (Math.min(...rects.map((r) => r.y0)) + Math.max(...rects.map((r) => r.y1))) / 2 - moved.dy,
+      }
+    : { x: colon.x, y: colon.y };
+  return {
+    ...next,
+    exerciseSeparator: {
+      ...colon,
+      x: Math.round(center.x + (colon.x - center.x) * factor),
+      y: Math.round(center.y + (colon.y - center.y) * factor),
+    },
+  };
 }
 
 /** Scale (AM/PM, the weather icon, the battery icon, template images, selectable data), as a multiplier. */

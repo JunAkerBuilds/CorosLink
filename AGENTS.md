@@ -5,7 +5,10 @@
   precision, little text). Desktop-only code lives in `desktop/`.
 - The app is local: its data lives on this computer (`desktop/main/localStore.ts`) and the paired phone syncs
   straight to it. There is no C-LINK account and no C-LINK cloud, and no code here calls a C-LINK server (the public
-  Community face catalog Studio reads is the one exception). AI is only the athlete's own pick in Coach settings.
+  Community face catalog Studio reads is one exception; Reach from anywhere is the other: off until the athlete
+  turns it on, it signs this computer in to the coroslink.com account and links it to relay.coroslink.com for a
+  Cloudflare Tunnel, so paired phones reach it away from home — `desktop/main/remote/`). AI is only the athlete's own pick in Coach settings,
+  except Studio's Watchmaker, which always runs the athlete's own installed Codex CLI.
 - Nothing from CorosLink is copied in as it is. When a CorosLink feature comes over, rewrite it to these rules and
   carry its "Must not regress" notes from `CorosLink/docs/replacement-checklist.md` over as tests.
 - The page stays sandboxed: no Node in the renderer, no `nodeIntegration`, no new IPC unless a screen can't be

@@ -5,7 +5,9 @@ import type {
   NativeFoodEntry, NativeFuelProfile, NativeGymPlanned, NativeGymRoutine, NativeGymWorkout, NativeSleepNight, NativeSport,
   ViewBodyBody, ViewStrengthBody, ViewTrainingBody, WatchStateBody,
 } from "@/data/sync/native";
-import { calendarDayKey, REF_EPOCH_UNIX } from "@/data/sync/native";
+import { calendarDayKey, REF_EPOCH_UNIX, type FeelCheckBody } from "@/data/sync/native";
+import { localTraining } from "@/data/sync/trainingLocal";
+import { dayKey } from "@/lib/format";
 import { msg, t, tx } from "@/lib/i18n";
 
 export interface Row { collection: string; id: string; body: unknown }
@@ -33,8 +35,12 @@ export interface AthleteItems {
 
 const isBag = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-/** Sorts raw items into an athlete. Anything that is not an object is dropped; unknown collections are ignored. */
-export function athleteItems(rows: readonly Row[]): AthleteItems {
+/**
+ * Sorts raw items into an athlete. Anything that is not an object is dropped; unknown collections are ignored.
+ * With no phone's training view among them, the one this computer works out stands in (`localTraining`), so Coach
+ * reads the same fitness, load and readiness the Dashboard shows.
+ */
+export function athleteItems(rows: readonly Row[], now = new Date()): AthleteItems {
   const out: AthleteItems = {
     activities: [], details: {}, days: [], nights: [], energy: {}, fuelEntries: [], gymWorkouts: [], routines: [], planned: [],
     measurements: [], memory: [], briefs: [],
@@ -68,6 +74,10 @@ export function athleteItems(rows: readonly Row[]): AthleteItems {
   out.nights = out.nights.filter((d) => dayOf(d)).sort((a, b) => (dayOf(a) < dayOf(b) ? -1 : 1));
   out.activities = out.activities.filter((a) => typeof a.start === "number").sort((a, b) => (b.start ?? 0) - (a.start ?? 0));
   out.gymWorkouts.sort((a, b) => (b.start ?? 0) - (a.start ?? 0));
+  if (!out.training) {
+    const feel = rows.find((r) => r.collection === "feel.check" && r.id === dayKey(now) && isBag(r.body))?.body as FeelCheckBody | undefined;
+    out.training = localTraining({ activities: out.activities, days: out.days, nights: out.nights, feel }, now);
+  }
   return out;
 }
 

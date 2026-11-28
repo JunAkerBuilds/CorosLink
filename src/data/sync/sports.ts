@@ -1,8 +1,8 @@
-// Synced items → the Sports hub and the Running, Riding and Swimming pages. Pure: plain bodies and `now` in, the
+// Synced items → the Sports hub and each sport's page. Pure: plain bodies and `now` in, the
 // screens' types out. Headlines and section names follow the phone (SportFindings.swift, SwimFindings.swift,
 // SportPages.swift); the numbers come from src/lib/sports.ts.
 import type {
-  Bar, BarChart, Chip, Figure, HoursWeek, HubCard, HubRing, LineChart, Missing, PowerTile, RidePage, RunPage, SplitShare, Sports, SportsHub, Standout, SwimPage, Tile,
+  Bar, BarChart, Chip, Figure, HoursWeek, HubCard, HubRing, LineChart, Missing, PowerTile, RecentSession, RidePage, RunPage, SplitShare, SportPage, Sports, SportsHub, Standout, SwimPage, Tile,
 } from "@/data/sports";
 import type { HubCalendarDay } from "@/data/hub";
 import { hoursMinutes } from "@/lib/calendar";
@@ -13,8 +13,8 @@ import {
 } from "@/lib/units";
 import {
   addDays, atBest, cogganZones, criticalSwimPace, cyclingVo2Estimate, dayMonthOf, detectSports, durationName, efficiencyTrend, ftpTrend, hoursText, includesSport,
-  intensityBalance, isBlip, isSpike, kmText, monthOf, powerCurve, powerZoneSeconds, rideClimbing, runDurability, runTypes, sharePercents, shortfall,
-  spikeCheck, sportVolume, standing, swimBands, volumeChange, wattsPerBeat, weekdayLong, weekdayOf, weekStart,
+  intensityBalance, isBlip, isSpike, kmText, monthOf, PAGE_FAMILIES, powerCurve, powerZoneSeconds, rideClimbing, runDurability, runTypes, sharePercents, shortfall,
+  shownSports, spikeCheck, sportVolume, standing, swimBands, volumeChange, wattsPerBeat, weekdayLong, weekdayOf, weekStart,
   type Family, type IntensityBalance, type Recording, type RunKind, type SportAct, type SportVolume, type Standing,
 } from "@/lib/sports";
 import { SPORT_TITLE } from "./geo";
@@ -24,13 +24,34 @@ import { doneSetCount, muscleRow, NOTHING_YET, volumeKg } from "./strength";
 
 const FAMILY_OF: Record<NativeSport, Family> = {
   run: "run", indoorRun: "run", trailRun: "run", track: "run", bike: "ride", indoorBike: "ride", poolSwim: "swim", openWater: "swim",
-  strength: "strength", walk: "walk", hike: "walk", cardio: "other", ski: "other", row: "other", multisport: "other", other: "other",
+  strength: "strength", walk: "walk", hike: "hike", cardio: "other", ski: "snow", row: "other", multisport: "other", other: "other",
 };
+
+/**
+ * COROS's sport codes that the phone's sport name is too coarse for: climbing comes over as "other", and every snow
+ * sport as "ski". Codes from the watch's own sport list (desktop/main/watch/engine/sportRecord.ts).
+ */
+const CODE_KIND: Partial<Record<NativeSport, Record<number, string>>> = {
+  other: { 800: "indoorClimb", 801: "bouldering" },
+  ski: { 500: "ski", 501: "snowboard", 502: "xcSki" },
+};
+const CLIMB_KINDS = new Set(["indoorClimb", "bouldering"]);
+/** English names of the kinds the phone has no name for. */
+const KIND_TITLE: Record<string, string> = { indoorClimb: msg("Indoor climb"), bouldering: msg("Bouldering"), snowboard: msg("Snowboard"), xcSki: msg("Cross-country ski") };
+
+/** The activity's kind: the phone's sport name, or COROS's finer one where the code gives it. */
+export const kindOf = (sport: NativeSport, code?: number): string => (code != null ? CODE_KIND[sport]?.[code] : undefined) ?? sport;
+/** Which sport family an activity belongs to. */
+export const familyOf = (sport: NativeSport, code?: number): Family => (CLIMB_KINDS.has(kindOf(sport, code)) ? "climb" : FAMILY_OF[sport] ?? "other");
+
 /** English, translated where shown: `t(FAMILY_NAME[f])`. */
-export const FAMILY_NAME: Record<Family, string> = { run: msg("Running"), ride: msg("Riding"), swim: msg("Swimming"), strength: msg("Strength"), walk: msg("Walking"), other: msg("Other") };
-export const FAMILY_HREF: Record<Family, string> = { run: "/sports/running", ride: "/sports/riding", swim: "/sports/swimming", strength: "/strength", walk: "/activities", other: "/activities" };
-/** The four sports with a page of their own, in the order the hub shows them. */
-export const PAGE_FAMILIES: readonly Family[] = ["run", "ride", "swim", "strength"];
+export const FAMILY_NAME: Record<Family, string> = {
+  run: msg("Running"), ride: msg("Riding"), swim: msg("Swimming"), strength: msg("Strength"), walk: msg("Walking"), hike: msg("Hiking"), snow: msg("Skiing"), climb: msg("Climbing"), other: msg("Other"),
+};
+export const FAMILY_HREF: Record<Family, string> = {
+  run: "/sports/running", ride: "/sports/riding", swim: "/sports/swimming", strength: "/strength", walk: "/sports/walking", hike: "/sports/hiking", snow: "/sports/skiing", climb: "/sports/climbing", other: "/activities",
+};
+export { PAGE_FAMILIES };
 
 /** A workout planned for a day of this week. */
 export interface PlannedWorkout { day: string; family: Family; name: string; meters: number; seconds: number }
@@ -66,7 +87,7 @@ function qualitySub(quality: number, known: number, easyPercent: number | null):
 export function actFromNative(n: NativeActivity): SportAct | null {
   if (!finite(n.start)) return null;
   return {
-    id: n.id, at: refToDate(n.start), family: FAMILY_OF[n.sport] ?? "other", kind: n.sport,
+    id: n.id, at: refToDate(n.start), family: familyOf(n.sport, n.sportCode), kind: kindOf(n.sport, n.sportCode),
     name: typeof n.name === "string" && n.name.trim() ? n.name : t(SPORT_TITLE[n.sport] ?? SPORT_TITLE.other),
     meters: positive(n.distanceMeters), seconds: positive(n.durationSeconds) ?? 0, avgHr: positive(n.averageHR),
     climbM: finite(n.elevationGain) ? n.elevationGain : null, avgPowerW: positive(n.averagePower),
@@ -692,11 +713,140 @@ function buildSwim(c: Context): SwimPage {
   };
 }
 
+/* ───────────── Walking, Hiking, Skiing, Climbing ───────────── */
+
+type OwnFamily = "walk" | "hike" | "snow" | "climb";
+const isOwn = (f: Family): f is OwnFamily => f === "walk" || f === "hike" || f === "snow" || f === "climb";
+const OWN_HUE: Record<OwnFamily, SplitShare["hue"][]> = { walk: ["gold", "violet"], hike: ["coral", "gold"], snow: ["violet", "ride", "swim"], climb: ["rose", "gold"] };
+
+/** "1 walk", "3 hikes": the right word for a number of one sport's sessions. */
+function sessionsText(f: OwnFamily, n: number): string {
+  if (f === "walk") return n === 1 ? t("1 walk") : t("{n} walks", { n });
+  if (f === "hike") return n === 1 ? t("1 hike") : t("{n} hikes", { n });
+  if (f === "snow") return n === 1 ? t("1 day on snow") : t("{n} days on snow", { n });
+  return n === 1 ? t("1 climbing session") : t("{n} climbing sessions", { n });
+}
+
+function noneThisWeek(f: OwnFamily): string {
+  return f === "walk" ? t("No walks yet this week") : f === "hike" ? t("No hikes yet this week") : f === "snow" ? t("Nothing on snow yet this week") : t("No climbing sessions yet this week");
+}
+
+/** A kind's name on these pages: the phone's own, and COROS's finer one where the code gave it. */
+export const kindName = (kind: string): string => t(KIND_TITLE[kind] ?? SPORT_TITLE[kind as NativeSport] ?? SPORT_TITLE.other);
+
+/** The page of a sport the activity list alone reads: walking, hiking, snow sports, climbing. */
+function buildOwn(c: Context, f: OwnFamily): SportPage {
+  const { now } = c;
+  const acts = c.by(f).filter((a) => !isBlip(a)).sort((a, b) => b.at.getTime() - a.at.getTime());
+  const volume = sportVolume(acts, now, 12);
+  const week = volume.weeks[volume.weeks.length - 1];
+  const usual = volume.usualSeconds;
+  const stand = standing(week.seconds, usual, daysLeft(volume), 900);
+  const distanced = f !== "climb", climbed = f !== "climb";
+  const climbOf = (list: readonly SportAct[]) => sum(list.map((a) => Math.max(0, a.climbM ?? 0)));
+  const distanceOf = (list: readonly SportAct[]) => sum(list.map((a) => a.meters ?? 0));
+
+  /* This week */
+  const total = hoursText(week.seconds, true);
+  const headline = stand.kind === "none" ? noneThisWeek(f)
+    : stand.kind === "more" ? t("{total} this week, {by} more than usual", { total, by: hoursText(stand.by, true) })
+    : stand.kind === "less" ? t("{total} this week, {by} less than usual", { total, by: hoursText(stand.by, true) })
+    : stand.kind === "level" ? t("{total} this week, about your usual", { total }) : t("{total} so far this week", { total });
+  const thisWeek = acts.filter((a) => a.at.getTime() >= weekStart(now).getTime());
+  const figures: Figure[] = [{ value: hoursText(week.seconds), label: t("This week") }, { value: String(week.sessions), label: t("Sessions") }];
+  if (distanced && week.meters > 0) figures.push({ value: kmText(week.meters), label: t("Distance") });
+  if (climbed && climbOf(thisWeek) > 0) figures.push({ value: height(climbOf(thisWeek)), label: t("Climb") });
+  if (f === "climb") {
+    const hr = thisWeek.map((a) => a.avgHr).filter((v): v is number => v != null);
+    if (hr.length) figures.push({ value: `${Math.round(sum(hr) / hr.length)}`, label: t("Avg heart rate") });
+  }
+  const last = acts[0];
+  const hm = (s: number) => hoursMinutes(s);
+  const chart: BarChart = {
+    bars: weekBars(volume, (w) => w.seconds, hm, 0),
+    line: usual != null ? { value: usual, text: t("Usual, {distance}", { distance: hoursText(usual) }) } : null, planned: false,
+    label: t("Hours in each of the last {weeks} weeks, with {done} so far this week.", { weeks: volume.weeks.length, done: hm(week.seconds) }),
+  };
+
+  /* The last four weeks against the four before */
+  const DAY = 86_400_000, cut = now.getTime() - 28 * DAY;
+  const month = acts.filter((a) => a.at.getTime() > cut), before = acts.filter((a) => a.at.getTime() <= cut && a.at.getTime() > cut - 28 * DAY);
+  const monthS = sum(month.map((a) => a.seconds)), beforeS = sum(before.map((a) => a.seconds));
+  const change = beforeS > 0 ? (monthS / beforeS - 1) * 100 : null;
+  const monthFigures: Figure[] = [{ value: hoursText(monthS), label: t("Time") }];
+  if (distanced && distanceOf(month) > 0) monthFigures.push({ value: kmText(distanceOf(month)), label: t("Distance") });
+  if (climbed && climbOf(month) > 0) monthFigures.push({ value: height(climbOf(month)), label: t("Climb") });
+  const longest = month.reduce<SportAct | null>((a, x) => (!a || x.seconds > a.seconds ? x : a), null);
+  if (longest) monthFigures.push({ value: hoursText(longest.seconds), label: t("Longest") });
+  const kindSeconds = new Map<string, { seconds: number; sessions: number }>();
+  for (const a of month) { const k = kindSeconds.get(a.kind) ?? { seconds: 0, sessions: 0 }; k.seconds += a.seconds; k.sessions++; kindSeconds.set(a.kind, k); }
+  const kinds: SplitShare[] | null = kindSeconds.size < 2 || !(monthS > 0) ? null : [...kindSeconds.entries()].sort((a, b) => b[1].seconds - a[1].seconds).map(([kind, k], i) => ({
+    name: kindName(kind), percent: Math.round((k.seconds / monthS) * 100), detail: hoursText(k.seconds, true), hue: OWN_HUE[f][i % OWN_HUE[f].length],
+  }));
+  const monthReading: SportPage["month"] = {
+    chip: change == null ? null : change >= 10 ? chip("good", t("Up {percent}", { percent: percentText(change) })) : change <= -10 ? chip("attention", t("Down {percent}", { percent: percentText(change) })) : chip("neutral", t("Steady")),
+    headline: month.length ? sessionsText(f, month.length) : t("Nothing in the last 4 weeks"),
+    sub: beforeS > 0 ? t("{time}, against {before} in the 4 weeks before.", { time: hoursText(monthS, true), before: hoursText(beforeS, true) }) : null,
+    figures: monthFigures, kinds,
+  };
+
+  /* Climb a week */
+  let climbCard: SportPage["climb"] = null;
+  if (climbed) {
+    const weeks = volume.weeks.map((w) => {
+      const end = addDays(w.start, 7).getTime();
+      return { start: w.start, meters: climbOf(acts.filter((a) => a.at.getTime() >= w.start.getTime() && a.at.getTime() < end)) };
+    });
+    const climbNow = weeks[weeks.length - 1].meters, climbLast = weeks[weeks.length - 2]?.meters ?? 0;
+    climbCard = !weeks.some((w) => w.meters > 0) ? missing(t("Needs a session with its climb from the watch.")) : {
+      chip: null,
+      headline: climbNow > 0 ? t("{height} climbed this week", { height: height(climbNow) }) : t("No climbing yet this week"),
+      sub: climbLast > 0 ? t("Last week: {height}.", { height: height(climbLast) }) : null,
+      weeks: {
+        bars: weeks.map((w, k) => {
+          const bar: Bar = { value: w.meters, top: w.meters > 0 ? thousands(heightIn(w.meters)) : "", label: String(w.start.getDate()), now: k === weeks.length - 1 };
+          if (k === 0 || w.start.getMonth() !== weeks[k - 1].start.getMonth()) bar.sub = monthOf(w.start);
+          return bar;
+        }),
+        line: null, planned: false,
+        label: imperial()
+          ? t("Feet climbed in each of the last {weeks} weeks: {values}.", { weeks: weeks.length, values: weeks.map((w) => thousands(heightIn(w.meters))).join(", ") })
+          : t("Metres climbed in each of the last {weeks} weeks: {values}.", { weeks: weeks.length, values: weeks.map((w) => thousands(w.meters)).join(", ") }),
+      },
+    };
+  }
+
+  /* Recent sessions and records */
+  const recent: RecentSession[] = acts.slice(0, 8).map((a) => ({
+    id: a.id, name: a.name, kind: kindName(a.kind), date: dayMonthOf(a.at),
+    figures: [hoursText(a.seconds), ...(distanced && a.meters ? [kmText(a.meters)] : []), ...(climbed && (a.climbM ?? 0) > 0 ? [height(a.climbM as number)] : []), ...(a.avgHr != null ? [`${Math.round(a.avgHr)} bpm`] : [])],
+  }));
+  const best = (value: (a: SportAct) => number) => acts.reduce<SportAct | null>((a, x) => (value(x) > (a ? value(a) : 0) ? x : a), null);
+  const records: SportPage["records"] = [];
+  const longestEver = best((a) => a.seconds);
+  if (longestEver) records.push({ name: t("Longest"), value: hoursText(longestEver.seconds, true), date: dayMonthOf(longestEver.at) });
+  const farthest = distanced ? best((a) => a.meters ?? 0) : null;
+  if (farthest) records.push({ name: t("Farthest"), value: kmText(farthest.meters as number), date: dayMonthOf(farthest.at) });
+  const highest = climbed ? best((a) => a.climbM ?? 0) : null;
+  if (highest) records.push({ name: t("Most climbing"), value: height(highest.climbM as number), date: dayMonthOf(highest.at) });
+  const biggest = volume.weeks.reduce<SportVolume["weeks"][number] | null>((a, w) => (w.seconds > (a?.seconds ?? 0) ? w : a), null);
+  if (biggest) records.push({ name: t("Biggest week, last 12"), value: hoursText(biggest.seconds, true), date: dayMonthOf(biggest.start) });
+
+  return {
+    family: f,
+    hero: {
+      chip: t("This week"), headline, figures, chart,
+      text: last ? t("Last: {name} on {day} {date}, {time}.", { name: last.name, day: weekdayOf(last.at), date: dayMonthOf(last.at), time: hoursText(last.seconds, true) }) : null,
+    },
+    month: monthReading, climb: climbCard, recent, records,
+  };
+}
+
 /* ───────────── Hub ───────────── */
 
-function buildHub(c: Context, items: SportsItems, run: RunPage | null, ride: RidePage | null, swim: SwimPage | null): SportsHub {
+function buildHub(c: Context, items: SportsItems, run: RunPage | null, ride: RidePage | null, swim: SwimPage | null, own: Partial<Record<OwnFamily, SportPage>>): SportsHub {
   const { now } = c;
-  const shown = PAGE_FAMILIES.filter((f) => includesSport(c.families, f));
+  const shown = shownSports(c.families);
   const all = sportVolume(c.acts, now, 12);
   const volumes = new Map(shown.map((f) => [f, sportVolume(c.by(f), now, 12)]));
   const thisWeek = all.weeks[all.weeks.length - 1];
@@ -712,9 +862,11 @@ function buildHub(c: Context, items: SportsItems, run: RunPage | null, ride: Rid
     if (f === "run") { value = kmText(w.meters); of = v.usualMeters != null ? kmText(v.usualMeters) : null; percent = v.usualMeters ? (w.meters / v.usualMeters) * 100 : null; }
     else if (f === "ride") { value = hoursText(w.seconds); of = v.usualSeconds != null ? hoursText(v.usualSeconds) : null; percent = v.usualSeconds ? (w.seconds / v.usualSeconds) * 100 : null; }
     else if (f === "swim") { value = swimDistance(w.meters); of = v.usualMeters != null ? swimDistance(v.usualMeters) : null; percent = v.usualMeters ? (w.meters / v.usualMeters) * 100 : null; }
+    else if (f === "walk" || f === "hike" || f === "snow") { value = hoursText(w.seconds); of = v.usualSeconds != null ? hoursText(v.usualSeconds) : null; percent = v.usualSeconds ? (w.seconds / v.usualSeconds) * 100 : null; }
     else {
       const usual = Math.round(sum(v.weeks.slice(-5, -1).map((x) => x.sessions)) / 4);
-      value = w.sessions === 1 ? t("1 workout") : t("{n} workouts", { n: w.sessions }); of = usual > 0 ? String(usual) : null; percent = usual > 0 ? (w.sessions / usual) * 100 : null;
+      value = f === "climb" ? (w.sessions === 1 ? t("1 session") : t("{n} sessions", { n: w.sessions })) : w.sessions === 1 ? t("1 workout") : t("{n} workouts", { n: w.sessions });
+      of = usual > 0 ? String(usual) : null; percent = usual > 0 ? (w.sessions / usual) * 100 : null;
     }
     const name = t(FAMILY_NAME[f]);
     return {
@@ -736,6 +888,9 @@ function buildHub(c: Context, items: SportsItems, run: RunPage | null, ride: Rid
         ? { family: f, title: recovering.length === 1 ? t("{muscles} is still recovering", { muscles: muscles1 }) : t("{muscles} are still recovering", { muscles: muscles1 }), detail: t("{ready} of {total} muscles ready", { ready: muscles.filter((m) => m.state === "ready").length, total: muscles.length }), chip: chip("neutral", t("Recovering")), href: FAMILY_HREF[f] }
         : { family: f, title: t("All {n} muscles are ready", { n: muscles.length }), detail: "", chip: chip("good", t("Ready")), href: FAMILY_HREF[f] };
     }
+    const mine = isOwn(f) ? own[f] : undefined;
+    if (mine) return { family: f, title: mine.hero.headline, detail: mine.hero.text?.replace(/[.。]$/, "") ?? "", chip: mine.month.chip ?? chip("neutral", t("This week")), href: FAMILY_HREF[f] };
+    if (isOwn(f)) return { family: f, title: "", detail: "", chip: chip("neutral", t("This week")), href: FAMILY_HREF[f] };
     const page = f === "run" ? run?.much : f === "ride" ? ride?.much : null;
     if (page) return { family: f, title: page.headline, detail: page.sub?.replace(/[.。]$/, "") ?? "", chip: page.chip ?? chip("neutral", t("This week")), href: FAMILY_HREF[f] };
     const tile = swim?.tiles[3];
@@ -771,6 +926,16 @@ function buildHub(c: Context, items: SportsItems, run: RunPage | null, ride: Rid
         figures: ride.hero.figures.filter((x) => x.label !== t("This week")).slice(0, 3).map((x) => (x.label === t("Cycling VO₂ max") ? { ...x, label: "VO₂ max" } : x)),
       };
     }
+    const mine = isOwn(f) ? own[f] : undefined;
+    if (mine) {
+      return {
+        family: f, name: t(FAMILY_NAME[f]), href: FAMILY_HREF[f], spark: v.weeks.slice(-8).map((x) => x.seconds), headline: mine.hero.headline,
+        figures: [{ value: String(w.sessions), label: t("Sessions") }, ...mine.month.figures.slice(0, 2).map((x) => ({ value: x.value, label: t("{figure}, 4 weeks", { figure: x.label }) }))],
+      };
+    }
+    if (isOwn(f)) {
+      return { family: f, name: t(FAMILY_NAME[f]), href: FAMILY_HREF[f], spark: null, headline: noneThisWeek(f), figures: [{ value: String(w.sessions), label: t("Sessions") }] };
+    }
     if (f === "swim" && swim) {
       return { family: f, name: t(FAMILY_NAME[f]), href: FAMILY_HREF[f], spark: v.weeks.slice(-8).map((x) => x.meters), headline: swim.hero.headline.replace(/[.。]$/, ""), figures: [{ value: String(w.sessions), label: t("Swims") }, ...swim.hero.figures.filter((x) => x.label !== t("Swims") && x.label !== t("Last 4 weeks"))].slice(0, 3) };
     }
@@ -788,8 +953,7 @@ function buildHub(c: Context, items: SportsItems, run: RunPage | null, ride: Rid
   const others = new Map<string, { sessions: number; seconds: number; last: Date }>();
   for (const a of c.acts) {
     if (shown.includes(a.family) || a.at.getTime() < from || a.at.getTime() > now.getTime() || isBlip(a)) continue;
-    const title = SPORT_TITLE[a.kind as NativeSport];
-    const name = title ? t(title) : t("Workout");
+    const name = kindName(a.kind);
     const row = others.get(name) ?? { sessions: 0, seconds: 0, last: a.at };
     row.sessions++; row.seconds += a.seconds; if (a.at.getTime() > row.last.getTime()) row.last = a.at;
     others.set(name, row);
@@ -852,5 +1016,7 @@ export function sportsFromItems(items: SportsItems, now: Date): Sports {
   };
   const has = (f: Family) => includesSport(families, f) && c.by(f).length > 0;
   const run = has("run") ? buildRun(c) : null, ride = has("ride") ? buildRide(c) : null, swim = has("swim") ? buildSwim(c) : null;
-  return { families, hub: buildHub(c, items, run, ride, swim), run, ride, swim };
+  const walk = has("walk") ? buildOwn(c, "walk") : null, hike = has("hike") ? buildOwn(c, "hike") : null, snow = has("snow") ? buildOwn(c, "snow") : null, climb = has("climb") ? buildOwn(c, "climb") : null;
+  const own = { ...(walk ? { walk } : {}), ...(hike ? { hike } : {}), ...(snow ? { snow } : {}), ...(climb ? { climb } : {}) };
+  return { families, hub: buildHub(c, items, run, ride, swim, own), run, ride, swim, walk, hike, snow, climb };
 }

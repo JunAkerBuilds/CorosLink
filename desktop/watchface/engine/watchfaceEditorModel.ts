@@ -303,8 +303,20 @@ function hiddenMetricBounds(
   const metricChanges = { ...design.metricChanges };
   if (templateShows) delete metricChanges[metricId];
   else metricChanges[metricId] = true;
-  return deriveEditorLayers(details, { ...design, metricChanges })
+  // Only this metric's box is wanted, and it doesn't depend on where the other
+  // hidden metrics would go: working theirs out too, each again for every other,
+  // grew with the factorial of how many a face hides.
+  return deriveEditorLayers(details, { ...design, metricChanges }, { hiddenBounds: false })
     .find((layer) => layer.id === groupId)?.bounds ?? null;
+}
+
+export interface DeriveEditorLayersOptions {
+  /**
+   * Whether a metric the face hides gets the box it would draw in once shown
+   * (one more derivation per hidden metric). Default true; false leaves those
+   * boxes null, for a caller that only wants a shown layer's box.
+   */
+  hiddenBounds?: boolean;
 }
 
 /**
@@ -314,8 +326,10 @@ function hiddenMetricBounds(
  */
 export function deriveEditorLayers(
   details: CorosWatchfaceTemplateDetails,
-  design: CorosWatchfaceDesignState
+  design: CorosWatchfaceDesignState,
+  options: DeriveEditorLayersOptions = {}
 ): EditorLayer[] {
+  const hiddenBoundsOf: typeof hiddenMetricBounds = options.hiddenBounds === false ? () => null : hiddenMetricBounds;
   // Keep selection geometry aligned with selectable styling and layout while
   // retaining hidden top-level layers in the layer list so users can re-enable
   // them. Control-battery is different: disabling it removes only children of
@@ -422,7 +436,7 @@ export function deriveEditorLayers(
     if (groupId === "battery") {
       const capability = metricActivity.get("battery");
       const visible = design.metricChanges?.battery ?? capability?.active ?? false;
-      const shownBounds = bounds ?? hiddenMetricBounds(details, design, "battery", groupId, capability?.active ?? false);
+      const shownBounds = bounds ?? hiddenBoundsOf(details, design, "battery", groupId, capability?.active ?? false);
       layers.push({
         id: groupId,
         kind: "battery",
@@ -523,7 +537,7 @@ export function deriveEditorLayers(
       }
       const overridden = design.metricChanges?.[metricId];
       const visible = overridden ?? capability.active;
-      const shownBounds = bounds ?? hiddenMetricBounds(details, design, metricId, groupId, capability.active);
+      const shownBounds = bounds ?? hiddenBoundsOf(details, design, metricId, groupId, capability.active);
       layers.push({
         id: groupId,
         kind: "metric",

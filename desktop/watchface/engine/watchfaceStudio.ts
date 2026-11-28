@@ -1,5 +1,6 @@
 import { msg } from "@/lib/i18n";
 import { artworkMatchesFrame, batteryIconRotation, batteryPreviewStateIndex, batteryReplacementStateCount, batteryScalesFromArtwork, batteryStateFrameSize, batteryStatesCoverTemplate } from "./watchfaceBatteryStates";
+import { renderStudioControlIcon, studioControlIconPrefix, studioControlIconRelativePath, STUDIO_CONTROL_ICON_PREFIXES } from "./watchfaceControlIcons";
 export { batteryPreviewStateIndex } from "./watchfaceBatteryStates";
 import { drawSpritePreservingCore, placePercentGlyph, renderAlignedRasterGlyph, spaceWatchfaceGlyph, type WatchfacePercentAlign } from "./watchfaceGlyphLayout";
 import { getWatchfaceTarget } from "../watchfaceTargets";
@@ -171,6 +172,19 @@ export const AOD_DIM_FACTOR = 0.55;
 export const AOD_SAFE_ALPHA_CUTOFF = 250;
 /** Lowest edge coverage eligible for one-pixel AOD smoothing. */
 export const AOD_SAFE_EDGE_ALPHA_FLOOR = 8;
+/** Coverage at which an always-on glyph pixel is on: half, as COROS cuts its own bitmap digits. */
+export const AOD_GLYPH_ALPHA_CUTOFF = 128;
+
+/**
+ * Layers drawn from digit and letter sprites (time, date, readings, AM/PM). Their always-on pixels are cut at
+ * half coverage with no edge dither, so strokes keep their weight and edges stay clean stair steps, like the
+ * digits in COROS's own faces. Icons, weather and artwork keep the softer cleanup.
+ */
+const AOD_GLYPH_LAYERS = new Set([
+  "hours", "minutes", "seconds", "autoTime", "weekday", "dateMonth", "dateDay", "ampm",
+  "battery", "heartRate", "steps", "calories", "exercise", "elevation", "temperature"
+]);
+export const isWatchfaceAodGlyphLayer = (layerId: string | null | undefined): boolean => !!layerId && AOD_GLYPH_LAYERS.has(layerId);
 
 const AOD_EDGE_DITHER_4X4 = [
   0, 8, 2, 10,
@@ -190,8 +204,14 @@ export function sanitizeWatchfaceAodAlpha(
   width = 0,
   height = 0,
   cutoff = AOD_SAFE_ALPHA_CUTOFF,
-  options: { keepCutoff?: boolean } = {}
+  options: { keepCutoff?: boolean; glyph?: boolean } = {}
 ): Uint8ClampedArray {
+  // A plain glyph: on at half coverage, off below, nothing else. Faded or decorated glyphs (keepCutoff) don't
+  // get this: their alpha isn't coverage.
+  if (options.glyph && !options.keepCutoff) {
+    for (let at = 3; at < pixels.length; at += 4) pixels[at] = pixels[at]! >= AOD_GLYPH_ALPHA_CUTOFF ? 255 : 0;
+    return pixels;
+  }
   let normalizedCutoff = Math.max(1, Math.min(255, Math.round(cutoff)));
   const pixelCount = Math.floor(pixels.length / 4);
   // A soft sprite (one resampled up from a small layout, say 260 to 800 to 416) has few nearly opaque
@@ -1234,9 +1254,28 @@ export function configAssetDefaultsToNativeSize(configKey: string): boolean {
  */
 export function configAssetCanScaleTemplateImage(configKey: string): boolean {
   return (
-    NATIVE_CONFIG_ICON_KEYS.has(configKey) &&
-    controlStatusLayoutGroupId(configKey) !== null
+    (NATIVE_CONFIG_ICON_KEYS.has(configKey) &&
+      controlStatusLayoutGroupId(configKey) !== null) ||
+    SLOT_TYPE_ICON_KEY.test(configKey)
   );
+}
+
+/** A selectable-slot type's own icon (heart rate's, the barometer's arrows …), which can have a size of its own. */
+const SLOT_TYPE_ICON_KEY =
+  /^control_(?:hr|step|kcal|floor|elevation|exercise|sunrise|sunset|temperature|barometer|barometer_(?:up|down|flat))_icon$/;
+
+/**
+ * A slot type's icon size: its canvas as a multiple of the slot's icon size,
+ * set on the icon alone (own size on, with its scale). 1 for any other key or
+ * an icon left at the slot's size.
+ */
+export function slotTypeIconSize(
+  configKey: string,
+  override: Pick<CorosWatchfaceConfigAssetOverride, "nativeSize" | "scale"> | undefined
+): number {
+  return SLOT_TYPE_ICON_KEY.test(configKey) && override?.nativeSize
+    ? normalizePositiveScale(override.scale)
+    : 1;
 }
 
 /**
@@ -1443,6 +1482,33 @@ function renderBarometerIcon(
   return canvas.toDataURL("image/png");
 }
 
+/** The canvas of the colon Studio draws for a selectable time: half a digit wide, a digit tall. */
+function controlColonCanvasSize(
+  resolution: CorosWatchfaceResolutionDetails
+): { width: number; height: number } {
+  const digit = controlTemperatureFontFolder(resolution)?.files[0];
+  return digit
+    ? { width: Math.max(3, Math.round(digit.width * 0.5)), height: digit.height }
+    : virtualControlIconCanvasSize(resolution);
+}
+
+/** Two round dots, where a digit's colon sits. */
+function renderControlColonIcon(width: number, height: number, color: string): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+  if (!context) return canvas.toDataURL("image/png");
+  const radius = Math.max(1, Math.min(canvas.width * 0.3, canvas.height * 0.08));
+  context.fillStyle = color;
+  for (const at of [0.32, 0.72]) {
+    context.beginPath();
+    context.arc(canvas.width / 2, canvas.height * at, radius, 0, Math.PI * 2);
+    context.fill();
+  }
+  return canvas.toDataURL("image/png");
+}
+
 function controlPointCanvasSize(
   resolution: CorosWatchfaceResolutionDetails
 ): { width: number; height: number } {
@@ -1484,11 +1550,46 @@ function renderControlPointIcon(
   return canvas.toDataURL("image/png");
 }
 
+/**
+ * The picture Studio draws for a selectable-slot key that names one of its
+ * own files (the barometer's icon and trend arrows, its decimal point, the
+ * time colon), for showing in the inspector; null for the template's own
+ * pictures and keys Studio doesn't draw.
+ */
+export function studioSlotPictureDataUrl(
+  resolution: CorosWatchfaceResolutionDetails,
+  key: string,
+  color: string
+): string | null {
+  const relative = resolution.config[key]?.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!relative || resolution.icons.some((icon) => icon.path === `${resolution.directory}/${relative}`)) return null;
+  const size = virtualControlIconCanvasSize(resolution);
+  const trend = BAROMETER_TRENDS.find((candidate) => barometerTrendIconRelativePath(candidate) === relative);
+  if (trend) return renderBarometerTrendIcon(size.width, size.height, trend, color);
+  if (relative === BAROMETER_ICON_RELATIVE_PATH) return renderBarometerIcon(size.width, size.height, color);
+  if (relative === BAROMETER_POINT_ICON_RELATIVE_PATH) {
+    const point = controlPointCanvasSize(resolution);
+    return renderControlPointIcon(point.width, point.height, color);
+  }
+  if (relative === CONTROL_COLON_ICON_RELATIVE_PATH) {
+    const colon = controlColonCanvasSize(resolution);
+    return renderControlColonIcon(colon.width, colon.height, color);
+  }
+  const prefix = studioControlIconPrefix(relative);
+  return prefix ? renderStudioControlIcon(prefix, size.width, size.height, color) : null;
+}
+
 /** Creates assets for exactly the selected parser branch plus its decimal point. */
 export function buildBarometerIconReplacements(
   details: CorosWatchfaceTemplateDetails,
-  color: string
+  color: string,
+  /** The face's picture settings: a slot icon's own size draws Studio's icon bigger or smaller. */
+  overrides: Record<string, CorosWatchfaceConfigAssetOverride> = {}
 ): CorosWatchfaceAssetReplacement[] {
+  const sized = (configKey: string, base: { width: number; height: number }) => {
+    const factor = slotTypeIconSize(configKey, overrides[watchfaceConfigAssetId("config", configKey)]);
+    return { width: Math.max(1, Math.round(base.width * factor)), height: Math.max(1, Math.round(base.height * factor)) };
+  };
   const replacements: CorosWatchfaceAssetReplacement[] = [];
   for (const resolution of details.resolutions) {
     const size = virtualControlIconCanvasSize(resolution);
@@ -1501,7 +1602,7 @@ export function buildBarometerIconReplacements(
       if (!resolution.icons.some((icon) => icon.path === path)) {
         replacements.push({
           path,
-          dataUrl: renderBarometerIcon(size.width, size.height, color),
+          dataUrl: renderBarometerIcon(sized("control_barometer_icon", size).width, sized("control_barometer_icon", size).height, color),
           create: true
         });
       }
@@ -1518,13 +1619,38 @@ export function buildBarometerIconReplacements(
       replacements.push({
         path,
         dataUrl: renderBarometerTrendIcon(
-          size.width,
-          size.height,
+          sized(configKey, size).width,
+          sized(configKey, size).height,
           trend,
           color
         ),
         create: true
       });
+    }
+    // The default icons Studio gives slot types without a picture.
+    for (const [configKey, rawValue] of Object.entries(resolution.config)) {
+      if (!/^control_[a-z]+_icon$/.test(configKey)) continue;
+      const relative = rawValue.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+      const prefix = studioControlIconPrefix(relative);
+      const path = `${resolution.directory}/${relative}`;
+      if (!prefix || resolution.icons.some((icon) => icon.path === path)) continue;
+      const iconCanvas = sized(configKey, size);
+      replacements.push({ path, dataUrl: renderStudioControlIcon(prefix, iconCanvas.width, iconCanvas.height, color), create: true, allowDimensionOverride: true });
+    }
+    const colonPath = resolution.config.control_colon_icon
+      ?.trim()
+      .replace(/\\/g, "/")
+      .replace(/^\.\//, "");
+    if (colonPath === CONTROL_COLON_ICON_RELATIVE_PATH) {
+      const path = `${resolution.directory}/${colonPath}`;
+      if (!resolution.icons.some((icon) => icon.path === path)) {
+        const colonSize = controlColonCanvasSize(resolution);
+        replacements.push({
+          path,
+          dataUrl: renderControlColonIcon(colonSize.width, colonSize.height, color),
+          create: true
+        });
+      }
     }
     const pointPath = resolution.config.control_point_icon
       ?.trim()
@@ -1672,7 +1798,13 @@ export function buildWatchfaceConfigAssetOverrides(
             ? currentAnalogOverride
             : undefined);
         if (!override) continue;
-        const virtual = !scopedConfig[configKey]?.trim();
+        // No picture in the template: no key, or one naming a picture Studio
+        // draws itself (a default slot icon), which the designer's replaces.
+        const scopedValue = scopedConfig[configKey]?.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+        const virtual = !scopedValue || (
+          studioControlIconPrefix(scopedValue) !== null &&
+          !resolution.icons.some((icon) => icon.path === `${resolution.directory}/${scopedValue}`)
+        );
         if (override.enabled === false) {
           // A disabled direct asset must not leave a blank declaration behind:
           // COROS can treat key presence itself as feature presence. Delete the
@@ -2000,12 +2132,21 @@ export async function buildWatchfaceConfigAssetReplacements(
         const effectiveOverride = virtual
           ? { ...override, nativeSize: false }
           : override;
-        const virtualCanvas = virtual
+        // A slot icon with a size of its own grows its canvas; the picture
+        // then fills it rather than zooming inside the slot's.
+        const iconSize = virtual ? slotTypeIconSize(configKey, override) : 1;
+        const slotCanvas = virtual
           ? virtualControlIconCanvasSize(
               options.layoutDetails?.resolutions.find(
                 (candidate) => candidate.directory === resolution.directory
               ) ?? resolution
             )
+          : null;
+        const virtualCanvas = slotCanvas
+          ? {
+              width: Math.max(1, Math.round(slotCanvas.width * iconSize)),
+              height: Math.max(1, Math.round(slotCanvas.height * iconSize))
+            }
           : null;
         const replacementHeight = Math.max(
           1,
@@ -2044,7 +2185,7 @@ export async function buildWatchfaceConfigAssetReplacements(
               override!.replacement!.dataUrl,
               canvasSize.width,
               canvasSize.height,
-              override!.scale ?? 1
+              iconSize !== 1 ? 1 : override!.scale ?? 1
             );
         const dataUrl = hasDecorations
           ? (
@@ -3618,8 +3759,39 @@ export async function tintSprite(
   return resizeAndTintSprite(dataUrl, width, height, color);
 }
 
+/**
+ * Resized and tinted sprites, by source, size and colour. Every preview redraws
+ * the template's digits in the face's colours, and each was a PNG encode; the
+ * same sprite comes out the same, so it's made once. Large sources aren't kept.
+ */
+const tintedSpriteCache = new Map<string, Promise<string>>();
+const TINTED_SPRITE_CACHE_LIMIT = 512;
+
 /** Resizes a source bitmap and optionally recolors its non-transparent pixels. */
-export async function resizeAndTintSprite(
+export function resizeAndTintSprite(
+  dataUrl: string,
+  width: number,
+  height: number,
+  color?: string
+): Promise<string> {
+  if (dataUrl.length > STUDIO_IMAGE_CACHE_MAX_SOURCE_LENGTH) {
+    return drawResizedTintedSprite(dataUrl, width, height, color);
+  }
+  const key = `${width}x${height}|${color ?? ""}|${dataUrl}`;
+  const cached = tintedSpriteCache.get(key);
+  if (cached) return cached;
+  const pending = drawResizedTintedSprite(dataUrl, width, height, color);
+  tintedSpriteCache.set(key, pending);
+  pending.catch(() => tintedSpriteCache.delete(key));
+  while (tintedSpriteCache.size > TINTED_SPRITE_CACHE_LIMIT) {
+    const oldest = tintedSpriteCache.keys().next().value;
+    if (oldest === undefined) break;
+    tintedSpriteCache.delete(oldest);
+  }
+  return pending;
+}
+
+async function drawResizedTintedSprite(
   dataUrl: string,
   width: number,
   height: number,
@@ -3958,7 +4130,9 @@ let lastPreviewBackground: {
   dataUrl: string;
   image: Promise<HTMLImageElement>;
 } | null = null;
-function loadPreviewBackground(dataUrl: string): Promise<HTMLImageElement> {
+function loadPreviewBackground(dataUrl: string | HTMLCanvasElement): Promise<CanvasImageSource> {
+  // A background already drawn on a canvas is used as it is.
+  if (typeof dataUrl !== "string") return Promise.resolve(dataUrl);
   if (lastPreviewBackground?.dataUrl === dataUrl) {
     return lastPreviewBackground.image;
   }
@@ -4052,7 +4226,9 @@ export async function renderWatchfaceSolidFontSprite(dataUrl: string): Promise<s
 export async function renderWatchfaceAodSafeSprite(
   dataUrl: string,
   /** The sprite carries baked layer opacity, effects or strokes (see sanitizeWatchfaceAodAlpha). */
-  keepCutoff = false
+  keepCutoff = false,
+  /** A digit or letter sprite: cut at half coverage (see isWatchfaceAodGlyphLayer). */
+  glyph = false
 ): Promise<string> {
   const image = await loadStudioImage(dataUrl, false);
   const canvas = document.createElement("canvas");
@@ -4065,7 +4241,7 @@ export async function renderWatchfaceAodSafeSprite(
   if (!context) return dataUrl;
   context.drawImage(image, 0, 0);
   const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-  sanitizeWatchfaceAodAlpha(imageData.data, canvas.width, canvas.height, undefined, { keepCutoff });
+  sanitizeWatchfaceAodAlpha(imageData.data, canvas.width, canvas.height, undefined, { keepCutoff, glyph });
   context.putImageData(imageData, 0, 0);
   return canvas.toDataURL("image/png");
 }
@@ -5542,11 +5718,19 @@ function complicationFontKey(
     : `control_${complication.controlPrefix}_font`;
 }
 
+// Configs are never changed in place (overrides make new objects), so what a
+// config holds is worked out once per object. Both lookups below run thousands
+// of times per edit on a busy face and walk every key each time.
+const usableControlSlotCache = new WeakMap<Record<string, string>, boolean>();
 function hasUsableControlSlot(config: Record<string, string>): boolean {
-  return Object.entries(config).some(
+  const cached = usableControlSlotCache.get(config);
+  if (cached !== undefined) return cached;
+  const usable = Object.entries(config).some(
     ([key, value]) =>
       /^rect_control\d+_pos$/.test(key) && parseConfigPos(value) !== null
   );
+  usableControlSlotCache.set(config, usable);
+  return usable;
 }
 
 export type WatchfaceBarometerMode = "static" | "directional";
@@ -5811,6 +5995,8 @@ function barometerTrendIconRelativePath(trend: BarometerTrend): string {
 const BAROMETER_ICON_RELATIVE_PATH = "icon/coroslink_barometer.png";
 const BAROMETER_POINT_ICON_RELATIVE_PATH =
   "icon/coroslink_control_point.png";
+/** The colon Studio gives a time it adds to the selectable slot (sunrise, sunset, exercise). */
+const CONTROL_COLON_ICON_RELATIVE_PATH = "icon/coroslink_control_colon.png";
 
 function firstControlRect(config: Record<string, string>): string | undefined {
   return Object.entries(config).find(
@@ -5864,6 +6050,36 @@ function fallbackControlRect(
   return `{${x0},${y0},${x0 + width},${y0 + height},hcenter|vcenter}`;
 }
 
+/**
+ * Splits the slot's box into a value's two parts sized for its digits: the
+ * leading part `leading` digits wide, a half-digit gap for the colon or point,
+ * then the trailing part, starting at the box's left or past the icon. Each
+ * part holds its digits against the separator. Null when the box can't be read.
+ */
+function splitControlRectForDigits(
+  value: string,
+  digitWidth: number,
+  leading: number,
+  trailing: number,
+  /** Where the value starts; past the icon when the icon sits in the box. */
+  startX?: number
+): { hour: string; minute: string } | null {
+  const parsed = parseConfigRect(value);
+  if (!parsed || !(digitWidth > 0)) return null;
+  const rect = { ...parsed, x0: Math.max(parsed.x0, Math.round(startX ?? parsed.x0)) };
+  const suffix =
+    value.match(
+      /^\{\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*((?:,[^}]*)?)\}$/
+    )?.[1] || ",hcenter|vcenter";
+  const gap = Math.max(2, Math.round(digitWidth * 0.5));
+  const leadEnd = rect.x0 + Math.round(digitWidth * leading);
+  const trailStart = leadEnd + gap;
+  return {
+    hour: alignConfigRectValue(`{${rect.x0},${rect.y0},${leadEnd},${rect.y1}${suffix}}`, "right"),
+    minute: alignConfigRectValue(`{${trailStart},${rect.y0},${trailStart + Math.round(digitWidth * trailing)},${rect.y1}${suffix}}`, "left")
+  };
+}
+
 function splitControlRect(
   value: string,
   leadingRatio = 0.5
@@ -5880,10 +6096,22 @@ function splitControlRect(
     value.match(
       /^\{\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*((?:,[^}]*)?)\}$/
     )?.[1] || ",hcenter|vcenter";
+  // Each half holds its digits against the separator (6:30, 1013.2), not in
+  // its own middle, which left them adrift either side of the colon or point.
   return {
-    hour: `{${rect.x0},${rect.y0},${middle - gap},${rect.y1}${suffix}}`,
-    minute: `{${middle + gap},${rect.y0},${rect.x1},${rect.y1}${suffix}}`
+    hour: alignConfigRectValue(`{${rect.x0},${rect.y0},${middle - gap},${rect.y1}${suffix}}`, "right"),
+    minute: alignConfigRectValue(`{${middle + gap},${rect.y0},${rect.x1},${rect.y1}${suffix}}`, "left")
   };
+}
+
+/** The widest digit of the slot's font (0 when it has none). */
+function controlDigitWidth(
+  resolution: CorosWatchfaceResolutionDetails,
+  config: Record<string, string>,
+  fontKey: string
+): number {
+  const files = findSpriteFolder(resolution, config[fontKey])?.files.slice(0, 10) ?? [];
+  return files.length ? Math.max(...files.map((file) => file.width)) : 0;
 }
 
 function fallbackControlFont(
@@ -5981,6 +6209,38 @@ function complicationIconPath(
     .replace(/\//g, "\\");
 }
 
+/**
+ * Where a value Studio lays out starts: at least a gap past the right of
+ * its icon when the icon is to its left, else the box's left.
+ */
+function controlValueStart(
+  resolution: CorosWatchfaceResolutionDetails,
+  config: Record<string, string>,
+  complication: WatchfaceComplicationDefinition,
+  baseRect: string
+): number | undefined {
+  const rect = parseConfigRect(baseRect);
+  if (!rect) return undefined;
+  const iconKey = `control_${complication.controlPrefix}_icon`;
+  const iconPos = parseConfigPos(config[`${iconKey}_pos`]) ??
+    parseConfigPos(fallbackControlIconPosition(config, baseRect));
+  const iconValue = (config[iconKey] || complicationIconPath(resolution, complication))
+    ?.replace(/\\/g, "/").replace(/^\.\//, "");
+  const iconFile = iconValue
+    ? resolution.icons.find((icon) => icon.path === `${resolution.directory}/${iconValue}`)
+    : undefined;
+  // Studio's own icons (the barometer's, and the defaults it gives other types)
+  // are drawn at the slot's icon size.
+  const iconWidth = iconFile?.width ??
+    (complication.id === "barometer" || iconValue ? virtualControlIconCanvasSize(resolution).width : 0);
+  if (!iconPos || iconWidth <= 0) return undefined;
+  // An icon to the right of the value leaves its start alone. One to the left
+  // (in the box, or just before it at another choice's icon place) keeps the
+  // value about a third of the icon's width clear of it.
+  if (iconPos.x >= rect.x1) return undefined;
+  return Math.max(rect.x0, iconPos.x + iconWidth + Math.max(4, Math.round(iconWidth * 0.35)));
+}
+
 function addMissingControlComplication(
   resolution: CorosWatchfaceResolutionDetails,
   config: Record<string, string>,
@@ -5989,6 +6249,34 @@ function addMissingControlComplication(
   aod: boolean
 ): Record<string, string> {
   const values: Record<string, string> = {};
+  // A time (hours and minutes) needs the colon (also where the template
+  // has the time's own rects but no colon) between them; the watch draws
+  // none unless the face names one.
+  if (
+    complication.valueParts?.some((part) => part.rectSuffix === "hour") &&
+    !config.control_colon_icon?.trim()
+  ) {
+    values.control_colon_icon = CONTROL_COLON_ICON_RELATIVE_PATH.replace(/\//g, "\\");
+  }
+  // A type with no picture of its own gets Studio's (hiding it leaves the value
+  // alone again). Where the template already places the value, the icon goes
+  // where the slot's other icons sit, else just left of the value.
+  const studioIconKey = `control_${complication.controlPrefix}_icon`;
+  if (
+    (STUDIO_CONTROL_ICON_PREFIXES as readonly string[]).includes(complication.controlPrefix) &&
+    !config[studioIconKey]?.trim() &&
+    !complicationIconPath(resolution, complication)
+  ) {
+    values[studioIconKey] = studioControlIconRelativePath(complication.controlPrefix).replace(/\//g, "\\");
+    const firstRect = parseConfigRect(config[complicationRectKeys(complication)[0] ?? ""]);
+    if (firstRect && !parseConfigPos(config[`${studioIconKey}_pos`])) {
+      const otherIcon = Object.entries(config).find(
+        ([key, value]) => /^control_[a-z0-9_]+_icon_pos$/.test(key) && parseConfigPos(value) !== null
+      )?.[1];
+      const size = virtualControlIconCanvasSize(resolution);
+      values[`${studioIconKey}_pos`] = otherIcon ?? `{${Math.round(firstRect.x0 - size.width - Math.max(4, size.width * 0.35))},${Math.round((firstRect.y0 + firstRect.y1 - size.height) / 2)}}`;
+    }
+  }
   if (
     complication.id !== "barometer" &&
     hasUsableControlSlot(config) &&
@@ -6020,6 +6308,8 @@ function addMissingControlComplication(
 
   const iconPositionKey = `control_${complication.controlPrefix}_icon_pos`;
   const iconKey = `control_${complication.controlPrefix}_icon`;
+  // The value starts past its icon, which sits at the box's top left.
+  const valueStart = controlValueStart(resolution, { ...config, ...values }, complication, baseRect);
   if (complication.id === "barometer") {
     // COROS's compiler fails on the static branch (one icon and one rectangle), so
     // only the directional branch is ever written; a static template is converted.
@@ -6032,7 +6322,9 @@ function addMissingControlComplication(
       parseConfigRect(config.control_barometer_integer_rect) === null ||
       parseConfigRect(config.control_barometer_decimal_rect) === null
     ) {
-      const splitRect = splitControlRect(baseRect, 0.78) ?? {
+      // Four digits (1013), the point, one decimal.
+      const splitRect = splitControlRectForDigits(baseRect, controlDigitWidth(resolution, { ...config, ...values }, fontKey), 4, 1, valueStart) ??
+        splitControlRect(baseRect, 0.78) ?? {
         hour: baseRect,
         minute: baseRect
       };
@@ -6061,8 +6353,10 @@ function addMissingControlComplication(
   }
 
   const rectKeys = complicationRectKeys(complication);
+  // Two digits each side of the colon (19:45).
   const splitRect = complication.valueParts
-    ? splitControlRect(baseRect, 0.5)
+    ? splitControlRectForDigits(baseRect, controlDigitWidth(resolution, { ...config, ...values }, fontKey), 2, 2, valueStart) ??
+      splitControlRect(baseRect, 0.5)
     : null;
   for (const [index, key] of rectKeys.entries()) {
     if (parseConfigRect(config[key])) {
@@ -6095,8 +6389,9 @@ function addMissingControlComplication(
     values[iconKey] = iconPath;
   }
   if (
-    (config[iconKey] || iconPath || complication.id === "battery") &&
-    !parseConfigPos(config[iconPositionKey])
+    (config[iconKey] || values[iconKey] || iconPath || complication.id === "battery") &&
+    !parseConfigPos(config[iconPositionKey]) &&
+    !values[iconPositionKey]
   ) {
     values[iconPositionKey] = fallbackControlIconPosition(config, baseRect);
   }
@@ -6553,8 +6848,29 @@ export function buildSelectableMetricStyleOverrides(
             scaleConfigRectValue(rect.value, style.scale) ?? rect.value;
         }
       }
-      for (const rect of implementedRects) {
-        values[rect.key] = alignConfigRectValue(values[rect.key]!, style.align);
+      // A value over several rects (sunrise's hours and minutes) moves as one,
+      // so the gap between them grows and shrinks with the digits.
+      const grouped: Record<string, string> = {};
+      if (implementedRects.length > 1) {
+        const sizes = implementedRects.map((rect) => {
+          const sized = parseConfigRect(values[rect.key] ?? "");
+          return sized ? { width: sized.x1 - sized.x0, height: sized.y1 - sized.y0 } : null;
+        });
+        const first = parseConfigRect(implementedRects[0]!.value);
+        const spread = first && sizes[0]
+          ? sizes[0].height / Math.max(1, first.y1 - first.y0)
+          : 1;
+        placeConfigRectGroup(
+          implementedRects.map((rect) => rect.value), sizes, { x: spread, y: spread },
+          controlValueAnchor(resolution.config, complication.controlPrefix, implementedRects.map((rect) => rect.value))
+        )
+          .forEach((value, index) => { if (value) grouped[implementedRects[index]!.key] = value; });
+      }
+      Object.assign(values, grouped);
+      // A value split over rects keeps each part against its separator, so
+      // the slot's alignment only moves a single-rect value.
+      if (implementedRects.length === 1) {
+        values[implementedRects[0]!.key] = alignConfigRectValue(values[implementedRects[0]!.key]!, style.align);
       }
       values[fontKey] = useStudioFolder ? "cl_control" : source.folder;
       if (style.color) values[`${fontKey}_color`] = configHexColor(style.color);
@@ -6569,6 +6885,80 @@ export interface WatchfaceSelectableMetricSpriteComposition {
   replacements: CorosWatchfaceAssetReplacement[];
   /** Native-size value rectangles, centered on the template positions. */
   configOverrides: CorosWatchfaceConfigOverride[];
+}
+
+/**
+ * The selectable slot's colon (sunrise, sunset and exercise times), drawn to
+ * match its digits: the digits' height, and with a font their font, weight,
+ * style and colour; with the template's PNG digits, the template colon at the
+ * digits' scale. Null when there's nothing to draw it from.
+ */
+export async function renderSelectableColonSprite(
+  colon: Pick<CorosWatchfaceSpriteFile, "width" | "height"> | null,
+  colonDataUrl: string | undefined,
+  digit: Pick<CorosWatchfaceSpriteFile, "width" | "height">,
+  style: WatchfaceMetricSpriteStyle,
+  fontFamily: string,
+  typography: WatchfaceTypography,
+  color: string,
+  nativeScale = 1,
+  /** ":" for a time, "." for the barometer's decimal point. */
+  separator: ":" | "." = ":"
+): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  const scale = normalizeSpriteScale(style.scale);
+  const imported = style.nativeSize ? rasterFontNativeSpriteSize(style.rasterFont, "0") : undefined;
+  const height = Math.max(1, Math.round((imported?.height ? imported.height * nativeScale : digit.height) * scale));
+  const font = style.fontFamily ?? fontFamily;
+  const glyphTypography = resolveWatchfaceComponentTypography(typography, style);
+  if (shouldRenderWatchfaceText(separator, font, glyphTypography)) {
+    const dataUrl = await renderNativeWatchfaceTextSprite(separator, height, font, style.color ?? color, glyphTypography);
+    const image = await loadStudioImage(dataUrl);
+    return { dataUrl, width: image.naturalWidth, height: image.naturalHeight };
+  }
+  if (!colon || !colonDataUrl) {
+    // No picture to scale (Studio added the colon): the dots, a digit tall.
+    const width = Math.max(3, Math.round(digit.width * 0.5 * scale));
+    const draw = separator === "." ? renderControlPointIcon : renderControlColonIcon;
+    return { dataUrl: draw(width, height, style.color ?? color), width, height };
+  }
+  const width = Math.max(1, Math.round(colon.width * scale));
+  const colonHeight = Math.max(1, Math.round(colon.height * scale));
+  return { dataUrl: await resizeAndTintSprite(colonDataUrl, width, colonHeight, style.color), width, height: colonHeight };
+}
+
+/** The selectable colon and decimal point redrawn to match the styled digits, in every tree that has them. */
+async function buildSelectableColonReplacements(
+  details: CorosWatchfaceTemplateDetails,
+  style: WatchfaceMetricSpriteStyle,
+  fontFamily: string,
+  typography: WatchfaceTypography,
+  loadAssets: WatchfaceAssetLoader
+): Promise<CorosWatchfaceAssetReplacement[]> {
+  const masterWidth = pickPreviewResolution(details)?.width;
+  const replacements: CorosWatchfaceAssetReplacement[] = [];
+  for (const resolution of details.resolutions) for (const [configKey, separator] of [["control_colon_icon", ":"], ["control_point_icon", "."]] as const) {
+    const colonValue = resolution.config[configKey]?.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+    const colon = colonValue ? resolution.icons.find((icon) => icon.path === `${resolution.directory}/${colonValue}`) ?? null : null;
+    const digit = controlTemperatureFontFolder(resolution)?.files[0];
+    if (!colonValue || !digit) continue;
+    const textColon = shouldRenderWatchfaceText(
+      separator, style.fontFamily ?? fontFamily, resolveWatchfaceComponentTypography(typography, style)
+    );
+    const colonDataUrl = textColon || !colon ? undefined : (await loadAssets([colon.path]))[0]?.dataUrl;
+    const drawn = await renderSelectableColonSprite(
+      colon, colonDataUrl, digit, style, fontFamily, typography, "#ffffff",
+      masterWidth ? resolution.width / masterWidth : 1, separator
+    );
+    if (drawn) {
+      replacements.push({
+        path: `${resolution.directory}/${colonValue}`,
+        dataUrl: drawn.dataUrl,
+        create: !colon,
+        allowDimensionOverride: true
+      });
+    }
+  }
+  return replacements;
 }
 
 /**
@@ -6657,7 +7047,10 @@ export async function buildSelectableMetricSpriteComposition(
             rendered, job.width, job.height, style.rotation
           ), spriteTypography.letterSpacing)
         };
-      })),
+      })).then(async (digits) => [
+        ...digits,
+        ...await buildSelectableColonReplacements(details, style, fontFamily, typography, loadAssets)
+      ]),
       configOverrides: []
     };
   }
@@ -6765,6 +7158,7 @@ export async function buildSelectableMetricSpriteComposition(
       });
     }
   }
+  replacements.push(...await buildSelectableColonReplacements(details, style, fontFamily, typography, loadAssets));
   return { replacements, configOverrides };
 }
 
@@ -7554,6 +7948,86 @@ export function scaleConfigRectValue(value: string, scale: number): string | nul
   return `{${nextX0},${nextY0},${nextX0 + width},${nextY0 + height}${match[5]}}`;
 }
 
+/**
+ * Scales firmware rects that show one value together, around the center of
+ * the box they span: each rect's size and its distance from that center grow
+ * by the same factor per axis. Unparseable values come back null.
+ */
+export function scaleConfigRectGroup(
+  values: readonly string[],
+  factor: { x: number; y: number }
+): (string | null)[] {
+  const pattern = /^\{\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*((?:,[^}]*)?)\}$/;
+  const parsed = values.map((value) => {
+    const match = value.match(pattern);
+    return match
+      ? { x0: Number(match[1]), y0: Number(match[2]), x1: Number(match[3]), y1: Number(match[4]), rest: match[5] }
+      : null;
+  });
+  const shown = parsed.filter((rect) => rect !== null);
+  if (shown.length === 0) return values.map(() => null);
+  const centerX = (Math.min(...shown.map((r) => r.x0)) + Math.max(...shown.map((r) => r.x1))) / 2;
+  const centerY = (Math.min(...shown.map((r) => r.y0)) + Math.max(...shown.map((r) => r.y1))) / 2;
+  return parsed.map((rect) => {
+    if (!rect) return null;
+    const width = Math.max(1, Math.round((rect.x1 - rect.x0) * factor.x));
+    const height = Math.max(1, Math.round((rect.y1 - rect.y0) * factor.y));
+    const x0 = Math.round(centerX + ((rect.x0 + rect.x1) / 2 - centerX) * factor.x - width / 2);
+    const y0 = Math.round(centerY + ((rect.y0 + rect.y1) / 2 - centerY) * factor.y - height / 2);
+    return `{${x0},${y0},${x0 + width},${y0 + height}${rect.rest}}`;
+  });
+}
+
+/**
+ * The point a selectable value grows from: its icon's top left (where the
+ * icon itself grows from) when the icon is beside it, so value and icon scale
+ * as one and the value never runs over the icon. Null for the middle.
+ */
+function controlValueAnchor(
+  config: Record<string, string>,
+  controlPrefix: string,
+  values: readonly string[]
+): { x: number; y: number } | null {
+  const icon = parseConfigPos(config[`control_${controlPrefix}_icon_pos`]);
+  const rects = values.map((value) => parseConfigRect(value)).filter((rect) => rect !== null);
+  if (!icon || rects.length === 0) return null;
+  const left = Math.min(...rects.map((r) => r.x0));
+  const right = Math.max(...rects.map((r) => r.x1));
+  return icon.x < right && icon.x <= left + 1 ? icon : null;
+}
+
+/**
+ * Gives rects that show one value together new sizes, and moves each one's
+ * center away from (or toward) the center of the box they span by `spread`,
+ * so the gaps between them change with the digits. Unparseable values and
+ * missing sizes come back null.
+ */
+export function placeConfigRectGroup(
+  values: readonly string[],
+  sizes: readonly ({ width: number; height: number } | null)[],
+  spread: { x: number; y: number },
+  /** The point that stays put (e.g. the icon's corner); default the middle of the rects. */
+  anchor?: { x: number; y: number } | null
+): (string | null)[] {
+  const rects = values.map((value) => parseConfigRect(value));
+  const shown = rects.filter((rect) => rect !== null);
+  if (shown.length === 0) return values.map(() => null);
+  const centerX = anchor?.x ??
+    (Math.min(...shown.map((r) => r.x0)) + Math.max(...shown.map((r) => r.x1))) / 2;
+  const centerY = anchor?.y ??
+    (Math.min(...shown.map((r) => r.y0)) + Math.max(...shown.map((r) => r.y1))) / 2;
+  return rects.map((rect, index) => {
+    const size = sizes[index];
+    if (!rect || !size) return null;
+    const rest = values[index]!.match(/^\{\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*((?:,[^}]*)?)\}$/)?.[1] ?? "";
+    const width = Math.max(1, Math.round(size.width));
+    const height = Math.max(1, Math.round(size.height));
+    const x0 = Math.round(centerX + ((rect.x0 + rect.x1) / 2 - centerX) * spread.x - width / 2);
+    const y0 = Math.round(centerY + ((rect.y0 + rect.y1) / 2 - centerY) * spread.y - height / 2);
+    return `{${x0},${y0},${x0 + width},${y0 + height}${rest}}`;
+  });
+}
+
 /** Resizes a firmware rect around its center to exact native pixel dimensions. */
 export function resizeConfigRectValue(
   value: string,
@@ -7613,19 +8087,27 @@ export function buildMetricStyleOverrides(
             )
           )
         : null;
-      const rects = style
-        ? parts.map((part) => {
-            const value = resolution.config[part.rectKey] ?? "";
-            const rect = factors ? parseConfigRect(value) : null;
-            return rect && factors
-              ? resizeConfigRectToCanvas(
-                  value,
-                  (rect.x1 - rect.x0) * factors.x,
-                  (rect.y1 - rect.y0) * factors.y
-                )
-              : scaleConfigRectValue(value, style.scale);
-          })
-        : [];
+      // A value split over several rects (Exercise's hours and minutes) grows
+      // as one: around the rects' shared center, so the gap between them
+      // grows with the digits instead of staying fixed.
+      const rects = !style
+        ? []
+        : parts.length > 1
+          ? scaleConfigRectGroup(
+              parts.map((part) => resolution.config[part.rectKey] ?? ""),
+              factors ?? { x: normalizeSpriteScale(style.scale), y: normalizeSpriteScale(style.scale) }
+            )
+          : parts.map((part) => {
+              const value = resolution.config[part.rectKey] ?? "";
+              const rect = factors ? parseConfigRect(value) : null;
+              return rect && factors
+                ? resizeConfigRectToCanvas(
+                    value,
+                    (rect.x1 - rect.x0) * factors.x,
+                    (rect.y1 - rect.y0) * factors.y
+                  )
+                : scaleConfigRectValue(value, style.scale);
+            });
       if (
         !style ||
         rects.some((rect) => !rect) ||
@@ -8962,12 +9444,22 @@ export function layoutGroupKeys(
       return [];
     }
   }
-  return Object.keys(resolution.config).filter(
-    (key) =>
-      group.patterns.some((pattern) => pattern.test(key)) &&
-      offsetConfigValue(resolution.config[key]!, 0, 0) !== null
-  );
+  let byGroup = layoutGroupKeysCache.get(resolution.config);
+  if (!byGroup) layoutGroupKeysCache.set(resolution.config, (byGroup = new Map()));
+  let keys = byGroup.get(group);
+  if (!keys) {
+    keys = Object.keys(resolution.config).filter(
+      (key) =>
+        group.patterns.some((pattern) => pattern.test(key)) &&
+        offsetConfigValue(resolution.config[key]!, 0, 0) !== null
+    );
+    byGroup.set(group, keys);
+  }
+  // A copy: callers may change what they get.
+  return [...keys];
 }
+/** layoutGroupKeys' walk over a config, once per config object and group (see hasUsableControlSlot). */
+const layoutGroupKeysCache = new WeakMap<Record<string, string>, Map<WatchfaceLayoutGroup, string[]>>();
 
 /**
  * Turns per-group pixel offsets (in the largest resolution's coordinates)
@@ -9712,7 +10204,8 @@ function drawStudioLayerImage(
         mask.height
       );
       sanitizeWatchfaceAodAlpha(imageData.data, mask.width, mask.height, undefined, {
-        keepCutoff: decorated || alpha < 1
+        keepCutoff: decorated || alpha < 1,
+        glyph: isWatchfaceAodGlyphLayer(layerId)
       });
       maskContext.putImageData(imageData, 0, 0);
       return mask;
@@ -10047,7 +10540,8 @@ async function drawTemplateAnimationStill(
 
 export async function drawStudioPreview(
   canvas: HTMLCanvasElement,
-  backgroundDataUrl: string,
+  /** The background as a PNG data URL, or already drawn on a canvas. */
+  backgroundDataUrl: string | HTMLCanvasElement,
   details: CorosWatchfaceTemplateDetails,
   options: WatchfaceStudioOptions,
   loadAssets: WatchfaceAssetLoader
@@ -11416,7 +11910,13 @@ export async function drawStudioPreview(
     virtualComplicationIconOverride.enabled !== false &&
     complicationIconPos
   ) {
-    const fallback = virtualControlIconCanvasSize(resolution);
+    // The icon's own size grows the slot's icon canvas (export does the same).
+    const ownSize = slotTypeIconSize(complicationIconKey, virtualComplicationIconOverride);
+    const slotCanvas = virtualControlIconCanvasSize(resolution);
+    const fallback = {
+      width: Math.max(1, Math.round(slotCanvas.width * ownSize)),
+      height: Math.max(1, Math.round(slotCanvas.height * ownSize))
+    };
     const canvasSize = configAssetCanvasSize(
       complicationIconKey,
       { ...virtualComplicationIconOverride, nativeSize: false },
@@ -11434,7 +11934,7 @@ export async function drawStudioPreview(
             virtualComplicationIconOverride.replacement.dataUrl,
             canvasSize.width,
             canvasSize.height,
-            virtualComplicationIconOverride.scale ?? 1
+            ownSize !== 1 ? 1 : virtualComplicationIconOverride.scale ?? 1
           )
     );
     drawStudioLayerImage(
@@ -11451,7 +11951,15 @@ export async function drawStudioPreview(
       complication?.id === "battery" ? "controlBatteryIcon" : undefined
     );
   } else if (!options.compiledPixels && complication?.id === "barometer" && complicationIconPos) {
-    const fallback = virtualControlIconCanvasSize(resolution);
+    const slotCanvas = virtualControlIconCanvasSize(resolution);
+    const ownSize = slotTypeIconSize(
+      complicationIconKey,
+      options.configAssetOverrides?.[watchfaceConfigAssetId("config", complicationIconKey)]
+    );
+    const fallback = {
+      width: Math.max(1, Math.round(slotCanvas.width * ownSize)),
+      height: Math.max(1, Math.round(slotCanvas.height * ownSize))
+    };
     const image = await loadStudioImage(
       config.control_barometer_icon
         ? renderBarometerIcon(
@@ -11465,6 +11973,42 @@ export async function drawStudioPreview(
             options.previewBarometerTrend ?? "flat",
             options.layerColors?.complication ?? options.digitColor
           )
+    );
+    drawStudioLayerImage(
+      context,
+      image,
+      complicationIconPos.x * scale,
+      complicationIconPos.y * scale,
+      image.naturalWidth * scale,
+      image.naturalHeight * scale,
+      scale,
+      options,
+      "complication",
+      false
+    );
+  } else if (
+    !options.compiledPixels &&
+    complicationIconPos &&
+    complicationPrefix &&
+    studioControlIconPrefix(complicationIconValue ?? "")
+  ) {
+    // A default icon Studio gives a type without a picture, at its own size.
+    const slotCanvas = virtualControlIconCanvasSize(resolution);
+    const ownSize = slotTypeIconSize(
+      complicationIconKey,
+      options.configAssetOverrides?.[watchfaceConfigAssetId("config", complicationIconKey)]
+    );
+    const fallback = {
+      width: Math.max(1, Math.round(slotCanvas.width * ownSize)),
+      height: Math.max(1, Math.round(slotCanvas.height * ownSize))
+    };
+    const image = await loadStudioImage(
+      renderStudioControlIcon(
+        studioControlIconPrefix(complicationIconValue ?? "")!,
+        fallback.width,
+        fallback.height,
+        options.layerColors?.complication ?? (options.tintIcons ? options.accentColor : options.digitColor)
+      )
     );
     drawStudioLayerImage(
       context,
@@ -11903,7 +12447,24 @@ export async function drawStudioPreview(
     const second = relativeComplicationRects[1]!.rect;
     const separatorColor = options.layerColors?.complication ??
       (options.tintIcons ? options.accentColor : options.digitColor);
-    const image = controlValueSeparatorFile
+    // A styled slot draws its colon to match its digits (as the export does).
+    const styledColon = options.complicationStyle && complicationSource?.files[0] &&
+      (complication?.id !== "barometer" || config.control_point_icon)
+      ? await renderSelectableColonSprite(
+          controlValueSeparatorFile,
+          controlValueSeparatorFile ? loadedAssets.get(controlValueSeparatorFile.path)?.dataUrl : undefined,
+          complicationSource.files[0],
+          options.complicationStyle,
+          options.fontFamily,
+          options,
+          separatorColor,
+          options.nativeSpriteResolutionScale ?? 1,
+          complication?.id === "barometer" ? "." : ":"
+        )
+      : null;
+    const image = styledColon
+      ? await loadStudioImage(styledColon.dataUrl)
+      : controlValueSeparatorFile
       ? await configuredAssetImage(
           complication?.id === "barometer"
             ? "control_point_icon"
@@ -11911,6 +12472,14 @@ export async function drawStudioPreview(
           controlValueSeparatorFile,
           separatorColor
         )
+      : !options.compiledPixels && complication?.id !== "barometer" && config.control_colon_icon
+        ? await loadStudioImage(
+            renderControlColonIcon(
+              controlColonCanvasSize(resolution).width,
+              controlColonCanvasSize(resolution).height,
+              separatorColor
+            )
+          )
       : !options.compiledPixels && complication?.id === "barometer" && config.control_point_icon
         ? await loadStudioImage(
             renderControlPointIcon(

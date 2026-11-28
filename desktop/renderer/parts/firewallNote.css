@@ -1,0 +1,4 @@
+/* The firewall note while pairing on Windows. */
+.fw-note { display: flex; align-items: center; gap: 12px; }
+.fw-note > span { flex: 1; }
+.fw-note > button { flex: none; }

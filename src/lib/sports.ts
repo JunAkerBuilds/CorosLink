@@ -4,8 +4,13 @@
 import { language, locale, msg, t } from "@/lib/i18n";
 import { distanceIn, distanceUnit } from "@/lib/units";
 
-export type Family = "run" | "ride" | "swim" | "strength" | "walk" | "other";
-export const FAMILIES: readonly Family[] = ["run", "ride", "swim", "strength", "walk", "other"];
+export type Family = "run" | "ride" | "swim" | "strength" | "walk" | "hike" | "snow" | "climb" | "other";
+export const FAMILIES: readonly Family[] = ["run", "ride", "swim", "strength", "walk", "hike", "snow", "climb", "other"];
+
+/** The sports with a page of their own (Strength's is /strength). */
+export const PAGE_FAMILIES: readonly Family[] = ["run", "ride", "swim", "strength", "walk", "hike", "snow", "climb"];
+/** What shows while nothing is known about the person's sports. */
+export const DEFAULT_SPORTS: readonly Family[] = ["run", "ride", "swim", "strength"];
 
 /** One activity, as the list holds it. `kind` is the phone's own sport name ("trailRun", "indoorBike"). */
 export interface SportAct {
@@ -74,6 +79,50 @@ export function detectSports(acts: readonly SportAct[], now: Date, days = DETECT
 
 /** Whether a family's page and card show. With nothing known, every family's do. */
 export const includesSport = (families: readonly Family[], family: Family): boolean => families.length === 0 || families.includes(family);
+
+/**
+ * `sports` in the order the person dragged them into: the ones they placed first, as they placed them, then any
+ * other in the order it came. `saved` is read from storage, so anything in it that isn't one of `sports` is skipped.
+ */
+export function orderSports(sports: readonly Family[], saved: readonly unknown[] = []): Family[] {
+  const placed: Family[] = [];
+  for (const f of Array.isArray(saved) ? saved : []) if (sports.includes(f as Family) && !placed.includes(f as Family)) placed.push(f as Family);
+  return [...placed, ...sports.filter((f) => !placed.includes(f))];
+}
+
+/** The order to save after the person drags `shown` into place: theirs first, then any sport placed before that isn't shown now. */
+export const savedSportOrder = (saved: readonly unknown[], shown: readonly Family[]): Family[] =>
+  [...shown, ...orderSports(PAGE_FAMILIES, saved).filter((f) => !shown.includes(f) && (Array.isArray(saved) ? saved : []).includes(f))];
+
+/**
+ * The sports the switcher, the hub and the palette list: the person's own that have a page, in `detectSports`'s
+ * order, or in the order they dragged them into (`saved`). With nothing known, the four main ones.
+ */
+export const shownSports = (families: readonly Family[], saved: readonly unknown[] = []): Family[] =>
+  orderSports(families.length ? families.filter((f) => PAGE_FAMILIES.includes(f)) : [...DEFAULT_SPORTS], saved);
+
+/** Each sport's page in the switcher, the hub and the Go to palette. */
+export const SPORT_PAGES: Partial<Record<Family, { label: string; href: string }>> = {
+  run: { label: msg("Running"), href: "/sports/running" },
+  ride: { label: msg("Riding"), href: "/sports/riding" },
+  swim: { label: msg("Swimming"), href: "/sports/swimming" },
+  strength: { label: msg("Strength"), href: "/strength" },
+  walk: { label: msg("Walking"), href: "/sports/walking" },
+  hike: { label: msg("Hiking"), href: "/sports/hiking" },
+  snow: { label: msg("Skiing"), href: "/sports/skiing" },
+  climb: { label: msg("Climbing"), href: "/sports/climbing" },
+};
+
+/** The Sports switcher's tabs: All sports, then the person's sports in their order, and the page open if it isn't one. */
+export function sportTabs(families: readonly Family[], current: Family | null, saved: readonly unknown[] = []): { family: Family | null; label: string; href: string }[] {
+  const sports = shownSports(families, saved);
+  if (current && !sports.includes(current)) sports.push(current);
+  return [{ family: null, label: msg("All sports"), href: "/sports" }, ...sports.flatMap((f) => { const p = SPORT_PAGES[f]; return p ? [{ family: f, ...p }] : []; })];
+}
+
+/** The sport pages the Go to palette offers as chips: the person's sports with a page under Sports (Strength is in the sidebar). */
+export const paletteSports = (families: readonly Family[], saved: readonly unknown[] = []): { label: string; href: string }[] =>
+  shownSports(families, saved).flatMap((f) => { const p = SPORT_PAGES[f]; return p && p.href.startsWith("/sports/") ? [p] : []; });
 
 /* ───────────── Weeks ───────────── */
 

@@ -244,8 +244,9 @@ function collectModeFontUses(
   if (exerciseSeparator && exerciseSeparator.enabled !== false && !exerciseSeparator.artwork) {
     add(
       (mode.metricStyles ?? base.metricStyles)?.exercise?.fontFamily || family,
-      exerciseSeparator.fontWeight ?? 700,
-      exerciseSeparator.fontStyle,
+      // The colon takes the digits' weight and style (watchfaceBackground.ts, exerciseColonFace).
+      (mode.metricStyles ?? base.metricStyles)?.exercise?.fontWeight ?? mode.fontWeight ?? base.fontWeight ?? 400,
+      (mode.metricStyles ?? base.metricStyles)?.exercise?.fontStyle ?? mode.fontStyle ?? base.fontStyle,
       "Separators"
     );
   }

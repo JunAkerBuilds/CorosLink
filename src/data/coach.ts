@@ -23,6 +23,7 @@ import { SAMPLE_COACH } from "./sample/coach";
 import { put, remove, syncView, type SyncView } from "./sync";
 import { newEntry } from "./sync/fuel";
 import { calendarDayOf, dateToRef, newUuid, refToMs, type CoachConversationBody } from "./sync/native";
+import { trainingOf } from "./sync/trainingLocal";
 import type { SavedWorkout, Workout } from "./workouts";
 
 /** A hue token name: drawn with `var(--h-<name>)`, written with `var(--h-<name>-ink)`. */
@@ -422,7 +423,7 @@ function lookingAt(view: SyncView): CoachData["looking"] {
   const out: CoachData["looking"] = [];
   const activities = view.all("activity").length, nights = view.all("health.night").length, gym = view.all("gym.workout").length, foods = view.all("fuel.entry").length;
   if (activities) out.push({ label: t("Activities"), value: String(activities) });
-  const f = view.get("view.training", "me")?.fitness;
+  const f = trainingOf(view)?.fitness;
   if (f?.fitness?.length && f.fatigue?.length === f.fitness.length) {
     const fit = f.fitness[f.fitness.length - 1], fat = f.fatigue[f.fatigue.length - 1], form = Math.round((fit - fat) * 10) / 10;
     out.push({ label: t("Fitness / fatigue / form"), value: `${fit} / ${fat} / ${form < 0 ? `−${Math.abs(form)}` : `+${form}`}` });

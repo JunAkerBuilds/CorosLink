@@ -7,7 +7,7 @@ is in beta:
 | Track | Tags | GitHub | Update file | Who takes it |
 |---|---|---|---|---|
 | CorosLink (legacy) | `v0.1.84`, `v0.1.85`… (CorosLink's `main`) | release | `latest-mac.yml` (+ Windows, Linux) | every CorosLink that didn't opt in |
-| C-LINK beta | `v0.2.0-clink.1`, `-clink.2`… (this branch) | **prerelease** | `clink-mac.yml` | CorosLink 0.1.84+ that opted in, and C-LINK betas |
+| C-LINK beta | `v0.2.0-clink.1`, `-clink.2`… (CorosLink's `c-link`) | **prerelease** | `clink-mac.yml` | CorosLink 0.1.84+ that opted in, and C-LINK betas |
 | C-LINK | `v0.2.0`… | release | `latest-mac.yml` | everyone on a Mac (CorosLink and C-LINK betas) |
 
 How electron-updater (6.8, GitHub provider) routes them:
@@ -19,6 +19,11 @@ How electron-updater (6.8, GitHub provider) routes them:
 - **C-LINK beta** (`0.2.0-clink.N`): `desktop/main/updates.ts` asks the stable track first (a stable C-LINK wins),
   then its own `clink` channel (the next beta).
 - **C-LINK stable**: only the stable track.
+
+Where the code lives: clink-desktop `main` is the app, with no separate release branch. CorosLink's `c-link` carries
+the same tree plus its own `CHANGELOG.md` and `AGENTS.md` edits, so publish by applying `main`'s changes since the last
+publish (`git diff <last published> main | git apply --3way` in a worktree on `origin/c-link`), not by copying the
+whole tree. Last published: `978433b` → `c-link` `b3018997` (0.2.0-clink.4).
 
 Rules:
 - Every C-LINK beta tag is `vX.Y.Z-clink.N` (`scripts/release-version.mjs` refuses other suffixes) and is published

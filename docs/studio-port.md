@@ -47,7 +47,7 @@ Each phase ends usable, with `npm run check`, CLINK_SMOKE shots and its "Must no
 6. **Getting it to the watch.** Send to COROS (share link + QR, 10,485,760 B cap); Convert to another watch from the
    800 master; Send to iPhone; Install over Bluetooth into a slot (needs the watch engine: read face list 0x96, file 8
    in 4 KB blocks, poll for the face ID).
-7. **Watchmaker and automation.** The AI designer (using the app's own AI providers, not only Codex CLI), saved chats
+7. **Watchmaker and automation.** The AI designer (the athlete's own Codex CLI and its harness, as in CorosLink), saved chats
    per face, and the watch-face MCP server for external AI.
 
 ## Decided (2026-11-23)
@@ -624,6 +624,61 @@ URLs only at the editor boundary, as in CorosLink.
   (`studio-automation-*.png`).
 
 **Watchmaker** (`desktop/main/watchface/watchmaker/`, panel `desktop/renderer/parts/StudioWatchmaker.tsx`).
+- An **AI** tab beside Layer and Face, loaded on demand. Like CorosLink, it always runs the athlete's own **Codex
+  CLI** (`codex.ts`), whatever Coach uses: `codex app-server` over stdio with Codex's own sign-in, model and settings.
+  The bar shows "Codex CLI"; the panel says when Codex isn't installed or signed in (`codex login`).
+- Codex keeps its native harness (shell, files, web search, its own MCP servers, image generation) with
+  `workspace-write` and network access in a fresh temporary folder, removed after the message; approvals are
+  `never` and questions mid-turn are refused. The face is reached through a private MCP server for that one message
+  (`ai/bridge.ts`, random bearer token, `mcp_servers.watchmaker` set per thread; the athlete's Codex config is not
+  changed). Tool results carry pictures as MCP images and as files in the folder.
+- Codex's native images are copied into the automation asset store as they finish; `get_generated_images` hands
+  their ids back, and `import_file` takes PNG / JPEG / WebP files Codex made in its folder (nothing outside it).
+  There is no OpenAI-key image path any more.
+- Pictures paste, drop or attach (PNG, JPEG, WebP, up to four, 8 MB each); the first in a chat is the design
+  reference, later ones screenshots, switched on the chip. The latest reference, and the face's preview, go with
+  every message as local images. Each message is a fresh ephemeral Codex thread carrying the saved chat as text.
+- Each `apply_commands` and `undo` is one undo step; the tools keep the session and revision and tell Codex to
+  re-read on a conflict. Stop interrupts the turn and ends Codex's process group; what was done stays and the answer
+  is saved as stopped. Codex's commands, file changes, searches and images show as steps.
+- Chats are saved with the face (`studio/projects/<id>/watchmaker/<chat>.json`, pictures in the automation asset
+  store) and the newest opens with the face.
+- Tests: `codex.test.ts` runs a scripted `codex` program over the real protocol and MCP bridge (thread sandbox and
+  config, tool calls and pictures, native images kept, imports only from the folder, failure, stop, folder removed,
+  sign-in read). `watchmaker.test.ts` covers the tools (revision, conflicts, the wrong face), history and the
+  remembered reference, and the service end to end with a scripted engine (saved chats, Codex not ready, foreign
+  requests, busy, stop). `CLINK_SMOKE_STUDIO_WATCHMAKER=1` runs the real panel with a scripted engine instead of
+  Codex (dev builds only) and checks the one-step undo and the reopened chat (`studio-watchmaker-*.png`).
+
+**Activity screens** (CorosLink `CorosActivityScreenPanel.tsx`, `electron/corosActivityScreen*.ts`). DEV-only and
+   Experimental, for PACE Pro: read an activity's data pages over Bluetooth (V3 0x9e), back them up, sync them back
+   unchanged and read back every byte, confirm on the watch, then try other field counts (0x9f). Here: behind
+   developer mode, on the Developer page, through the Local mode watch link; the helper gets one narrow command that
+   only sends 0x9e / 0x9f. The protocol and service move over with their rules as tests (backup and journal before
+   every write, read-back must match, a pending restore blocks writes, experimental layouts need a confirmed
+   baseline).
+
+## Phase 7: done (2026-11-25)
+
+**Automation MCP server** (`desktop/main/watchface/automation/`, page side `desktop/renderer/studioAutomation*.ts`,
+`useAutomationHost.ts`).
+- The open editor answers through the broker as planned: `get_document`, `apply_commands`, `undo`, `redo`, `select`,
+  `set_view`, `render_preview`, `get_geometry`, `check_contrast`, `sample_color`, `validate`, `save`, `render_svg`,
+  `recolor_image`; `open` navigates to a face and waits for its editor. `crop_image` runs in the main process with the
+  compiler's PNG codec, so it never holds up the screen. Any change to the face, by hand or by an agent, is a new
+  revision; `apply_commands` with a stale revision or another session's id is refused untouched.
+- Settings → External AI → Watch faces turns the server on. Port 38471 (CorosLink's; 38472 is the strength-workouts
+  server's), a new token each time it's turned on, sealed with the keychain, revoked when it's turned off, kept
+  across restarts. Copy Codex configuration writes the TOML to the clipboard from the main process; the page only
+  sees the token's last four characters.
+- Tests: `automation.test.ts` (broker order, refusals, waits, disconnects, timeouts, cancel; asset store ids, refs,
+  limits; server admission by token / Host / Origin, tool list and calls, HTTP; import paths; crop; settings on /
+  copy / restart / off), `studioAutomation.test.ts` (document and placement, one undo step per batch, stale revision
+  and session, always-on, previews, contrast probes, select, validate, save). `CLINK_SMOKE_STUDIO_AUTOMATION=1` turns
+  it on in Settings, takes the configuration off the clipboard and drives SIMPLE over HTTP as Codex would
+  (`studio-automation-*.png`).
+
+**Watchmaker** (`desktop/main/watchface/watchmaker/`, panel `desktop/renderer/parts/StudioWatchmaker.tsx`).
 - An **AI** tab beside Layer and Face, loaded on demand. It asks the AI picked on the AI page, through the same
   pills as Coach's message box (provider and model, power level), so changing it there changes Coach's too. Agents
   that run as their own program (Claude Code, Gemini CLI, OpenCode, Antigravity) get tool text only; the others also
@@ -654,11 +709,11 @@ URLs only at the editor boundary, as in CorosLink.
 
 ### Left
 
-- Watchmaker on a real model: only the scripted smoke and the tests ran here; no live provider was tried. Its
-  instructions (`rules.ts`) are a condensed rewrite of CorosLink's skill.
+- Watchmaker on a real turn: the installed Codex CLI (0.170) took the thread config and reported the watchmaker MCP
+  server ready, but no full message (with image generation) has been run here. Its instructions (`rules.ts`) are a
+  condensed rewrite of CorosLink's skill.
 - Watchmaker: CorosLink's requirement checklist and evidence gates, `compare_design_reference`, asset review
-  decisions, parallel image workers, the Codex CLI app-server engine, image generation through ChatGPT or Gemini
-  sign-ins, and reference images for generation.
+  decisions and parallel image workers; choosing Codex's model or power level from the panel.
 - MCP: `convert`, `build_archive` / `export_*`, `publish`, `load_template`, `list_templates`, `duplicate` / `delete`,
   `list_fonts`, `close`. `render_preview` at a resolution draws the master scaled down, not that resolution's own
   sprites (CorosLink drew the export at that size).

@@ -8,7 +8,7 @@ import { t } from "@/lib/i18n";
 import { chartDragSplit } from "../watchface/engine/chartReadouts";
 import { makeWatchfaceDragForegroundDesign } from "../watchface/engine/watchfaceDragIsolation";
 import type { WatchfacePreviewScenario } from "../watchface/engine/watchfaceSimulation";
-import { allLayersOf, editMode, layersOf, masterSize, renderFace, rowsOf, spotsOf, type Design, type EditorLayer, type FaceSource, type Mode, type SpotChoice } from "./studioFace";
+import { allLayersOf, editMode, layersOf, masterSize, renderFace, renderFaceCanvas, rowsOf, spotsOf, type Design, type EditorLayer, type FaceSource, type Mode, type SpotChoice } from "./studioFace";
 import { nudge } from "./studioEdits";
 import { inkIn, separable, type Box } from "./studioSnap";
 
@@ -74,27 +74,47 @@ export function withoutLayers(design: Design, layers: EditorLayer[]): Design {
   };
 }
 
+/** Thrown when the frames being composed are no longer wanted (another layer, another edit). */
+export class DragFramesDropped extends Error {
+  constructor() { super("The drag frames are no longer wanted."); }
+}
+
+/**
+ * Between drawings: lets the window handle input, and stops when the frames are no longer wanted. Each drawing of a
+ * busy face is one long task, so a run of them must not hold the window between them.
+ */
+async function breathe(live: () => boolean): Promise<void> {
+  if (!live()) throw new DragFramesDropped();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  if (!live()) throw new DragFramesDropped();
+}
+
 /**
  * Composes the drag frames. The base is the face without the layers. The sprite comes from two foreground-only
  * drawings (no background colour or picture, so edges keep their real transparency): with the layers and without
- * them; the pixels that differ are the layers'.
+ * them; the pixels that differ are the layers'. `live` says whether they're still wanted: once it's false the work
+ * stops at the next drawing with DragFramesDropped.
  */
 export async function composeDragFrames(
   source: FaceSource, root: Design, mode: Mode, layers: EditorLayer[], size: number, scenario?: WatchfacePreviewScenario, choice?: SpotChoice,
+  live: () => boolean = () => true,
 ): Promise<DragFrames> {
   const lifted = movingWith(source, root, mode, layers);
   const without = (d: Design) => withoutLayers(d, lifted);
   const foreground = (d: Design) => makeWatchfaceDragForegroundDesign(d);
-  const [base, fg, fgBase] = await Promise.all([
-    renderFace(source, editMode(root, mode, without), mode, size, scenario, true, choice),
-    // Not cut to the round screen: a layer dragged in from the edge shows whole, and the dial clips it on screen.
-    renderFace(source, editMode(root, mode, foreground), mode, size, scenario, false, choice),
-    renderFace(source, editMode(root, mode, (d) => foreground(without(d))), mode, size, scenario, false, choice),
-  ]);
-  const { sprite, rest } = await difference(fg, fgBase, size);
+  // One drawing at a time, with the window free between them.
+  await breathe(live);
+  // Not cut to the round screen: a layer dragged in from the edge shows whole, and the dial clips it on screen.
+  const fg = await renderFaceCanvas(source, editMode(root, mode, foreground), mode, size, scenario, false, choice);
+  await breathe(live);
+  const fgBase = await renderFaceCanvas(source, editMode(root, mode, (d) => foreground(without(d))), mode, size, scenario, false, choice);
+  await breathe(live);
+  const base = await renderFace(source, editMode(root, mode, without), mode, size, scenario, true, choice);
+  await breathe(live);
+  const { sprite, rest } = difference(fg, fgBase, size);
   // Decoded now, so swapping them in for the face paints them at once.
   await Promise.all([base, sprite?.src].map((src) => (src ? decode(src).then((img) => img.decode()).catch(() => {}) : null)));
-  const toMaster = masterSize(source) / size;
+  const toMaster = masterSize(source, mode) / size;
   const toFrame = (b: Box): Box => ({ x0: b.x0 / toMaster, y0: b.y0 / toMaster, x1: b.x1 / toMaster, y1: b.y1 / toMaster });
   const toBox = (b: Box): Box => ({ x0: b.x0 * toMaster, y0: b.y0 * toMaster, x1: b.x1 * toMaster, y1: b.y1 * toMaster });
   // The other layers' ink, from the foreground drawing without the moving ones: each inside its own box, and only
@@ -110,21 +130,47 @@ export async function composeDragFrames(
     const ink = inkIn(rest, size, size, toFrame(t.box));
     if (ink) measured.set(t.id, toBox(ink));
   }
-  // A layer whose box overlaps another's (the hour's digit cells and the colon) can't be told apart in one drawing, and
-  // its padded box doesn't line up with ink. Drawn once more without it, the pixels that change inside its box are its.
-  await Promise.all(targets.filter((t) => !apart.has(t.id)).map(async (t) => {
-    const row = rows.find((r) => r.id === t.id);
-    if (!row) return;
-    const alone = await renderFace(source, editMode(root, mode, (d) => foreground(without(withoutLayers(d, [row])))), mode, size, scenario, false, choice)
-      .catch(() => null);
-    if (!alone) return;
-    const ink = await changedIn(fgBase, alone, size, toFrame(t.box)).catch(() => null);
-    if (ink) measured.set(t.id, toBox(ink));
-  }));
-  return {
+  const overlapping = targets.filter((t) => !apart.has(t.id));
+  const frames: DragFrames = {
     key: dragKey(layers.map((l) => l.id), mode, size, choice), design: root, base, sprite, size, lifted: [...liftedIds],
     ink: { moving: sprite ? toBox({ x0: sprite.x, y0: sprite.y, x1: sprite.x + sprite.w, y1: sprite.y + sprite.h }) : null, targets: measured },
   };
+  // A layer whose box overlaps another's (the hour's digit cells and the colon) can't be told apart in one drawing, and
+  // its padded box doesn't line up with ink. Drawn once more without it, the pixels that change inside its box are its.
+  // That's a whole drawing per layer, dozens on a busy face, so it isn't done here: refineDragInk does it once the
+  // editor has been still a while. Until then those layers snap by their boxes.
+  if (overlapping.length) {
+    refinements.set(frames, async (stillLive) => {
+      const more = new Map(measured);
+      for (const t of overlapping) {
+        const row = rows.find((r) => r.id === t.id);
+        if (!row) continue;
+        await breathe(stillLive);
+        const alone = await renderFaceCanvas(source, editMode(root, mode, (d) => foreground(without(withoutLayers(d, [row])))), mode, size, scenario, false, choice)
+          .catch(() => null);
+        if (!alone) continue;
+        const ink = changedIn(rest, alone, size, toFrame(t.box));
+        if (ink) more.set(t.id, toBox(ink));
+      }
+      return { ...frames, ink: { ...frames.ink, targets: more } };
+    });
+  }
+  return frames;
+}
+
+/** The overlapping layers' ink still to measure for frames, by composeDragFrames. */
+const refinements = new WeakMap<DragFrames, (live: () => boolean) => Promise<DragFrames>>();
+
+/** Whether the frames still have overlapping layers whose ink refineDragInk would measure. */
+export const canRefineDragInk = (frames: DragFrames) => refinements.has(frames);
+
+/**
+ * The frames with the overlapping layers' ink measured too (one drawing each), for snapping to what they draw rather
+ * than their boxes. Stops with DragFramesDropped once `live` is false.
+ */
+export async function refineDragInk(frames: DragFrames, live: () => boolean): Promise<DragFrames> {
+  const refine = refinements.get(frames);
+  return refine ? refine(live) : frames;
 }
 
 /**
@@ -134,16 +180,19 @@ export async function composeDragFrames(
  */
 export async function composePartFrames(
   source: FaceSource, root: Design, mode: Mode, key: string, away: (d: Design) => Design, size: number, scenario?: WatchfacePreviewScenario, choice?: SpotChoice,
+  live: () => boolean = () => true,
 ): Promise<DragFrames> {
   const foreground = (d: Design) => makeWatchfaceDragForegroundDesign(d);
-  const [base, fg, fgBase] = await Promise.all([
-    renderFace(source, editMode(root, mode, away), mode, size, scenario, true, choice),
-    renderFace(source, editMode(root, mode, foreground), mode, size, scenario, false, choice),
-    renderFace(source, editMode(root, mode, (d) => foreground(away(d))), mode, size, scenario, false, choice),
-  ]);
-  const { sprite } = await difference(fg, fgBase, size);
+  await breathe(live);
+  const fg = await renderFaceCanvas(source, editMode(root, mode, foreground), mode, size, scenario, false, choice);
+  await breathe(live);
+  const fgBase = await renderFaceCanvas(source, editMode(root, mode, (d) => foreground(away(d))), mode, size, scenario, false, choice);
+  await breathe(live);
+  const base = await renderFace(source, editMode(root, mode, away), mode, size, scenario, true, choice);
+  await breathe(live);
+  const { sprite } = difference(fg, fgBase, size);
   await Promise.all([base, sprite?.src].map((src) => (src ? decode(src).then((img) => img.decode()).catch(() => {}) : null)));
-  const toMaster = masterSize(source) / size;
+  const toMaster = masterSize(source, mode) / size;
   return {
     key, design: root, base, sprite, size, lifted: [],
     ink: { moving: sprite ? { x0: sprite.x * toMaster, y0: sprite.y * toMaster, x1: (sprite.x + sprite.w) * toMaster, y1: (sprite.y + sprite.h) * toMaster } : null, targets: new Map() },
@@ -155,14 +204,15 @@ export const snapTargets = (layers: EditorLayer[], moving: Set<string>) => layer
   .filter((l) => l.visible && l.bounds && l.kind !== "background" && !moving.has(l.id))
   .map((l) => ({ id: l.id, box: { x0: l.bounds!.x0, y0: l.bounds!.y0, x1: l.bounds!.x1, y1: l.bounds!.y1 } }));
 
+/** A drawing's pixels, read from its wide-gamut canvas so the sprite keeps the face's colours. */
+const pixelsOf = (c: HTMLCanvasElement, size: number): ImageData => {
+  const x = c.getContext("2d", { colorSpace: "display-p3" })!;
+  return x.getImageData(0, 0, size, size, { colorSpace: "display-p3" });
+};
+
 /** The pixels of `a` that `b` doesn't have, cropped to their box; and `b`'s pixels. */
-async function difference(a: string, b: string, size: number): Promise<{ sprite: DragFrames["sprite"]; rest: Uint8ClampedArray }> {
-  const [ia, ib] = await Promise.all([decode(a), decode(b)]);
-  // The face is drawn on a wide-gamut canvas; reading it back on one keeps the sprite's colours the face's.
-  const opts: CanvasRenderingContext2DSettings = { willReadFrequently: true, colorSpace: "display-p3" };
-  const xa = canvas(size).getContext("2d", opts)!, xb = canvas(size).getContext("2d", opts)!;
-  xa.drawImage(ia, 0, 0, size, size); xb.drawImage(ib, 0, 0, size, size);
-  const pa = xa.getImageData(0, 0, size, size, { colorSpace: "display-p3" }), pb = xb.getImageData(0, 0, size, size, { colorSpace: "display-p3" }).data, d = pa.data;
+function difference(a: HTMLCanvasElement, b: HTMLCanvasElement, size: number): { sprite: DragFrames["sprite"]; rest: Uint8ClampedArray } {
+  const pa = pixelsOf(a, size), pb = pixelsOf(b, size).data, d = pa.data;
   let x0 = size, y0 = size, x1 = -1, y1 = -1;
   for (let i = 0, p = 0; i < d.length; i += 4, p++) {
     if (d[i] === pb[i] && d[i + 1] === pb[i + 1] && d[i + 2] === pb[i + 2] && d[i + 3] === pb[i + 3]) { d[i + 3] = 0; continue; }
@@ -175,16 +225,22 @@ async function difference(a: string, b: string, size: number): Promise<{ sprite:
   return { sprite: { src: out.toDataURL("image/png"), x: x0, y: y0, w, h }, rest: pb };
 }
 
-/** The box of the pixels inside `region` where pictures `a` and `b` differ, or null. */
-async function changedIn(a: string, b: string, size: number, region: Box): Promise<Box | null> {
-  const [ia, ib] = await Promise.all([decode(a), decode(b)]);
-  const opts: CanvasRenderingContext2DSettings = { willReadFrequently: true, colorSpace: "display-p3" };
-  const xa = canvas(size).getContext("2d", opts)!, xb = canvas(size).getContext("2d", opts)!;
-  xa.drawImage(ia, 0, 0, size, size); xb.drawImage(ib, 0, 0, size, size);
-  const pa = xa.getImageData(0, 0, size, size, { colorSpace: "display-p3" }).data, pb = xb.getImageData(0, 0, size, size, { colorSpace: "display-p3" }).data;
+/** The box of the pixels inside `region` where the drawing `b` differs from the pixels `a`, or null. */
+function changedIn(a: Uint8ClampedArray, b: HTMLCanvasElement, size: number, region: Box): Box | null {
+  // Only the region is read and compared: the rest of the face can't be the layer's.
+  const r = {
+    x0: Math.max(0, Math.floor(region.x0)), y0: Math.max(0, Math.floor(region.y0)),
+    x1: Math.min(size, Math.ceil(region.x1)), y1: Math.min(size, Math.ceil(region.y1)),
+  };
+  const w = r.x1 - r.x0, h = r.y1 - r.y0;
+  if (w <= 0 || h <= 0) return null;
+  const pb = b.getContext("2d", { colorSpace: "display-p3" })!.getImageData(r.x0, r.y0, w, h, { colorSpace: "display-p3" }).data;
   const mask = new Uint8ClampedArray(size * size * 4);
-  for (let i = 0; i < pa.length; i += 4) {
-    if (pa[i] !== pb[i] || pa[i + 1] !== pb[i + 1] || pa[i + 2] !== pb[i + 2] || pa[i + 3] !== pb[i + 3]) mask[i + 3] = 255;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = ((r.y0 + y) * size + r.x0 + x) * 4, j = (y * w + x) * 4;
+      if (a[i] !== pb[j] || a[i + 1] !== pb[j + 1] || a[i + 2] !== pb[j + 2] || a[i + 3] !== pb[j + 3]) mask[i + 3] = 255;
+    }
   }
   return inkIn(mask, size, size, region);
 }

@@ -5,7 +5,10 @@ import { DatabaseSync } from "node:sqlite";
 
 const SESSION_DAYS = 90;
 const PAIRING_MINUTES = 10;
-export const PHONE_PERMISSIONS = ["sync:read", "sync:write"];
+/** What a paired phone may do: sync, and use Coach here (read, ask, approve). */
+export const PHONE_PERMISSIONS = ["sync:read", "sync:write", "coach:read", "coach:operate", "coach:approve"];
+/** A credential the relay handed a phone away from home works once, for this long. */
+const BOOTSTRAP_MS = 2 * 60_000;
 
 export interface PhoneSession { id: string; jkt: string; label: string; createdAt: string; lastUsedAt: string; expiresAt: string }
 export interface Grant { sessionToken: string; expiresAt: string; permissions: string[] }
@@ -17,6 +20,10 @@ const days = (n: number) => n * 24 * 3600 * 1000;
 export class PhoneSessions {
   private readonly db: DatabaseSync;
   private pairing: { secret: string; expiresAt: number } | null = null;
+  /** One-time credentials minted for the relay, by hash: the phone key each is for, and when it lapses. */
+  private readonly credentials = new Map<string, { jkt: string; expiresAt: number }>();
+  /** Called when a phone's session ends (removed here, or signed out on the phone): its sockets close. */
+  onEnded: (id: string) => void = () => {};
   readonly environmentId: string;
 
   constructor(file: string) {
@@ -61,9 +68,31 @@ export class PhoneSessions {
     const a = Buffer.from(secret), b = Buffer.from(open.secret);
     if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
     this.pairing = null;
+    return this.issue(jkt, label, now);
+  }
+
+  /** A one-time credential for the phone key `jkt`, for the relay to hand that phone (cloud/mint.ts). */
+  mintCredential(jkt: string, now = Date.now()): { credential: string; expiresAt: number } {
+    for (const [hash, c] of this.credentials) if (c.expiresAt <= now) this.credentials.delete(hash);
+    const credential = token(32), expiresAt = now + BOOTSTRAP_MS;
+    this.credentials.set(hashOf(credential), { jkt, expiresAt });
+    return { credential, expiresAt };
+  }
+
+  /** Spends a relay-brokered credential for a session, if it is for this key and still good. */
+  bootstrap(credential: string, jkt: string, label: string, now = Date.now()): Grant | null {
+    const hash = hashOf(credential), found = this.credentials.get(hash);
+    if (!found) return null;
+    this.credentials.delete(hash);
+    if (found.expiresAt <= now || found.jkt !== jkt) return null;
+    return this.issue(jkt, label, now);
+  }
+
+  private issue(jkt: string, label: string, now: number): Grant {
     const sessionToken = token(32), at = new Date(now).toISOString(), expiresAt = new Date(now + days(SESSION_DAYS)).toISOString();
     const clean = label.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 80) || "Phone";
     // The same phone pairing again (same key): its earlier session goes, so it's listed once.
+    for (const old of this.db.prepare("SELECT id FROM phones WHERE jkt = ?").all(jkt) as { id: string }[]) this.onEnded(old.id);
     this.db.prepare("DELETE FROM phones WHERE jkt = ?").run(jkt);
     this.db.prepare("INSERT INTO phones (id, token_hash, jkt, label, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(token(9), hashOf(sessionToken), jkt, clean, at, at, expiresAt);
@@ -90,11 +119,16 @@ export class PhoneSessions {
   }
 
   remove(id: string): boolean {
-    return Number(this.db.prepare("DELETE FROM phones WHERE id = ?").run(id).changes) > 0;
+    const removed = Number(this.db.prepare("DELETE FROM phones WHERE id = ?").run(id).changes) > 0;
+    if (removed) this.onEnded(id);
+    return removed;
   }
 
   /** Ends the session a token names (the phone's own sign-out). */
   end(sessionToken: string): void {
-    this.db.prepare("DELETE FROM phones WHERE token_hash = ?").run(hashOf(sessionToken));
+    const row = this.db.prepare("SELECT id FROM phones WHERE token_hash = ?").get(hashOf(sessionToken)) as { id: string } | undefined;
+    if (!row) return;
+    this.db.prepare("DELETE FROM phones WHERE id = ?").run(row.id);
+    this.onEnded(row.id);
   }
 }

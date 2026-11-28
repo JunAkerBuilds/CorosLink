@@ -1,7 +1,7 @@
 // Send, from the design's StudioSend / LightStudioSend boards: Watch | COROS app | File.
 //
 // - Watch: the face compiled for the watch and shown 1:1, its pixel checks (Show picks the layer), the name, the
-//   watch, languages, Full color / Smooth edges, and compile → send → verify. With the watch paired in Local mode
+//   watch, languages, and compile → send → verify (palette colours and soft edges, as the watch's own faces). With the watch paired in Local mode
 //   the slots are read and Send to watch installs over Bluetooth; otherwise Save BIN and Send to iPhone.
 // - COROS app: the face goes up to the signed-in COROS account and comes back as a share link and QR code.
 // - File: Editable project ZIP, Final watch ZIP, All watches (a final ZIP per watch in one folder) and Development
@@ -10,7 +10,7 @@
 // without one is rebuilt from its own layout with the edits applied).
 // Everything after the first build works from one prepared copy (desktop/main/watchface/send.ts).
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Segmented, Switch } from "@/components/ui";
+import { Button, Segmented } from "@/components/ui";
 import { t, tx } from "@/lib/i18n";
 import { tr } from "@/lib/i18n/react";
 import { WATCHFACE_TARGETS, getWatchfaceTarget, type WatchfaceTarget } from "../../watchface/watchfaceTargets";
@@ -45,6 +45,8 @@ export interface SendDialogProps {
   onLanguages: () => void;
   /** Editable project ZIP, made the same way as the Download menu's. */
   onEditable: () => Promise<void>;
+  /** The design (with font snapshots) and preview for the Editable project Send to iPhone also offers. */
+  projectBody: () => Promise<{ design: Design; previewDataUrl?: string }>;
   onOpenProject: (id: string) => void;
   onClose: () => void;
 }
@@ -105,8 +107,6 @@ interface TabProps extends SendDialogProps { prepared: () => Promise<PreparedFac
 function WatchTab(p: TabProps & { face: PreparedFace | null; look: CompiledLook | null; say: (text: string | null) => void }) {
   const { look, watch } = p;
   const [connection, setConnection] = useState<{ connected: boolean; reason?: string } | null>(null);
-  const [fullColor, setFullColor] = useState(false);
-  const [smoothEdges, setSmoothEdges] = useState(false);
   const [step, setStep] = useState<Step>(null);
   // The watch paired in Local mode: its slots, read once it's known to be there, and the one chosen.
   const [slots, setSlots] = useState<FaceSlots | null>(null);
@@ -121,7 +121,6 @@ function WatchTab(p: TabProps & { face: PreparedFace | null; look: CompiledLook 
     watchConnection().then((c) => { setConnection(c); if (c.connected) void readSlots(); }, () => setConnection({ connected: false }));
   }, [readSlots]);
   const checks = look?.checks.map((c) => describeCheck(c, p.layerLabel)) ?? [];
-  const mip = watch.display === "mip";
 
   const saveBin = async () => {
     p.fail(null); p.say(null);
@@ -129,7 +128,7 @@ function WatchTab(p: TabProps & { face: PreparedFace | null; look: CompiledLook 
     try {
       const built = await p.prepared();
       setStep({ at: "compile", progress: 70 });
-      const { warnings } = await downloadPreparedBin(built.id, { name: p.name, fullColor, smoothEdges });
+      const { warnings } = await downloadPreparedBin(built.id, { name: p.name, fullColor: false, smoothEdges: false });
       setStep({ done: warnings[0] ? `${t("BIN saved.")} ${warnings[0]}` : t("BIN for {watch} saved and checked.", { watch: watch.label }) });
     } catch (e) { setStep(null); p.fail(said(e)); }
   };
@@ -149,7 +148,7 @@ function WatchTab(p: TabProps & { face: PreparedFace | null; look: CompiledLook 
       const built = await p.prepared();
       setStep({ at: "send", progress: 30 });
       const done = await installPrepared(built.id, {
-        name: p.name, fullColor, smoothEdges, slot: chosen.slot, expectedFaceId: chosen.faceId ?? null, replace: chosen.faceId != null,
+        name: p.name, fullColor: false, smoothEdges: false, slot: chosen.slot, expectedFaceId: chosen.faceId ?? null, replace: chosen.faceId != null,
       });
       setSlots(done);
       const slot = done.installed ?? chosen.slot;
@@ -218,10 +217,6 @@ function WatchTab(p: TabProps & { face: PreparedFace | null; look: CompiledLook 
             <span className="muted">{t("Languages:")} <b>{languagesLine(p.design)}</b></span>
             <button type="button" className="st-link" onClick={p.onLanguages}>{t("Change")}</button>
           </div>
-          <div className="st-send-inline st-send-toggles">
-            <span title={mip ? t("Full color is for AMOLED watches.") : undefined}><Switch label={t("Full color")} checked={fullColor && !mip} disabled={mip} onChange={setFullColor} />{t("Full color")}</span>
-            <span title={mip ? undefined : t("Smooth edges are for memory-in-pixel watches.")}><Switch label={t("Smooth edges")} checked={smoothEdges && mip} disabled={!mip} onChange={setSmoothEdges} />{t("Smooth edges")}</span>
-          </div>
         </div>
       </div>
       <div className="st-send-foot">
@@ -255,7 +250,7 @@ function PhoneHandoff(p: TabProps) {
   useEffect(() => () => { void stopPhone().catch(() => {}); }, []);
   const start = async () => {
     setBusy(true); p.fail(null);
-    try { const built = await p.prepared(); const made = await sendToPhone(built.id, p.name); setSend({ ...made, minutes: Math.round((made.expiresAt - Date.now()) / 60000) }); setStatus(null); } catch (e) { p.fail(said(e)); } finally { setBusy(false); }
+    try { const built = await p.prepared(); const project = await p.projectBody().catch(() => undefined); const made = await sendToPhone(built.id, p.name, project); setSend({ ...made, minutes: Math.round((made.expiresAt - Date.now()) / 60000) }); setStatus(null); } catch (e) { p.fail(said(e)); } finally { setBusy(false); }
   };
   const over = status && !status.active;
   if (!send || over) {

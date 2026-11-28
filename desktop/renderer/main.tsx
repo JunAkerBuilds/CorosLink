@@ -16,7 +16,9 @@ import { App } from "./App";
 import { LocalModeCards, LocalModePanel, LocalModeTools } from "./parts/LocalMode";
 import { CorosAccountPart, useCorosAccountConnected } from "./parts/CorosImport";
 import { RailFoot } from "./parts/RailFoot";
+import { HistoryArrows } from "./parts/HistoryArrows";
 import { UpdatesBadge, UpdatesMenuItem } from "./parts/Updates";
+import { MobileBeta } from "./parts/MobileBeta";
 import { CoachAI } from "./parts/CoachAI";
 import { ThisComputer } from "./parts/ThisComputer";
 import { WatchLink } from "./parts/WatchLink";
@@ -45,8 +47,12 @@ platformSlots.originShown = (origin) => origin === "coros";
 platformSlots.aiSettingsHref = "/coach/settings";
 // …and switched right in Coach's message box: provider, model and power level (parts/CoachAI.tsx).
 platformSlots.coachAI = CoachAI;
+// The dashboard invites people with no phone paired here to the C-LINK iPhone beta (parts/MobileBeta.tsx).
+platformSlots.dashboardNote = MobileBeta;
 platformSlots.settingsHref = "/settings";
 platformSlots.railNote = RailFoot;
+// Back and forward through the screens opened in this window, at the top of the sidebar (parts/HistoryArrows.tsx).
+platformSlots.railTop = HistoryArrows;
 // C-LINK's own updates: a row in the account menu, and a dot on the account button when one is waiting.
 platformSlots.accountItem = UpdatesMenuItem;
 platformSlots.accountBadge = UpdatesBadge;

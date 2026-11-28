@@ -294,7 +294,8 @@ export function libraryItems(design: Design, ctx: LibraryContext): LibraryItem[]
 function hiddenMetricBounds(design: Design, ctx: LibraryContext, layer: EditorLayer): Box | null {
   if (!layer.metricId || layer.visible) return null;
   const shown = { ...design, metricChanges: { ...design.metricChanges, [layer.metricId]: true } };
-  return deriveEditorLayers(ctx.details, shown).find((l) => l.id === layer.id)?.bounds ?? null;
+  // Only this layer's box is wanted: the other hidden metrics' boxes would each be one more derivation.
+  return deriveEditorLayers(ctx.details, shown, { hiddenBounds: false }).find((l) => l.id === layer.id)?.bounds ?? null;
 }
 
 /** Rows matching a search, by label, group or the words they carry. */

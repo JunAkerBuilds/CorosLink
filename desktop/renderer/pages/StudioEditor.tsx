@@ -6,7 +6,7 @@
 // simulation of time, battery and weather. Every change is saved on this computer a moment later and can be undone.
 // Download makes the editable project ZIP, the final watch ZIP or the BIN; Send opens Watch | COROS app | File
 // (parts/StudioSend.tsx).
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { CorosWatchfaceNativeDataStyle, CorosWatchfaceTemplateDetails } from "../../watchface/types";
 import { Button, Segmented } from "@/components/ui";
 import { t, tx } from "@/lib/i18n";
@@ -18,7 +18,7 @@ import {
 } from "../../watchface/engine/watchfaceSimulation";
 import {
   allLayersOf, buildInput, clickOrder, colour, colourOf, detailsOf, editMode, grouped, initialDesign, isChartPart, LAYER_GROUPS, layersOf, masterSize, moveTo,
-  openFaceSource, renderFace, resolutionOf, rowOf, rowsOf, separateTime, setVisible, sourceDetailsOf, spotActive, spotKeyOf, spotsOf, supportsAlwaysOn,
+  openFaceSource, renderFace, renderWebsitePreviewAnimation, resolutionOf, rowOf, rowsOf, separateTime, setVisible, sourceDetailsOf, spotActive, spotKeyOf, spotsOf, supportsAlwaysOn,
   type Design, type EditorLayer, type FaceSource, type Mode, type SpotChoice,
 } from "../studioFace";
 import { currentGesture } from "../studioGesture";
@@ -39,9 +39,10 @@ import { pickPreviewResolution, pickWatchPreviewResolution, type WatchfaceDatePa
 import { attachWatchfaceFontSnapshots } from "../../watchface/engine/watchfaceFontSnapshots";
 import { Dots, FaceInspector, LayerInspector, MultiInspector } from "./StudioInspector";
 import { AnimationPlayer, type AnimationPlayback } from "../parts/StudioAnimation";
+import { useAnimationOutcome } from "../studioAnimationOutcome";
 import { resolveWatchfaceModeDesign } from "../../watchface/engine/watchfaceDisplayModes";
 import { FaceView } from "../parts/FaceView";
-import { composeDragFrames, composePartFrames, dragKey, snapTargets, type DragFrames } from "../studioDrag";
+import { canRefineDragInk, composeDragFrames, composePartFrames, dragKey, DragFramesDropped, refineDragInk, snapTargets, type DragFrames } from "../studioDrag";
 import { moveBox, snapGaps, snapGuides, snapMove, snapPartners, type Box, type SnapGap, type SnapGuide, type SnapHold, type SnapTarget } from "../studioSnap";
 import { Icon } from "../parts/StudioIcon";
 import { ConvertDialog, SendDialog, type SendTab } from "../parts/StudioSend";
@@ -110,8 +111,8 @@ export default function StudioEditor() {
   const [snap, setSnap] = useState(true);
   const [guides, setGuides] = useState(true);
   // While dragging: the lines the selection lines up with, the gaps to its neighbours, and the outlines of the layers
-  // it's placed against.
-  const [snapped, setSnapped] = useState<Snapped>(NO_SNAP);
+  // it's placed against. Kept outside the editor's state, so a pointer move redraws only the marks (SnapMarks).
+  const [snapped] = useState(snapStore);
   const [sim, setSim] = useState<WatchfaceSimulation>(() => createWatchfaceSimulation());
   const [speed, setSpeed] = useState<SimSpeed>("min");
   // The face as last drawn, with the design it was drawn from, and which drawing the page has on screen.
@@ -120,9 +121,10 @@ export default function StudioEditor() {
   const [playback, setPlayback] = useState<AnimationPlayback>({ playing: true, still: 0 });
   const [onScreen, setOnScreen] = useState<string | null>(null);
   const frame = shot?.src ?? null;
-  // A drag in progress: the layers moving and how far. `held` keeps the drag frames on screen after the drop until
-  // the face drawn at the new place is.
-  const [drag, setDrag] = useState<{ ids: string[]; dx: number; dy: number } | null>(null);
+  // A drag in progress: the layers moving. How far they've gone is on the face box as --st-drag-x / --st-drag-y, set
+  // straight on the element each frame, so a pointer move doesn't render the editor again. `held` keeps the drag
+  // frames on screen after the drop until the face drawn at the new place is.
+  const [drag, setDrag] = useState<{ ids: string[] } | null>(null);
   const [held, setHeld] = useState<{ dx: number; dy: number; from: Design; frames: DragFrames } | null>(null);
   const [frames, setFrames] = useState<DragFrames | null>(null);
   // The same for an icon dragged apart from its number: the face without the icon, and the icon on top.
@@ -276,7 +278,7 @@ export default function StudioEditor() {
     if (!source || !design || !active) return null;
     const details = detailsOf(source, design, mode);
     const m = pickPreviewResolution(details);
-    const ctx: LibraryContext = { details, layers: allLayersOf(source, design, mode), face: { width: m?.width ?? masterSize(source), height: m?.height ?? masterSize(source) },
+    const ctx: LibraryContext = { details, layers: allLayersOf(source, design, mode), face: { width: m?.width ?? masterSize(source, mode), height: m?.height ?? masterSize(source, mode) },
       mode, watchWidth: pickWatchPreviewResolution(source.details, source.watch.model)?.width };
     return { ctx, items: libraryItems(active, ctx) };
   }, [source, design, active, mode]);
@@ -291,7 +293,7 @@ export default function StudioEditor() {
     setExtra((x) => (x.some(same) ? x.filter((i) => !same(i)) : [...x, id]));
   };
   const resolution = useMemo(() => (source && design ? resolutionOf(source, design, mode) : null), [source, design, mode]);
-  const master = source ? masterSize(source) : 800;
+  const master = source ? masterSize(source, mode) : 800;
   const scale = (FACE_PX * zoom) / master;
   const hasAutoTime = layers.some((l) => l.id === "autoTime");
   // With the selectable slot picked alone, the previewed type's icon has a grip of its own on the face.
@@ -319,6 +321,8 @@ export default function StudioEditor() {
     return selected.filter(movable);
   }, [drag, hover, layers, selected, movable]);
   const dragSetKey = dragSet.length ? dragKey(dragSet.map((l) => l.id), mode, pixels, choice) : "";
+  // The frames would be for a layer the pointer is only over, not one picked.
+  const hoverOnly = !drag && dragSet.length === 1 && dragSet[0]!.id === hover && !selected.some((l) => l.id === hover);
   const scenarioNow = useRef(scenario);
   const choiceNow = useRef(choice);
   const framesNow = useRef(frames);
@@ -339,15 +343,31 @@ export default function StudioEditor() {
     const have = framesNow.current;
     if (have && have.key === dragSetKey && have.design === design) return;
     let live = true;
+    // Composing is several drawings of the face, so it waits for the pointer and the edits to settle: longer for a
+    // layer only passed over than for the selection. A newer set or edit stops it part way.
     const tm = setTimeout(() => {
-      composeDragFrames(source, design, mode, dragSet, pixels, scenarioNow.current, choiceNow.current)
+      composeDragFrames(source, design, mode, dragSet, pixels, scenarioNow.current, choiceNow.current, () => live)
         .then((f) => { if (live) setFrames(f); })
-        .catch((e) => console.warn("Studio couldn't prepare the drag.", e));
-    }, 40);
+        .catch((e) => { if (!(e instanceof DragFramesDropped)) console.warn("Studio couldn't prepare the drag.", e); });
+    }, hoverOnly ? 250 : 120);
     return () => { live = false; clearTimeout(tm); };
-    // dragSet is keyed by dragSetKey.
+    // dragSet is keyed by dragSetKey; picking the layer being composed for (hoverOnly turning false) mustn't restart it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, design, mode, pixels, dragSetKey, waiting]);
+
+  // Once the editor has been still a second, the layers that overlap others get their ink measured for snapping (a
+  // drawing each). Any edit, a new selection or a drag stops it; until it's done they snap by their boxes.
+  const dragging = drag !== null;
+  useEffect(() => {
+    if (!frames || frames.design !== design || dragging || waiting || !canRefineDragInk(frames)) return;
+    let live = true;
+    const tm = setTimeout(() => {
+      refineDragInk(frames, () => live)
+        .then((f) => { if (live) setFrames(f); })
+        .catch((e) => { if (!(e instanceof DragFramesDropped)) console.warn("Studio couldn't measure the layers for snapping.", e); });
+    }, 1000);
+    return () => { live = false; clearTimeout(tm); };
+  }, [frames, design, dragging, waiting]);
 
   // The icon grip's frames, composed ahead of a drag like the layers' (the icon taken off by moving it past the face,
   // which leaves the number and everything else where they are).
@@ -363,10 +383,10 @@ export default function StudioEditor() {
     if (!move) return;
     let live = true;
     const tm = setTimeout(() => {
-      composePartFrames(source, design, mode, iconKey, (x) => move(x, master, master), pixels, scenarioNow.current, choiceNow.current)
+      composePartFrames(source, design, mode, iconKey, (x) => move(x, master, master), pixels, scenarioNow.current, choiceNow.current, () => live)
         .then((f) => { if (live) setIconFrames(f); })
-        .catch((e) => console.warn("Studio couldn't prepare the icon drag.", e));
-    }, 40);
+        .catch((e) => { if (!(e instanceof DragFramesDropped)) console.warn("Studio couldn't prepare the icon drag.", e); });
+    }, 120);
     return () => { live = false; clearTimeout(tm); };
   }, [source, design, mode, pixels, iconKey, waiting, master]);
 
@@ -427,6 +447,10 @@ export default function StudioEditor() {
   // Until the watch's Back button has been pressed once on this computer, it glows and its label asks to be
   // pressed. Kept above the early returns below so the hooks run in the same order on every render.
   const [backTried, setBackTried] = useState(backButtonTried);
+  // What the face's watch plays of the animation (MIP watches: 64 colors, frames left out past 64 KB), measured
+  // once here for the canvas and the Animation inspector alike.
+  const outcomeModel = (project && getWatchfaceTarget(project.firmwareType)?.model) ?? source?.watch.model ?? "";
+  const animationOutcome = useAnimationOutcome(active?.animation, outcomeModel, resolution?.width);
 
   if (problem && !doc.now) return <main className="page"><div className="notice" role="alert">{problem} <a href="/studio" onClick={(e) => { e.preventDefault(); navigate("/studio"); }}>{t("Back to Studio")}</a></div></main>;
   if (!doc.now || !design || !active || !source || !project) return <main className="page"><div className="st-loading">{t("Opening the face…")}</div></main>;
@@ -611,12 +635,22 @@ export default function StudioEditor() {
       return (lineUp = { frames: f, moving: f?.ink.moving ?? b, targets });
     };
     let moved = false, last = { dx: 0, dy: 0 }, snaps = NO_SNAP, hold: Partial<Record<"x" | "y", SnapHold>> = {}, raf = 0;
-    // One state update a frame, however often the pointer reports.
-    const paint = () => { raf = 0; setSnapped(snaps); setDrag({ ids, ...last }); };
+    // One paint a frame, however often the pointer reports: the moving layers' offset straight on the face box, and
+    // the snap marks. The editor itself renders once when the drag starts and once when it ends.
+    const paint = () => {
+      raf = 0;
+      const el = faceBox.current;
+      if (el) { el.style.setProperty("--st-drag-x", `${last.dx * scale}px`); el.style.setProperty("--st-drag-y", `${last.dy * scale}px`); }
+      snapped.set(snaps);
+    };
     const move = (ev: PointerEvent) => {
       const p = toMaster(ev.clientX, ev.clientY);
       let dx = p.x - start.x, dy = p.y - start.y;
       if (!moved && Math.abs(dx) + Math.abs(dy) < 3 / scale) return;
+      if (!moved) {
+        faceBox.current?.style.setProperty("--st-drag-x", "0px"); faceBox.current?.style.setProperty("--st-drag-y", "0px");
+        setDrag({ ids });
+      }
       moved = true;
       const lock = ev.shiftKey ? (Math.abs(dx) > Math.abs(dy) ? "x" : "y") : null;
       if (lock === "x") dy = 0; else if (lock === "y") dx = 0;
@@ -641,7 +675,7 @@ export default function StudioEditor() {
       done = true;
       removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up);
       if (raf) cancelAnimationFrame(raf);
-      setSnapped(NO_SNAP); setDrag(null);
+      snapped.set(NO_SNAP); setDrag(null);
       if (!moved || (!last.dx && !last.dy)) return;
       // The drag frames stay where they were dropped until the face is drawn there.
       const f = framesNow.current;
@@ -762,8 +796,14 @@ export default function StudioEditor() {
     try { const done = await work(); if (done) say(done); } catch (e) { setProblem(said(e)); } finally { setBusy(null); }
   };
   const makeEditable = async () => {
-    const previewDataUrl = await renderFace(source, design, "current", 800);
-    await downloadEditable(id, { name: name.trim() || "Untitled face", design: await attachWatchfaceFontSnapshots(design).catch(() => design), previewDataUrl });
+    const [previewDataUrl, previewAnimation] = await Promise.all([
+      renderFace(source, design, "current", 800),
+      renderWebsitePreviewAnimation(source, design, watch),
+    ]);
+    await downloadEditable(id, {
+      name: name.trim() || "Untitled face", design: await attachWatchfaceFontSnapshots(design).catch(() => design), previewDataUrl,
+      ...(previewAnimation ? { previewAnimation } : {}),
+    });
   };
   const downloads = {
     editable: () => run(t("Making the editable project…"), async () => {
@@ -791,22 +831,23 @@ export default function StudioEditor() {
     : { top: g.from * scale, height: (g.to - g.from) * scale, left: g.at * scale - 5, width: 10 };
   const spot = (b: { x0: number; y0: number; x1: number; y1: number }) => ({ left: b.x0 * scale, top: b.y0 * scale, width: Math.max(6, (b.x1 - b.x0) * scale), height: Math.max(6, (b.y1 - b.y0) * scale) });
   const box = (l: EditorLayer) => {
-    const b = l.bounds!, d = drag?.ids.includes(l.id) ? drag : { dx: 0, dy: 0 };
-    return { left: (b.x0 + d.dx) * scale, top: (b.y0 + d.dy) * scale, width: Math.max(6, (b.x1 - b.x0) * scale), height: Math.max(6, (b.y1 - b.y0) * scale) };
+    const b = l.bounds!;
+    return { left: b.x0 * scale, top: b.y0 * scale, width: Math.max(6, (b.x1 - b.x0) * scale), height: Math.max(6, (b.y1 - b.y0) * scale),
+      ...(drag?.ids.includes(l.id) ? { transform: DRAGGED } : {}) };
   };
   // While dragging, and after a drop until the face is redrawn: the face without the moving layers, and them on top.
-  const live = drag && frames && frames.design === design && frames.key === dragKey(drag.ids, mode, pixels, choice) ? { ...drag, frames } : null;
+  const live = drag && frames && frames.design === design && frames.key === dragKey(drag.ids, mode, pixels, choice) ? { dx: 0, dy: 0, frames } : null;
   const iconLive = iconDrag && iconFrames && iconFrames.design === design && iconFrames.key === iconKey ? { ...iconDrag, frames: iconFrames } : null;
   const lifted = live ?? iconLive ?? holding;
   const k = lifted ? (FACE_PX * zoom) / lifted.frames.size : 1;
   const sprite = lifted?.frames.sprite;
   const animation = mode === "current" && active?.animation?.enabled && active.animation.frames.length ? active.animation : null;
   const over = !lifted && animation && shot?.parts
-    ? <AnimationPlayer animation={animation} parts={shot.parts} scale={scale} playback={playback} />
+    ? <AnimationPlayer animation={animation} parts={shot.parts} scale={scale} playback={playback} outcome={animationOutcome} />
     : lifted ? <>
     <img className="st-face-img st-drag-base" src={lifted.frames.base} alt="" draggable={false} />
     {sprite ? <img className="st-drag-sprite" src={sprite.src} alt="" draggable={false}
-      style={{ left: sprite.x * k, top: sprite.y * k, width: sprite.w * k, height: sprite.h * k, transform: `translate(${lifted.dx * scale}px, ${lifted.dy * scale}px)` }} /> : null}
+      style={{ left: sprite.x * k, top: sprite.y * k, width: sprite.w * k, height: sprite.h * k, transform: live ? DRAGGED : `translate(${lifted.dx * scale}px, ${lifted.dy * scale}px)` }} /> : null}
   </> : null;
   const savedText = saving === "saving" ? t("Saving…") : saving === "failed" ? t("Not saved") : t("Saved");
   const canColour = !!layer?.capabilities.color;
@@ -1009,11 +1050,7 @@ export default function StudioEditor() {
               <div ref={faceBox} className="st-face-box" onDragStart={(e) => e.preventDefault()}>
                 <FaceView src={frame} size={FACE_PX * zoom} label={t("{name} on {watch}", { name, watch: watch.label })} over={over} onShown={shownNow}>
                   {guides ? <div className="st-safe" aria-hidden="true" /> : null}
-                  {snapped.outlines.map((b, i) => <div key={`o${i}`} className="st-snap-to" style={{ left: b.x0 * scale - 2, top: b.y0 * scale - 2, width: (b.x1 - b.x0) * scale + 4, height: (b.y1 - b.y0) * scale + 4 }} aria-hidden="true" />)}
-                  {snapped.lines.map((g, i) => <div key={i} className="st-snap" style={guide(g)} aria-hidden="true" />)}
-                  {snapped.gaps.filter((g) => (g.to - g.from) * scale >= 4).map((g, i) => (
-                    <div key={`g${i}`} className="st-gap" data-axis={g.axis} data-equal={g.equal || undefined} style={gap(g)} aria-hidden="true"><span>{Math.round(g.to - g.from)}</span></div>
-                  ))}
+                  <SnapMarks store={snapped} scale={scale} guide={guide} gap={gap} />
                   {left === "add" ? items.filter((i) => !i.added && i.bounds).map((i) => (
                     <button key={i.key} type="button" className="st-spot" aria-label={t("Add {name} here", { name: t(i.label) })} title={t(i.label)} style={spot(i.bounds!)} onClick={() => void add(i)}>
                       <Icon name="plus" size={14} width={2.6} />
@@ -1112,9 +1149,9 @@ export default function StudioEditor() {
               <MultiInspector layers={selected} design={active} edit={edit} master={master} onClear={() => setSel(null)} />
             ) : layer ? (
               <LayerInspector key={`${mode}:${layer.spot?.id ?? layer.id}`} allLayers={library?.ctx.layers} choice={choice} onState={(spot, key) => setChoice((c) => ({ ...c, [spot]: key }))} onAddState={(key) => void addState(key)}
-                onStateVisible={(l, v) => edit((x) => setVisible(x, l, v, source, mode))} layer={layer} design={active} edit={edit} details={detailsOf(source, design, mode)} resolution={resolution}
+                onStateVisible={(l, v) => edit((x) => setVisible(x, l, v, source, mode))} layer={layer} design={active} edit={edit} details={library?.ctx.details ?? detailsOf(source, design, mode)} resolution={resolution}
                 master={master} icon={(layer.spot && SPOT_ICON[layer.spot.id]) || (ICON[layer.kind] ?? "rect")} aodNote={mode === "aod"} say={say} loadAssets={source.loadAssets} watch={watch.model}
-                watchLabel={watch.label} playback={playback} onPlayback={setPlayback}
+                watchLabel={watch.label} playback={playback} onPlayback={setPlayback} animationOutcome={animationOutcome}
                 onRemove={library && canRemove(active, layer, library.ctx) ? () => remove([layer]) : null}
                 arrange={isArtwork(layer.id) ? { place: artworkPlace(active, layer.id), move: (step) => orderArtwork(layer, step), copy: () => copyArtwork(layer) } : undefined}
                 onHide={() => hide(layer)} onShow={() => edit((x) => setVisible(x, layer, true, source, mode))} onSplitTime={splitTime}
@@ -1131,7 +1168,7 @@ export default function StudioEditor() {
               </div>
             )
           ) : (<>
-            <FaceInspector design={active} edit={edit} details={detailsOf(source, design, mode)} resolution={resolution} loadAssets={source.loadAssets} fail={(e) => say(e instanceof Error ? e.message : String(e))}
+            <FaceInspector design={active} edit={edit} details={library?.ctx.details ?? detailsOf(source, design, mode)} resolution={resolution} loadAssets={source.loadAssets} fail={(e) => say(e instanceof Error ? e.message : String(e))}
               watchRow={<div className="st-watch-row"><FaceView src={frame} size={44} />
                 <span><b>{watch.label}</b><small>{watch.previewSize} × {watch.previewSize} · {watch.display === "amoled" ? "AMOLED" : t("Memory-in-pixel")}{project.sourceTemplateId ? ` · ${t("template {id}", { id: project.sourceTemplateId })}` : ""}</small></span></div>} />
             <ProjectFolds design={design} editRoot={(fn) => apply((s) => { const next = fn(s.design); return next === s.design ? s : { ...s, design: next }; })}
@@ -1147,6 +1184,10 @@ export default function StudioEditor() {
         onShowLayer={(lid) => { setSendTab(null); setMode("current"); setLeft("layers"); setInsp("layer"); showLayer(lid); }}
         onLanguages={() => { setSendTab(null); setInsp("face"); }}
         onEditable={makeEditable}
+        projectBody={async () => ({
+          design: await attachWatchfaceFontSnapshots(design).catch(() => design),
+          previewDataUrl: await renderFace(source, design, "current", 800).catch(() => undefined),
+        })}
         onOpenProject={(pid) => { setSendTab(null); navigate(`/studio/${pid}`); }}
         onClose={() => setSendTab(null)} /> : null}
       {converting ? <ConvertDialog projectId={id} name={name} source={source} design={design} watch={watch}
@@ -1168,6 +1209,32 @@ const redrawn = (held: { from: Design }, design: Design | null, shot: { src: str
 
 interface Snapped { lines: SnapGuide[]; gaps: SnapGap[]; outlines: Box[] }
 const NO_SNAP: Snapped = { lines: [], gaps: [], outlines: [] };
+/** A dragged layer's offset, from the face box's custom properties (startDrag sets them each frame). */
+const DRAGGED = "translate(var(--st-drag-x, 0px), var(--st-drag-y, 0px))";
+
+/** The snap marks of a drag in progress, set each frame without rendering the editor. */
+function snapStore() {
+  let value = NO_SNAP;
+  const listeners = new Set<() => void>();
+  const same = (a: Snapped, b: Snapped) => a === b || JSON.stringify(a) === JSON.stringify(b);
+  return {
+    get: () => value,
+    set: (next: Snapped) => { if (same(value, next)) return; value = next; for (const l of listeners) l(); },
+    subscribe: (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; },
+  };
+}
+type SnapStore = ReturnType<typeof snapStore>;
+
+function SnapMarks({ store, scale, guide, gap }: { store: SnapStore; scale: number; guide: (g: SnapGuide) => CSSProperties; gap: (g: SnapGap) => CSSProperties }) {
+  const snapped = useSyncExternalStore(store.subscribe, store.get);
+  return <>
+    {snapped.outlines.map((b, i) => <div key={`o${i}`} className="st-snap-to" style={{ left: b.x0 * scale - 2, top: b.y0 * scale - 2, width: (b.x1 - b.x0) * scale + 4, height: (b.y1 - b.y0) * scale + 4 }} aria-hidden="true" />)}
+    {snapped.lines.map((g, i) => <div key={i} className="st-snap" style={guide(g)} aria-hidden="true" />)}
+    {snapped.gaps.filter((g) => (g.to - g.from) * scale >= 4).map((g, i) => (
+      <div key={`g${i}`} className="st-gap" data-axis={g.axis} data-equal={g.equal || undefined} style={gap(g)} aria-hidden="true"><span>{Math.round(g.to - g.from)}</span></div>
+    ))}
+  </>;
+}
 
 /* ───────────── Pieces ───────────── */
 

@@ -6,9 +6,11 @@ import { Button, Card } from "@/components/ui";
 import "@/app/(app)/connect/connect.css";
 import "./thisComputer.css";
 import { language, locale, t } from "@/lib/i18n";
+import { FirewallNote, type FirewallState } from "./FirewallNote";
+import { ReachAnywhere } from "./ReachAnywhere";
 
 interface Phone { id: string; label: string; createdAt: string; lastUsedAt: string }
-interface Status { name: string; listening: boolean; addresses: string[]; items: number; pairing: boolean; phones: Phone[] }
+interface Status { name: string; listening: boolean; addresses: string[]; items: number; pairing: boolean; phones: Phone[]; firewall?: FirewallState }
 interface Pairing { link: string; qr: string; expiresAt: string }
 
 const ago = (iso: string): string => {
@@ -80,6 +82,7 @@ export function ThisComputer() {
               <li>{t("Tap Pair on the phone.")}</li>
               <li>{t("Keep the phone on the same Wi-Fi as this computer.")}</li>
             </ol>
+            <FirewallNote state={status?.firewall} />
             <span className="muted">{t("Works once · {time} left", { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` })}</span>
             <div className="tc-actions">
               <Button onClick={() => void navigator.clipboard.writeText(pairing.link)}>{t("Copy code")}</Button>
@@ -109,6 +112,7 @@ export function ThisComputer() {
         ) : null}
         {status && status.phones.length > 0 && !status.listening ? <p role="alert" className="cn-problem">{t("Phones can't reach this computer right now.")}</p> : null}
       </Card>
+      <ReachAnywhere />
     </section>
   );
 }
