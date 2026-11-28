@@ -16,7 +16,7 @@ import { inferPhaseKinds } from "@/lib/planGenerate";
 import { PHASE_LABELS, type PhaseKind } from "@/lib/plan";
 import { CardShell, hueVar, ICONS, Outcome, Read } from "./CardShell";
 import { useThread } from "./thread";
-import { language, locale, t } from "@/lib/i18n";
+import { dateText, language, locale, t } from "@/lib/i18n";
 
 const PHASE_HUE: Record<PhaseKind, CoachHue> = { base: "blue", build: "coral", peak: "pink", taper: "mint", recovery: "cyan", custom: "gold" };
 const PLUS = "M12 5v14M5 12h14";
@@ -121,7 +121,7 @@ export function PlanDraft({ card }: { card: PlanDraftCard }) {
     return out;
   }, []), [kinds]);
   const firstWeeks = Array.from({ length: Math.min(3, d.weeks) }, (_, w) => d.workouts.filter((x) => Math.floor(x.offset / 7) === w));
-  const start = new Date(`${d.start}T12:00:00Z`).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short", timeZone: "UTC" });
+  const start = dateText(new Date(`${d.start}T12:00:00Z`), language() === "en" ? undefined : locale(), { day: "numeric", month: "short", timeZone: "UTC" });
   const act = (work: () => Promise<unknown>, failed: string) => {
     if (busy) return;
     setBusy(true); setProblem(null);

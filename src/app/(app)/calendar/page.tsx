@@ -25,7 +25,7 @@ import {
   type DraftOp, type Filter, type Pairing,
 } from "@/lib/calendarPlan";
 import "./training.css";
-import { locale, t, tx } from "@/lib/i18n";
+import { dateText, locale, t, tx } from "@/lib/i18n";
 
 const GRID = "repeat(7, minmax(0, 1fr)) 208px";
 /** Marks a drag as the calendar's own, so files dragged in from elsewhere are never taken for workouts. */
@@ -48,8 +48,7 @@ export default function CalendarPage() {
 
 /** Short weekday names, Monday first, in the app's language (2024-01-01 was a Monday). */
 function weekHeads(): string[] {
-  const short = new Intl.DateTimeFormat(locale("en-GB"), { weekday: "short", timeZone: "UTC" });
-  return Array.from({ length: 7 }, (_, i) => short.format(Date.UTC(2024, 0, 1 + i)));
+  return Array.from({ length: 7 }, (_, i) => dateText(Date.UTC(2024, 0, 1 + i), locale("en-GB"), { weekday: "short", timeZone: "UTC" }));
 }
 
 let copyCounter = 0;

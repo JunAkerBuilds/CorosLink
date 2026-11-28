@@ -14,7 +14,7 @@ import {
 import { readMcp, type McpStatus } from "../mcp";
 import { McpServers } from "../parts/McpServers";
 import { ThisComputer } from "../parts/ThisComputer";
-import { language, locale, msg, t, tx } from "@/lib/i18n";
+import { dateText, language, locale, msg, t, tx } from "@/lib/i18n";
 import "./coachSettings.css";
 
 type Section = "display" | "instructions" | "memory" | "remote" | "mcp" | string;
@@ -44,7 +44,7 @@ const GROUPS = [
 ] as const;
 
 const said = (error: unknown) => (error instanceof AIProblem || error instanceof Error ? error.message : t("That didn't work."));
-const day = (ms: number) => (ms ? new Date(ms).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" }) : "");
+const day = (ms: number) => (ms ? dateText(new Date(ms), language() === "en" ? undefined : locale(), { day: "numeric", month: "short" }) : "");
 
 function Tag({ tone, children }: { tone?: "ok"; children: ReactNode }) {
   return <span className="cs-tag" data-tone={tone}>{children}</span>;

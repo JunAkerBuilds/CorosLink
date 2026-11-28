@@ -2,7 +2,7 @@
 // { time })` looks the English up in the chosen language's catalog (src/lib/i18n/<lang>/*.json) and falls back to
 // the English when a line isn't translated yet. Works in the page and in the main process (no browser APIs here).
 
-export type Lang = "en" | "es" | "de" | "pt-BR" | "zh-Hans";
+export type Lang = "en" | "es" | "de" | "pt-BR" | "pt-PT" | "zh-Hans";
 /** What the athlete picked: a language, or whatever the system prefers. */
 export type Choice = Lang | "system";
 export type Catalog = Readonly<Record<string, string>>;
@@ -13,7 +13,8 @@ export const LANGUAGES: readonly { id: Lang; label: string }[] = [
   { id: "en", label: "English" },
   { id: "es", label: "Español" },
   { id: "de", label: "Deutsch" },
-  { id: "pt-BR", label: "Português" },
+  { id: "pt-BR", label: "Português (Brasil)" },
+  { id: "pt-PT", label: "Português (Portugal)" },
   { id: "zh-Hans", label: "简体中文" },
 ];
 
@@ -31,6 +32,8 @@ export function languageFor(choice: Choice, preferred: readonly string[]): Lang 
     if (l === "en" || l.startsWith("en-")) return "en";
     if (l === "es" || l.startsWith("es-")) return "es";
     if (l === "de" || l.startsWith("de-")) return "de";
+    // A plain "pt" is Brazilian, as CLDR reads it; only Portugal's own tag picks pt-PT.
+    if (l === "pt-pt" || l.startsWith("pt-pt-")) return "pt-PT";
     if (l === "pt" || l.startsWith("pt-")) return "pt-BR";
     if (l === "zh" || l.startsWith("zh-")) return "zh-Hans";
   }
@@ -68,9 +71,22 @@ export function tx(context: string, text: string, vars?: Vars): string {
  */
 export const msg = <S extends string>(text: S): S => text;
 
-const TAGS: Record<Exclude<Lang, "en">, string> = { es: "es-ES", de: "de-DE", "pt-BR": "pt-BR", "zh-Hans": "zh-CN" };
+const TAGS: Record<Exclude<Lang, "en">, string> = { es: "es-ES", de: "de-DE", "pt-BR": "pt-BR", "pt-PT": "pt-PT", "zh-Hans": "zh-CN" };
 
 /** The tag for dates and numbers: `english` ("en-GB", "en-US") while the app speaks English, else the language's. */
 export function locale(english = "en-GB"): string {
   return current === "en" ? english : TAGS[current];
 }
+
+type Tag = string | string[] | undefined;
+// pt-PT, in its spelling before 1990, writes months and weekdays with a capital ("Sábado, 28 de Novembro"); Intl doesn't.
+const capitals = (tag: Tag, parts: Intl.DateTimeFormatPart[]): string =>
+  parts.map((p) => (tag === "pt-PT" && (p.type === "month" || p.type === "weekday") ? p.value.charAt(0).toUpperCase() + p.value.slice(1) : p.value)).join("");
+
+/** `d` in `tag` (usually `locale()`), the way `toLocaleDateString(tag, options)` writes it, with pt-PT's capitals. */
+export const dateText = (d: Date | number, tag: Tag, options: Intl.DateTimeFormatOptions): string =>
+  capitals(tag, new Intl.DateTimeFormat(tag, options).formatToParts(d));
+
+/** The range `a` to `b`, the way `Intl.DateTimeFormat#formatRange` writes it, with pt-PT's capitals. */
+export const dateRangeText = (a: Date, b: Date, tag: Tag, options: Intl.DateTimeFormatOptions): string =>
+  capitals(tag, new Intl.DateTimeFormat(tag, options).formatRangeToParts(a, b));

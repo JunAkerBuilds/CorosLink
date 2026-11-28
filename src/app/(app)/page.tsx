@@ -17,7 +17,7 @@ import { clock, thousands } from "@/lib/format";
 import { distanceIn, distanceUnit, paceText } from "@/lib/units";
 import { sky, type WeatherNow } from "@/lib/openMeteo";
 import { loadWeatherNow } from "@/data/weatherNow";
-import { locale, msg, t, tx } from "@/lib/i18n";
+import { dateText, locale, msg, t, tx } from "@/lib/i18n";
 import { tr } from "@/lib/i18n/react";
 import { platformSlots } from "@/lib/platform";
 import { Board, type BoardHandle, type BoardItem } from "./Board";
@@ -69,7 +69,7 @@ function widget(k: WidgetKey, d: Dashboard): ReactNode {
 const hue = (h: HueName) => `var(--h-${h})`;
 const dateWords = (day: string) => `${dayMonth(day)} ${day.slice(0, 4)}`;
 /** A month's name in the app's language, 0 = January. */
-const monthName = (k: number, month: "long" | "short") => new Date(Date.UTC(2000, k, 1)).toLocaleDateString(locale("en-GB"), { month, timeZone: "UTC" });
+const monthName = (k: number, month: "long" | "short") => dateText(new Date(Date.UTC(2000, k, 1)), locale("en-GB"), { month, timeZone: "UTC" });
 
 export default function DashboardPage() {
   const state = useLoaded(loadDashboard);
@@ -724,7 +724,7 @@ function Month({ m, today }: { m: Dashboard["month"]; today: string }) {
   const cells = monthCells(m.month, today, m.done, m.planned);
   const name = monthName(Number(m.month.slice(5)) - 1, "long");
   // Monday first: 3 January 2000 was a Monday.
-  const letters = Array.from({ length: 7 }, (_, k) => new Date(Date.UTC(2000, 0, 3 + k)).toLocaleDateString(locale("en-GB"), { weekday: "narrow", timeZone: "UTC" }));
+  const letters = Array.from({ length: 7 }, (_, k) => dateText(new Date(Date.UTC(2000, 0, 3 + k)), locale("en-GB"), { weekday: "narrow", timeZone: "UTC" }));
   return (
     <Card aria-label={t("This month")} className="db-card db-w3">
       <Head title={name}><Status text={m.done.length === 1 ? t("1 day") : t("{n} days", { n: m.done.length })} /></Head>

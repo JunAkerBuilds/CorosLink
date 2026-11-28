@@ -10,7 +10,7 @@ import { useStore } from "@/data/local/store";
 import { changeWatchSetting, discardWatchChanges, loadWatch, sendPendingToPhone, undoWatchSetting, WATCH_NOT_CONNECTED, type Alarm, type GpsMode, type Watch } from "@/data/watch";
 import { useSyncStatus } from "@/data/sync";
 import { parseDay } from "@/lib/format";
-import { language, locale, t, tx } from "@/lib/i18n";
+import { dateText, language, locale, t, tx } from "@/lib/i18n";
 import { type Json, alarmJson, alarmKey, alarmLine, alarmRows, dayShort, goalShare, lastChargeIndex, pendingCount, pendingFor, repeatLabel, stepGoal, valueOf, WEEK_ORDER } from "@/lib/watch";
 import { platformSlots } from "@/lib/platform";
 import "./watch.css";
@@ -234,7 +234,7 @@ function WatchScreen({ watch, origin }: { watch: Watch; origin: Origin }) {
           <h2>{t("Battery")}</h2>
           <div className="wa-batt-stats">
             <div><span className="wa-k">{t("Average use")}</span><span>{watch.batteryHistory.perDay || "—"}</span></div>
-            <div><span className="wa-k">{t("Last charged")}</span><span>{charged === null ? "—" : language() === "en" ? `${chargedDay.getDate()} ${MONTHS[chargedDay.getMonth()]}` : chargedDay.toLocaleDateString(locale(), { day: "numeric", month: "short" })}</span></div>
+            <div><span className="wa-k">{t("Last charged")}</span><span>{charged === null ? "—" : language() === "en" ? `${chargedDay.getDate()} ${MONTHS[chargedDay.getMonth()]}` : dateText(chargedDay, locale(), { day: "numeric", month: "short" })}</span></div>
             <div><span className="wa-k">{tx("remaining", "Left")}</span><span>{watch.battery.left || "—"}</span></div>
           </div>
           {watch.batteryHistory.levels.length < 2 ? null : <BatteryChart levels={watch.batteryHistory.levels} firstDay={watch.batteryHistory.firstDay} alt={watch.batteryHistory.alt} />}

@@ -3,7 +3,7 @@
 // cached here. Right: the package table with search, region, map version and layer filters.
 import { useEffect, useMemo, useState } from "react";
 import { Select } from "@/components/ui";
-import { language, locale, msg, t } from "@/lib/i18n";
+import { dateText, language, locale, msg, t } from "@/lib/i18n";
 import type { CachedPackage, MapManifest, MapPackage, MapRegion, MapsWatch, PackagesStatus } from "../../../maps/types";
 import { bytes, cancelInstall, cancelPackage, checkPackages, deleteCached, downloadPackage, installPackages, manifest, packages, said } from "../../maps";
 import { MapsIcon } from "./MapsIcon";
@@ -208,7 +208,7 @@ export default function CorosMaps({ watch, readWatch }: { watch: MapsWatch | nul
             </table>
           </div>
         ) : <div className="mp-table-empty"><b>{t("No matching packages")}</b><small>{t("Try another name, or pick All regions.")}</small></div>}
-        {list && <small className="mp-note">{t("COROS manifest updated {date}.", { date: new Date(list.updatedAt).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short", year: "numeric" }) })}</small>}
+        {list && <small className="mp-note">{t("COROS manifest updated {date}.", { date: dateText(new Date(list.updatedAt), language() === "en" ? undefined : locale(), { day: "numeric", month: "short", year: "numeric" }) })}</small>}
       </section>
     </div>
   );

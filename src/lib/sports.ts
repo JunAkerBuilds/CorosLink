@@ -1,7 +1,7 @@
 // The maths of the Sports pages, ported from the phone app (CorosKit: SportsProfile.swift, SportSections.swift,
 // TrainingTrends.swift, RideFindings.swift, SwimHistory.swift). Pure: activities and recordings in, readings out.
 // Weeks run Monday to Sunday, as everywhere on the web.
-import { language, locale, msg, t } from "@/lib/i18n";
+import { dateText, language, locale, msg, t } from "@/lib/i18n";
 import { distanceIn, distanceUnit } from "@/lib/units";
 
 export type Family = "run" | "ride" | "swim" | "strength" | "walk" | "hike" | "snow" | "climb" | "other";
@@ -592,7 +592,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const LONG_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 /** A date in the app's language; English keeps the words above. */
-const dated = (d: Date, options: Intl.DateTimeFormatOptions): string => new Intl.DateTimeFormat(locale(), options).format(d);
+const dated = (d: Date, options: Intl.DateTimeFormatOptions): string => dateText(d, locale(), options);
 export const dayMonthOf = (d: Date): string => (language() === "en" ? `${d.getDate()} ${MONTHS[d.getMonth()]}` : dated(d, { day: "numeric", month: "short" }));
 export const monthOf = (d: Date): string => (language() === "en" ? MONTHS[d.getMonth()] : dated(d, { month: "short" }));
 export const weekdayOf = (d: Date): string => (language() === "en" ? DAYS[d.getDay()] : dated(d, { weekday: "short" }));

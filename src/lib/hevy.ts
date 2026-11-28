@@ -3,7 +3,7 @@
 // Field names, paging and the sync steps follow the desktop app (CorosLink electron/hevyService.ts and
 // hevyModel.ts); the gym-log shape and the overlap rule follow the phone (CorosKit HevyAPI.swift, applyHevy).
 // Read only: nothing here, or anywhere on the web, writes to Hevy.
-import { language, locale, t } from "@/lib/i18n";
+import { dateText, language, locale, t } from "@/lib/i18n";
 import { msToRef, refToMs, type NativeGymSet, type NativeGymSetKind, type NativeGymWorkout } from "@/data/sync/native";
 
 type Json = Record<string, unknown>;
@@ -309,6 +309,6 @@ export function lastSyncedText(at: number | null | undefined, now: Date): string
   const sameYear = d.getFullYear() === now.getFullYear();
   const date = language() === "en"
     ? `${d.getDate()} ${MONTHS[d.getMonth()]}${sameYear ? "" : ` ${d.getFullYear()}`}`
-    : d.toLocaleDateString(locale(), { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
+    : dateText(d, locale(), { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
   return t("{date} at {time}", { date, time });
 }

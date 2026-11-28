@@ -2,7 +2,7 @@
 import { useState, type KeyboardEvent, type PointerEvent } from "react";
 import { indexAt } from "@/lib/chart";
 import { parseDay } from "@/lib/format";
-import { language, locale, t } from "@/lib/i18n";
+import { dateText, language, locale, t } from "@/lib/i18n";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const W = 700, H = 150;
@@ -10,7 +10,7 @@ const W = 700, H = 150;
 function dayLabel(firstDay: string, index: number): string {
   const d = parseDay(firstDay);
   d.setDate(d.getDate() + index);
-  return language() === "en" ? `${d.getDate()} ${MONTHS[d.getMonth()]}` : d.toLocaleDateString(locale(), { day: "numeric", month: "short" });
+  return language() === "en" ? `${d.getDate()} ${MONTHS[d.getMonth()]}` : dateText(d, locale(), { day: "numeric", month: "short" });
 }
 
 /** Battery level, one reading a day. Hover, or focus and use the arrow keys, to read a day. */

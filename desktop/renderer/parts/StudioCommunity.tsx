@@ -5,7 +5,7 @@
 // a project (desktop/main/watchface/community.ts).
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui";
-import { language, locale, msg, t } from "@/lib/i18n";
+import { dateText, language, locale, msg, t } from "@/lib/i18n";
 import type { WatchfaceTarget } from "../../watchface/watchfaceTargets";
 import { FaceView } from "./FaceView";
 import { Icon } from "./StudioIcon";
@@ -30,7 +30,7 @@ const ago = (iso: string | null) => {
   if (days < 2) return t("yesterday");
   if (days < 14) return t("{n} days ago", { n: Math.floor(days) });
   if (days < 60) return t("{n} weeks ago", { n: Math.floor(days / 7) });
-  return new Date(iso).toLocaleDateString(language() === "en" ? undefined : locale(), { month: "short", year: "numeric" });
+  return dateText(new Date(iso), language() === "en" ? undefined : locale(), { month: "short", year: "numeric" });
 };
 
 export function CommunityTab({ target, opening, onOpen }: {

@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { Button, Card, Field, Switch } from "@/components/ui";
 import { createStore, useStore } from "@/data/local/store";
-import { locale, msg, t } from "@/lib/i18n";
+import { dateText, locale, msg, t } from "@/lib/i18n";
 import { tr } from "@/lib/i18n/react";
 import {
   cancelDownloads, clearDownloads, connectSource, disconnectSource, downloadEpisode, downloadSongs, MediaProblem, readDownloads,
@@ -326,7 +326,7 @@ const topicStore = createStore<string>("media.podcasts.topic", TOPICS[0]);
 /** Topic searches, kept while the app is open so switching tabs doesn't search again. */
 const topicShows = new Map<string, Show[]>();
 
-const published = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString(locale("en-GB"), { day: "numeric", month: "short", year: "numeric" }) : "");
+const published = (ms: number | null) => (ms ? dateText(new Date(ms), locale("en-GB"), { day: "numeric", month: "short", year: "numeric" }) : "");
 const numbered = (e: Episode) => [e.season ? t("Season {n}", { n: e.season }) : null, e.number ? t("Episode {n}", { n: e.number }) : null].filter(Boolean).join(" · ");
 
 export function PodcastsPanel() {

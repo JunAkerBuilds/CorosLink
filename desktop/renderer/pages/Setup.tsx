@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Button, Field, Select, Switch } from "@/components/ui";
 import { AIProblem, connectAI, detectLocalAI, pickAI, readAI, signInAndWait, type AIStatus } from "../ai";
 import { readDeveloper } from "../developer";
-import { language, locale, msg, t, tx } from "@/lib/i18n";
+import { dateText, language, locale, msg, t, tx } from "@/lib/i18n";
 import { tr } from "@/lib/i18n/react";
 import { computerWord } from "../computer";
 import { navigate, useLocation } from "../router";
@@ -166,7 +166,7 @@ const ago = (iso: string, now: number): string => {
   if (minutes < 1) return t("just now");
   if (minutes < 60) return t("{n} min ago", { n: minutes });
   const hours = Math.round(minutes / 60);
-  return hours < 24 ? t("{n} h ago", { n: hours }) : new Date(iso).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
+  return hours < 24 ? t("{n} h ago", { n: hours }) : dateText(new Date(iso), language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
 };
 
 function PhoneStep({ onPaired, onBack, onNext }: { onPaired: (label: string | null) => void; onBack: () => void; onNext: () => void }) {

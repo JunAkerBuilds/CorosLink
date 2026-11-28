@@ -1,5 +1,5 @@
 // The Studio pages' calls to the main process (desktop/main/watchface/studio.ts), at /api/desktop/studio.
-import { language, locale, t } from "@/lib/i18n";
+import { dateText, language, locale, t } from "@/lib/i18n";
 import type { WatchfaceCarriedPreferences } from "../watchface/engine/watchfaceCarriedPreferences";
 import type { CorosWatchfaceDesignState, CorosWatchfacePreviewAnimation, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../watchface/types";
 import type { WatchfaceBuildInput } from "../watchface/archive/build";
@@ -168,7 +168,7 @@ export function edited(at: number | string, now = Date.now()): string {
   const days = Math.round(hours / 24);
   if (days === 1) return t("Yesterday");
   if (days < 7) return t("{days} days ago", { days });
-  return new Date(time).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
+  return dateText(new Date(time), language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
 }
 
 /** The watch Studio makes new faces for, remembered on this computer. */

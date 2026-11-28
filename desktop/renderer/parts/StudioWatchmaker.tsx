@@ -4,7 +4,7 @@
 // (shell and image generation in a temporary folder), so the bar shows Codex rather than Coach's AI pills.
 // Chats are saved with the face. Loaded on demand.
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
-import { language, locale, t, tx } from "@/lib/i18n";
+import { dateText, language, locale, t, tx } from "@/lib/i18n";
 import { Icon } from "./StudioIcon";
 // The chat list menu uses its menu colours.
 import "./coachAI.css";
@@ -49,7 +49,7 @@ function ago(iso: string): string {
   if (minutes < 60) return t("{mins} min ago", { mins: minutes });
   const hours = Math.round(minutes / 60);
   if (hours < 24) return t("{hours} h ago", { hours });
-  return new Date(iso).toLocaleDateString(language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
+  return dateText(new Date(iso), language() === "en" ? undefined : locale(), { day: "numeric", month: "short" });
 }
 
 const paragraphs = (text: string) => text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p, i) => <p key={i}>{p}</p>);

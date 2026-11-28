@@ -1,6 +1,6 @@
 // The translation catalogs (src/lib/i18n/<lang>/*.json): finds every English line the code passes to t, tx, tr or msg
 // and says which a language is missing, or where a translation drops a {placeholder}.
-//   node scripts/i18n.mjs check [path…]   lines missing in es / de / pt-BR / zh-Hans (all of src and desktop when no path)
+//   node scripts/i18n.mjs check [path…]   lines missing in es / de / pt-BR / pt-PT / zh-Hans (all of src and desktop when no path)
 //   node scripts/i18n.mjs conflicts       lines two catalog files translate differently
 //   node scripts/i18n.mjs index           rewrites src/lib/i18n/catalogs/<lang>.ts from the json files
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const i18nDir = path.join(root, "src/lib/i18n");
-export const LANGS = ["es", "de", "pt-BR", "zh-Hans"];
+export const LANGS = ["es", "de", "pt-BR", "pt-PT", "zh-Hans"];
 
 function sourceFiles(target) {
   const full = path.resolve(root, target);

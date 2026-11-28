@@ -2,7 +2,7 @@
 import type { SleepStage } from "@/data/health";
 import type { SleepRecord } from "@/data/sleep";
 import { dayKey, parseDay } from "./format";
-import { language, locale, msg, t } from "./i18n";
+import { dateText, language, locale, msg, t } from "./i18n";
 import { addDays, mean, nightTotals, stageSpans } from "./health";
 
 /* ---------- Words and colours ---------- */
@@ -208,7 +208,7 @@ export function period(range: Range, anchor: string, offset: number): Period {
     const days = Array.from({ length: 7 }, (_, i) => dayKey(addDays(monday, i)));
     const s = parseDay(days[0]), e = parseDay(days[6]);
     if (language() !== "en") {
-      const short = (x: Date, year: boolean) => x.toLocaleDateString(locale(), { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}) });
+      const short = (x: Date, year: boolean) => dateText(x, locale(), { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}) });
       return { range, days, title: `${short(s, false)} – ${short(e, e.getFullYear() !== a.getFullYear())}` };
     }
     return { range, days, title: `${s.getDate()}${s.getMonth() !== e.getMonth() ? ` ${MON[s.getMonth()]}` : ""}–${e.getDate()} ${MON[e.getMonth()]}${e.getFullYear() !== a.getFullYear() ? ` ${e.getFullYear()}` : ""}` };
@@ -216,7 +216,7 @@ export function period(range: Range, anchor: string, offset: number): Period {
   if (range === "month") {
     const first = new Date(a.getFullYear(), a.getMonth() + offset, 1);
     const len = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
-    return { range, days: Array.from({ length: len }, (_, i) => dayKey(new Date(first.getFullYear(), first.getMonth(), i + 1))), title: language() !== "en" ? first.toLocaleDateString(locale(), { month: "long", year: "numeric" }) : `${MONTHS[first.getMonth()]} ${first.getFullYear()}` };
+    return { range, days: Array.from({ length: len }, (_, i) => dayKey(new Date(first.getFullYear(), first.getMonth(), i + 1))), title: language() !== "en" ? dateText(first, locale(), { month: "long", year: "numeric" }) : `${MONTHS[first.getMonth()]} ${first.getFullYear()}` };
   }
   const y = a.getFullYear() + offset;
   const days: string[] = [];
@@ -292,7 +292,7 @@ export function perDay(days: readonly string[], byDay: ReadonlyMap<string, Sleep
 }
 
 export function monthName(m: number, short = false): string {
-  if (language() !== "en") return new Date(2000, m, 1).toLocaleDateString(locale(), { month: short ? "short" : "long" });
+  if (language() !== "en") return dateText(new Date(2000, m, 1), locale(), { month: short ? "short" : "long" });
   return short ? MON[m] : MONTHS[m];
 }
 
