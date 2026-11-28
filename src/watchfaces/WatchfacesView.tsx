@@ -279,6 +279,15 @@ interface WatchfaceConversionDraft {
   bakeForWatch?: WatchfaceAutomationConversionInput["bakeForWatch"];
 }
 
+interface PublishTargetResult {
+  model: WatchModelId;
+  label: string;
+  firmwareType: string;
+  status: "waiting" | "converting" | "publishing" | "success" | "error";
+  shareLink?: CorosWatchfaceShareLink;
+  error?: string;
+}
+
 const DEFAULT_FIRMWARE_TYPE = "COROS W332";
 const DEFAULT_MODEL_VERSION = "W332-3.1708.0";
 const IS_DEVELOPMENT_BUILD = import.meta.env.DEV;
@@ -416,6 +425,7 @@ export function WatchfacesView({
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishName, setPublishName] = useState("");
   const [shareLink, setShareLink] = useState<CorosWatchfaceShareLink | null>(null);
+  const [publishResults, setPublishResults] = useState<PublishTargetResult[]>([]);
 
   const [busy, setBusy] = useState<
     "login" | "themes" | "archive" | "publish" | "project" | "community" | null
@@ -656,6 +666,7 @@ export function WatchfacesView({
       setStudioSession(null);
       setBuiltArchive(null);
       setShareLink(null);
+      setPublishResults([]);
       setPublishOpen(false);
       setThemes([]);
       setThemesLoaded(false);
@@ -790,6 +801,7 @@ export function WatchfacesView({
     setImportOpen(false);
     setImportShareUrl("");
     setShareLink(null);
+    setPublishResults([]);
     setPublishOpen(false);
     setConversionDraft(null);
     setConversionSignInWatch(null);
@@ -926,6 +938,7 @@ export function WatchfacesView({
     setStudioSession(null);
     setPublishOpen(false);
     setShareLink(null);
+    setPublishResults([]);
     clearMessages();
     if (queuedCommunityRequest) {
       const { slug, model } = queuedCommunityRequest;
@@ -1267,6 +1280,7 @@ export function WatchfacesView({
       setBuiltArchive(null);
       setPublishName(theme.name);
       setShareLink(nextLink);
+      setPublishResults([]);
       setPublishOpen(true);
       setNotice(localizedText(() => t("Your COROS share link is ready.")));
     } catch (caught) {
@@ -1278,12 +1292,7 @@ export function WatchfacesView({
     }
   }
 
-  /**
-   * `sendNow` comes from the Studio Send panel, where the name was already
-   * confirmed: upload straight away and let the dialog show the share link
-   * (or sign-in first, when the account is not connected).
-   */
-  function openPublish(archive: CorosWatchfaceArchive, currentName: string, options?: { sendNow?: boolean }) {
+  function openPublish(archive: CorosWatchfaceArchive, currentName: string) {
     const name = currentName.trim() || studioSession?.initialName || t("Untitled watch face");
     setBuiltArchive(archive);
     if (archive.firmwareType) {
@@ -1291,20 +1300,23 @@ export function WatchfacesView({
     }
     setPublishName(name);
     setShareLink(null);
+    setPublishResults([]);
     setPublishOpen(true);
     clearMessages();
-    if (options?.sendNow && connected) {
-      void publishArchive(archive, name, archive.firmwareType || firmwareType);
-    }
   }
 
-  async function handlePublish(event: FormEvent<HTMLFormElement>) {
+  async function handlePublish(event: FormEvent<HTMLFormElement>, models: WatchModelId[]) {
     event.preventDefault();
     if (!builtArchive) return;
-    await publishArchive(builtArchive, publishName, firmwareType);
+    await publishArchive(builtArchive, publishName, builtArchive.firmwareType || firmwareType, models);
   }
 
-  async function publishArchive(archive: CorosWatchfaceArchive, name: string, archiveFirmwareType: string) {
+  async function publishArchive(
+    archive: CorosWatchfaceArchive,
+    name: string,
+    archiveFirmwareType: string,
+    models: WatchModelId[]
+  ) {
     if (!connected) {
       setError(localizedText(() => t("Connect your COROS account before sending this watch face.")));
       setNotice(null);
@@ -1315,30 +1327,68 @@ export function WatchfacesView({
       setNotice(null);
       return;
     }
+    const targets = models
+      .map((model) => getWatchfaceTarget(model))
+      .filter((target): target is NonNullable<ReturnType<typeof getWatchfaceTarget>> => Boolean(target));
+    if (!targets.length) {
+      setError(localizedText(() => t("Choose a supported destination watch.")));
+      setNotice(null);
+      return;
+    }
     setBusy("publish");
+    setShareLink(null);
+    setPublishResults(targets.map((target) => ({
+      model: target.model,
+      label: target.label,
+      firmwareType: target.firmwareType,
+      status: "waiting"
+    })));
     clearMessages();
+    let succeeded = 0;
     try {
-      const nextLink = await api.publishCorosWatchface({
-        archiveId: archive.archiveId,
-        name: name.trim(),
-        firmwareType: archiveFirmwareType,
-        backgroundImageId: Number(backgroundImageId),
-        language
-      });
-      setShareLink(nextLink);
-      setNotice(localizedText(() => t("Your COROS share link is ready.")));
-    } catch (caught) {
-      setError(localizedText(() => toErrorMessage(caught)));
+      for (const target of targets) {
+        setPublishResults((current) => current.map((result) =>
+          result.model === target.model ? { ...result, status: "converting" } : result
+        ));
+        try {
+          const sameTarget = archiveFirmwareType.trim().toUpperCase() === target.firmwareType.toUpperCase();
+          const converted = sameTarget ? null : await api.convertCorosWatchfaceArchive({
+            sourceArchiveId: archive.archiveId,
+            watchModel: target.model
+          });
+          const publishableArchive = converted?.archive ?? archive;
+          setPublishResults((current) => current.map((result) =>
+            result.model === target.model ? { ...result, status: "publishing" } : result
+          ));
+          const nextLink = await api.publishCorosWatchface({
+            archiveId: publishableArchive.archiveId,
+            name: name.trim(),
+            firmwareType: target.firmwareType,
+            backgroundImageId: Number(backgroundImageId),
+            language
+          });
+          succeeded += 1;
+          setPublishResults((current) => current.map((result) =>
+            result.model === target.model ? { ...result, status: "success", shareLink: nextLink } : result
+          ));
+        } catch (caught) {
+          setPublishResults((current) => current.map((result) =>
+            result.model === target.model ? { ...result, status: "error", error: toErrorMessage(caught) } : result
+          ));
+        }
+      }
+      setNotice(localizedText(() => succeeded === targets.length
+        ? t("Your COROS share link is ready.")
+        : t("Published {{count}} of {{total}} watch-face links.", { count: succeeded, total: targets.length })));
     } finally {
       setBusy(null);
       void api.getCorosWatchfaceStatus().then(setStatus).catch(() => undefined);
     }
   }
 
-  async function handleCopy() {
-    if (!shareLink) return;
+  async function handleCopy(url: string) {
     try {
-      await navigator.clipboard.writeText(shareLink.url);
+      await navigator.clipboard.writeText(url);
       setNotice(localizedText(() => t("Share link copied.")));
     } catch {
       setError(localizedText(() => t("Could not copy the link. Select and copy it from the field.")));
@@ -1562,6 +1612,7 @@ export function WatchfacesView({
             backgroundImageId={backgroundImageId}
             language={language}
             shareLink={shareLink}
+            results={publishResults}
             connected={connected}
             email={email}
             password={password}
@@ -1588,7 +1639,7 @@ export function WatchfacesView({
             onLogin={(event) => void handleLogin(event, "publish")}
             onSavedLogin={() => void handleSavedLogin("publish")}
             onSubmit={handlePublish}
-            onCopy={() => void handleCopy()}
+            onCopy={(url) => void handleCopy(url)}
             onClose={() => setPublishOpen(false)}
           />
         ) : null}
@@ -1874,6 +1925,7 @@ export function WatchfacesView({
           backgroundImageId={backgroundImageId}
           language={language}
           shareLink={shareLink}
+          results={publishResults}
           connected={connected}
           email={email}
           password={password}
@@ -1900,7 +1952,7 @@ export function WatchfacesView({
           onLogin={(event) => void handleLogin(event, "publish")}
           onSavedLogin={() => void handleSavedLogin("publish")}
           onSubmit={handlePublish}
-          onCopy={() => void handleCopy()}
+          onCopy={(url) => void handleCopy(url)}
           onClose={() => setPublishOpen(false)}
         />
       ) : null}
@@ -4346,19 +4398,33 @@ interface PublishDialogProps extends WatchfaceSignInFormProps {
   backgroundImageId: string;
   language: string;
   shareLink: CorosWatchfaceShareLink | null;
+  results: PublishTargetResult[];
   connected: boolean;
   busy: boolean;
   onNameChange: (value: string) => void;
   onFirmwareTypeChange: (value: string) => void;
   onBackgroundImageIdChange: (value: string) => void;
   onLanguageChange: (value: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onCopy: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>, models: WatchModelId[]) => void;
+  onCopy: (url: string) => void;
   onClose: () => void;
 }
 
 function PublishDialog(props: PublishDialogProps) {
   useLanguage();
+  const [selectedModels, setSelectedModels] = useState<WatchModelId[]>(
+    WATCHFACE_TARGETS.map(target => target.model)
+  );
+  const finishedCount = props.results.filter(result =>
+    result.status === "success" || result.status === "error"
+  ).length;
+  const statusLabel = (status: PublishTargetResult["status"]) => {
+    if (status === "converting") return t("Converting…");
+    if (status === "publishing") return t("Send to COROS");
+    if (status === "success") return t("Published");
+    if (status === "error") return t("Failed");
+    return t("Waiting");
+  };
   return (
     <div className="watchface-modal-backdrop" role="presentation">
       <section
@@ -4379,7 +4445,80 @@ function PublishDialog(props: PublishDialogProps) {
         >
           <X size={18} aria-hidden="true" />
         </button>
-        {props.shareLink ? (
+        {props.results.length ? (
+          <>
+            <div className="watchface-publish-heading">
+              <span className="watchface-publish-icon is-success" aria-hidden="true">
+                <Check size={20} />
+              </span>
+              <h2 id="watchface-publish-title">{props.name}</h2>
+              <p>{t("Scan with the phone that has your COROS app.")}</p>
+            </div>
+            <div className="watchface-copy-all-bar">
+              <button
+                className="primary-button"
+                type="button"
+                disabled={props.busy || !props.results.some(result => result.shareLink)}
+                onClick={() => props.onCopy(props.results.flatMap(result =>
+                  result.shareLink ? [`${t(result.label)}: ${result.shareLink.url}`] : []
+                ).join("\n"))}
+              >
+                <Clipboard size={16} aria-hidden="true" />{" "}
+                {props.busy
+                  ? t("Generating {{done}} of {{total}}…", {
+                      done: String(finishedCount),
+                      total: String(props.results.length)
+                    })
+                  : t("Copy all model links")}
+              </button>
+            </div>
+            <div style={{ display: "grid", gap: 12, marginTop: 22 }}>
+              {props.results.map((result) => (
+                <section
+                  key={result.model}
+                  style={{
+                    border: "1px solid var(--wf-border)",
+                    borderRadius: "var(--wf-control-radius)",
+                    padding: 14
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                    <div>
+                      <strong>{t(result.label)}</strong>
+                      <small style={{ display: "block", color: "var(--text-muted)" }}>{result.firmwareType}</small>
+                    </div>
+                    <span style={{ color: result.status === "error" ? "var(--error-text)" : "var(--text-secondary)" }}>
+                      {result.status === "converting" || result.status === "publishing" ? (
+                        <Loader2 className="spin" size={16} aria-hidden="true" />
+                      ) : null}{" "}
+                      {statusLabel(result.status)}
+                    </span>
+                  </div>
+                  {result.shareLink ? (
+                    <>
+                      <div className="watchface-share-actions">
+                        <button className="secondary-button" type="button" onClick={() => props.onCopy(result.shareLink!.url)}>
+                          <Clipboard size={16} aria-hidden="true" />{" "}{t("Copy link")}
+                        </button>
+                        <a className="primary-button" href={result.shareLink.url} target="_blank" rel="noreferrer">
+                          <ExternalLink size={16} aria-hidden="true" />{" "}{t("Open link")}
+                        </a>
+                      </div>
+                      <input
+                        className="watchface-share-link"
+                        value={result.shareLink.url}
+                        readOnly
+                        aria-label={t("Official COROS share link")}
+                      />
+                    </>
+                  ) : result.error ? (
+                    <p style={{ margin: "10px 0 0", color: "var(--error-text)" }}>{result.error}</p>
+                  ) : null}
+                </section>
+              ))}
+            </div>
+          </>
+        ) : props.shareLink ? (
           <>
             <div className="watchface-publish-heading">
               <span className="watchface-publish-icon is-success" aria-hidden="true">
@@ -4401,7 +4540,7 @@ function PublishDialog(props: PublishDialogProps) {
                 <p className="watchface-share-expiry">{t("Link expires")}{" "}{formatExpiry(props.shareLink.expiresAt)}.
                 </p>
                 <div className="watchface-share-actions">
-                  <button className="secondary-button" type="button" onClick={props.onCopy}>
+                  <button className="secondary-button" type="button" onClick={() => props.onCopy(props.shareLink!.url)}>
                     <Clipboard size={16} aria-hidden="true" />{" "}{t("Copy link")}</button>
                   <a
                     className="primary-button"
@@ -4444,7 +4583,7 @@ function PublishDialog(props: PublishDialogProps) {
               <h2 id="watchface-publish-title">{props.name}</h2>
               <p>{t("Upload the current design and create its official COROS link.")}</p>
             </div>
-            <form className="watchface-publish-form" onSubmit={props.onSubmit}>
+            <form className="watchface-publish-form" onSubmit={(event) => props.onSubmit(event, selectedModels)}>
               <label className="field">{t("Watch-face name")}<input
                   autoFocus
                   value={props.name}
@@ -4454,15 +4593,45 @@ function PublishDialog(props: PublishDialogProps) {
                   required
                 />
               </label>
+              <fieldset style={{ gridColumn: "1 / -1", margin: 0, padding: 0, border: 0 }}>
+                <legend style={{ marginBottom: 8, color: "var(--text-secondary)", fontSize: "var(--wf-text-sm)", fontWeight: 700 }}>
+                  {t("Watch model")}
+                </legend>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                  {WATCHFACE_TARGETS.map((target) => (
+                    <label
+                      key={target.model}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        minHeight: 38,
+                        border: "1px solid var(--wf-border)",
+                        borderRadius: "var(--wf-control-radius)",
+                        padding: "6px 10px"
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedModels.includes(target.model)}
+                        disabled={props.busy}
+                        onChange={() => setSelectedModels((current) =>
+                          current.includes(target.model)
+                            ? current.filter((model) => model !== target.model)
+                            : [...current, target.model]
+                        )}
+                      />
+                      <span>
+                        <strong>{t(target.label)}</strong>
+                        <small style={{ display: "block", color: "var(--text-muted)" }}>{target.firmwareType}</small>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               <details className="watchface-publish-settings">
                 <summary>{t("Upload settings")}</summary>
                 <div className="watchface-publish-settings-grid">
-                  <label className="field">{t("Firmware type")}<input
-                      value={props.firmwareType}
-                      onChange={(event) => props.onFirmwareTypeChange(event.target.value)}
-                      required
-                    />
-                  </label>
                   <label className="field">{t("Background ID")}<input
                       type="number"
                       min="0"
@@ -4484,7 +4653,7 @@ function PublishDialog(props: PublishDialogProps) {
               <button
                 className="primary-button watchface-publish-submit"
                 type="submit"
-                disabled={props.busy || !props.archive}
+                disabled={props.busy || !props.archive || selectedModels.length === 0}
               >
                 {props.busy ? (
                   <Loader2 className="spin" size={16} aria-hidden="true" />

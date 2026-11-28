@@ -1640,6 +1640,22 @@
   grid-row: 1 / span 3;
 }
 
+.watchface-shell .watchface-copy-all-bar {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  margin: 16px -26px 0;
+  border-block: 1px solid var(--wf-border);
+  background: color-mix(in srgb, var(--wf-surface-raised) 94%, transparent);
+  padding: 12px 26px;
+  backdrop-filter: blur(12px);
+}
+
+.watchface-shell .watchface-copy-all-bar .primary-button {
+  width: 100%;
+  justify-content: center;
+}
+
 .watchface-shell .watchface-publish-icon.is-success {
   border-color: var(--success-border);
   background: var(--success-bg);
