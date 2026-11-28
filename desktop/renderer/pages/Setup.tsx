@@ -12,8 +12,6 @@ import { navigate, useLocation } from "../router";
 import { changeSetup, readSetup, type SetupState, type SportTile } from "../setup";
 import { backStep, coachSays, countdown, LIST, listIndex, listLabel, nextStep, placeHref, readPlace, stepNote, type Place, type Source } from "../setupFlow";
 import { restoreBackup, SettingsProblem } from "../settings";
-import { useCorosImport } from "../corosImport";
-import { CorosAccountPart } from "../parts/CorosImport";
 import { FirewallNote, type FirewallState } from "../parts/FirewallNote";
 import "../parts/localMode.css";
 import "./setup.css";
@@ -40,13 +38,11 @@ export default function Setup() {
     ask<PhoneStatus>("/api/desktop/phones").then((s) => setPhone(s.phones.slice().sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))[0]?.label ?? null), () => {});
   }, [step]);
 
-  const account = useCorosImport();
-  const accountOn = !!account && account.connected && !account.signIn;
   const hasData = !!setup && Object.keys(setup.found).length > 0;
-  const coach = coachSays(step, source === "coros" ? { paired: accountOn, hasData, coros: true } : { paired: !!phone, hasData });
+  const coach = coachSays(step, { paired: !!phone, hasData });
   const coachName = ai?.providers.find((p) => p.id === ai.picked && p.ready)?.name ?? null;
   const at = listIndex(step);
-  const notes = { phone, sports: setup?.sports?.length ?? 0, coach: coachName, account: accountOn ? t("Connected") : null };
+  const notes = { phone, sports: setup?.sports?.length ?? 0, coach: coachName };
 
   return (
     <div className="ob">
@@ -72,8 +68,7 @@ export default function Setup() {
         </aside>
         <section className="card ob-panel" aria-labelledby="ob-title">
           {step === "source" ? <SourceStep source={source} onNext={(s) => go({ step: nextStep("source", s), source: s })} /> : null}
-          {step === "phone" && source === "coros" ? <CorosStep onBack={() => go({ step: "source" })} onNext={() => go({ step: "sports" })} /> : null}
-          {step === "phone" && source !== "coros" ? <PhoneStep onPaired={setPhone} onBack={() => go({ step: "source" })} onNext={() => go({ step: "sports" })} /> : null}
+          {step === "phone" ? <PhoneStep onPaired={setPhone} onBack={() => go({ step: "source" })} onNext={() => go({ step: "sports" })} /> : null}
           {step === "sports" ? <SportsStep setup={setup} hasData={hasData} onSaved={setSetup} onBack={() => go({ step: backStep("sports", source) })} onNext={() => go({ step: "coach" })} /> : null}
           {step === "coach" ? <CoachStep ai={ai} onChange={setAI} onBack={() => go({ step: "sports" })} onNext={() => go({ step: "mac" })} /> : null}
           {step === "mac" ? <MacStep setup={setup} onSaved={setSetup} onBack={() => go({ step: "coach" })} onNext={() => go({ step: "done" })} /> : null}
@@ -87,9 +82,7 @@ export default function Setup() {
 /* ───────────── Your data ───────────── */
 
 function SourceStep({ source, onNext }: { source: Source; onNext: (s: Source) => void }) {
-  const [picked, setPicked] = useState<"phone" | "coros" | "look">(source === "look" || source === "coros" ? source : "phone");
-  // The COROS account import needs the Mac helper; elsewhere the choice isn't offered.
-  const corosHere = !!useCorosImport()?.available;
+  const [picked, setPicked] = useState<"phone" | "look">(source === "look" ? source : "phone");
   const [sample, setSampleOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -137,13 +130,6 @@ function SourceStep({ source, onNext }: { source: Source; onNext: (s: Source) =>
           <span className="ob-src-text"><strong>{t("C-LINK on my phone")} <span className="ob-tag">{t("Recommended")}</span></strong><span>{t("Your phone keeps syncing the watch and copies everything here. Works with the COROS app too.")}</span></span>
           <span className="ob-radio" aria-hidden="true" />
         </button>
-        {corosHere ? (
-          <button type="button" role="radio" className="ob-source" aria-checked={picked === "coros"} onClick={() => setPicked("coros")}>
-            <span className="ob-art" aria-hidden="true"><Glyph d={WATCH} size={22} /><Dots /><Glyph d={CLOUD} size={22} /><Dots /><Glyph d={MAC} size={22} /></span>
-            <span className="ob-src-text"><strong>{t("My COROS account")}</strong><span>{t("Keep the watch on the COROS app. Your workouts, health and sleep come here from your COROS account.")}</span></span>
-            <span className="ob-radio" aria-hidden="true" />
-          </button>
-        ) : null}
         <button type="button" role="radio" className="ob-source" aria-checked={picked === "look"} disabled={sample === null} onClick={() => setPicked("look")}>
           <span className="ob-art" aria-hidden="true"><Glyph d={EYE} size={22} /></span>
           <span className="ob-src-text"><strong>{t("Just look around")}</strong><span>{t("A sample athlete's year. Pair your phone later on Connections.")}</span></span>
@@ -158,20 +144,6 @@ function SourceStep({ source, onNext }: { source: Source; onNext: (s: Source) =>
       </div>
       {problem ? <p className="notice" role="alert">{problem}</p> : null}
       <Foot><Button variant="primary" disabled={busy} onClick={() => void next()}>{t("Continue")}</Button></Foot>
-    </>
-  );
-}
-
-/* ───────────── Connect the COROS account ───────────── */
-
-function CorosStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
-  return (
-    <>
-      <h1 id="ob-title">{t("Connect your COROS account")}</h1>
-      <p className="ob-note">{t("Your watch stays on the COROS app. Sign in to COROS in your browser, and your activities, health and sleep come here.")}{" "}
-        {t("Add Training Hub on Connections later for full recordings, your calendar and workouts.")}</p>
-      <div className="ob-sync"><CorosAccountPart /></div>
-      <Foot onBack={onBack}><Button variant="primary" onClick={onNext}>{t("Continue")}</Button></Foot>
     </>
   );
 }
@@ -467,7 +439,6 @@ function DoneStep({ setup, source, coach, onStartOver }: { setup: SetupState | n
   const counts = setup?.data ? t("{activities} activities, {days} days of health", { activities: setup.data.activities.toLocaleString(locale("en-GB")), days: setup.data.healthDays.toLocaleString(locale("en-GB")) }) : "";
   const data = source === "look" ? { title: t("Sample data"), detail: t("Pair your phone on Connections when you're ready") }
     : source === "backup" ? { title: t("Restored from a backup"), detail: counts }
-    : source === "coros" ? { title: t("Reading your COROS account"), detail: counts || t("Change it any time on the Watch page") }
     : phone ? { title: t("Syncing with {phone}", { phone: phone.label }), detail: counts }
     : { title: t("No phone paired yet"), detail: t("Pair it any time on Connections") };
   const sports = setup?.sports ?? [];
@@ -519,7 +490,6 @@ const CHECK = "M5 12l4 4 10-10";
 const WATCH = "M12 7a5 5 0 1 0 0 10a5 5 0 0 0 0-10zM9.4 7.7l.8-4.2h3.6l.8 4.2M9.4 16.3l.8 4.2h3.6l.8-4.2";
 const PHONE = "M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2";
 const MAC = "M3 5h18v11H3zM8 20h8M12 16v4";
-const CLOUD = "M7 18h10a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.2 9.1 4.5 4.5 0 0 0 7 18z";
 const EYE = "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6a3 3 0 0 0 0-6z";
 const FOLDER = "M3 6h6l2 2h10v11H3z";
 const WIFI = "M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01";

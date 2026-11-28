@@ -9,8 +9,7 @@ export interface Blocked { at: number; method: string; target: string }
 // Reads COROS takes as POSTs: Training Hub sign-in and queries; for Studio, the mobile app's sign-in and its
 // watch-face lists (corosAccount.ts). A face is only ever sent to COROS by a later phase, through a path not here.
 // Map areas' package check (mapstatic.coros.com) is a POST that only asks which map files cover some squares.
-// An activity's file (/activity/detail/download) is a POST that only names where to fetch it (the account import).
-const READ_PATH = /^\/account\/|\/query$|\/calculate$|^\/activity\/detail\/download$|^\/coros\/user\/login$|^\/coros\/watchface\/getWatchFaceThemeList$|^\/openapi\/tileMap\/getMapPackage$/;
+const READ_PATH = /^\/account\/|\/query$|\/calculate$|^\/coros\/user\/login$|^\/coros\/watchface\/getWatchFaceThemeList$|^\/openapi\/tileMap\/getMapPackage$/;
 
 /** Whether a request would upload to COROS: any write to its servers, the upload bucket, or the start of an upload. */
 export function uploadsToCoros(url: URL, method: string): boolean {

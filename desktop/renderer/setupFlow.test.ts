@@ -47,16 +47,9 @@ describe("setup steps", () => {
     for (const step of ["source", "phone", "sports", "coach", "mac", "done"] as const) expect(coachSays(step, { paired: false, hasData: false }).line).not.toBe("");
   });
 
-  it("asks a COROS account to connect, as it does a phone (the watch stays on the COROS app)", () => {
-    expect(readPlace("?step=phone&from=coros")).toEqual({ step: "phone", source: "coros" });
-    expect(nextStep("source", "coros")).toBe("phone");
-    expect(backStep("sports", "coros")).toBe("phone");
-    const notes = { phone: "iPhone 17 Pro", sports: 0, coach: null, account: "Connected" };
-    expect(stepNote("source", "coros", notes)).toBe("COROS account");
-    expect(stepNote("connect", "coros", notes)).toBe("Connected");
-    expect(stepNote("connect", "coros", { ...notes, account: null })).toBe("Later");
-    expect(coachSays("phone", { paired: false, hasData: false, coros: true }).line).toMatch(/COROS app/);
-    expect(coachSays("phone", { paired: true, hasData: false, coros: true }).pose).toBe("cheer");
+
+  it("reads an old COROS-account address as the phone", () => {
+    expect(readPlace("?step=phone&from=coros")).toEqual({ step: "phone", source: "phone" });
   });
 
   it("counts the code down", () => {

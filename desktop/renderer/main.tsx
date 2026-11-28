@@ -14,7 +14,6 @@ import { createRoot } from "react-dom/client";
 import { platformSlots } from "@/lib/platform";
 import { App } from "./App";
 import { LocalModeCards, LocalModePanel, LocalModeTools } from "./parts/LocalMode";
-import { CorosAccountPart, useCorosAccountConnected } from "./parts/CorosImport";
 import { RailFoot } from "./parts/RailFoot";
 import { HistoryArrows } from "./parts/HistoryArrows";
 import { UpdatesBadge, UpdatesMenuItem } from "./parts/Updates";
@@ -62,9 +61,6 @@ platformSlots.watchLink = WatchLink;
 platformSlots.watchPanel = LocalModePanel;
 platformSlots.watchCards = LocalModeCards;
 platformSlots.watchTools = LocalModeTools;
-// The COROS account card on Connections: the import through COROS's MCP above Training Hub (parts/CorosImport.tsx).
-platformSlots.corosAccount = CorosAccountPart;
-platformSlots.useCorosAccountConnected = useCorosAccountConnected;
 // Media lives only here: the library on this computer and the watch as a USB drive (pages/Media.tsx).
 // Maps plans routes and puts COROS maps on the watch (pages/Maps.tsx, main/maps/service.ts).
 // Studio makes watch faces, kept on this computer (pages/Studio.tsx, main/studio.ts).

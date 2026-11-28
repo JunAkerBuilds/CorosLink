@@ -4,18 +4,17 @@
 import { msg, t } from "@/lib/i18n";
 import { COMPUTER, computerWord, thisComputer } from "./computer";
 export type Step = "source" | "phone" | "sports" | "coach" | "mac" | "done";
-/** Where the data comes from: the phone, the COROS account (the watch stays on the COROS app), the sample athlete,
- * or a backup restored on the first step. */
-export type Source = "phone" | "coros" | "look" | "backup";
+/** Where the data comes from: the phone, the sample athlete, or a backup restored on the first step. */
+export type Source = "phone" | "look" | "backup";
 
 const STEPS: readonly Step[] = ["source", "phone", "sports", "coach", "mac", "done"];
-const SOURCES: readonly Source[] = ["phone", "coros", "look", "backup"];
-/** Sources with a Connect step: pairing the phone, or signing in to the COROS account. */
-const connects = (source: Source) => source === "phone" || source === "coros";
+const SOURCES: readonly Source[] = ["phone", "look", "backup"];
+/** Sources with a Connect step: pairing the phone. */
+const connects = (source: Source) => source === "phone";
 
 export const SETUP_PATH = "/setup";
 
-/** The list down the side: five steps; the phone step (or the COROS account's) is "Connect". Labels are English;
+/** The list down the side: five steps; the phone step is "Connect". Labels are English;
  * `listLabel` gives them in the app's language. */
 export const LIST = [
   { id: "source", label: msg("Your data") },
@@ -55,13 +54,13 @@ export function backStep(step: Step, source: Source): Step {
   return STEPS[Math.max(0, STEPS.indexOf(step) - 1)];
 }
 
-export interface Notes { phone: string | null; sports: number; coach: string | null; account?: string | null }
+export interface Notes { phone: string | null; sports: number; coach: string | null }
 
 /** The short note beside each step once it's done. */
 export function stepNote(id: ListId, source: Source, notes: Notes): string {
   switch (id) {
-    case "source": return source === "phone" ? t("Your phone") : source === "coros" ? t("COROS account") : source === "look" ? t("Sample data") : t("A backup");
-    case "connect": return source === "look" ? t("Skipped") : source === "backup" ? t("Restored") : source === "coros" ? notes.account ?? t("Later") : notes.phone ?? t("Later");
+    case "source": return source === "phone" ? t("Your phone") : source === "look" ? t("Sample data") : t("A backup");
+    case "connect": return source === "look" ? t("Skipped") : source === "backup" ? t("Restored") : notes.phone ?? t("Later");
     case "sports": return notes.sports ? t("{n} picked", { n: notes.sports }) : t("None");
     case "coach": return notes.coach ?? t("Later");
     case "mac": return "";
@@ -69,15 +68,10 @@ export function stepNote(id: ListId, source: Source, notes: Notes): string {
 }
 
 /** Coach's pose and line for each step, as on the phone's setup. */
-export function coachSays(step: Step, { paired, hasData, coros = false }: { paired: boolean; hasData: boolean; coros?: boolean }): { pose: string; line: string } {
+export function coachSays(step: Step, { paired, hasData }: { paired: boolean; hasData: boolean }): { pose: string; line: string } {
   switch (step) {
     case "source": return { pose: "ponder", line: t("Where does your watch data live today? I'll bring it all here.") };
     case "phone":
-      if (coros) {
-        return paired
-          ? { pose: "cheer", line: t("Connected! Your workouts, health and sleep are on their way. Keep going while they come.") }
-          : { pose: "listen", line: t("Keep your watch on the COROS app. Connect your COROS account and I'll read it from there.") };
-      }
       return paired
         ? { pose: "cheer", line: t("Got it! Your history is on its way. Keep going while it copies.") }
         : { pose: "listen", line: t("Scan this with your phone and I'll copy everything over.") };

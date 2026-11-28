@@ -140,23 +140,12 @@ function HubSignedIn({ session }: { session: HubSessionInfo }) {
   );
 }
 
-/** Set at startup by the host app, so the hook below is called on every render or never. */
-const useHostCorosConnected = platformSlots.useCorosAccountConnected ?? (() => false);
-
-/**
- * The athlete's COROS account, one card however it's reached: Training Hub (calendar, workouts, uploads, recordings)
- * and, in a host app that has one, its own way in above it (the desktop's import through COROS's MCP).
- */
+/** The athlete's COROS account through Training Hub: calendar, workouts, uploads and recordings. */
 function HubCard({ session }: { session: HubSessionInfo | undefined }) {
-  const HostCoros = platformSlots.corosAccount;
-  const hostOn = useHostCorosConnected();
-  const hubOn = session?.state === "signedIn";
   return (
-    <ConnectionCard mono="CO" hue="coral" name={t("COROS account")} line={HostCoros ? t("Activities, health, sleep and training") : t("Calendar, workouts and uploads")}
+    <ConnectionCard mono="CO" hue="coral" name={t("COROS account")} line={t("Calendar, workouts and uploads")}
       busy={session === undefined}
-      pill={session === undefined && !hostOn ? null : hubOn || hostOn ? <Pill tone="ok">{t("Connected")}</Pill> : <Pill>{t("Not connected")}</Pill>}>
-      {HostCoros ? <HostCoros /> : null}
-      {HostCoros ? <h5 className="cn-part">Training Hub</h5> : null}
+      pill={session === undefined ? null : session.state === "signedIn" ? <Pill tone="ok">{t("Connected")}</Pill> : <Pill>{t("Not connected")}</Pill>}>
       {session === undefined ? <p className="cn-note" role="status">{t("Checking…")}</p>
         : session.state === "signedIn" ? <HubSignedIn session={session} />
         : session.state === "needsCode" ? <CodeForm session={session} />
@@ -320,7 +309,6 @@ function ElsewhereList({ title, rows }: { title: string; rows: readonly Elsewher
 export default function ConnectPage() {
   const sync = useSyncStatus();
   const session = useHubSession();
-  const hostCoros = useHostCorosConnected();
   const watchState = useSyncItems("watch.state")[0]?.body;
   const [intervals, setIntervals] = useState<Read<IntervalsStatus>>({ state: "checking" });
   const [coachKey, setCoachKey] = useState<Read<CoachAccessInfo>>({ state: "checking" });
@@ -350,7 +338,7 @@ export default function ConnectPage() {
 
   const checking = session === undefined || intervals.state === "checking" || coachKey.state === "checking" || hevy.read === "checking";
   const connected = connectedCount([
-    session?.state === "signedIn" || hostCoros,
+    session?.state === "signedIn",
     hevy.read === "known" && hevy.status?.connected,
     intervals.state === "known" && intervals.value.connected,
     coachKey.state === "known" && coachKeyConnected(coachKey.value.key),

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { isBeta, notesText, problemText, Updates, versionLabel, type Updater } from "./updates";
+import { isBeta, notesText, notPublishedYet, problemText, Updates, versionLabel, type Updater } from "./updates";
 
 /** electron-updater's AppUpdater as the service sees it: events, and calls that say what happened. */
 function fakeUpdater(script: { check?: (u: FakeUpdater) => void; download?: (u: FakeUpdater) => void } = {}) {
@@ -60,6 +60,27 @@ describe("Updates", () => {
     expect((await ask(updates, "")).phase).toBe("ready");
     // Read back on the next launch.
     expect(new Updates(data, "0.2.0", fakeUpdater() as unknown as Updater).state.auto.download).toBe(false);
+  });
+
+  it("treats a tag whose release isn't published yet as no update, logs nothing, and lets a beta still ask its track", async () => {
+    const missing = () => Object.assign(new Error("Cannot find latest-mac.yml in the latest release artifacts (https://github.com/x/y/releases/download/v0.2.0-clink.4/latest-mac.yml): HttpError: 404"), { code: "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND" });
+    expect(notPublishedYet(missing())).toBe(true);
+    expect(notPublishedYet(new Error("net::ERR_INTERNET_DISCONNECTED"))).toBe(false);
+    const lines: string[] = [];
+    const channels: (string | null)[] = [];
+    const u = fakeUpdater();
+    u.checkForUpdates = async () => {
+      u.emit("checking-for-update");
+      channels.push(u.channel);
+      if (u.channel === "latest") { const e = missing(); u.emit("error", e); throw e; }
+      u.emit("update-not-available");
+      return null;
+    };
+    const updates = new Updates(dir(), "0.2.0-clink.3", u as unknown as Updater, (line) => lines.push(line));
+    expect(u).toMatchObject({ logger: null });
+    expect(await ask(updates, "/check")).toMatchObject({ phase: "none", problem: null });
+    expect(channels).toEqual(["latest", "clink"]);
+    expect(lines).toEqual([]);
   });
 
   it("says up to date, and turns failures into plain words", async () => {

@@ -21,6 +21,8 @@ export interface Updater {
   allowDowngrade: boolean;
   /** Setting it also turns allowDowngrade on (electron-updater), so that is set again after. */
   channel: string | null;
+  /** electron-updater's own logger (console by default); set to null, as its errors repeat whole HTTP headers. */
+  logger?: unknown;
   on(event: string, listener: (...args: unknown[]) => void): unknown;
   checkForUpdates(): Promise<{ isUpdateAvailable?: boolean } | null | undefined>;
   downloadUpdate(): Promise<unknown>;
@@ -67,6 +69,15 @@ export function notesText(notes: unknown): string {
     .replace(/\n{3,}/g, "\n\n").trim().slice(0, MAX_NOTES);
 }
 
+/** A feed file that isn't there yet: GitHub lists a pushed tag while its release is still a draft, so until it is
+ *  published the check finds the tag but none of its files. That is "nothing new", not a failure. */
+export function notPublishedYet(error: unknown): boolean {
+  const code = error && typeof error === "object" && "code" in error ? String((error as { code: unknown }).code) : "";
+  const text = error instanceof Error ? error.message : String(error);
+  return code === "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND" || code === "ERR_UPDATER_NO_PUBLISHED_VERSIONS"
+    || /Cannot find \S+\.yml in the latest release artifacts|No published versions/i.test(text);
+}
+
 /** What the person reads when a check or download fails: never a raw stack or URL with tokens. */
 export function problemText(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error);
@@ -95,6 +106,7 @@ export class Updates {
     } catch { /* first run: both on */ }
     this.phase = updater ? "idle" : "unavailable";
     if (!updater) return;
+    updater.logger = null;
     updater.autoDownload = this.saved.download;
     updater.autoInstallOnAppQuit = true;
     updater.allowPrerelease = false;
@@ -115,6 +127,8 @@ export class Updates {
     });
     updater.on("update-downloaded", () => { this.phase = "ready"; this.percent = 100; });
     updater.on("error", (error) => {
+      // check() settles a release that isn't published yet as "none"; it is not worth a line in the error log.
+      if (notPublishedYet(error)) return;
       this.problem = problemText(error);
       this.phase = "failed";
       this.log(`Update ${error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300)}`);
@@ -142,16 +156,28 @@ export class Updates {
       // then its own channel (the version's "clink" prerelease id). A stable build only ever asks the stable track.
       // The channel is set every time: a beta's own app-update.yml says "clink", which would make the stable check
       // look for clink-mac.yml in a normal release.
+      // A track whose newest tag isn't published yet (notPublishedYet) has nothing new; a beta still asks its own.
       this.track("latest", false);
-      const stable = await this.updater.checkForUpdates();
+      const stable = await this.ask();
       if (isBeta(this.version) && !stable?.isUpdateAvailable) {
         this.track("clink", true);
         this.phase = "checking";
-        await this.updater.checkForUpdates();
+        await this.ask();
       }
     } catch (error) {
       this.problem = problemText(error);
       this.phase = "failed";
+    }
+  }
+
+  /** One check; a release that isn't published yet counts as no update. */
+  private async ask(): Promise<{ isUpdateAvailable?: boolean } | null | undefined> {
+    try { return await this.updater!.checkForUpdates(); } catch (error) {
+      if (!notPublishedYet(error)) throw error;
+      this.phase = "none";
+      this.problem = null;
+      this.checkedAt = Date.now();
+      return null;
     }
   }
 

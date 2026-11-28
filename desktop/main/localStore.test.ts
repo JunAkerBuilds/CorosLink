@@ -49,7 +49,7 @@ describe("local store, speaking the sync API", () => {
 
   it("writes a big import in batches the push takes, leaving out only an item too large for it", () => {
     const store = open();
-    // 150 activity details of ~20 KB: 3 MB in all, more than one push takes, as the COROS account import writes.
+    // 150 activity details of ~20 KB: 3 MB in all, more than one push takes, as a big first import writes.
     const streams = Array.from({ length: 2500 }, (_, i) => i * 1.5);
     const details = Array.from({ length: 150 }, (_, i) => ({ collection: "activity.detail", id: String(1000 + i), body: { streams: { x: streams } } }));
     const huge = { collection: "activity.detail", id: "huge", body: { streams: { x: Array.from({ length: 60_000 }, (_, i) => i) } } };
