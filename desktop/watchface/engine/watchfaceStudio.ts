@@ -5840,9 +5840,14 @@ interface ControlComplicationSelection {
 export function watchfaceComplicationChoices(
   details: CorosWatchfaceTemplateDetails
 ): WatchfaceComplicationDefinition[] {
+  // Studio doesn't add the barometer: it's a choice only where the template
+  // already has one.
+  const choices = hasControlComplication(details, "barometer")
+    ? WATCHFACE_COMPLICATIONS
+    : WATCHFACE_COMPLICATIONS.filter((complication) => complication.id !== "barometer");
   return hasControlComplication(details, "date")
-    ? [CONTROL_DATE_COMPLICATION, ...WATCHFACE_COMPLICATIONS]
-    : WATCHFACE_COMPLICATIONS;
+    ? [CONTROL_DATE_COMPLICATION, ...choices]
+    : choices;
 }
 
 function legacyControlComplicationSetting(

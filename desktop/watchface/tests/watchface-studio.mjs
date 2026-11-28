@@ -65,6 +65,7 @@ import {
   getWatchfaceControlStatusPreviewLayers,
   hasControlBattery,
   hasControlComplication,
+  watchfaceComplicationChoices,
   hasAutoAlignedTime,
   hasWatchfaceAod,
   inferExerciseSeparatorStyle,
@@ -916,49 +917,23 @@ assert.equal(
   "a barometer missing from the imported template defaults off"
 );
 
+// Studio doesn't add a barometer: on a template without one it isn't a
+// choice, so switching it on writes nothing.
 const enabledBarometer = buildControlComplicationConfigurationOverrides(
   noControlDetails,
   { controlComplicationEnabled: { barometer: true } }
 );
-for (const candidate of noControlDetails.resolutions) {
-  const override = enabledBarometer.find(
-    ({ path }) => path === `${candidate.directory}/config.txt`
-  );
-  assert.equal(override?.values.rect_control1_pos, "{0,0}");
-  for (const key of [
-    "control_barometer_down_icon",
-    "control_barometer_flat_icon",
-    "control_barometer_up_icon",
-    "control_barometer_font",
-    "control_point_icon"
-  ]) {
-    assert.ok(override?.values?.[key], `enabling barometer must write ${key}`);
-  }
-  for (const key of ["control_barometer_integer_rect", "control_barometer_decimal_rect"]) {
-    assert.match(
-      override?.values?.[key] ?? "",
-      // Whole part against the point, decimal after it.
-      key.endsWith("integer_rect") ? /^\{\d+,\d+,\d+,\d+,right\|vcenter\}$/ : /^\{\d+,\d+,\d+,\d+,left\|vcenter\}$/,
-      `enabling barometer must write ${key}`
-    );
-  }
-  assert.match(override?.values?.control_barometer_icon_pos ?? "", /^\{\d+,\d+\}$/);
-  for (const key of ["control_barometer_icon", "control_barometer_rect"]) {
-    assert.ok(
-      override?.values?.[key] === undefined || override.values[key] === "__COROSLINK_DELETE_CONFIG_KEY__",
-      `${key} (the static branch) must not be written`
-    );
-  }
-}
-const configuredBarometer = applyConfigOverridesToDetails(
-  noControlDetails,
-  enabledBarometer
-);
 assert.equal(
-  hasControlComplication(configuredBarometer, "barometer"),
-  true,
-  "the synthesized barometer is recognized when the project reloads"
+  watchfaceComplicationChoices(noControlDetails).some(({ id }) => id === "barometer"),
+  false,
+  "Studio doesn't offer a barometer the template lacks"
 );
+for (const override of enabledBarometer) {
+  assert.ok(
+    !Object.keys(override.values).some((key) => key.startsWith("control_barometer_") || key === "control_point_icon"),
+    "switching on a barometer the template lacks writes none of its keys"
+  );
+}
 
 // A template on the static branch is converted to the directional one.
 const staticBarometerTemplate = {
@@ -969,7 +944,10 @@ const staticBarometerTemplate = {
       ...candidate.config,
       rect_control1_pos: "{0,0}",
       control_barometer_icon: "icon\\coroslink_barometer.png",
-      control_barometer_rect: "{10,10,160,50,hcenter|vcenter}"
+      control_barometer_rect: "{10,10,160,50,hcenter|vcenter}",
+      control_barometer_icon_pos: "{2,3}",
+      control_barometer_font: "13x19",
+      control_point_icon: "icon\\point.png"
     }
   }))
 };
@@ -1001,7 +979,8 @@ const templateWithBarometer = {
       control_barometer_flat_icon: "icon\\flat.png",
       control_barometer_up_icon: "icon\\up.png",
       control_barometer_font: "13x19",
-      control_barometer_font_color: ""
+      control_barometer_font_color: "",
+      control_point_icon: "icon\\point.png"
     }
   }))
 };

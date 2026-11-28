@@ -108,11 +108,8 @@ describe("selectable times Studio adds", () => {
     expect(sunrise.control_sunrise_minute_rect).toMatch(/,left\|vcenter}$/);
   });
 
-  it("holds the barometer's whole and decimal parts against the point", () => {
-    const barometer = values("barometer");
-    expect(barometer.control_barometer_integer_rect).toMatch(/,right\|vcenter}$/);
-    expect(barometer.control_barometer_decimal_rect).toMatch(/,left\|vcenter}$/);
-    expect(barometer.control_colon_icon).toBeUndefined();
+  it("adds no barometer: Studio only keeps a template's own", () => {
+    expect(Object.keys(values("barometer")).filter((k) => k.startsWith("control_barometer_"))).toEqual([]);
   });
 });
 

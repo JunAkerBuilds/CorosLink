@@ -831,8 +831,14 @@ export async function composeWatchfaceReplacements(
         )
       : [],
     // The plain pictures Studio adds first, so a styled slot's own colon replaces its plain one.
+    // Sized from the slot as "Values and icons" leaves it, as the preview is.
     buildBarometerIconReplacements(
-      selectableConfigDetails,
+      design.selectableMetricStyle
+        ? applyConfigOverridesToDetails(
+            selectableConfigDetails,
+            buildSelectableMetricStyleOverrides(selectableConfigDetails, design.selectableMetricStyle)
+          )
+        : selectableConfigDetails,
       design.layerColors?.complication ?? design.digitColor,
       design.configAssetOverrides ?? {}
     ),

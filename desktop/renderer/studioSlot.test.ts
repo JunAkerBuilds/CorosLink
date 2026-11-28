@@ -20,7 +20,7 @@ import {
  * the slot's Bluetooth pair, a floors group the template declares but leaves empty, and (with `aod`) heart rate on the
  * always-on screen (`"bare"`: an always-on screen with only the clock). Without, it has only the clock.
  */
-function template(extra: { slot?: boolean; aod?: boolean | "bare"; blankIcon?: boolean; noBatteryArt?: boolean } = {}): CorosWatchfaceTemplateDetails {
+function template(extra: { slot?: boolean; aod?: boolean | "bare"; blankIcon?: boolean; noBatteryArt?: boolean; barometer?: boolean } = {}): CorosWatchfaceTemplateDetails {
   const resolution = (width: number) => {
     const directory = `watchface_${width}x${width}`;
     const s = width / 800, n = (v: number) => Math.round(v * s);
@@ -44,10 +44,17 @@ function template(extra: { slot?: boolean; aod?: boolean | "bare"; blankIcon?: b
           control_bluetooth_icon_pos: at(210, 0), control_bluetooth_on_icon: "icon\\c_bt_on.png", control_bluetooth_off_icon: "icon\\c_bt_off.png",
           control_floor_rect: "", control_floor_font: "",
         } : {}),
+        // A template's own barometer (Studio doesn't add one): the direction branch.
+        ...(extra.barometer ? {
+          control_barometer_icon_pos: at(0, 0), control_barometer_integer_rect: rect(50, 0, 160, 40), control_barometer_decimal_rect: rect(170, 0, 200, 40),
+          control_barometer_down_icon: "icon\\down.png", control_barometer_flat_icon: "icon\\flat.png", control_barometer_up_icon: "icon\\up.png",
+          control_barometer_font: "digits", control_point_icon: "icon\\point.png",
+        } : {}),
       },
       aodConfig: extra.aod ? { bg_color: "#000000", time_hour_high_pos: at(150, 300), time_hour_high_font: "digits", ...(extra.aod === true ? { rect_control1_pos: at(300, 560), ...heart } : {}) } : {},
       spriteFolders: [{ folder: "digits", kind: "digits", aod: false, files: files("digits", 10) }, ...(extra.noBatteryArt ? [] : [{ folder: "battery", kind: "state", aod: false, files: files("battery", 12, 40, 24) }])],
-      icons: [{ path: `${directory}/background.png`, width, height: width }, icon("hr"), icon("step"), icon("sunrise"), icon("colon", 8, 28), icon("minus", 12, 4), icon("c_bt_on"), icon("c_bt_off")],
+      icons: [{ path: `${directory}/background.png`, width, height: width }, icon("hr"), icon("step"), icon("sunrise"), icon("colon", 8, 28), icon("minus", 12, 4), icon("c_bt_on"), icon("c_bt_off"),
+        ...(extra.barometer ? [icon("down"), icon("flat"), icon("up"), icon("point", 8, 28)] : [])],
     };
   };
   return { templateId: "slot-test", resolutions: [resolution(800), resolution(416)] } as unknown as CorosWatchfaceTemplateDetails;
@@ -134,7 +141,7 @@ describe("Add → Selectable data", () => {
         const text = Object.entries(before).map(([k, value]) => `[${k}]=${value}`).join("\r\n");
         const changed = Object.fromEntries(Object.entries(after).filter(([k, value]) => before[k] !== value));
         const out = applyCorosWatchfaceConfigOverrides(text, changed);
-        for (const key of ["rect_control1_pos", "control_battery_icon_pos", "control_battery_level_rect", "control_sunset_hour_rect", "control_temperature_rect", "control_barometer_up_icon", "control_elevation_icon_pos"]) {
+        for (const key of ["rect_control1_pos", "control_battery_icon_pos", "control_battery_level_rect", "control_sunset_hour_rect", "control_temperature_rect", "control_elevation_icon_pos"]) {
           expect(out, key).toMatch(new RegExp(`\\[${key}\\]=\\S`));
         }
       });
@@ -154,7 +161,9 @@ describe("The slot's data types", () => {
   it("lists every type with what the face has for it", () => {
     const details = template({ slot: true });
     const v = view(details, makeDefaultDesign());
-    expect(v.types.map((t) => t.id)).toEqual(["heartRate", "steps", "calories", "floors", "elevation", "barometer", "exercise", "sunrise", "sunset", "battery", "temperature"]);
+    // Studio doesn't add a barometer: it's listed only where the template has one.
+    expect(v.types.map((t) => t.id)).toEqual(["heartRate", "steps", "calories", "floors", "elevation", "exercise", "sunrise", "sunset", "battery", "temperature"]);
+    expect(view(template({ slot: true, barometer: true }), makeDefaultDesign()).types.map((t) => t.id)).toContain("barometer");
     expect(on(v.types)).toEqual(["heartRate", "steps", "sunrise", "battery"]);
     expect(v.type("heartRate")).toMatchObject({ inTemplate: true, icon: "template", iconKey: "control_hr_icon", canOffset: true, blocked: null });
     expect(v.type("heartRate").iconPath).toBe("watchface_800x800/icon/hr.png");
@@ -212,15 +221,20 @@ describe("The slot's data types", () => {
     }
   });
 
-  it("writes the barometer's direction branch only: three trend images, two value boxes and a decimal point", () => {
+  it("adds no barometer to a template without one", () => {
     const details = template({ slot: true });
+    const design = setSlotType(makeDefaultDesign(), details, "current", "barometer", true);
+    for (const config of built(details, design)) {
+      expect(Object.keys(config).filter((k) => k.startsWith("control_barometer_") || k === "control_point_icon")).toEqual([]);
+    }
+  });
+
+  it("keeps a template's own barometer: three trend images, two value boxes and a decimal point", () => {
+    const details = template({ slot: true, barometer: true });
     const design = setSlotType(makeDefaultDesign(), details, "current", "barometer", true);
     for (const config of built(details, design)) {
       for (const key of ["control_barometer_down_icon", "control_barometer_flat_icon", "control_barometer_up_icon", "control_barometer_integer_rect",
         "control_barometer_decimal_rect", "control_barometer_font", "control_barometer_icon_pos", "control_point_icon"]) expect(config[key], key).toBeTruthy();
-      // COROS's compiler aborts on the static branch.
-      expect(config.control_barometer_icon).toBeUndefined();
-      expect(config.control_barometer_rect).toBeUndefined();
     }
     const v = view(details, design);
     expect(v.type("barometer")).toMatchObject({ on: true, icon: "trend" });
@@ -329,7 +343,7 @@ describe("A type's icon", () => {
   });
 
   it("gives the barometer's trend arrow a grip too, which moves it", () => {
-    const details = template({ slot: true });
+    const details = template({ slot: true, barometer: true });
     const design = setSlotPreview(setSlotType(makeDefaultDesign(), details, "current", "barometer", true), "barometer");
     const grip = (d: Design) => slotIconGrip(details, d, view(details, d).types);
     const before = grip(design);
